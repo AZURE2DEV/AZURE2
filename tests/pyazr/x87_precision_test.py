@@ -19,13 +19,24 @@ the length of every call from the binding and in every thread of its OpenMP regi
         OpenMP threads that thread starts inherit the lowered word, so the regions' scopes are tested too),
       - in the main thread with its precision lowered to 53 bits (its OpenMP threads, made earlier, keep 64),
     and the lowered word is still in force after the calls.
-Without an x87 (arm64) the control words are 0 and (b) compares the threads as they start only.
+(c) A representative of each group of the module's functions that compute (repo_consistency check 60 (iii)), called
+    in the main thread and in a threading.Thread lowered to 53 bits, bit for bit: rows of the physics table
+    (physics_evaluate: Coulomb functions, Whittaker function, penetrability, dS/dE, kinematics), the session's calls
+    that release the GIL (transform, channel_functions), those that keep it (Objective(x), log_prob, scattering
+    lengths, Park norms), a level door (pyazr.endf.from_session), block physics (collision_matrix,
+    optical_scattering), a project's grid (extrapolation_grid, relativistic) and stopping; and the set-up: a Session
+    made in a lowered thread gives, called in the main thread, the main session's Objective(x).
+Without an x87 (arm64) the control words are 0, (b) compares the threads as they start only and (c) is skipped.
 
 Can fail: with the build before the scope (trial 101), lowering a thread's precision with a ctypes helper moves 27 of
-T1's 442 residuals by up to 1.4e-12 relative, its value by 8e-16 and 7 of 13 gradient components (2026-11-16).
+T1's 442 residuals by up to 1.4e-12 relative, its value by 8e-16 and 7 of 13 gradient components (2026-11-16).  (c)
+against the build before PrecisionGuard (9d7ec793): the set-up moves Objective(x) by 4.1e-15 relative (2.1e-14
+without the Coulomb table); against trial 101 also Objective(x) and log_prob (8.2e-16).  The other representatives
+did not move on Linux in either build: their arithmetic is double (SSE) here, or ran in an OpenMP region's scope.
 
 Run: python3 tests/pyazr/x87_precision_test.py
 """
+import dataclasses
 import os
 import shutil
 import sys
@@ -156,6 +167,138 @@ try:
             check("the main thread lowered to 53 bits = the main thread at 64", not d, d)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
+
+
+print("(c) a representative of each kind of binding call that computes, in a thread lowered to 53 bits")
+
+
+def leaves(v, path=""):
+    """(path, array) of every number of `v` (dicts by key, sequences, dataclasses, numpy arrays); text as bytes."""
+    if dataclasses.is_dataclass(v) and not isinstance(v, type):
+        v = {f.name: getattr(v, f.name) for f in dataclasses.fields(v)}
+    if isinstance(v, dict):
+        for k in sorted(v, key=str):
+            yield from leaves(v[k], f"{path}.{k}")
+    elif isinstance(v, (list, tuple)) and not all(isinstance(e, (int, float, complex, bool)) for e in v):
+        for i, e in enumerate(v):
+            yield from leaves(e, f"{path}[{i}]")
+    elif isinstance(v, (str, bytes)):
+        yield path, np.frombuffer(v.encode() if isinstance(v, str) else v, dtype=np.uint8)
+    elif v is None:
+        yield path, np.zeros(0)
+    else:
+        yield path, np.asarray(v)
+
+
+def leaf_differences(a, b):
+    """'' when `a` and `b` hold the same numbers bit for bit, else the first leaves that differ and by how much."""
+    la, lb = list(leaves(a)), list(leaves(b))
+    if [p for p, _ in la] != [p for p, _ in lb]:
+        return "the results have other fields"
+    text = []
+    for (p, u), (_, v) in zip(la, lb):
+        if u.shape != v.shape or u.dtype != v.dtype or u.tobytes() != v.tobytes():
+            if u.shape == v.shape and u.dtype.kind in "fc":
+                n = int(np.sum(u != v))
+                rel = float(np.max(np.abs(u - v) / np.maximum(np.abs(v), 1e-300)))
+                text.append(f"{p or 'value'}: {n} of {v.size} differ, largest relative {rel:.1e}")
+            else:
+                text.append(f"{p or 'value'}: differs")
+    return "; ".join(text[:3]) + (f" (and {len(text) - 3} more fields)" if len(text) > 3 else "")
+
+
+def table_row(name):
+    """Row `name` of the physics table on 40 points of its axis argument's sweep, the others at their example."""
+    row = next(r for r in _azure2.physics_functions() if r["name"] == name)
+    columns = []
+    for a in row["arguments"]:
+        if a["name"] == row["axis"] and a["sweep"]:
+            lo, hi = a["sweep"]["lower"], a["sweep"]["upper"]
+            col = np.geomspace(lo, hi, 40) if a["sweep"]["spacing"] == "log" else np.linspace(lo, hi, 40)
+        else:
+            x = a["example"] if a["example"] is not None else a["default"]
+            x = a["choices"].index(x) if isinstance(x, str) else float(x)
+            col = np.full(40, x)
+        columns.append(np.ascontiguousarray(col, dtype=float))
+    values, status = _azure2.physics_evaluate(name, columns)
+    return {"values": np.asarray(values), "status": np.asarray(status)}
+
+
+if not x87:
+    print("  no x87 on this machine: nothing to lower")
+else:
+    from pyazr import physics as ph
+    from pyazr import stopping, extrapolation_grid
+    from pyazr.endf import model as endf_model
+
+    tmp = tempfile.mkdtemp(prefix="x87_precision_c_")
+    try:
+        shutil.copytree(os.path.join(ROOT, "tests", "upgrade", "T1"), os.path.join(tmp, "T1"),
+                        ignore=shutil.ignore_patterns("output", "checks"))
+        os.makedirs(os.path.join(tmp, "T1", "output"), exist_ok=True)
+        azr = os.path.join(tmp, "T1", "T1.azr")
+        with Session(azr) as s:
+            f = s.objective()
+            x0 = s.parameters.x0
+            x = x0 * (1 + 1e-3 * np.cos(np.arange(x0.size)))
+            pair = s.pairs[0].key
+            e_cm = np.linspace(0.05, 3.0, 25)
+            potential = dict(radius_convention="target_mass", target_mass_number=15, coulomb_r0_fm=1.25,
+                             real_volume=(50.0, 1.17, 0.75), imaginary_surface=(5.0, 1.32, 0.6),
+                             real_spin_orbit=(6.2, 1.01, 0.75))
+            levels, gamma = np.array([2.37, 3.5]), np.array([[0.61, 0.12], [-0.83, 0.47]])
+            # (group, label, the call): the groups of api/src's computing functions (repo_consistency check 60)
+            calls = [
+                ("physics table", "coulomb_waves", lambda: table_row("coulomb_waves")),
+                ("physics table", "whittaker_wave", lambda: table_row("whittaker_wave")),
+                ("physics table", "penetrability", lambda: table_row("penetrability")),
+                ("physics table", "shift_derivative", lambda: table_row("shift_derivative")),
+                ("physics table", "lab_to_cm_energy (kinematics)", lambda: table_row("lab_to_cm_energy")),
+                ("session, GIL released", "Session.transform", lambda: s.transform(x)),
+                ("session, GIL released", "Session.channel_functions",
+                 lambda: s.channel_functions(pair, e_cm, l=1)),
+                ("session, GIL held", "Objective(x)", lambda: f(x)),
+                ("session, GIL held", "Objective.log_prob", lambda: f.log_prob(x)),
+                ("session, GIL held", "Session.scattering_lengths", lambda: s.scattering_lengths(x)),
+                ("session, GIL held", "Session.park_norms", lambda: s.park_norms(x)),
+                ("level doors", "pyazr.endf.from_session (formal_levels_of_block)",
+                 lambda: endf_model.from_session(s, x)),
+                ("block physics", "physics.collision_matrix",
+                 lambda: ph.collision_matrix(levels, gamma, 2.35, penetrability=np.array([0.0123, 0.3]),
+                                             shift=np.array([-0.71, -0.1]), boundary=np.array([-0.4, 0.05]),
+                                             hard_sphere_phase=np.array([-0.002, 0.2]),
+                                             coulomb_phase=np.array([0.0, 0.35]))),
+                ("block physics", "physics.optical_scattering",
+                 lambda: ph.optical_scattering(1, 7, 1.0, 15.0, 4.6875, potential, angles_deg=[30.0, 90.0, 150.0],
+                                               projectile_spin=0.5, l_max=16)),
+                ("project reading", "extrapolation_grid (c.m. -> lab, relativistic)",
+                 lambda: extrapolation_grid("range 0.1 3 MeV cm points 30 log", masses=(1.00782503, 15.0001089),
+                                            relativistic=True)),
+                ("stopping", "stopping.stopping and range_of",
+                 lambda: (stopping.stopping(stopping.Material("Ta2O5"), "p", np.geomspace(0.05, 3.0, 20)),
+                          stopping.range_of(stopping.Material("Ta2O5"), "a", np.geomspace(0.1, 5.0, 20)))),
+            ]
+
+            def lowered(fn):
+                def run():
+                    _azure2._set_x87_control_word(LOWERED)
+                    return fn()
+                return run
+
+            for group, label, fn in calls:
+                main = fn()
+                d = leaf_differences(in_thread(lowered(fn)), main)
+                check(f"{group}: {label}", not d, d)
+            # The set-up: a session made in a lowered thread computes, in the main thread, the main session's bits.
+            value = f(x)
+            made = in_thread(lowered(lambda: Session(azr)))
+            try:
+                d = leaf_differences(made.objective()(x), value)
+            finally:
+                made.close()
+            check("session set-up: Session(...) made in a lowered thread, Objective(x) in the main thread", not d, d)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 if failures:
     print(f"FAIL: {len(failures)} check(s): {failures}")

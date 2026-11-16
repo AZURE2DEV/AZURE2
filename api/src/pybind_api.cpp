@@ -879,7 +879,7 @@ PYBIND11_MODULE(_azure2, m) {
 ;
 
   py::class_<Session>(m, "Session")
-      .def(py::init<const std::string &, const RuntimeOptions &, int, int>(),
+      .def(py::init<const std::string &, const RuntimeOptions &, int, int>(), PrecisionGuard(),
            py::arg("configfile"), py::arg("options") = RuntimeOptions(), py::arg("rate_entrance") = 0,
            py::arg("rate_exit") = 0,
            "Load ``configfile`` and build the model.  Raises AZURE2Error if "
@@ -892,8 +892,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_external_capture", &Session::calculate_external_capture,
            py::call_guard<EngineCallScope>(),
            "Recompute every external-capture integral from scratch.")
-      .def("reaction_rate", &Session::reaction_rate, py::arg("params"), py::arg("min_temp"), py::arg("max_temp"),
-           py::arg("temp_step"), py::arg("temperature_file"),
+      .def("reaction_rate", &Session::reaction_rate, PrecisionGuard(), py::arg("params"), py::arg("min_temp"),
+           py::arg("max_temp"), py::arg("temp_step"), py::arg("temperature_file"),
            "N_A<sigma v> (cm^3 mol^-1 s^-1) of a rate session (Session(..., rate_entrance, rate_exit)) at every "
            "parameter value (params_all_rwa() layout), as the program's rate command: [(T9, rate)] on min_temp + i "
            "temp_step (GK) up to max_temp, sorted, or on the temperatures of temperature_file in its order when "
@@ -939,16 +939,16 @@ PYBIND11_MODULE(_azure2, m) {
            "without calculating.  Fixed values are what the free-vector calls use.")
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
            py::call_guard<EngineCallScope>(), py::arg("params"))
-      .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"),
+      .def("transform_all_rwa", &Session::transform_all_rwa, PrecisionGuard(), py::arg("params"),
            py::arg("include_fixed") = false)
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<EngineCallScope>(), py::arg("params"))
-      .def("scattering_lengths_rwa", &Session::scattering_lengths_rwa, py::arg("params"),
+      .def("scattering_lengths_rwa", &Session::scattering_lengths_rwa, PrecisionGuard(), py::arg("params"),
            "s-wave scattering lengths of every particle pair at a free RWA vector: 6 numbers per channel "
            "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
-      .def("park_norms", &Session::park_norms, py::arg("params"),
+      .def("park_norms", &Session::park_norms, PrecisionGuard(), py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
-      .def("prior_covariance_residuals", &Session::prior_covariance_residuals, py::arg("params"),
+      .def("prior_covariance_residuals", &Session::prior_covariance_residuals, PrecisionGuard(), py::arg("params"),
            "Prior parameter covariance (<config> priorCovariance=): the whitened residuals L^-1 (p - mu) at the free "
            "RWA parameters (empty without one); their squared sum is the prior's chi2 term.")
       .def("prior_covariance_names", &Session::prior_covariance_names,
@@ -958,56 +958,56 @@ PYBIND11_MODULE(_azure2, m) {
            "freezes it at its parameters.  Returns the number of covariance groups with relvector terms.")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,
            py::call_guard<EngineCallScope>(), py::arg("params"))
-      .def("calculate_objective_rwa", &Session::calculate_objective_rwa, py::arg("params"),
+      .def("calculate_objective_rwa", &Session::calculate_objective_rwa, PrecisionGuard(), py::arg("params"),
            "The fit's objective at the free RWA parameters: data chi^2 plus every prior and constraint.")
-      .def("calculate_objective_grad_rwa", &Session::calculate_objective_grad_rwa, py::arg("params"),
+      .def("calculate_objective_grad_rwa", &Session::calculate_objective_grad_rwa, PrecisionGuard(), py::arg("params"),
            "[objective, gradient...] at the free RWA parameters.")
-      .def("objective_terms_rwa", &Session::objective_terms_rwa, py::arg("params"),
+      .def("objective_terms_rwa", &Session::objective_terms_rwa, PrecisionGuard(), py::arg("params"),
            "The objective's terms: total, names, values, and per-segment norm/shift priors (index 0 unused).")
-      .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,
-           py::arg("params"))
-      .def("evaluation_rwa", &Session::evaluation_rwa, py::arg("params"),
+      .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa, PrecisionGuard(), py::arg("params"))
+      .def("evaluation_rwa", &Session::evaluation_rwa, PrecisionGuard(), py::arg("params"),
            "One evaluation at the free vector: the objective, its terms, the data chi^2 and every data set's arrays, "
            "read as the output writer reads them (pyazr.evaluate.Evaluation).")
-      .def("objective_rows_rwa", &Session::objective_rows_rwa, py::arg("params"), py::arg("jacobian"),
+      .def("objective_rows_rwa", &Session::objective_rows_rwa, PrecisionGuard(), py::arg("params"), py::arg("jacobian"),
            py::arg("skip") = std::vector<int>(),
            "The objective as least-squares rows (sum r^2 = the objective) and, with jacobian, their Jacobian; the "
            "free columns listed in skip are not finite-differenced (left zero).")
-      .def("fit_with_engine", &Session::fit_with_engine, py::arg("method"), py::arg("minos"), py::arg("x0"),
-           py::arg("max_calls"), py::arg("progress"), py::arg("stop"),
+      .def("fit_with_engine", &Session::fit_with_engine, PrecisionGuard(), py::arg("method"), py::arg("minos"),
+           py::arg("x0"), py::arg("max_calls"), py::arg("progress"), py::arg("stop"),
            "The program's fit on the session (pyazr/session_fit.py): a row of fitters(), without the GIL.")
-      .def("sample_with_engine", &Session::sample_with_engine,
+      .def("sample_with_engine", &Session::sample_with_engine, PrecisionGuard(),
            "The program's ensemble sampler on the session (pybind_sampler.cpp: its keywords), without the GIL.")
       .def("objective_term_names", &Session::objective_term_names,
            "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
-      .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),
+      .def("log_prob_rwa", &Session::log_prob_rwa, PrecisionGuard(), py::arg("params"),
            "-1/2 x the objective, -infinity outside the ensemble sampler's support.")
-      .def("sampler_log_probability", &Session::sampler_log_probability, py::arg("x0"), py::arg("params"),
+      .def("sampler_log_probability", &Session::sampler_log_probability, PrecisionGuard(), py::arg("x0"),
+           py::arg("params"),
            "The engine's ensemble sampler set up at x0 (fit basis): (ln P at params, its constant).  A test's tie.")
-      .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
+      .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa, PrecisionGuard(),
            py::arg("params"), py::arg("skip") = std::vector<int>(),
            "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")
-      .def("calculate_residuals_rwa", &Session::calculate_residuals_rwa, py::arg("params"),
+      .def("calculate_residuals_rwa", &Session::calculate_residuals_rwa, PrecisionGuard(), py::arg("params"),
            "Standardized residuals (forward pass; THM norms profiled).")
       .def("thm_experiments", &Session::thm_experiments,
            "THM experiments (<thm> experiment[...]) as the last chi-squared evaluation "
            "profiled them: list of dicts (name, segments, background, points, chi2, status, "
            "value = [norm, b0, b1, b2], covariance = 4x4 row-major).")
-      .def("thm_lineshape", &Session::thm_lineshape, py::arg("name"), py::arg("energies"),
+      .def("thm_lineshape", &Session::thm_lineshape, PrecisionGuard(), py::arg("name"), py::arg("energies"),
            "Coulomb line shape of THM experiment `name` (lineshape=on) at c.m. energies, with the "
            "level poles of the last evaluation's parameters.")
-      .def("thm_vertex", &Session::thm_vertex, py::arg("name"), py::arg("energies"),
+      .def("thm_vertex", &Session::thm_vertex, PrecisionGuard(), py::arg("name"), py::arg("energies"),
            "THM entrance vertex of experiment `name` at c.m. energies: the spectator-momentum "
            "window at every energy (nodes p_s, weights, T_s, theta_cm, rho: lists over E) and, per "
            "entrance channel and level, <|M_l|^2> over the window and |M_l|^2 at p_s = 0.")
-      .def("thm_distortion", &Session::thm_distortion, py::arg("name"), py::arg("energies"),
+      .def("thm_distortion", &Session::thm_distortion, PrecisionGuard(), py::arg("name"), py::arg("energies"),
            "Distortion factor R(E) of THM experiment `name` (distortion=coulomb|optical|table) at "
            "c.m. energies: E_sF, eta_sF, the spectator angle, |M|^2, |M_PW|^2, R directly and as the "
            "model uses it (R_model).")
-      .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
+      .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa, PrecisionGuard(),
            py::arg("params"))
-      .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))
-      .def("ec_integrals", &Session::ec_integrals, py::arg("request"))
+      .def("coulomb_functions", &Session::coulomb_functions, PrecisionGuard(), py::arg("request"))
+      .def("ec_integrals", &Session::ec_integrals, PrecisionGuard(), py::arg("request"))
       .def("cache_stats", &Session::cache_stats)
       .def("take_notices", &Session::take_notices,
            "The engine's notices held back since the last call (pybind_notices.h), cleared: dicts with text, file, "

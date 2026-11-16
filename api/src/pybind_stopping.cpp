@@ -386,17 +386,17 @@ void BindStopping(py::module_ &parent) {
   py::module_ m = parent.def_submodule("stopping", "stopping/: SRIM-2013 stopping, energy loss and straggling (cite SRIM)");
   m.attr("citation") = st::kSrimCitation;
   m.attr("implementation") = st::kSrimImplementation;
-  m.def("material", &MaterialInfo, py::arg("formula"), py::arg("phase") = "", py::arg("compound_correction") = 1.0);
+  m.def("material", &MaterialInfo, PrecisionGuard(), py::arg("formula"), py::arg("phase") = "", py::arg("compound_correction") = 1.0);
   m.def("light_projectile", &LightProjectile, py::arg("name"));
-  m.def("stopping", &Stopping, py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy"), py::arg("phase") = "",
+  m.def("stopping", &Stopping, PrecisionGuard(), py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy"), py::arg("phase") = "",
         py::arg("compound_correction") = 1.0);
-  m.def("areal_density_between", &ArealDensityBetween, py::arg("formula"), py::arg("z1"), py::arg("mass_u"),
+  m.def("areal_density_between", &ArealDensityBetween, PrecisionGuard(), py::arg("formula"), py::arg("z1"), py::arg("mass_u"),
         py::arg("energy_in"), py::arg("energy_out"), py::arg("phase") = "", py::arg("compound_correction") = 1.0);
-  m.def("energy_after", &EnergyAfter, py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy_in"),
+  m.def("energy_after", &EnergyAfter, PrecisionGuard(), py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy_in"),
         py::arg("areal_density"), py::arg("phase") = "", py::arg("compound_correction") = 1.0);
-  m.def("range", &Range, py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy"), py::arg("phase") = "",
+  m.def("range", &Range, PrecisionGuard(), py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy"), py::arg("phase") = "",
         py::arg("compound_correction") = 1.0);
-  m.def("straggling", &Straggling, py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy_in"),
+  m.def("straggling", &Straggling, PrecisionGuard(), py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("energy_in"),
         py::arg("areal_density"), py::arg("beam_sigma"), py::arg("model") = "trim", py::arg("phase") = "",
         py::arg("compound_correction") = 1.0);
   m.def("functions", &DescribeStopping,
@@ -404,11 +404,11 @@ void BindStopping(py::module_ &parent) {
         "summary, doc, library, axis, group, citation (SRIM's, owed by every use), implementation, arguments "
         "(formula, a text, then the numeric ones: phase, compound_correction, z1, mass_u and the row's own) and "
         "returns; plain JSON data.");
-  m.def("evaluate", &EvaluateStopping, py::arg("name"), py::arg("formula"), py::arg("arguments"),
+  m.def("evaluate", &EvaluateStopping, PrecisionGuard(), py::arg("name"), py::arg("formula"), py::arg("arguments"),
         "Row `name` for the material `formula` element-wise on equal-length 1-d float arrays, one per numeric "
         "argument in the row's order (a choice as its index): (values, status), values of shape (n_returns, n), NaN "
         "where status != 0; status 0 computed, k > 0 numeric argument k (1-based) outside its domain, -2 the "
         "arguments together outside the domain (a layer at least the range), -1 failed.");
-  m.def("provenance", &Provenance, py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("phase") = "",
+  m.def("provenance", &Provenance, PrecisionGuard(), py::arg("formula"), py::arg("z1"), py::arg("mass_u"), py::arg("phase") = "",
         py::arg("compound_correction") = 1.0);
 }

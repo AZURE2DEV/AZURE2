@@ -190,6 +190,12 @@ how each was checked:
 - **Determinism.** Results must not depend on thread count, on which file a
   session started from, or on the order of levels and channels. Tests run with
   `OMP_NUM_THREADS=2`. Differences across GCC, Clang and MinGW stay near 1e-5.
+  Nor on the thread a call runs in: `long double` keeps the x87 precision of the thread (53 bits in a Windows
+  Python thread), so every OpenMP parallel region opens with `const azure2::support::ExtendedPrecisionScope`, the
+  binding releases the GIL only through `EngineCallScope`, and every `.def` of `api/src/pybind_*.cpp` takes a scope
+  (`py::call_guard<EngineCallScope>()`, `PrecisionGuard()` when it keeps the GIL, or `EngineCallScope` in its
+  lambda) unless it is listed in `BINDING_WITHOUT_ARITHMETIC` as computing nothing the precision can change (no
+  `long double`, no mathematical library function) [check 60; `tests/pyazr/x87_precision_test.py`].
 - **No hidden state.** Constant tables (masses, constants, the schema) are built
   once and reached through a function returning a `const` reference; nothing
   else is global. What a calculation writes belongs to the caller and is passed
