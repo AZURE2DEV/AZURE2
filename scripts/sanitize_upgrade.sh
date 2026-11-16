@@ -15,6 +15,10 @@
 # scripts/sanitizers/, by hand, and nightly on the default branch only: a push that changes nothing of these does
 # not run it, and the branch then shows the result of its last run.
 #
+# The functions of physics/ that the engine calls for the collision matrix and the observables' sums
+# (CollisionMatrix.h, ChannelSolve.h, Observables.h; since 2026-11-16) run here through the projects T1 to T3.
+# Their own unit tests (physics/tests) are not part of this script.
+#
 # Environment (all optional):
 #   SAN_THREADS        OpenMP threads (default 8)
 #   SAN_FIT_CALLS      function calls of the bounded T2 fit (default 30; the full fit needs about 1100)
