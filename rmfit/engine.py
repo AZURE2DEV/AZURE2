@@ -28,7 +28,7 @@ import numpy as np
 from . import AZURE2_ROOT  # noqa: F401
 from .keys import ParamKey, index_map, build_keys
 from .model import ShardSpec, build_shards, base_segments, single_variant, plan_balanced, shard_shift_count
-from .covariance import Covariance, NormGroups, RowBlock, has_keyword, load_reference, norm_field, strip_text
+from .covariance import Covariance, NormGroups, RowBlock, has_keyword, load_reference
 from .azr3 import SegmentTable, has_field, without_fields
 
 

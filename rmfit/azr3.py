@@ -62,8 +62,29 @@ class Segment:
     shift_fn_params: tuple = ()           # (a_j start, sigma, vary) per shift-function parameter
 
     @property
+    def differential(self) -> bool:
+        """The quantity is measured at an angle (the engine gives such a data set an angle window)."""
+        return self.angle_min is not None
+
+    @property
     def composite(self) -> bool:
         return len(self.terms) > 1
+
+    @property
+    def operation(self) -> Optional[str]:
+        """None for one reaction; ``"ratio"`` or ``"sum"`` for a reaction of several terms (the engine's tree)."""
+        if len(self.terms) <= 1:
+            return None
+        return "ratio" if "/" in self.tree else "sum"
+
+    @property
+    def components(self) -> tuple:
+        return self.terms if len(self.terms) > 1 else ()
+
+    @property
+    def folded(self) -> bool:
+        """The record names a target, a beam or a detector: its points are folded by the engine."""
+        return any(self.get(f) for f in ("target", "beam", "detector"))
 
     def get(self, name, default=""):
         """The text of a field of the record (the first, of a repeatable one), or ``default``."""
@@ -139,6 +160,20 @@ class SegmentTable(list):
                 covariance=get("covariance", ""), norm_text=norm, shift_text=shift,
                 norm_group=norm if kinds.get(norm) == "normalization" else "",
                 shift_group=shift if kinds.get(shift) == "energy_scale" else "", fields=flds))
+            # which nuisances are fitted, as the engine describes the record (no session needed): a member of a
+            # shared record other than the first reads "fixed (the group's is its first member's)"
+            s, fn = out[-1], []
+            for q in d.parameters:
+                fit = str(q.get("status", "")) == "fit"
+                if q.get("kind") == "norm":
+                    s.vary_norm = fit
+                elif q.get("kind") == "energy shift":
+                    s.vary_shift = fit
+                elif q.get("kind") == "energy shift sqrt":
+                    s.vary_shift_sqrt = fit
+                elif q.get("kind") == "energy shift function":
+                    fn.append((0.0, 0.0, fit))
+            s.shift_fn_params = tuple(fn)
         return out
 
 
@@ -186,3 +221,104 @@ def nuisance_rows(parameters) -> List[dict]:
                         prior_centre=getattr(p, "prior_centre", None), prior_sigma=sigma,
                         bounds=tuple(p.bounds) if p.bounds is not None else None))
     return out
+
+
+#: the factor to MeV of the energy units a data file's energy column may be written in
+_ENERGY_UNITS = {"MeV": 1.0, "keV": 1e-3, "eV": 1e-6}
+
+
+def read_points(seg: Segment, base_dir: str):
+    """``(E_lab in MeV, angle in deg or NaN)`` of every data row of the file of ``seg``, in file order, or None
+    when rmfit cannot place the rows itself: the record's ``columns`` must name a lab-energy column
+    (``E_lab[MeV|keV|eV]``) and, for a quantity at an angle, an angle column (``theta_lab[deg]`` or
+    ``theta_cm[deg]``); a file that names its own columns (``columns from_file``) or another frame gives None, and
+    such a data set is then never split.  The windows of the record are not applied here."""
+    import numpy as np
+    roles = seg.get("columns").split()
+    ie = next((i for i, r in enumerate(roles) if r.startswith("E_lab[")), None)
+    if ie is None or roles[ie][6:-1] not in _ENERGY_UNITS or not seg.get("energy_window", "x MeV").endswith("MeV"):
+        return None
+    ia = next((i for i, r in enumerate(roles) if r.startswith("theta_") and r.endswith("[deg]")), None)
+    if seg.differential and ia is None:
+        return None
+    scale = _ENERGY_UNITS[roles[ie][6:-1]]
+    rows = []
+    path = seg.data_file_resolved or os.path.join(base_dir, seg.data_file)
+    with open(path) as fh:
+        for line in fh:
+            s = line.strip()
+            if not s or s[0] in "#!":
+                continue
+            t = s.split()
+            try:
+                rows.append((float(t[ie]) * scale, float(t[ia]) if ia is not None else float("nan")))
+            except (ValueError, IndexError):
+                continue
+    return np.array(rows, float).reshape(-1, 2)
+
+
+def data_paths(path) -> List[str]:
+    """Every file a record of the project names relative to the project (data files, covariance files, grid
+    files) and the files of ``<config>`` (the prior covariance), as written."""
+    import pyazr
+    project = pyazr.Project.open(os.path.abspath(path))
+    out = []
+    for rec in project.records().values():
+        for k, v in rec.items():
+            if k in ("file", "covariance", "grid_file"):
+                out.append(str(v).split()[0].strip('"'))
+    v = project.config().get("priorCovariance")
+    if v:
+        out.append(str(v))
+    return [p for p in dict.fromkeys(out) if p and not os.path.isabs(p)]
+
+
+def write_variant(base_azr: str, out_path: str, output_dir: str, datasets=None, drop_fields=()) -> Tuple[str, Dict[str, int]]:
+    """Write a variant of project ``base_azr`` to ``out_path`` with the output directory ``output_dir``.
+
+    ``datasets``: None keeps the data sets as they are; else a list of ``(base record name, new name, {field:
+    value})``: the data sets of the variant, each the base record with the given fields replaced (None removes a
+    field); a base record listed more than once is copied under the new names (pieces of a split data set).  Data
+    sets not listed are removed, and with them (``datasets`` given) the extrapolations, the model data and the
+    prior covariance of ``<config>``, which belong to the whole model.  ``drop_fields``: fields removed from every
+    data set kept.  Returns ``(path, {record name: its key in the variant})``."""
+    import pyazr
+    project = pyazr.Project.open(os.path.abspath(base_azr))
+    if datasets is not None:
+        used = {b for b, _, _ in datasets}
+        for name, rec in list(project.records().items()):
+            kind = rec.record_kind
+            if kind in ("extrapolation", "datum") or (kind == "dataset" and name not in used):
+                project.remove(name)
+        if project.config().get("priorCovariance"):
+            project.set_config(priorCovariance=None)
+        first = {}
+        for base, new, fields in datasets:
+            fields = dict(fields)
+            for f in drop_fields:
+                fields.setdefault(f, None)
+            if base not in first:
+                first[base] = new
+                original = dict(project[base].items())
+                project.set(base, **{k: v for k, v in fields.items() if not (v is None and k not in original)})
+                if new != base:
+                    project.rename(base, new)
+                first[base] = (new, original)
+            else:
+                full = dict(first[base][1])
+                full.update(fields)
+                project.add_dataset(new, **{k: v for k, v in full.items() if v is not None})
+    elif drop_fields:
+        for name, rec in list(project.records().items()):
+            if rec.record_kind == "dataset":
+                drop = {f: None for f in drop_fields if f in rec.keys()}
+                if drop:
+                    project.set(name, **drop)
+    project.set_config(output_dir=output_dir.rstrip("/") + "/")
+    path = project.save(out_path)
+    keys, n = {}, 0
+    for name, rec in project.records().items():
+        if rec.record_kind == "dataset":
+            n += 1
+            keys[name] = n
+    return path, keys

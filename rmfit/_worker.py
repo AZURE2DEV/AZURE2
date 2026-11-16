@@ -70,12 +70,12 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
             )
 
             def engine_chi2(x):
-                """The data chi-squared with the model's own terms (the J > 0 wall, abundances, model data such as
+                """The data chi-squared (``Evaluation.chi2``, which holds the data covariances) with the model's own terms (the J > 0 wall, abundances, model data such as
                 scattering lengths), without the normalization and energy-shift penalties: what pyazr 2's
                 ``calculate_chi2_rwa`` returned."""
                 ev = m.evaluate(x)
                 return float(ev.chi2) + sum(float(ev.terms.get(k, 0.0) or 0.0)
-                                            for k in ("data covariance", "Park J > 0", "abundances", "model data"))
+                                            for k in ("Park J > 0", "abundances", "model data"))
 
             conn.send(("ready", info))
             while True:
