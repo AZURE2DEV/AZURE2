@@ -165,7 +165,7 @@ fitter_help = function_body(read("src/Fitters.cpp"), "std::string FitterSwitches
     if "FitterSwitchesHelp()" in help_text else ""
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--validate",
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--schema-out", "--validate",
                    "--describe", "--print-predictions",
                    # option of --convert-params
                    "--project",
@@ -569,7 +569,7 @@ try:
     import json
     if _gen.generate(json.loads(read("tests/schema/schema_v3.json"))) != read("docs/source/reference/format3.rst"):
         problems.append("docs/source/reference/format3.rst: not the output of tools/gen_schema_docs.py; run it "
-                        "(after AZURE2 --schema > tests/schema/schema_v3.json if the table changed)")
+                        "(after AZURE2 --schema-out=tests/schema/schema_v3.json if the table changed)")
 except (OSError, ValueError) as e:
     problems.append(f"check 18: {e}")
 

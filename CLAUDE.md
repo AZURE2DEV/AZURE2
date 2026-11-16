@@ -457,8 +457,8 @@ parameter name].
    `experiment/tests/quantities_test.cpp` (the test tries it on every quantity that does not list it).
 2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
    if the field brings a refusal of its own.
-3. After the build: `<build>/src/AZURE2 --schema > schema.tmp && cp schema.tmp tests/schema/schema_v3.json` (a
-   redirect straight onto the file empties it when the binary path is wrong), bump `Schema::kVersion` if an existing
+3. After the build: `<build>/src/AZURE2 --schema-out=tests/schema/schema_v3.json` (it writes a temporary file and renames it, so a
+   wrong binary path or a failure leaves the file as it was; a shell redirect onto the file empties it first), bump `Schema::kVersion` if an existing
    project changes meaning [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py`
    [check 18: `format3.rst` against `schema_v3.json` only].
 
@@ -540,7 +540,7 @@ base unit with factor 1, as `inverse_energy`, 1/MeV); `experiment_parsers` check
 on every quantity (a unit is offered to every quantity of its dimension); its place in the table is its place in every
 `units` list of the schema.  The row tests pass for any positive factor, so state the factor in one line of
 `experiment/tests/parsers_test.cpp` ("The unit table", beside `keV`) and use the unit once in a fixture of
-`experiment/tests/data/`.  Then build and regenerate: `AZURE2 --schema > tests/schema/schema_v3.json`, `python3
+`experiment/tests/data/`.  Then build and regenerate: `AZURE2 --schema-out=tests/schema/schema_v3.json`, `python3
 tools/gen_schema_docs.py`, and run `ctest -R 'experiment_schema|pyazr_schema'` (the two tests that see a stale schema;
 the consistency script does not).  A factor is applied only by `Units.h` `Rescale` (through
 `ToBase`, `ToUnit`, `Context::InBase`; the columns of a data file through `experiment/DataRows.h`, where the points
@@ -579,7 +579,7 @@ parameters; the engine applies whatever the table holds.
    a derivative against central differences (the node values are linear between nodes: a closed form for a curved σ
    carries + σ'' h²/12, h the node spacing); a format-3 fixture that validates (a `detector` record with
    `energy_resolution <form> <parameter> <value> <unit>` in `experiment/tests/data/section_examples.azr`, which
-   `schema_test.cpp` lists); after a build, `AZURE2 --schema > tests/schema/schema_v3.json`, `python3
+   `schema_test.cpp` lists); after a build, `AZURE2 --schema-out=tests/schema/schema_v3.json`, `python3
    tools/gen_schema_docs.py`, then `ctest -R 'experiment_schema|pyazr_schema'` [check 18, 21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
    the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
    --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
