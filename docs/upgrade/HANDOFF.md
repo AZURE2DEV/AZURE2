@@ -2,6 +2,18 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-test-races`: two pyazr tests on private copies (dev's `1fe959ff`)
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below.
+`tests/pyazr/apply_fit_test.py` and `beta_sign_test.py` wrote their snapshots (`_snapshot_test.azr`,
+`_beta_sign_*.azr`, each with a `.sav`) into `tests/hybrid_potential` and `tests/beta_delayed_alpha` and removed them
+at the end. On dev two other tests read those directories at the same time under `ctest -j` (one copies the
+directory, one globs `tests/*/*.azr`) and failed now and then on a file just removed. Both tests are the same here
+and `apply_fit_test.py` itself globs `tests/*/*.azr`, so the same race is open here; it was not seen to fail here.
+Now each test copies its fixture to a temporary directory and works there. Both pass (base engine, CRC); nothing is
+left in `tests/` or in the temporary directory. No engine file changed.
+
 ## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 90 (one commit of mine: `scripts/sanitize_upgrade.sh`

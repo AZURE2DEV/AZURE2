@@ -154,13 +154,16 @@ print("\n4. a snapshot reads back as the fit it was made from")
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 import numpy as np  # noqa: E402
 from pyazr import Session  # noqa: E402
-project = os.path.join(ROOT, "tests", "hybrid_potential")
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+# A .azr resolves its data files and output directory relative to itself, so its snapshot must sit beside it: on a
+# private copy of the fixture.  Written into tests/hybrid_potential itself, the snapshot raced other tests under
+# ctest -j (on dev pyazr_output_files copies that directory and hit a file this test had just removed, 2026-11-15).
+tmp = tempfile.mkdtemp(prefix="apply_fit_")
+project = os.path.join(tmp, "hybrid_potential")
+shutil.copytree(os.path.join(ROOT, "tests", "hybrid_potential"), project, ignore=shutil.ignore_patterns("_*"))
 azr = os.path.join(project, "hybrid_potential.azr")
-# Beside the original, not in a temp dir: a .azr resolves its data files
-# and output directory relative to itself, so that is the only place a
-# snapshot of it runs.
 out = os.path.join(project, "_snapshot_test.azr")
-sav = os.path.splitext(out)[0] + ".sav"
 try:
     with Session(azr, cwd=project) as m:
         want = np.asarray(m.transform(m.parameters.x0)[m.parameters.free_mask], float)
@@ -183,9 +186,7 @@ try:
           f"{int(np.sum(~np.isclose(got, want, rtol=1e-4)))} differ"
           if got.shape == want.shape else f"{got.shape} vs {want.shape}")
 finally:
-    for f in (out, sav):
-        if os.path.exists(f):
-            os.remove(f)
+    shutil.rmtree(tmp, ignore_errors=True)
 
 print()
 if failures:
