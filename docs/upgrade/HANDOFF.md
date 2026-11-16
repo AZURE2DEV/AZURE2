@@ -82,6 +82,22 @@ and its rows, the gradient and the Jacobian through the ties against finite diff
 **Run here** (CRC, GCC 11.5): build; `tests/isospin_levels`; the unit tests named above. The full gate: see the end
 of this entry. **Not run:** CI.
 
+**A real project, outside the tree:** the A = 4 fit of the PI's archive (43 isospin levels in 4Li, 4H and 4He, 14
+mixes, formal basis; 87 data sets, 5,005 points, its spin-observable sets left out). From one formal parameter file
+(dev's `param.par`, its names converted by `--convert-params`) the model values of dev and of this branch agree to
+1e-9 (1.7e-7 at worst), and the d+d reaction data sets are exactly twice dev's (`FOR_THE_OWNER.md` section 3, row 1).
+From the project's own level values the formal parameters of the two builds differ by 4e-7, with 14 whole-level
+signs reversed: the input transformation, not the ties.
+
+**Decided by the owner (2026-11-16):** the identical-entrance-pair factor stays as this branch has it ("Go with
+Jakub's convention for the identical particles"): `FOR_THE_OWNER.md` section 3 row 1 is answered, keep 1 + δ₁₂. The
+A = 4 project's d + d reaction data were halved for `dev`'s convention (`*_azconv`) and go in un-halved here.
+
+**The full gate** (queue job, 8 slots, on the commit before this paragraph): consistency, configure, build and the
+docs clean; ctest 315 of 317, the base's two failing (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites
+172 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"),
+`tests/isospin_levels` passing (58 checks).
+
 ## 2026-11-16 (owner's session, dev port) — per-channel radii, step 3: the session side
 
 **Branch** `feature/upgrade-5-dev-channel-radii`, on the entry below. dev's step 3 was a session method
