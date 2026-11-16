@@ -283,6 +283,8 @@ immutable, built at set-up and read by everything outside the data classes; the 
 built at set-up. Remaining: external-capture amplitudes at set-up (with the decay-position defect of the data
 classes), the pathway trees deleted, the parameter vector and the set-up out, `CNuc` deleted. The file-size ratchet
 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file passes 1,000 lines.
+Since 2026-11-16 `src/AZURECalc.cpp`, `src/AZURECalcMCMC.cpp` and `api/src/AZUREAPI.cpp` are off that list: each is
+split into files of one job (`FOR_THE_OWNER.md` section 10 item 5), no function changed.
 *Design of the last steps, six branches: `cnuc_split.md` §12 (2026-11-13); it replaces the "Remaining" list above.*
 - [x] The structure frozen after set-up: the entrance pairs an input of the set-up, the `System` built once in `Fill`,
       the pairs, groups and channels read through `const` pointers only (`cnuc_split.md` §12.3, step 1 as built).

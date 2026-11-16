@@ -167,6 +167,17 @@ with the engine's context). The terms read the engine's objects and stay in
 is the sampler's log-probability on pools of its own; it drives ``nu::Mcmc``,
 whose ``nu::Ensemble`` owns the walkers.
 
+Each of the two classes is one header and several source files, one job per file. ``AZURECalc``:
+``src/AZURECalc.cpp`` (the evaluation: ``operator()``, ``Chi2On``, ``Chi2Value``), ``AZURECalcGradient.cpp``
+(``Gradient``, ``G2``), ``AZURECalcJacobian.cpp`` (``ResidualJacobian``, ``ResidualsOnly``, ``FillShiftColumns``),
+``AZURECalcNuisance.cpp`` (the limits manager's priors), ``AZURECalcPool.cpp`` (the idle states of the caller's
+``FitterStates``), ``AZURECalcOutput.cpp`` (the intermediate files, ``param.fit``) and ``AZURECalcDiagnostics.cpp``
+(the ``AZURE_DUMP_NONFINITE`` dump). ``AZURECalcMCMC``: ``src/AZURECalcMCMC.cpp`` (the log-likelihood and
+log-probability of a walker, the map between the varying and the full vector), ``AZURECalcMCMCPriors.cpp`` (the
+priors and their set-up), ``AZURECalcMCMCRun.cpp`` (``RunMCMCSampling``, the walker-position files),
+``AZURECalcMCMCChain.cpp`` (the chain file, the reports of a step) and ``AZURECalcMCMCPool.cpp`` (the idle states of
+the caller's ``SamplerStates``).
+
 A fitter is a ``FitterRow`` of ``Fitters()``: its function takes the
 objective, the ``AZUREParams`` (start in, end point out) and a ``FitControl``
 (call limit, progress sink, checkpoint, stop request, log) and makes a

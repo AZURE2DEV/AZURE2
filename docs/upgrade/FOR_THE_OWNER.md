@@ -226,7 +226,7 @@ Coulomb tables, the cache of input files, output-stream locks, the level-state v
 engine, its libraries or the binding has a `mutable` member. What the evaluations of a fit or of the sampler keep
 between calls (idle copies of the levels and of the working copy, the copies the intermediate files are written
 from, the last gradient) is in a `FitterStates` or `SamplerStates` that the caller owns and lends. No source
-file may grow: the 10 hand-written files above 1,000 lines have a ceiling in `tests/consistency/file_sizes.tsv`.
+file may grow: the 7 hand-written files above 1,000 lines have a ceiling in `tests/consistency/file_sizes.tsv`.
 
 ## 6. How to add to it
 
@@ -643,8 +643,17 @@ re-read against its design at the hand-over.
    target values); what copy-on-write could share is the sites of a project without energy shifts and without
    fitted target parameters (`evaluation.md` section 7.8, the last part). The cost today is memory, not
    correctness. The locks are as they were.
-5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
-   (1,532), `src/AZURECalc.cpp` (1,395), `src/AZURECalcMCMC.cpp` (1,309). The arithmetic of the collision matrix
+5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below). The three other files this
+   item named were split by job on 2026-11-16, every function moved as it was and no number moved:
+   `src/AZURECalc.cpp` (1,395 lines) into seven files (the evaluation, the gradient, the residual Jacobian, the limits
+   manager's priors, the pool, the intermediate files, the dump), `src/AZURECalcMCMC.cpp` (1,309) into five (a walker's
+   posterior, the priors, the run of the chain, the chain's files, the pool), `api/src/AZUREAPI.cpp` (1,532) into
+   five beside the class's four other files (the session's model, what a calculation reports, the objective's value, its
+   derivatives, the diagnostics), each with a head comment that says what it holds. The largest is
+   `src/AZURECalcGradient.cpp` (593 lines), of which 447 are one function, `AZURECalc::GradientBy`: shortening it is
+   a rewrite, not a move, and was not done. Still above 1,000 lines in the engine and the binding:
+   `AMatrixFunc.cpp`, `src/WorkingCopy.cpp` (1,273), `src/AZUREGrad.cpp` (1,108), `api/src/pybind_api.cpp` (1,017).
+   The arithmetic of the collision matrix
    (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
    sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
    `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and

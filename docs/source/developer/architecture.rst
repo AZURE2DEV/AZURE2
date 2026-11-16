@@ -275,7 +275,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    *Program*: steps 3 to 6 are ``AZURECalc::operator()``
    (``src/AZURECalc.cpp``), Minuit2's function; during a fit each evaluation
    takes a pooled copy of the run's ``LevelState`` and of the working copy with its own
-   ``Results`` (``AZURECalc::GetPooledState``, ``GetPooledData``). *pyazr*:
+   ``Results`` (``AZURECalc::GetPooledState``, ``GetPooledData``; ``src/AZURECalcPool.cpp``). *pyazr*:
    ``Session.objective()`` is ``AZUREAPI::CalculateObjectiveRWA`` as an object for a fitter or sampler
    (``pyazr.Objective``), which runs the same hand-over, point pass, model pass and ``Objective::Engine()`` on
    the session's own objects, and
@@ -289,7 +289,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    function, ``FitResult run(AZURECalc &, AZUREParams &, const FitControl &)``:
    ``FitMigrad`` and ``FitMigradGradient`` (``src/FitMigrad.cpp``: Minuit2's
    ``MnMigrad``, the second with the analytic gradient
-   ``AZURECalc::Gradient``, the reverse-mode adjoint of ``src/AZUREGrad.cpp``
+   ``AZURECalc::Gradient`` (``src/AZURECalcGradient.cpp``), the reverse-mode adjoint of ``src/AZUREGrad.cpp``
    and ``src/GradEnergyTasks.cpp``, and the rerun with a re-frozen relvector
    data covariance), ``FitLevenbergMarquardt`` (``src/FitLeastSquares.cpp``)
    and ``FitGslTrustRegion`` (``src/FitGslTrustRegion.cpp``) on the residual
@@ -308,8 +308,8 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    intermediate files through ``ProgramProgress``, then HESSE for the band,
    MINOS, ``fitStatus.out``, ``covariance_matrix.out`` and ``param.sav``.
    The sampler is ``runMCMC`` (``src/AZURE2.cpp``), which sets up its own
-   ``CompoundSystem`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling`` on
-   ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
+   ``CompoundSystem`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling``
+   (``src/AZURECalcMCMCRun.cpp``) on ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
    session (``AZUREAPI::FitWithEngine``, ``api/src/AZUREAPIFit.cpp``; the
    binding releases the GIL), or the fit is Python's (SciPy or iminuit on
    ``Session.objective().value_and_grad``), with the same gradient through
