@@ -71,13 +71,37 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
                 nuisances=nuisance_rows(P),
             )
 
+            #: the nuisance priors are the last rows of the objective, one per free parameter with a prior
+            n_prior = sum(1 for p in P if not p.fixed and (getattr(p, "prior_sigma", None) or 0.0) > 0)
+            prior_rows = [(int(p.free_index), float(p.prior_centre), float(p.prior_sigma)) for p in P
+                          if not p.fixed and (getattr(p, "prior_sigma", None) or 0.0) > 0]
+
             def engine_chi2(x):
-                """The data chi-squared (``Evaluation.chi2``, which holds the data covariances) with the model's own terms (the J > 0 wall, abundances, model data such as
-                scattering lengths), without the normalization and energy-shift penalties: what pyazr 2's
-                ``calculate_chi2_rwa`` returned."""
+                """The engine's objective without the priors of the nuisances: the data chi-squared
+                (``Evaluation.chi2``, which holds the data covariances) with the model's own terms (the rows of
+                engine.ModelRows: the J > 0 wall, abundance sums, model data, ...).  The normalization and
+                energy-shift penalties are the parent's rows (engine.Penalties)."""
                 ev = m.evaluate(x)
-                return float(ev.chi2) + sum(float(ev.terms.get(k, 0.0) or 0.0)
-                                            for k in ("Park J > 0", "abundances", "model data"))
+                return float(ev.objective) - sum(((x[j] - c) / s) ** 2 for j, c, s in prior_rows)
+
+            def model_rows(x, want_jac):
+                """The objective's rows between the data rows and the nuisance priors (engine.ModelRows).  The
+                tail is checked to be the nuisance priors (sum of squares), so that a change of the engine's row
+                layout cannot pass silently."""
+                if want_jac:
+                    r, J = f.residuals_and_jacobian(x)
+                else:
+                    r, J = f.residuals(x), None
+                r = np.asarray(r, float)
+                end = r.size - n_prior
+                if end < ndata:
+                    raise RuntimeError(f"objective rows: {r.size} for {ndata} data rows and {n_prior} priors")
+                want = sum(((x[j] - c) / s) ** 2 for j, c, s in prior_rows)
+                got = float(np.sum(r[end:] ** 2))
+                if abs(got - want) > 1e-8 * max(1.0, abs(want)):
+                    raise RuntimeError(f"objective rows: the last {n_prior} rows are not the nuisance priors "
+                                       f"({got:.10g} vs {want:.10g})")
+                return r[ndata:end], (None if J is None else np.asarray(J, float)[ndata:end])
 
             conn.send(("ready", info))
             while True:
@@ -97,6 +121,9 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
                             conn.send(("ok", (np.asarray(r, float)[:ndata], np.asarray(J, float)[:ndata])))
                         else:
                             conn.send(("ok", (np.asarray(f.residuals(x), float)[:ndata], None)))
+                    elif cmd == "model_rows":
+                        x, want_jac = payload
+                        conn.send(("ok", model_rows(np.asarray(x, float), bool(want_jac))))
                     elif cmd == "fast_status":
                         # pyazr 3.0: the rows without a Jacobian are the objective's own (one forward evaluation)
                         conn.send(("ok", dict(ok=True, checked=True)))

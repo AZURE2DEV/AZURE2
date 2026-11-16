@@ -170,6 +170,24 @@ class ParkWall:
         return cls(list(labels), [by.get(lab, []) for lab in labels])
 
 
+@dataclass
+class ModelRows:
+    """The rows of the engine's objective that belong to the model as a whole, not to a data set and not to one
+    nuisance's prior: model data (measured scattering lengths, widths, branching ratios, ... of ``<modelData>``), a
+    prior covariance, Park's J > 0 wall, the priors of ``gamma_decay`` records and the abundance sums.
+
+    pyazr 3.0's ``Objective.residuals`` gives them after the data rows and before the nuisance priors; the worker
+    cuts that block out (``model_rows``) and the evaluator appends it once, from one worker that holds the whole
+    R-matrix block (a shard keeps the model data and the decay records, so any shard has it).  The rows are never
+    weighted and count in ``penalty``.  pyazr 2 had no such rows: rmfit rebuilt the scattering lengths by finite
+    differences (ScatLenRows) and left the other terms out."""
+    n: int
+
+    @property
+    def parts(self):
+        return range(self.n)
+
+
 def _jpi_text(s: float, parity: int) -> str:
     """J^pi label of an s-wave channel (J = s), as rmfit level labels write it ("3/2+", "1-")."""
     t = f"{int(round(2 * s))}/2" if abs(s - round(s)) > 1e-6 else f"{int(round(s))}"
@@ -657,39 +675,43 @@ class Evaluator:
             return 0.0
         return float(np.sum(np.asarray(r, float)[-len(self.park.labels):] ** 2))
 
-    scat: Optional[ScatLenRows] = None
+    scat: Optional["ModelRows"] = None
 
     def _init_scat(self, worker, m_, azr):
-        """The measured scattering-length rows of the model (None without an active line)."""
-        # format 3: a measured scattering length is a record of <modelData>, a term of the engine's objective
-        # ("model data"); its rows are not ported yet (stage D of the port), so such a project is refused here
-        # rather than fitted without the term
-        from .azr3 import record_kinds
-        if "datum" not in record_kinds(azr):
+        """The engine's own rows of the model (:class:`ModelRows`), None when it has none (or only Park's wall,
+        which :class:`ParkWall` carries)."""
+        n = int(worker.call("model_rows", (np.asarray(self.x0, float)[m_], False))[0].size)
+        if n == 0:
             self.scat = None
             return
-        raise NotImplementedError(f"{os.path.basename(azr)}: model data (measured scattering lengths, ...) are not "
-                                  f"supported by rmfit on pyazr 3.0 yet")
-        sample = worker.call("scatlen", np.asarray(self.x0, float)[m_])
-        self.scat = ScatLenRows.build(azr, self.keys, self.n_rmatrix, worker.info.get("pair_i1i2", {}), sample)
-        print(f"rmfit: {len(self.scat.parts)} scattering-length row(s) from <scatteringLengths> "
-              f"({len(self.scat.cols)} R-matrix columns move them)", flush=True)
+        if self.park is not None:
+            if n == len(self.park.labels):
+                self.scat = None              # the block is the wall alone: ParkWall's rows
+                return
+            # the engine's block holds the wall among its other rows: take the whole block from the engine
+            print(f"rmfit: Park's J > 0 wall is taken from the engine's rows (with its other model rows)", flush=True)
+            self.park = None
+        self.scat = ModelRows(n)
+        print(f"rmfit: {n} model row(s) from the engine's objective (model data such as measured scattering "
+              f"lengths, a prior covariance, decay priors, abundance sums"
+              + (", Park's wall" if self.flags.get("use_park") else "") + ")", flush=True)
 
     def _scat_rows(self, x, jac=False):
-        """The measured scattering-length rows (and their Jacobian rows) at ``x``."""
+        """The engine's model rows (and their Jacobian rows) at ``x``."""
         x = np.asarray(x, float)
         w, m_ = self._park_handle()          # a worker holding the whole R-matrix block
-        r = self.scat.residuals(w.call("scatlen", x[m_]))
+        r, Jl = w.call("model_rows", (x[m_], bool(jac)))
+        r = np.asarray(r, float)
+        if r.size != self.scat.n:
+            raise RuntimeError(f"the engine gave {r.size} model rows, {self.scat.n} at start-up")
         if not jac:
             return r, None
-        if not self.scat.cols:
-            return r, np.zeros((r.size, x.size))
-        inv = {int(g): s for s, g in enumerate(m_)}
-        D = w.call("scatlen_jac", (x[m_], [inv[c] for c in self.scat.cols]))
-        return r, self.scat.jacobian(D, x.size)
+        J = np.zeros((r.size, x.size))
+        J[:, np.asarray(m_, int)] = np.asarray(Jl, float)
+        return r, J
 
     def scat_value(self, r) -> float:
-        """The scattering-length rows' share of the objective (they sit just before the Park wall rows)."""
+        """The model rows' share of the objective (they sit just before the Park wall rows)."""
         if self.scat is None:
             return 0.0
         r = np.asarray(r, float)
@@ -1035,6 +1057,12 @@ class Sharded(Evaluator):
         self.base_azr = os.path.abspath(base_azr)
         self.workdir = os.path.abspath(workdir)
         self.flags = dict(flags or {})
+        import pyazr
+        if pyazr.Project.open(self.base_azr).config().get("priorCovariance"):
+            # a prior covariance couples parameters of several data sets; a shard holds a subset of them and its
+            # file drops the key, so the term would be missing here and present in a single session
+            raise NotImplementedError(f"{os.path.basename(self.base_azr)}: a prior covariance (priorCovariance of "
+                                      f"<config>) is supported in SingleSession only")
         self.segments = base_segments(self.base_azr)
         # shard files carry neither `covariance` nor `normgroup` (rmfit.model.write_shard): a follower's
         # pieces run at its own fixed norm and are rescaled here, covariance rows are whitened here

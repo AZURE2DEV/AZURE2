@@ -295,8 +295,9 @@ def write_variant(base_azr: str, out_path: str, output_dir: str, datasets=None, 
     ``datasets``: None keeps the data sets as they are; else a list of ``(base record name, new name, {field:
     value})``: the data sets of the variant, each the base record with the given fields replaced (None removes a
     field); a base record listed more than once is copied under the new names (pieces of a split data set).  Data
-    sets not listed are removed, and with them (``datasets`` given) the extrapolations, the model data and the
-    prior covariance of ``<config>``, which belong to the whole model.  ``drop_fields``: fields removed from every
+    sets not listed are removed, and with them (``datasets`` given) the extrapolations and the prior covariance of
+    ``<config>`` (it may name parameters of removed data sets); the model data stay, so that any such variant has
+    the engine's model rows (rmfit.engine.ModelRows).  ``drop_fields``: fields removed from every
     data set kept.  Returns ``(path, {record name: its key in the variant})``."""
     import pyazr
     project = pyazr.Project.open(os.path.abspath(base_azr))
@@ -304,7 +305,7 @@ def write_variant(base_azr: str, out_path: str, output_dir: str, datasets=None, 
         used = {b for b, _, _ in datasets}
         for name, rec in list(project.records().items()):
             kind = rec.record_kind
-            if kind in ("extrapolation", "datum") or (kind == "dataset" and name not in used):
+            if kind == "extrapolation" or (kind == "dataset" and name not in used):
                 project.remove(name)
         if project.config().get("priorCovariance"):
             project.set_config(priorCovariance=None)
