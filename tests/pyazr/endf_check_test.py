@@ -28,6 +28,11 @@ except ImportError as e:
     sys.exit(77)
 from endf_testfiles import Writer, material
 
+if os.name == "nt":
+    # the stand-ins for the checking codes are one script under seven names, run by its first line: not on Windows
+    print("skip: the stand-in checking codes are scripts run by their first line")
+    sys.exit(77)
+
 STANDIN = os.path.join(HERE, "endf_standin", "standin.py")
 EXTRACT = os.path.join(HERE, "data", "endf", "h-002_He_004_extract.endf")
 REAL = {k: os.environ.get(k) for k in ("AZURE2_ENDF_UTILITIES", "AZURE2_PREPRO")}
@@ -71,7 +76,7 @@ r = E.check(hand)
 check("check(): the own check first, named as its own, and the three codes", r.own.path == hand and
       [x.program for x in r.reports] == ["checkr", "fizcon", "psyche"] and all(
           f.source == "pyazr.endf" for f in r.own.findings), r)
-deck = open(os.path.join(r.reports[0].workdir, "deck.txt")).read().splitlines()
+deck = open(os.path.join(r.reports[0].workdir, "deck.txt"), encoding="utf-8").read().splitlines()
 check("the deck: input file, message file, Y, DONE (checkr.f 255-270, 806-861)", deck == [
     "hand.endf", "checkr.out", "Y", "DONE"], deck)
 check("each code in a directory of its own, on a copy", len({x.workdir for x in r.reports}) == 3 and

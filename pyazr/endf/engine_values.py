@@ -103,7 +103,7 @@ class Sweeps:
         P = self.session.parameters
         x = P.x0 if x is None else np.asarray(x, float)
         path = os.path.join(self.workdir, "x.par")
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(f"#parametrization {self.session.basis}\n")
             for p in P:
                 fh.write(f"{p.name} {float(p.start if p.fixed else x[p.free_index])!r}\n")

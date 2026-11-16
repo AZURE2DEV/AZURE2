@@ -95,7 +95,8 @@ sed 's/^/        /' "$WORK/limits.txt"
 setup fit 0.5 "$HERE/models/fit.azr"
 # at 1 thread: a fit at several threads is not reproducible to the last digit (Minuit's parallel gradient sums)
 run fit fit 1
-res="$(python3 -I - "$HERE/models/truth.json" "$WORK/fit/output" "$WORK/fit/run.log" <<'PY'
+# (the text goes to a file: bash 3.2 of macOS reads an apostrophe of a here-document inside $( ) as a quote)
+python3 -I - "$HERE/models/truth.json" "$WORK/fit/output" "$WORK/fit/run.log" > "$WORK/fit_result.txt" <<'PY'
 import json, sys
 truth = json.load(open(sys.argv[1]))["fit"]
 out = sys.argv[2]
@@ -119,7 +120,7 @@ good = len(scales) == 1 and all(abs(p) <= 2 for p in pulls.values()) and abs(chi
 print(int(good), f"one scale parameter of {len(scales)}; " + "; ".join(text) + f"; chi2/nu = {chi2:.2f}/{nu}; "
       f"objective - chi2 = {total - chi2:.4f}, the prior {prior:.4f}")
 PY
-)"
+res="$(cat "$WORK/fit_result.txt")"
 if [ "${res%% *}" = 1 ]; then ok "fit: ${res#* }"; else bad "fit: ${res:-no result ($(grep -m1 ERROR "$WORK/fit/run.log"))}"; fi
 
 # ---- 5. refusals

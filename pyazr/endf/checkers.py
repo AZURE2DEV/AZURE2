@@ -286,7 +286,7 @@ def _run_check(checker, path, timeout, header_text):
     deck = f"{name}\n{out}\nY\nDONE\n"
     status, terminal = _run(checker, folder, deck, timeout)
     report_path = os.path.join(folder, out)
-    report = open(report_path, errors="replace").read() if os.path.isfile(report_path) else ""
+    report = open(report_path, errors="replace", encoding="utf-8").read() if os.path.isfile(report_path) else ""
     findings, version, totals, counted = [], None, None, 0
     if checker.name in ("checkr", "fizcon", "psyche") and report:
         findings, version, totals, counted = parse_report(checker.name, report, header_text)
@@ -398,7 +398,7 @@ class Candidate:
 def _sections_of(path):
     """{(MF, MT): [content of each line]} of the first material (MF=1 included), and the order."""
     out, order = {}, []
-    with open(path, errors="replace") as f:
+    with open(path, errors="replace", encoding="utf-8") as f:
         for text in f.read().splitlines():
             t = text.ljust(80)
             try:
@@ -492,7 +492,7 @@ def standardize(path, program="stanef", search=None, timeout=300, mf2=False):
     if checker.family == "prepro":
         deck = _prepro_deck(program)
         if deck:
-            with open(os.path.join(folder, f"{program.upper()}.INP"), "w") as f:
+            with open(os.path.join(folder, f"{program.upper()}.INP"), "w", encoding="utf-8") as f:
                 f.write(deck)
         status, terminal = _run(checker, folder, "", timeout)
         out = os.path.join(folder, "ENDFB.OUT")
@@ -500,7 +500,7 @@ def standardize(path, program="stanef", search=None, timeout=300, mf2=False):
         out = os.path.join(folder, "candidate.endf")
         status, terminal = _run(checker, folder, f"{name}\ncandidate.endf\n\n{'0,Y,Y,Y' if mf2 else ''}\nDONE\n",
                                 timeout)
-    listing = "".join(open(os.path.join(folder, f), errors="replace").read() for f in sorted(os.listdir(folder))
+    listing = "".join(open(os.path.join(folder, f), errors="replace", encoding="utf-8").read() for f in sorted(os.listdir(folder))
                       if f.upper().endswith(".LST"))
     if status is None or not os.path.isfile(out) or os.path.getsize(out) == 0:
         raise FormatRefused(what=f"{program} wrote no file (exit {status})", allowed="a run that writes its output",

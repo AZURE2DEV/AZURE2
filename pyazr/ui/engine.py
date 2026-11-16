@@ -567,7 +567,7 @@ def linear_sigma(e, x, covariance, names):
 def _read_chi_squared(path):
     """The rows and the Total- line of the program's ``chiSquared.out``: ([{chi2, n, norm, norm_chi2}], {name: v})."""
     rows, totals = [], {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("Segment#"):

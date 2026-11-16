@@ -343,6 +343,17 @@ jobs:
                       out = out "%0A" cnt[k] " test(s):" who[k] (cnt[k] > 5 ? " ..." : "") "%0A    " k }
                     if (out != "") printf "::error::%s: failed unit tests by the last line of their output:%s\n", os, out }
               ' unit-tests.log
+            # The first failing lines of every failed test in one annotation: the last line of a test that prints
+            # "FAILED: 1 check(s)" does not say which check (the second Windows run: eleven tests of 27 so).
+            awk -v os="${{ matrix.name }}" '
+              function flush() { if (name != "") out = out "%0A" name ":" (why == "" ? " (no failing line found)" : why)
+                                 name = ""; why = ""; k = 0 }
+              /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { flush(); if ($0 ~ /Failed|Timeout|Exception|Not Run/) name = $4; next }
+              /^[0-9]+% tests passed/ { flush() }
+              name != "" && /FAIL|Error|error:|refused|differ/ && $0 !~ /^ *ok / && $0 !~ /^ *(FAIL|FAILED)[: ]*[0-9]* *(check|failure)/ {
+                gsub(/%/, "%25"); gsub(/\r/, ""); if (++k <= 3) why = why "%0A    " substr($0, 1, 260) }
+              END { flush(); if (out != "") printf "::error::%s: the first failing lines of every failed unit test:%s\n", os, out }
+              ' unit-tests.log
             # One annotation per failed test with its failing lines and the tail of its own output
             # (%0A = newline), so the reason shows without the log download.
             awk -v os="${{ matrix.name }}" '
