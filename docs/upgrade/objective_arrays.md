@@ -200,7 +200,8 @@ Engine gathers (in `src/Objective.cpp` beside the terms, or a file `src/Diagonal
 - *Today* (read): three walks of the R-matrix levels with three forms of the arithmetic.
   - Value: `ParkTerm::Wall`, `Objective.cpp` 127-140: Σ over levels in the R matrix with J < 0 of
     `pow(J/s, 2.0)`, s = `kParkNormScale` = 10⁻³, J = `state.ParkNorm(j, la)`.
-  - Gradient: `AddParkPenaltyGradient`, `AZUREGrad.cpp` 82-103: for J < 0 (skipped when J ≥ 0, so a NaN J passes),
+  - Gradient: `AddParkPenaltyGradient`, `AZUREGrad.cpp` 82-103: for J < 0 (skipped when J ≥ 0 or NaN since the
+    repair of 2026-11-16, section 6 item 6; before it a NaN J passed),
     factor = 2J/s², dχ²/dγ_c = factor · (−2 γ_c S'_c), dχ²/dE = factor · (−Σ_c γ_c² S''_c), over the channels with
     radiation type 'P' of a pair of type 0.
   - Rows: `AppendModelRows`, `Objective.cpp` 424-451: one row per level, J/s for J < 0 (else 0, also for a NaN J),
@@ -221,7 +222,7 @@ Engine gathers (in `src/Objective.cpp` beside the terms, or a file `src/Diagonal
   `AZURECalc.cpp` 71) and maps (j, la, c) to `GradAccum::AddGamma`/`AddE`.
 - *Curvature*: none outside the rows (J: J ᵀJ of the rows).
 - **Verdict: moves.** Three forms side by side in one header, tested against central differences of J(γ, E) with a
-  linear S'(E) given in the test; three walks become one. The NaN asymmetry is kept (section 6, item 6).
+  linear S'(E) given in the test; three walks become one. The three skip a NaN J alike (section 6, item 6).
 
 ### T7, the abundances
 
@@ -387,7 +388,7 @@ manager stay stored by their terms, as today.
 
 The stale nuisance total through pyazr's `write_outputs` (`inference.md` §6) is kept: correcting it changes a printed
 number and needs the PI's word. The function penalty of `shifts.out` (`DataOutputFiles.cpp` 530-540) is not a field of
-`chiSquared.out` and is not changed (section 6, item 7).
+`chiSquared.out`; it was repaired on its own, with the PI's word (section 6, item 7).
 
 ## 5. Slices
 
@@ -462,15 +463,22 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
 5. **The API's own data χ²** (read): `AZUREAPI::EvaluateFilledChi2` (`AZUREAPIChi2.cpp` 68-125) forms T1, T1a, T1b and
    T2 a second time, with the sum of `Pull()²` where `SegmentTerms` sums `Chi2()` ((d/e)² against d²/e²: different
    rounding). pyazr's `calculate_chi2` and its `objective()` (`Objective::Chi2`) can therefore differ in the last bits
-   of the data part. Not changed by any slice; unifying it changes pyazr numbers.
-6. **Park and a NaN J** (read): the value and the rows skip a NaN J, the gradient does not (`AZUREGrad.cpp` 90 tests
-   `>= 0.0`). Kept as it is in slice 5; a correction is its own commit.
+   of the data part. **Repaired** 2026-11-16 (commit 1ac8cd41, the PI's word): `EvaluateFilledChi2` evaluates the model
+   and then calls `Objective::DataChi2`; its rows are read from `Results::objective`. `calculate_chi2_rwa` moved by at
+   most 2.5e-16 relative on T1-T3 and 13N (three bases, two points; 11 of 24 cases moved);
+   `tests/pyazr/objective_test.py` section 6.
+6. **Park and a NaN J** (read): the value and the rows skip a NaN J, the gradient did not (`AZUREGrad.cpp` 90 tested
+   `>= 0.0`). **Repaired** 2026-11-16 (commit 48dc8f89, the PI's word): the gradient tests `!(J < 0)`; ctest
+   `park_chi2_fallback`, variant E.
 7. **`shifts.out`'s function penalty** (read): `pen − penOwn` (`DataOutputFiles.cpp` 532-535) subtracts the constant
    shift's prior without asking whether the prior covariance replaced it, and does not subtract the √E coefficient's
    prior, although the comment says "minus those of its constant and sqrt(E) terms". For a segment that owns a shift
    function and has a varied √E shift with σ ≠ 0, or whose constant prior is replaced, the printed penalty is not the
-   function's. `PriorsChi2(list, s, function part)` would print the function's own; that changes `shifts.out` and is
-   left for the PI.
+   function's. **Repaired** 2026-11-16 (commit 1e5a80a7, the PI's word): the line prints
+   `PriorsChi2(list, kShiftFn, s)`, the function's own priors by the objective's rule; `tests/shift_fn/check.sh` case 8
+   (a replaced offset prior: 5 before, 9 after, 9 by hand). No `shifts.out` of the projects of `tests/` changed (24
+   with a function line, three bases); the √E case cannot occur (a function and a √E term on one data set are
+   refused).
 8. **Stale totals through pyazr** (read): `objective.nuisance` is set only by an `Objective::Chi2` with a nuisance
    function; `objective.priorCovariance` by `CalculateChi2RWA` / `Physical` (`AZUREAPIChi2.cpp` 142, 202), not by
    `write_outputs`. Unchanged by the design.
@@ -489,8 +497,8 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
   refreshes `ModelChi2` only (T6, T7, T9, T11); the prior covariance total is set by the last `CalculateChi2RWA`.
 - The comment of `AZUREAPI::WriteOutputFiles` (`AZUREAPIReports.cpp` 275-279) says pyazr adds the Park, abundance and
   scattering-length terms in Python; `objective.md` §4 step 4 says pyazr computes no prior since pyazr 2.11.0.
-- `CLAUDE.md` check 11 says no term is added outside `src/Objective.cpp`; `AZUREAPI::EvaluateFilledChi2` re-forms the
-  data terms (item 5 of section 6).
+- `CLAUDE.md` check 11 says no term is added outside `src/Objective.cpp`; `AZUREAPI::EvaluateFilledChi2` re-formed the
+  data terms (item 5 of section 6; repaired 2026-11-16, and its entry in check 11's allowed list removed).
 - In `include/Objective.h` 234-250 the comment of `ReplaceDiagonalPriors` stands above that of `AppendModelRows`, and
   the latter names Park's wall and the abundance sums but not the `gamma_decay` rows the function also appends
   (`Objective.cpp` 452-454).

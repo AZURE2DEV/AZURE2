@@ -41,9 +41,9 @@ A data quantity (a kind of data set)
    project with an independent answer (``tests/ratio_to_rutherford/`` is the
    pattern), its lines in ``tests/upgrade/predictions.txt``
    (``tests/upgrade/predictions_test.py --write``, ``upgrade_predictions``).
-5. After the build, ``AZURE2 --schema > schema.tmp && cp schema.tmp
-   tests/schema/schema_v3.json`` (a redirect straight onto the file empties it
-   when the binary path is wrong; ``experiment_schema``, ``pyazr_schema``: the
+5. After the build, ``AZURE2 --schema-out=tests/schema/schema_v3.json`` (it
+   writes a temporary file and renames it, so a wrong binary path or a failure
+   leaves the file as it was; ``experiment_schema``, ``pyazr_schema``: the
    only tests that see a stale schema) and ``python3 tools/gen_schema_docs.py``
    (check 18: the generated ``reference/format3.rst`` against
    ``schema_v3.json``); check 35 for a reference leaf.

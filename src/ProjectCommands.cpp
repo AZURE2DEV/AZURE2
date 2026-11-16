@@ -7,6 +7,7 @@
 #include "azure2/support/Environment.h"
 
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -286,6 +287,47 @@ int describeProject(const std::string &file, bool json, const std::string &recor
   return stopping.refusals.empty() ? 0 : 2;
 }
 
+/// --schema-out=FILE: the text of --schema written to a temporary file beside FILE and renamed over FILE only after the
+/// whole text was written and flushed without error, so that FILE is either the old one or the new one, never
+/// truncated.  Returns the exit status; any failure says why on standard output (as the other commands' errors) and
+/// leaves FILE as it was.
+int writeSchemaOut(const std::string &file) {
+  if (file.empty()) {
+    std::cout << "ERROR: --schema-out= needs a FILE: --schema-out=tests/schema/schema_v3.json" << std::endl;
+    return 2;
+  }
+  const std::string temporary = file + ".tmp";
+  const std::string text = azure2::experiment::Schema::ToJson() + "\n";  // the bytes --schema prints
+  bool written = false, opened = false;
+  {
+    std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+    opened = static_cast<bool>(out);
+    if (out) {
+      out.write(text.data(), static_cast<std::streamsize>(text.size()));
+      out.flush();
+      written = out.good();
+      out.close();
+      written = written && !out.fail();
+    }
+  }
+  std::error_code ec;
+  if (!written) {
+    if (opened) std::filesystem::remove(temporary, ec);  // only what this call created: never a name that was taken
+    std::cout << "ERROR: --schema-out: cannot write " << temporary << " beside " << file << "; " << file
+              << " is unchanged" << std::endl;
+    return 1;
+  }
+  std::filesystem::rename(temporary, file, ec);
+  if (ec) {
+    std::error_code ignored;
+    std::filesystem::remove(temporary, ignored);
+    std::cout << "ERROR: --schema-out: cannot replace " << file << " (" << ec.message() << "); " << file
+              << " is unchanged" << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
 /// The command was given; it exits with `value`.
 bool Exit(int &exitCode, int value) {
   exitCode = value;
@@ -377,6 +419,11 @@ bool RunProjectCommand(int argc, char **argv, const azure2::ThreadsInForce &thre
       return Exit(exitCode,
                   describeProject(argv[i + 1], json, record, std::vector<std::string>(argv + 1, argv + argc), threads));
     }
+
+  // --schema-out=FILE writes the same text to FILE, all or nothing (a redirect of --schema onto the file empties it
+  // when the binary fails or its path is wrong)
+  for (int i = 1; i < argc; i++)
+    if (strncmp(argv[i], "--schema-out=", 13) == 0) return Exit(exitCode, writeSchemaOut(argv[i] + 13));
 
   // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);
   // tests/schema/schema_v3.json is its committed copy

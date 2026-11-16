@@ -87,7 +87,7 @@ void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &st
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || state.ParkNorm(j, la) >= 0.0) continue;
+      if (!level->IsInRMatrix() || !(state.ParkNorm(j, la) < 0.0)) continue;  // J >= 0 or NaN: off the wall (ParkTerm)
       const double factor = 2.0 * state.ParkNorm(j, la) / s2;
       double dE = 0.0;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
