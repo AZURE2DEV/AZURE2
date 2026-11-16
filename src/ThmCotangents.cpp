@@ -10,7 +10,7 @@
 #include "Results.h"
 #include "Segment.h"
 #include "THMMatrixFunc.h"
-#include "ThmProfile.h"
+#include "InferenceTypes.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
 

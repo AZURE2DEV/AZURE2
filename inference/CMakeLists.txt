@@ -20,6 +20,7 @@ endif()
 
 add_library(azure2_inference STATIC
   src/LevelParameterLayout.cpp
+  src/LinearProfile.cpp
   src/ParameterIndexMap.cpp
   src/PosteriorSupport.cpp
   src/PriorCovariance.cpp)
@@ -47,10 +48,13 @@ endif()
 #                            differences, the rows' squares = the sums' part
 #   park_wall                one level of two particle channels with a linear S'(E): J by hand, the value, the
 #                            gradient's and the row's forms against central differences, J >= 0 and NaN off the wall
+#   linear_profile           the line s m + a_0 + a_1 E + a_2 E^2 by hand (0-3 terms), chi2 against a scan, a singular
+#                            normal matrix, s <= 0, the profiled norm against a scan and by hand,
+#                            ThmProfileDerivative against central differences
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src parameter_kinds_test.cpp level_parameter_layout_test.cpp parameter_index_map_test.cpp
              posterior_support_test.cpp gaussian_prior_test.cpp prior_covariance_test.cpp term_list_test.cpp
-             diagonal_priors_test.cpp abundance_priors_test.cpp park_wall_test.cpp)
+             diagonal_priors_test.cpp abundance_priors_test.cpp park_wall_test.cpp linear_profile_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(inference_${_t}_test tests/${_src})
   target_link_libraries(inference_${_t}_test PRIVATE azure2_inference)
