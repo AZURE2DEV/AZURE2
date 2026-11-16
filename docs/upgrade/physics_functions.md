@@ -208,7 +208,9 @@ Not done in stage 3:
 
 - `GenMatrixFunc::GetRk` (the R_k of a secondary decay) stays: it calls the engine's `AngCoeff`, which takes its
   3j and 6j symbols from GSL, while `physics/AngularCoupling.h` computes its own; the two agree to round-off, not
-  to the last bit, so the move would change output digits.
+  to the last bit, so the move would change output digits.  (Since 2026-11-16 `AngCoeff` calls
+  `physics/AngularCoupling.h` itself, `cnuc_split.md` section 9, so this reason is gone; `GetRk` is still engine
+  code.)
 - The analysing power of a particle exit stays in `Polarization::AmplitudeMatrix` (`PolarizationFunc.h`, an engine
   class over the compound system).
 - The contractions with a reader's angle (`SiteObservables.cpp`: the Legendre sum, the Coulomb amplitude times

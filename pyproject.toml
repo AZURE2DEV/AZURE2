@@ -92,6 +92,9 @@ manylinux-aarch64-image = "manylinux_2_28"
 # GSL's headers and libraries (AlmaLinux 8: gsl-devel is in the powertools repository); auditwheel copies libgsl
 # and libgomp into the wheel.
 before-all = "dnf install -y dnf-plugins-core && dnf config-manager --set-enabled powertools && dnf install -y gsl-devel"
+# The test command runs in the build's container: with this variable it writes each failed check as an annotation
+# of the run (tests/pyazr/wheel_smoke.py), which can be read without a login.
+environment-pass = ["GITHUB_ACTIONS"]
 
 [tool.cibuildwheel.macos]
 # Apple's clang has no OpenMP runtime: Homebrew's libomp (found by the top CMakeLists.txt); delocate copies libgsl
