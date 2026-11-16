@@ -33,6 +33,12 @@ of U, with pycoulomb's interface), `coulomb_range`, the Python module, the Numer
   ¹²C+¹²C (z ≈ 20) between 1 eV and 2.5 keV above threshold was +4.6 to +11.2 instead of −9.594, of ¹⁶O+¹⁶O (z ≈ 31)
   −525 instead of −15.47 (`physics_coulomb_threshold` test). Four lines and a declaration; the same repair upstream
   in pycoulomb would take its own K_n. I_0 and I_1 keep their series (positive terms, no cancellation).
+- `src/method_coulsm.cpp` (2026-11-16, `docs/upgrade/coulomb.md` section 10): for η = 0 and l ≥ 1 the adaptor
+  replaces F and F′ by u_l and u_{l−1} − (l/ρ) u_l of `riccati_bessel` (`src/Coulomb.cpp`, declared in `Coulomb.h`;
+  moved unchanged from `physics/src/transfer/DistortedWaves.cpp`). `cwfcomp_accurate.cpp` climbs in l from sin ρ
+  and cos ρ for F and G alike (A&S 14.2.1–2), which for ρ < l is F's unstable direction: F was wrong by 1.6 × 10⁻¹⁰
+  (l = 1) to 2.9 × 10¹³ (l = 4) at ρ = 7.5 × 10⁻⁴, 4.7 × 10⁹³ (l = 8) at ρ = 10⁻⁶. G, G′ (stable upward) and l = 0
+  (sin, cos) keep the routine's bits; the third-party file is unchanged and its F at η = 0 is discarded.
 - Otherwise the third-party sources are unchanged. They are compiled with warnings off (`-w`; they are not ours to
   edit), COULCC without FMA contraction (`-ffp-contract=off`, as in pycoulomb), and on Windows with
   `_USE_MATH_DEFINES` (the `M_*` constants under `-std=c++17`, which AZURE2's `external/coul` copy had as `#ifndef`
@@ -50,7 +56,7 @@ x86-64, `-O3`:
 
 | Method | η = 0 | η > 0, ρ < ρ_tp | η > 0, ρ ≥ ρ_tp | F′G − FG′ − 1 (η > 0) |
 |---|---|---|---|---|
-| `coulsm` | G 5.4e-16; F wrong for l ≥ 2 at small ρ (upward recurrence; enters P, S, φ only through F/G, ≤ 1.4e-16) | 6.9e-10 | 8.3e-10 | 4.8e-11 |
+| `coulsm` | F 7.4e-16, G 5.4e-16 (F from `riccati_bessel` since 2026-11-16, below) | 6.9e-10 | 8.3e-10 | 4.8e-11 |
 | `coul` | F 3.2e-02 (l ≥ 6, 1 ≤ ρ ≤ 2), G 3.2e-11 | 6.9e-10 | 8.3e-10 | 4.8e-11 |
 | `coulfg` | 1.9e-01 | 3.9e+00, 7 points fail (JWKB inside the turning point) | 6.3e-14 | 2.4e-15 |
 | `coulcc` | 4.5e-13 | 1.5e-12 | 3.0e-13 | 4.4e-16 |
