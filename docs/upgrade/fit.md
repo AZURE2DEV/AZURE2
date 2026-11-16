@@ -162,3 +162,73 @@ the returned covariance differ from them by up to 6e-4 relative for some of thos
 density; norms about 1e-5); why was not found. Two LM fits from the same start in one session also end 4e-15 apart in the
 objective (the pooled working copies keep state between evaluations: applied energy shifts and sub-point grids).
 Not found here; for the owner.
+
+## 5. The chosen fitter is a row's name, not a bit (design, 2026-11-17)
+
+The closing plan the PI approved: "a fitter without a `Config.h` bit".
+
+**What was.** Each row of `Fitters()` owned a bit of `Config::paramMask` (`FitterRow::configBit`:
+`USE_NLOPT_MINIMIZER` 1<<17, `USE_ANALYTIC_GRADIENT` 1<<19, `USE_LM_MINIMIZER` 1<<20, `USE_GSL_LM_MINIMIZER` 1<<23; the
+default row 0). A new fitter needed the next free enumerator of `Config::ParameterFlags` in `include/Config.h`, which
+almost every file of the engine, the binding and the tests includes: the recipes trial (`recipes2_report.md`, R3-3,
+C-7) rebuilt nearly everything for one table row. The bit carried nothing but "which row".
+
+**The rule of precedence, as it was** (`FitterOfConfig`, `src/Fitters.cpp`): the parser ORs the bit of every fitter
+switch it meets (`ApplyFitterSwitch`); the fit runs the *first row of the table* whose bit is set, else the row without
+a switch (`migrad`). So with several switches the row earliest in the table wins (nlopt, gsl-lm, lm, migrad-gradient),
+whatever their order on the command line or in the options file, and a repeated switch changes nothing. The only other
+writer: a project with THM data and the gradient bit unset gets the bit and the line "THM segments present: enabling
+the analytic gradient ..." (`src/AZURE2.cpp`, after the project is read).
+
+**The holder.** One member `std::string Config::fitter`: the `name` of the chosen row (`FitterRow::name`), empty when
+no switch chose one; `Config::Reset` empties it. Empty means the row without a switch (`migrad`), as before. The
+row's key, not its index, because (a) the rows differ by build (`nlopt` is a row only with `USE_NLOPT`), so an index
+names a different fitter in another build, while the name is the same everywhere; (b) the name is already the key
+of every other reader: `fit_with_engine(method=)`, `pyazr.kinds()["fitters"]`, `fitStatus.out`, the web UI's
+`engine_<name>`; (c) a name that is no row is caught (`FitterOfConfig` throws `std::logic_error`), an index past the
+end or of a reordered table is not. The cost (a string comparison at the parse and once per fit) is nothing.
+
+**How the parser sets it.** `ApplyFitterSwitch(configure, option)` finds the row of the switch and calls
+`ChooseFitter(configure, row.name)`, which sets `fitter` to the row unless the row already chosen comes earlier in the
+table. After any sequence of switches `fitter` is therefore the earliest row of those given: the old rule, now applied
+when the switch is read instead of when the fit starts. `FitterOfConfig` returns the row named `fitter`, or the row
+without a switch. The THM rule becomes `ChooseFitter(configure, "migrad-gradient")` under the same precedence (a
+switch of an earlier row still wins, as the bit did). Its line is printed when the chosen row is not migrad-gradient.
+This is the old condition, "the gradient bit is unset", except in one case: on a THM project with both a switch of an
+earlier row and `--use-gradient` (e.g. `--use-lm --use-gradient`), the line is now printed where it was not before.
+The fitter that runs is the same (lm), and so are all the numbers. A single member cannot tell "`--use-gradient` was
+given too" apart from "it was not". No test or project of the repository gives two fitter switches.
+
+**Readers of the old bits** (grep of `src/`, `api/`, `include/`, `tests/`, `pyazr/`, `io/`, `experiment/`, before the
+change; declarations in `include/Config.h` not counted):
+
+| Bit | Uses | Where |
+|---|---|---|
+| `USE_NLOPT_MINIMIZER` | 1 | the row (`src/Fitters.cpp`) |
+| `USE_GSL_LM_MINIMIZER` | 1 | the row |
+| `USE_LM_MINIMIZER` | 1 | the row |
+| `USE_ANALYTIC_GRADIENT` | 3 + 2 | the row; the THM rule's test and set (`src/AZURE2.cpp`); check 46 (2) |
+| `configBit` / `paramMask` through it | 2 | `FitterOfConfig` (read), `ApplyFitterSwitch` (set) |
+
+No reader in `api/`, `pyazr/` or the tests other than check 46. A session never sets a bit: `fit_with_engine` names
+the row. All of them now go through `ChooseFitter` / `FitterOfConfig`.
+
+**The retired bits.** Positions 17, 19, 20 and 23 of `ParameterFlags` stay unused, and a comment in `Config.h` says so.
+Nothing writes `paramMask` as a number: no `<<` of it, no file, no `--describe` line (`--describe` and pyazr's
+`describe()` print the options of the calculation one by one from `OptionStorages()`, none of them a fitter bit, and the
+fitter table from the rows, which never exposed `configBit`), no options-file line (that file holds flags), no
+`<lastRun>` writer in the engine. So no saved or printed form depends on these positions. They are still left empty,
+so that a mask from an old debugger session or a log keeps its meaning.
+
+**Check 46 and the recipe.** The row regex loses the `configBit` column. The clause "every minimizer bit of
+`src/AZURE2.cpp` is a row's" becomes: `include/Config.h` declares no fitter bit (no enumerator `USE_*_MINIMIZER` or
+`USE_ANALYTIC_GRADIENT`), and `Config::fitter` is assigned nowhere but `src/Fitters.cpp` (`ChooseFitter`) and
+`Config::Reset`. So a fitter is chosen only through the table, and a bit for one cannot come back. In the recipe
+"A fitter", step 2 drops the `configBit` column and `Config.h`: a new fitter is its function file, its row, its CMake
+line, its docs and its tests.
+
+**Test.** `tests/upgrade/fit_choice_test.cpp` (ctest `upgrade_fit_choice`). With no switch: the row without a switch.
+For every non-empty set of switch rows, in every order, each switch given once and given twice: the row chosen is the
+earliest of the set in `Fitters()`. The test computes that answer itself from the table's order, not through
+`ChooseFitter`. Also: the THM choice under an earlier switch and alone, `Reset`, and an unknown switch, which returns
+false and leaves the choice alone. The program's eight fits of `verify_branch.sh` (five fitters) end where they ended.
