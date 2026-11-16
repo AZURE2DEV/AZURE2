@@ -1050,6 +1050,23 @@ the domain raises ``pyazr.DomainError``, or with ``errors="mask"`` gives NaN and
 own setting matters (its Coulomb table, GSL, a nuclear potential), ``azr.channel_functions(pair, e_cm, l)`` gives F,
 G, their derivatives, P, S and the hard-sphere phase shift of one of its pairs.
 
+The collision matrix needs no session either.  ``pyazr.physics.collision_matrix`` takes the formal levels of one
+:math:`J^\pi` block (energies, reduced-width amplitudes of shape levels x channels) and the channel functions at one
+energy, and returns the level matrix ``A`` and the collision and T-matrices ``U``, ``T`` as complex arrays: the
+engine's own arithmetic (``physics/CollisionMatrix.h``), one factorization and one solve per channel.  It is not a
+row of the table, because its arguments are matrices; ``help(pyazr.physics.collision_matrix)`` has the formulae.
+
+.. code-block:: python
+
+   from pyazr import physics as ph
+   pair = dict(z1=1, z2=6, m1_u=1.00782503, m2_u=12.0)       # p + 12C, l = 0, a = 3.4 fm
+   P = ph.penetrability(0, radius=3.4, e_cm=0.4, **pair)
+   S = ph.shift(0, radius=3.4, e_cm=0.4, **pair)
+   phi = ph.hard_sphere_phase(0, radius=3.4, e_cm=0.4, **pair)
+   m = ph.collision_matrix([2.37], [[0.61]], 2.35,           # one level at 2.37 MeV, gamma = 0.61 MeV^1/2
+                           penetrability=[P], shift=[S], boundary=[S], hard_sphere_phase=[phi])
+   delta = np.angle(m["U"][0, 0]) / 2                        # the nuclear phase shift (rad)
+
 The bound-channel Whittaker function needs no session: ``pyazr.whittaker_wave(l, eta_b, rho)`` returns
 :math:`W_{-\eta_b,l+1/2}(2\rho)` (unit ANC, :math:`W \sim e^{-\rho}(2\rho)^{-\eta_b}`) on broadcast arrays of the
 dimensionless :math:`l`, :math:`\eta_b = Z_1Z_2e^2\mu/(\hbar^2\kappa)` and :math:`\rho = \kappa r`, as

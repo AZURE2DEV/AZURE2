@@ -34,7 +34,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 0 | Freeze announced on `dev` | dropped | `dev` moved on; the join is the owner's and the PI's |
 | 0 | Skills on pyazr 3.0's names | done, ticked | the skills' own self-tests were not re-run at the hand-over |
 | 1 | pycoulomb prerequisites | outside this repository | the PI's package; the functions used here are `physics/coulomb` |
-| 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up | the collision matrix and the observables are engine classes on `CompoundSystem`, not functions of the arrays |
+| 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up; the collision matrix and the observables' sums are functions of arrays the engine calls (`physics_functions.md`) | the analytic gradient of those functions, the R_k of a secondary decay and the particle analysing power are engine code; `pyazr.physics.collision_matrix` takes formal levels and particle channels only |
 | 1 | `channel_functions` replaces the old Coulomb code | done for the channel tables | GSL still called in `src/CoulFunc.cpp` and `src/ECIntegral.cpp`; the Coulomb table is kept by design |
 | 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
 | 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |

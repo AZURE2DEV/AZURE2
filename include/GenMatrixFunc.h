@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "Site.h"
 #include "LevelState.h"
+#include "azure2/physics/Observables.h"
 
 #include <cstring>
 #include <string>
@@ -16,26 +17,6 @@ struct Results;
 struct EntrancePathways;
 struct ExitRow;
 }
-
-/// A temporaray T-Matrix structure
-
-/*!
- * The TempTMatrix structure is used to coherently add T-matrix elements from
- * pathways  with like \f$ J,l,l' \f$ values for the calculation of angle integrated cross section.
- * This is primarly used to facilitate the interference between internal and external pathways.
- */
-
-struct TempTMatrix {
-  /// Total spin value of temporary matrix element
-  double jValue;
-  /// Entrance orbital angular momentum for temporary matrix element
-  int lValue;
-  /// Exit orbital angular momentum for temporary matrix element
-  int lpValue;
-  /// Value of temporary matrix element
-  complex TMatrix;
-};
-
 
 /// A generalized function class to calculate cross sections
 
@@ -84,43 +65,10 @@ class GenMatrixFunc {
   /// The observable without electron screening.
   void CalculateBareCrossSection(Site *, azure2::Results &results);
 
-  /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
-  void NewTempTMatrix(TempTMatrix);
-  /// As NewTempTMatrix, for the E1 component kept separately.
-  void NewTempTMatrixE1(TempTMatrix);
-  /// As NewTempTMatrix, for the E2 component.
-  void NewTempTMatrixE2(TempTMatrix);
-  /// Accumulate into temporary element \p i, 1-based.
-  void AddToTempTMatrix(int, complex);
-  /// Accumulate into an E1 temporary element.
-  void AddToTempTMatrixE1(int, complex);
-  /// Accumulate into an E2 temporary element.
-  void AddToTempTMatrixE2(int, complex);
-  /// Drop the temporary elements.
-  void ClearTempTMatrices();
-  /// Drop the E1 temporaries.
-  void ClearTempTMatricesE1();
-  /// Drop the E2 temporaries.
-  void ClearTempTMatricesE2();
   /// Store an internal T-matrix element for a resonant pathway.
   void AddTMatrixElement(int, int, complex, int decayNum = 1);
   /// Store an external T-matrix element for an external-capture pathway.
   void AddECTMatrixElement(int, int, complex);
-  /// 1-based position of the \f$J,l,l'\f$ temporary element, or 0 if absent.
-  int IsTempTMatrix(double, int, int);
-  /// 1-based position of the E1 temporary, or 0.
-  int IsTempTMatrixE1(double, int, int);
-  /// 1-based position of the E2 temporary, or 0.
-  int IsTempTMatrixE2(double, int, int);
-  /// Number of temporary elements.
-  int NumTempTMatrices() const;
-  /// Number of E1 temporaries.
-  int NumTempTMatricesE1() const;
-  /// Number of E2 temporaries.
-  int NumTempTMatricesE2() const;
-  TempTMatrix *GetTempTMatrix(int);
-  TempTMatrix *GetTempTMatrixE1(int);
-  TempTMatrix *GetTempTMatrixE2(int);
   /// Internal T-matrix element for a resonant pathway.
   complex GetTMatrixElement(int, int, int decayNum = 1) const;
   /// External T-matrix element for an external-capture pathway.
@@ -177,12 +125,7 @@ class GenMatrixFunc {
   const azure2::ExitRow *rt_decay_ = nullptr;
   std::vector<complex> rt_wl_;
   /// The Coulomb-nuclear interference per (channel spin, l), BuildCoulombInterference.
-  struct CoulombTerm {
-    double s;
-    int l;
-    complex c;
-  };
-  std::vector<CoulombTerm> rt_it_;
+  azure2::physics::CoulombInterference rt_it_;
   void BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool elastic);
   /// rt_wl_ (and for elastic scattering rt_it_) for the T-matrix held now, once per T-matrix.
   void BuildOrderProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool particleExit, bool elastic);
@@ -199,9 +142,11 @@ class GenMatrixFunc {
   /// scattering the nuclear amplitude's part).
   std::vector<double> LegendreCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
                                              const azure2::ExitRow &exit, int aa, int exitPairNum);
-  std::vector<TempTMatrix> temp_t_matrices_;
-  std::vector<TempTMatrix> temp_t_matrices_E1_;
-  std::vector<TempTMatrix> temp_t_matrices_E2_;
+  /// The coherent sums by (J, l, l') of the spin group at hand (azure2/physics/Observables.h): all pathways, and
+  /// those of E1 and of E2 radiation kept apart for the reported components.
+  azure2::physics::PartialWaveSums partial_sums_;
+  azure2::physics::PartialWaveSums partial_sums_E1_;
+  azure2::physics::PartialWaveSums partial_sums_E2_;
 };
 
 #endif
