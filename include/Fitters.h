@@ -22,7 +22,6 @@ using FitFunction = FitResult (*)(AZURECalc &objective, AZUREParams &params, con
 struct FitterRow {
   const char *name;           ///< the method's name (fit_with_engine(method=), kinds()["fitters"])
   const char *option;         ///< the program's switch that selects it; "" for the default
-  unsigned int configBit;     ///< the Config::paramMask bit the switch sets; 0 for the default
   bool gradient;              ///< uses the analytic gradient of the objective
   bool residualRows;          ///< uses the residual rows and their analytic Jacobian
   bool bounds;                ///< honours the parameters' limits
@@ -48,8 +47,14 @@ const std::vector<FitterRow> &Fitters();
 const std::vector<AbsentFitterRow> &AbsentFitters();
 /// The row named `name`, nullptr for none.
 const FitterRow *FitterNamed(const std::string &name);
-/// The fitter the program's switches select (Config::paramMask).
+/// The fitter the program's switches chose: the row named Config::fitter, else the row without a switch.
 const FitterRow &FitterOfConfig(const Config &configure);
+/*!
+ * Choose the row named `name` for the program's fit (Config::fitter) unless the row already chosen comes earlier in
+ * Fitters(): after any sequence of choices the earliest row of them is chosen, whatever their order (the precedence
+ * of the program's switches; docs/upgrade/fit.md section 5).  Throws std::logic_error for a name that is no row.
+ */
+void ChooseFitter(Config &configure, const std::string &name);
 /// The row of the fitter that ran for `result` of `row`: the fallback row when it fell back, else `row`.
 const FitterRow &FitterThatRan(const FitterRow &row, const FitResult &result);
 
@@ -63,7 +68,7 @@ FitResult RunFitter(const FitterRow &row, AZURECalc &objective, AZUREParams &par
 /// The program's usage lines of the fitters' switches (one per row with a switch) and of --max-calls.
 std::string FitterSwitchesHelp();
 /*!
- * The program's switch `option` of a fitter: sets its Config::paramMask bit and returns true; false for no fitter
+ * The program's switch `option` of a fitter: chooses its row (ChooseFitter) and returns true; false for no fitter
  * switch.  The switch of a fitter this build leaves out throws std::invalid_argument with what, the switches
  * allowed and how to get the fitter.
  */

@@ -60,9 +60,11 @@ points when it is set.
 
 **The table** (`src/Fitters.cpp`, `include/Fitters.h`): one row per fitter, in the program's precedence order:
 `name` (what `fit_with_engine(method=)` and `pyazr.kinds()["fitters"]` say), `option` (the program's switch, "" for
-the default), `configBit` (the `Config::paramMask` bit the switch sets), `gradient`, `residualRows`, `bounds`,
+the default), `gradient`, `residualRows`, `bounds`,
 `covariance` (whether it yields one), `minos` (whether MINOS can follow), `progressLabel`, `doc`, and `run`, its
-function. The program's choice (`FitterOfConfig`) is the first row whose bit is set, else the row with no switch.
+function. The program's choice (`FitterOfConfig`) is the row `Config::fitter` names, the earliest row of the switches
+given, else the row with no switch (section 5; until 2026-11-17 a `configBit` column and a bit of `Config::paramMask`
+per row).
 Consistency check 46: every row's switch is parsed by the program and named in `reference/command_line.rst`, and the
 fitter table of the user guide lists every row.
 

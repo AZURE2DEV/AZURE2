@@ -82,13 +82,12 @@ class Config {
     USE_API = (1 << 14),
     PERFORM_MCMC = (1 << 15),
     USE_WIGNER_LIMITS = (1 << 16),
-    USE_NLOPT_MINIMIZER = (1 << 17),
+    // (1 << 17), (1 << 19), (1 << 20), (1 << 23) were the fitters' bits (USE_NLOPT_MINIMIZER, USE_ANALYTIC_GRADIENT,
+    // USE_LM_MINIMIZER, USE_GSL_LM_MINIMIZER), retired on 2026-11-17: the chosen fitter is Config::fitter, a row's
+    // name (docs/upgrade/fit.md section 5).  The positions stay unused; a fitter never gets a bit here (check 46).
     USE_HYBRID_COULOMB = (1 << 18),
-    USE_ANALYTIC_GRADIENT = (1 << 19),
-    USE_LM_MINIMIZER = (1 << 20),
     CALCULATE_COVARIANCE_BAND = (1 << 21),
     SCALE_COVARIANCE_BY_CHI2 = (1 << 22),
-    USE_GSL_LM_MINIMIZER = (1 << 23),
     /// Park (2021) level-dependent boundary conditions: the fit parameters are
     /// the observed reduced width amplitudes.  Always set together with
     /// USE_BRUNE_FORMALISM, whose per-level shift functions it shares.
@@ -124,6 +123,10 @@ class Config {
   bool stopFlag;
   /// A bitmask for the encoding of configuration flags
   unsigned int paramMask;
+  /// The fitter the program's switches chose: the name of a row of Fitters() (include/Fitters.h), empty for none (the
+  /// row without a switch, migrad).  Set only by ChooseFitter (src/Fitters.cpp), which keeps the table's precedence;
+  /// read by FitterOfConfig.  A new fitter needs no edit of this header (docs/upgrade/fit.md section 5).
+  std::string fitter;
   /// A bitmask storing which checks are printed to screen.
   unsigned int screenCheckMask;
   /// A bitmask storing which checks are printed to file.

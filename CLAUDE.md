@@ -341,13 +341,14 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    `FitEvaluations::BestPoint()` (`HasBest()`, `Stopped()`; `src/FitNLopt.cpp` is the pattern), never from its own
    last evaluation. A fitter that honours `control.maxCalls` ends by it (`FitEvaluations::Count()`).
 2. Its row in `Fitters()` (`src/Fitters.cpp`; the row's place is its precedence in the program). Columns (`FitterRow`,
-   `include/Fitters.h`): name, option, configBit, gradient, residualRows, bounds, covariance, minos, callLimit,
-   fallback, progressLabel, doc, run. `configBit` is a new enumerator `USE_<X>_MINIMIZER` of `Config::ParameterFlags`
-   (`include/Config.h`, the next bit above the highest in use; a change of that header rebuilds nearly everything). No
-   edit of `src/AZURE2.cpp`: the parser and `--help` read the row (`ApplyFitterSwitch`, `FitterSwitchesHelp`) [check 46
-   fails when it names the switch, or sets a `USE_*_MINIMIZER` bit that is no row's]. The switch's row in
-   `reference/command_line.rst` and the table "The Engine's Fitters" of `docs/source/user_guide/fitting.rst`, and the
-   fitter's name in the lists of `user_guide/pyazr.rst` ("The engine's own fitters"), `web_interface.rst`
+   `include/Fitters.h`): name, option, gradient, residualRows, bounds, covariance, minos, callLimit, fallback,
+   progressLabel, doc, run. No edit of `include/Config.h` or `src/AZURE2.cpp`: the program's choice is the row's name
+   (`Config::fitter`, set by `ChooseFitter` under the table's precedence; `docs/upgrade/fit.md` section 5), and the
+   parser and `--help` read the row (`ApplyFitterSwitch`, `FitterSwitchesHelp`) [check 46 fails when `src/AZURE2.cpp`
+   names the switch, when `Config.h` declares a fitter bit, or when code outside `src/Fitters.cpp` sets
+   `Config::fitter`; `upgrade_fit_choice` tests the precedence over every set and order of switches]. The switch's
+   row in `reference/command_line.rst` and the table "The Engine's Fitters" of `docs/source/user_guide/fitting.rst`, and
+   the fitter's name in the lists of `user_guide/pyazr.rst` ("The engine's own fitters"), `web_interface.rst`
    (`engine_<name>`) and `calculate.rst` (its switch, "Minimizer Selection") [check 46].
 3. Its case in `tests/pyazr/fit_with_engine_test.py` (the session's fit ends where the program's ends; the `hesse=`
    argument of `compare` at its call says whether the errors of `param.sav` are compared: a fitter that returns errors

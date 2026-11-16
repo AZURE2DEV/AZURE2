@@ -1218,14 +1218,16 @@ except (OSError, IndexError, KeyError) as e:
 #     fitters' switches from it (ApplyFitterSwitch) and prints their usage lines from it (FitterSwitchesHelp), and
 #     src/AZURE2.cpp names no row's switch itself (no second list); every row's switch, and the switch of a fitter the
 #     build may leave out (AbsentFitters()), is a row of docs/source/reference/command_line.rst; every row's name is
-#     in the fitter table of docs/source/user_guide/fitting.rst; every minimizer bit a switch of src/AZURE2.cpp sets
-#     (Config::USE_*_MINIMIZER, Config::USE_ANALYTIC_GRADIENT) is the configBit of a row, so a fitter cannot be
-#     selected outside the table.  The prose that lists the fitters beside that table names every row too: the
+#     in the fitter table of docs/source/user_guide/fitting.rst; a fitter is chosen only through the table: include/
+#     Config.h declares no fitter bit (no enumerator USE_*_MINIMIZER or USE_ANALYTIC_GRADIENT: the choice is the row's
+#     name, Config::fitter, docs/upgrade/fit.md section 5) and Config::fitter is assigned in src/Fitters.cpp
+#     (ChooseFitter) and Config::Reset only.  The prose that lists the fitters beside that table names every row too: the
 #     section "The engine's own fitters" of user_guide/pyazr.rst (the method), the page user_guide/web_interface.rst
 #     (the job method ``engine_<name>``) and the section "Minimizer Selection" of user_guide/calculate.rst (the switch).
 _fitter_rows = []
 try:
-    _fitter_rows = re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (Config::\w+|0u),', read("src/Fitters.cpp"))
+    _fitter_rows = [(_n, _o, "row") for _n, _o in
+                    re.findall(r'\{"([\w-]+)", "((?:--[\w-]+)?)", (?:true|false),', read("src/Fitters.cpp"))]
     if not _fitter_rows:
         problems.append("src/Fitters.cpp: no row found in Fitters() (check 46)")
     _fitters_src = read("src/Fitters.cpp")
@@ -1273,11 +1275,17 @@ try:
             if _word and _word not in _scope:
                 problems.append(f"{_page}: the fitter '{_name}' of Fitters() is not named ({_word}) in "
                                 f"{'the section \"' + _title + '\"' if _title else 'the page'} (check 46)")
-    _row_bits = {_bit for _n, _o, _bit in _fitter_rows}
-    for _bit in sorted(set(re.findall(r"Config::(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)", read("src/AZURE2.cpp")))):
-        if "Config::" + _bit not in _row_bits:
-            problems.append(f"src/AZURE2.cpp: the switch bit Config::{_bit} selects a fitter that is no row of "
-                            "Fitters() in src/Fitters.cpp (check 46)")
+    for _bit in re.findall(r"(?m)^\s*(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)\s*=", read("include/Config.h")):
+        problems.append(f"include/Config.h: the bit {_bit} selects a fitter; the chosen fitter is the row's name, "
+                        "Config::fitter, set by ChooseFitter (docs/upgrade/fit.md section 5) (check 46)")
+    for _rel in tracked_files():
+        if not _rel.endswith((".cpp", ".h")) or _rel.startswith("external/") or _rel in ("src/Fitters.cpp",
+                                                                                         "src/Config.cpp"):
+            continue
+        if re.search(r"\bconfig\w*(?:\(\))?\s*(?:\.|->)\s*fitter\s*(?:=(?!=)|\+=|\.(?:assign|clear|swap)\()",
+                     read(_rel)):  # a Config by its usual names: configure, configure(), config_, config
+            problems.append(f"{_rel}: sets Config::fitter itself; a fitter is chosen by ChooseFitter "
+                            "(src/Fitters.cpp), which keeps the table's precedence (check 46)")
 except (OSError, IndexError) as e:
     problems.append(f"check 46: {e}")
 

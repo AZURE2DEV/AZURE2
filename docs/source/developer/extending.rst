@@ -398,16 +398,15 @@ A minimiser the program and a pyazr session can both run:
    and one that honours ``control.maxCalls`` ends by it
    (``FitEvaluations::Count()``).
 2. Its row in ``Fitters()`` (``src/Fitters.cpp``; the columns of ``FitterRow``,
-   ``include/Fitters.h``): name, the program's switch, the
-   ``Config::paramMask`` bit the switch sets (a new enumerator
-   ``USE_<X>_MINIMIZER`` of ``Config::ParameterFlags`` in ``include/Config.h``,
-   the next bit above the highest in use; a change of that header rebuilds
-   nearly everything), gradient / residual rows /
+   ``include/Fitters.h``): name, the program's switch, gradient / residual rows /
    bounds / covariance / MINOS, whether it honours a call limit
    (``callLimit``: ``RunFitter`` adds the notice for a fitter that does not),
    the row it falls back to without an analytic Jacobian (``fallback``), the
    progress label, one line of doc. Its place in the table is its precedence
-   in the program. The program's parser and usage text take the switch and
+   in the program: the program's choice is the row's name
+   (``Config::fitter``, set by ``ChooseFitter``, which keeps the earliest
+   row of the switches given), so ``include/Config.h`` is not edited. The
+   program's parser and usage text take the switch and
    the doc line from the row (``ApplyFitterSwitch``, ``FitterSwitchesHelp``:
    ``src/AZURE2.cpp`` is not edited);
    a fitter behind a build option also gets a row in ``AbsentFitters()`` for
@@ -419,8 +418,9 @@ A minimiser the program and a pyazr session can both run:
    fitters"), ``user_guide/web_interface.rst`` (``engine_<name>``) and
    ``user_guide/calculate.rst`` (its switch, "Minimizer Selection") (check
    46 fails for a row missing from any of them, for a switch named in
-   ``src/AZURE2.cpp`` outside the table, and for a minimizer bit of the
-   parser that is no row).
+   ``src/AZURE2.cpp`` outside the table, for a fitter bit declared in
+   ``include/Config.h`` and for ``Config::fitter`` set outside
+   ``src/Fitters.cpp``).
 4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
    ends where the program ends, with the program's covariance (the ``hesse=``
    argument of ``compare`` says whether the errors of ``param.sav`` are

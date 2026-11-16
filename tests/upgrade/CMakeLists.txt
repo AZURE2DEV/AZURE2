@@ -54,6 +54,12 @@ add_executable(project_options_test project_options_test.cpp)
 target_link_libraries(project_options_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_project_options COMMAND project_options_test)
 
+# The program's choice of fitter (docs/upgrade/fit.md section 5): Config::fitter names a row of Fitters(); with several
+# switches the earliest row of the table runs, in every order; the THM rule under the same precedence.
+add_executable(fit_choice_test fit_choice_test.cpp)
+target_link_libraries(fit_choice_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_fit_choice COMMAND fit_choice_test)
+
 # The planner of the shared mesh (include/MeshPlanner.h) against today's private grids: never coarser, shared,
 # independent of order, local, deterministic (docs/upgrade/energy_grid.md §2.8).
 add_executable(mesh_planner_test mesh_planner_test.cpp)

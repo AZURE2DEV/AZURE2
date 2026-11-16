@@ -513,11 +513,12 @@ int main(int argc, char *argv[]) {
   // analytic/THM-finite-difference gradient reaches the physical minimum,
   // chi2 47.9 with the direct norm at 1.000).  A THM segment is an active
   // data set with a THM observable (its spec), so enable the analytic
-  // gradient for such projects.
-  if (!(configure.paramMask & Config::USE_ANALYTIC_GRADIENT)) {
+  // gradient for such projects: the row migrad-gradient, under the switches' precedence (a switch of an earlier row
+  // still wins; docs/upgrade/fit.md section 5).
+  if (std::string(FitterOfConfig(configure).name) != "migrad-gradient") {
     const bool hasTHMSegment = ProjectHasThmData(configure);  // an active data set with a THM observable
     if (hasTHMSegment) {
-      configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
+      ChooseFitter(configure, "migrad-gradient");
       configure.outStream << "THM segments present: enabling the analytic gradient "
                              "(numerical MIGRAD stalls on joint THM+direct fits)."
                           << std::endl;
