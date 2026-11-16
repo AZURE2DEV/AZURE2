@@ -23,13 +23,14 @@ commits were not read. The hours are estimates of an agent that did not do the w
   section 3, row 4; the gap is a question to the owner).
 - **The scattering length**: `src/ScatteringLength.cpp`, `tests/scattering_length`.
 - **Capture in a project with two compound nuclei** (dev's decay-index repair): right here (run: dev's three models
-  converted, the merged project's two capture curves equal the standalone ones). dev's test `tests/two_nuclei_ec`
-  is not ported: convert it with `AZURE2 --convert` and add it.
+  converted, the merged project's two capture curves equal the standalone ones). dev's test is here since
+  2026-11-15: `tests/two_nuclei_ec` (six checks, also in the formal parametrization).
 - **A final state of external capture in the formal parametrization**: this branch has its own version (the boundary
   condition at the lowest level of a group; the final states' amplitudes carried by `CompoundSystem`). Run: dev's
   four models agree across level orders and between the two bases. **Not run:** a final state that is not the
-  lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. Port dev's
-  `tests/formal_ec_final_state` (51 checks) and repair what it finds.
+  lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. dev's
+  `tests/formal_ec_final_state` is here since 2026-11-15 (50 checks pass; its README lists the two differences from
+  dev that remain open: no analytic derivative of the final state's amplitude, and a refusal where dev warns).
 - **dev's new blocks in an old project file** (`<channelRadii>`, `<isospin>`, spin-operator data types): refused by
   the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands.
 - **The flight path of a UDR record** is in metres (it was mis-scaled here; repaired).
