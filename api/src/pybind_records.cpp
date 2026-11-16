@@ -27,7 +27,7 @@
 #include "Config.h"
 #include "JGroup.h"
 #include "PPair.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "ThmExperiment.h"

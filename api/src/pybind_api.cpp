@@ -35,7 +35,7 @@
 #include "azure2/io/Document.h"
 #include "AZUREAPI.h"
 #include "CompoundSystem.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "CommandLineValues.h"
 #include "Config.h"
 #include "GSLException.h"

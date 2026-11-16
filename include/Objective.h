@@ -13,11 +13,17 @@
 #include "WorkingCopy.h"
 #include "Segment.h"
 #include "TargetEffect.h"
+#include "azure2/inference/TermList.h"
 
 /*!
  * The fit objective as one ordered list of terms (docs/upgrade/objective.md, Phase 2).  Every path that needs the
  * chi-squared of a parameter vector -- the Minuit FCN (AZURECalc::operator()), the finite-difference and LM cost
  * (AZURECalc::Chi2On) -- sums this list, in this order, after the model values of every point are in place.
+ *
+ * The rule of the list -- the sum in order, the sum with a breakdown, the sampler's sum and support, the terms of the
+ * model alone -- is the inference/ library's (azure2/inference/TermList.h: Term<Context>, TermList<Context>), over
+ * the context below.  The terms themselves read the engine's objects and are engine code (src/Objective.cpp;
+ * docs/upgrade/inference.md section 2).
  *
  * The order is the one AZURECalc::operator() always used, so its chi-squared keeps its bits:
  *   T1-T4  data chi^2 per segment, with each segment's normalization prior and energy-shift priors
@@ -65,25 +71,8 @@ struct ObjectiveContext {
   std::function<double(const vector_r &)> nuisance;
 };
 
-class ObjectiveTerm {
- public:
-  virtual ~ObjectiveTerm() = default;
-  virtual std::string Name() const = 0;
-  /// Adds this term to chi2 (some terms add in several steps, in the order the engine always used).
-  virtual void Add(const ObjectiveContext &c, double &chi2) const = 0;
-  /// A term of the model alone (no data, no parameter vector): T6, T7, T9.
-  virtual bool ModelOnly() const { return false; }
-  /*!
-   * The part of the term the ensemble sampler adds to its -2 ln L, at the model the evaluation filled
-   * (docs/upgrade/objective.md section 6).  The default is the whole term, so that a new term reaches the sampler
-   * with no edit of the sampler.  A term whose parameters the sampler gives normalised Gaussian priors from their
-   * enumeration (ForEachDiagonalPrior, the nuisance priors, the prior covariance) adds that part here no more, and
-   * says so; a term that is a support of the posterior (Park) adds nothing and answers ExcludesForSampler.
-   */
-  virtual void AddForSampler(const ObjectiveContext &c, double &chi2) const { Add(c, chi2); }
-  /// True where the sampler's posterior is zero (-infinity in ln P) by this term (Park's J > 0, decision D2).
-  virtual bool ExcludesForSampler(const ObjectiveContext &) const { return false; }
-};
+/// One term of the engine's objective: Name, Add, ModelOnly, AddForSampler, ExcludesForSampler (TermList.h).
+using ObjectiveTerm = azure2::inference::Term<ObjectiveContext>;
 
 class Objective {
  public:
@@ -113,10 +102,10 @@ class Objective {
                          GradAccum &accum) const;
   bool AppendModelDataRows(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
                            int nCols, vector_r &residuals, vector_r &jac) const;
-  const std::vector<std::unique_ptr<ObjectiveTerm> > &Terms() const { return terms_; }
+  const std::vector<std::unique_ptr<ObjectiveTerm> > &Terms() const { return terms_.Terms(); }
 
  private:
-  std::vector<std::unique_ptr<ObjectiveTerm> > terms_;
+  azure2::inference::TermList<ObjectiveContext> terms_;
 };
 
 
@@ -258,7 +247,6 @@ inline void ForEachDiagonalPrior(WorkingCopy *data, const ParamIndexMap &pmap, F
 void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac);
 
-class PriorCovariance;
 std::vector<std::string> ReplaceDiagonalPriors(const CompoundSystem *compound, WorkingCopy *data, const PriorCovariance &pc);
 
 #endif

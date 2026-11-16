@@ -18,7 +18,7 @@
 
 class CompoundSystem;
 class Config;
-class PriorCovariance;
+#include "InferenceTypes.h"
 class WorkingCopy;
 
 /// The program's sink of fit progress: today's lines on standard output, byte for byte, and the intermediate files

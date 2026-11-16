@@ -15,7 +15,8 @@ The upgrade rebuilds the engine so that its structure follows the chain itself. 
 depends only on the stages before it: `physics/` (levels, channels, collision matrix, observables), `experiment/`
 (measurements, materials, stopping, the apparatus kernel), `inference/` (parameters, the objective, the fitter) and
 `io/` (projects and nuclear-data libraries). (That was the plan; what was built is in `FOR_THE_OWNER.md` section 5:
-there is no `inference/` library; the arithmetic of the collision matrix and of the observables is in `physics/`,
+`inference/` holds the parameter vector as plain data, the priors and the sums of the objective's term list, while
+the terms and the fitters are engine code (`inference.md`); the arithmetic of the collision matrix and of the observables is in `physics/`,
 their analytic gradient and the walk over a site's pathways are engine classes.) The calculation is written in three
 lines (`ARCHITECTURE.md` §1), and a
 new reaction, observable or apparatus effect enters at one stated place and is tested against synthetic projects

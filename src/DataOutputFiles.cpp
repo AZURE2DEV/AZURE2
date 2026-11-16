@@ -322,7 +322,7 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
     double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
     if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
         !thisSegment->IsNormPriorReplaced()) normChiSquared =
-                             pow((State(*thisSegment).norm - thisSegment->GetNominalNorm()) / normError, 2.0);
+                             GaussianPriorChi2(State(*thisSegment).norm, thisSegment->GetNominalNorm(), normError);
     const int thisIndex = (int)(thisSegment - Data().GetSegments().begin()) + 1;
     totalChiSquared += results.objective.segmentChi2[thisIndex];
     totalNormChiSquared += normChiSquared;
@@ -529,7 +529,7 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
         double pen = 0.0, penOwn = 0.0;
         owner.AddShiftPenalty(State(owner), pen);
         if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = pow((State(owner).energyShift - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);  // as AddShiftPenalty
+          penOwn = GaussianPriorChi2(State(owner).energyShift, owner.GetNominalEnergyShift(), owner.GetEnergyShiftError());  // as AddShiftPenalty
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << State(owner).energyShift << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << State(owner).shiftFnValues[q];

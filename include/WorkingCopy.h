@@ -13,7 +13,7 @@
 #include "ThmGroup.h"
 #include "EvaluationCount.h"
 #include "Results.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include <functional>
 #include <memory>
 #include <atomic>
@@ -40,7 +40,7 @@ class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class AZUREParams;
-class PriorCovariance;
+#include "InferenceTypes.h"
 class GSLException;
 struct BandData;
 namespace ROOT {
