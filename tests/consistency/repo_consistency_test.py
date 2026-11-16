@@ -573,20 +573,38 @@ except (OSError, ValueError) as e:
     problems.append(f"check 18: {e}")
 
 
-# 27. Every model-data quantity is evaluated and tested (CLAUDE.md recipe "A model-only datum"; data_model.md M10): each
-#     quantity of the table for record kind datum (experiment/src/Quantities.cpp, q.recordKinds = kDatum) has its row
-#     in ModelQuantities() (experiment/src/ModelDatum.cpp: the engine's evaluation, src/ModelData.cpp, switches on it)
-#     and a test named after it, a shell function `test_<quantity>()` or a Python `def test_<quantity>(` under tests/.
+# 27. Every model-data quantity is declared once, evaluated and tested (CLAUDE.md recipe "A model-only datum";
+#     data_model.md M10 and section 11): each quantity of the table for record kind datum (experiment/src/
+#     Quantities.cpp, q.recordKinds = kDatum) names its key, `q.datum = Datum(ModelQuantity::<X>, ...)`; every
+#     enumerator of ModelQuantity (experiment/include/azure2/experiment/ModelQuantity.h) is named by exactly one row (the
+#     engine's value, LevelValue in src/ModelData.cpp, is a switch on it that the compiler checks: -Werror=switch); and
+#     each quantity has a test named after it, a shell function `test_<quantity>()` or a Python `def test_<quantity>(`
+#     under tests/.
 quantities_text = read("experiment/src/Quantities.cpp")
 datum_quantities = []
+datum_keys = {}  # quantity -> its ModelQuantity enumerator
 for body in re.split(r"\nQuantity \w+\(\) \{", quantities_text)[1:]:
     body = body.split("\n}\n", 1)[0]
     m = re.search(r'q\.name = "(\w+)";', body)
     if m and re.search(r"q\.recordKinds = kDatum;", body):
         datum_quantities.append(m.group(1))
+        k = re.search(r"q\.datum = Datum\(ModelQuantity::(\w+)", body)
+        if k:
+            datum_keys[m.group(1)] = k.group(1)
 if not datum_quantities:
     problems.append("check 27: no datum quantities found in experiment/src/Quantities.cpp; update this test")
-evaluated = set(re.findall(r'(?m)^\s*\{"(\w+)", ModelQuantity::\w+\}', read("experiment/src/ModelDatum.cpp")))
+_enum = re.search(r"enum class ModelQuantity \{(.*?)\};", read("experiment/include/azure2/experiment/ModelQuantity.h"),
+                  re.S)
+enumerators = re.findall(r"(?m)^\s*(\w+)\s*(?:=[^,\n]*)?,?\s*(?://.*)?$", _enum.group(1)) if _enum else []
+if not enumerators:
+    problems.append("check 27: no enumerators of ModelQuantity found in experiment/include/azure2/experiment/"
+                    "ModelQuantity.h; update this test")
+for e in enumerators:
+    rows = sorted(q for q, k in datum_keys.items() if k == e)
+    if len(rows) != 1:
+        problems.append(f"ModelQuantity::{e}: named by {len(rows)} rows of experiment/src/Quantities.cpp "
+                        f"({', '.join(rows) or 'none'}); each value is the key of exactly one datum quantity (check 27)")
+evaluated = {q for q, k in datum_keys.items() if k in enumerators}
 test_names = set()
 for dirpath, _, files in os.walk(os.path.join(ROOT, "tests")):
     for name in files:
@@ -595,8 +613,9 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "tests")):
             test_names.update(re.findall(r"(?m)^\s*(?:def )?test_(\w+)\s*\(", text))
 for q in datum_quantities:
     if q not in evaluated:
-        problems.append(f"{q}: a datum quantity of the table without a row in ModelQuantities() "
-                        "(experiment/src/ModelDatum.cpp) and its evaluation in src/ModelData.cpp")
+        problems.append(f"{q}: a datum quantity of the table without its key, q.datum = Datum(ModelQuantity::<X>, "
+                        "...), a value of experiment/include/azure2/experiment/ModelQuantity.h with its case in "
+                        "LevelValue (src/ModelData.cpp) (check 27)")
     if q not in test_names:
         problems.append(f"{q}: a datum quantity without a test named after it (test_{q} under tests/)")
 

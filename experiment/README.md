@@ -135,7 +135,7 @@ here, as tables:
 | `src/ValueParsers.cpp`, `ReactionParser.cpp`, `ColumnsGrid.cpp` | the one parser of each value type (`Parsers.h`), producing the typed values of `Values.h` |
 | `src/Validate.cpp` | `Schema::Validate`: every problem as a `Diagnostic` (code, line, column, record, field, found, allowed, message, syntax-only fix) |
 | `src/SchemaJson.cpp`, `Json.cpp` | `Schema::ToJson`: the table as the JSON of §6.1 (`AZURE2 --schema`, `pyazr.schema()`) |
-| `src/ModelDatum.cpp` | `BuildModelData`: a validated `datum` record as a `ModelDatum`, its level and pairs found in `<levels>` given as plain tables (`LevelInfo`, `PairInfo`), with the refusals and warnings that need them; `ModelQuantities()`, the quantities the engine evaluates (`src/ModelData.cpp`) |
+| `src/ModelDatum.cpp` | `BuildModelData`: a validated `datum` record as a `ModelDatum`, its level and pairs found in `<levels>` given as plain tables (`LevelInfo`, `PairInfo`), with the refusals and warnings that need them; what each quantity resolves and checks comes from its row (`Quantity::datum`: the key `ModelQuantity`, `include/azure2/experiment/ModelQuantity.h`, of the engine's value in `src/ModelData.cpp`, and the `DatumCheck`) |
 
 `Schema::Validate(sections)` takes the records of each format-3 section and returns `ValidationResult{diagnostics,
 records}`: each `ValidatedRecord` holds its fields as typed `Value`s (numbers keep the text written), its quantity row,

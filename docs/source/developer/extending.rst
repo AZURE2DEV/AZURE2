@@ -697,7 +697,8 @@ Other tables
 ------------
 
 The repository's ``CLAUDE.md`` has the recipes for a model-only datum
-(``ModelQuantities()``, check 27), a derived parametrisation of a level
+(a value of ``ModelQuantity``, its row of ``Quantities()`` with
+``q.datum``, its case in ``LevelValue``; check 27), a derived parametrisation of a level
 (``gamma_decay``), a new optical potential term or global optical set
 (``physics/src/transfer``), a material or stopping source (``stopping/``,
 ``TargetStopping``), a cache, and a regression check (``tests/<name>/check.sh``

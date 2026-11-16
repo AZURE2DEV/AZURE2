@@ -308,14 +308,18 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    whole value in `src/ModelData.cpp`: no code); the binding, recipe "A physics function or an observable" step 2
    [check 41]. A hand value that needs Coulomb functions: mpmath `coulombf`, `coulombg` (`mp_waves`, `mp_channel` in
    `tests/pyazr/physics_table_test.py`), the inputs and the result in the comment of the case.
-2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity",
-   whose `variants` record of a datum writes value and error with their unit, `0.03 1` when dimensionless), and in
-   three places of the model-datum code: a value of `enum class ModelQuantity` (`experiment/include/azure2/experiment/
-   SetupSpecs.h`), its name in `ModelQuantities()` and its case in `Builder::LevelPairs` (both
-   `experiment/src/ModelDatum.cpp`: what `BuildModelData` must find in `<levels>` (level, pairs, channel), its refusals,
-   a code each, recipe "A format-3 diagnostic code"). Only check 27 sees a missing `ModelQuantities()` row; the
-   `switch (d.quantity)` of `LevelPairs` and of `LevelValue` have no `default`: a missing case is seen by no check.
-3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CompoundSystem::ObservedOfFitValues` returns (never
+2. A value of `enum class ModelQuantity` (`experiment/include/azure2/experiment/ModelQuantity.h`) and its row in the
+   table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`, `q.datum = Datum(ModelQuantity::<X>,
+   DatumCheck::<rule>, "<its words>")`; the recipe "A format-3 quantity", whose `variants` record of a datum writes
+   value and error with their unit, `0.03 1` when dimensionless). Nothing else in `experiment/`: `BuildModelData`
+   (`experiment/src/ModelDatum.cpp`) finds in `<levels>` what the record's fields name (`level` and `J`; a `reaction`'s
+   two pairs; `pair` with `l` and `s`, one channel; `pair`) and then applies the row's `DatumCheck` (`kResonance`,
+   `kClosedChannel`, `kOpenChannel`: the level against the pair's threshold, refused with "<its words> belongs to ...";
+   `kSWavePair`: a scattering length); a rule no value fits is a new `DatumCheck` value and its case there (a code per
+   refusal, recipe "A format-3 diagnostic code") [`docs/upgrade/data_model.md` section 11; `experiment_quantities`
+   fails for a datum row without its `datum`, check 27 for an enumerator no row names].
+3. Its case in `LevelValue` (`src/ModelData.cpp`; compiled with `-Werror=switch`: a value of the enum without its case
+   does not compile), from the table `CompoundSystem::ObservedOfFitValues` returns (never
    formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds the physical E, and per channel the
    observed width W, the observed value and its kind, and the factor `P` W was formed with (an open particle channel's
    penetrability at E), the pair's reduced mass `mu_u` (u) and channel radius `a_fm` (fm): read them there, never
@@ -323,7 +327,7 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    need `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; E_c = E_x -
    `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
-   quantity of the table has its `ModelQuantities()` row and a function so named (that it is called is not checked:
+   quantity of the table names its `ModelQuantity` and has a function so named (that it is called is not checked:
    add it to the list under "every quantity, three bases")]; `reference/data_formats.rst` (the list of datum
    quantities) and `.claude/skills/azure2-setup/references/data-kinds.md` (the row of model data). `check.sh` is no
    ctest: `bash tests/model_data/check.sh <build>/src/AZURE2`, or `tests/run_tests.sh`. A datum is a record of `t2.md`

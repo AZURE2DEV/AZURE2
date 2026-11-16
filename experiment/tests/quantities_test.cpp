@@ -248,6 +248,28 @@ int main() {
       }
     }
   }
+
+  // The model-datum code's view of each datum quantity (Quantity::datum; docs/upgrade/data_model.md section 11): every
+  // row of record kind datum gives its key (ModelQuantity, the engine's case in LevelValue) and no other row does; no
+  // two rows share a key; a channel or threshold check has the words of its messages.  An enumerator no row names:
+  // repo_consistency check 27.
+  std::map<int, std::string> keys;
+  for (const Quantity &q : Quantities()) {
+    const bool datum = std::find(q.recordKinds.begin(), q.recordKinds.end(), "datum") != q.recordKinds.end();
+    check(q.name + ": " + (datum ? "a datum row gives its DatumRule" : "no DatumRule outside the datum rows"),
+          q.datum.given == datum);
+    if (!q.datum.given) continue;
+    const auto [it, fresh] = keys.emplace((int)q.datum.quantity, q.name);
+    check(q.name + ": its ModelQuantity is no other row's (" + it->second + ")", fresh);
+    const bool channel = q.datum.check == DatumCheck::kClosedChannel || q.datum.check == DatumCheck::kOpenChannel;
+    bool lists = true;
+    for (const char *f : {"pair", "l", "s"}) {
+      bool listed = false;
+      for (const QuantityField &qf : q.fields) listed = listed || qf.field == f;
+      lists = lists && listed;
+    }
+    if (channel) check(q.name + ": a channel check has its words and the fields pair, l, s", !q.datum.what.empty() && lists);
+  }
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
