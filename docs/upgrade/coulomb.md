@@ -877,3 +877,54 @@ d wave or higher at ρ ≪ 1), and the rule of CLAUDE.md is that a cache whose c
 `WorkingCopy::ECSignature` goes to v8, so every `intEC.dat` of v7 is recomputed once (the `intEC.dat.sig` file of
 every capture project changes), with a stale-file case (u) in `tests/ec_m1_exact` beside (t), fixture `stale_v7`.
 The Coulomb table holds charged pairs only and keeps its identity.
+
+### 10.5 As built (2026-11-16)
+
+Built as sections 10.2–10.4 say (commit 7c925f70; build `work/b-f0`, GCC 11.5 Release, pyazr on, 0 warnings).
+
+*Accuracy* (`physics_coulomb_neutral`, 369 points, largest relative error of F / F′):
+
+| l | before | after |
+|---|---|---|
+| 1 | 2.0 × 10⁻⁴ / 1.0 × 10⁻⁴ | 1.8 × 10⁻¹⁵ / 5.4 × 10⁻¹⁶ |
+| 2 | 3.0 × 10⁹ / 2.0 × 10⁹ | 7.4 × 10⁻¹⁶ / 8.6 × 10⁻¹⁶ |
+| 3 | 1.0 × 10²³ / 7.9 × 10²² | 2.2 × 10⁻¹⁵ / 6.1 × 10⁻¹⁵ |
+| 4 | 6.6 × 10³⁶ / 5.3 × 10³⁶ | 3.0 × 10⁻¹⁵ / 2.8 × 10⁻¹⁵ |
+| 5 | 6.5 × 10⁵⁰ / 5.5 × 10⁵⁰ | 6.4 × 10⁻¹⁶ / 1.4 × 10⁻¹⁵ |
+| 6 | 9.4 × 10⁶⁴ / 8.0 × 10⁶⁴ | 4.9 × 10⁻¹⁶ / 2.4 × 10⁻¹⁵ |
+| 7 | 1.8 × 10⁷⁹ / 1.6 × 10⁷⁹ | 7.4 × 10⁻¹⁶ / 2.0 × 10⁻¹⁵ |
+| 8 | 4.7 × 10⁹³ / 4.1 × 10⁹³ | 8.0 × 10⁻¹⁶ / 7.6 × 10⁻¹⁶ |
+
+(the largest errors before are at ρ = 10⁻⁶). l = 0 is unchanged (1.8 × 10⁻¹⁶). G, G′ unchanged, at most 5.9 × 10⁻¹⁵ and
+3.3 × 10⁻¹⁵; |F′G − FG′ − 1| at most 6.7 × 10⁻¹⁶ (4.6 × 10⁷⁷ before). On the library before the change the test fails
+at 98 of 369 points. A scratch sweep (201 values of ρ from 10⁻⁶ to 10⁵, l = 0–8, against mpmath) gave at most
+6.3 × 10⁻¹⁵. `physics_coulomb`: `coulsm` at η = 0 F 7.4 × 10⁻¹⁶, Wronskian 6.7 × 10⁻¹⁶ (bounds now 10⁻¹⁴).
+
+*Nothing for η ≠ 0 moved.* F, F′, G, G′, σ and status of `coulsm`, library before and after, on 1404 charged
+arguments (l = 0–8; η = 10⁻³⁰⁰, 10⁻¹², 10⁻³, 0.01, 0.1, 0.6449, 1, 3, 10, 50, 150, 300, −0.5; ρ = 10⁻³, 0.01, 0.1,
+0.5, 1, 1.2011, 3, 7.5, 10, 30, 100, 1000): the same bits (the 9 points at η = 300, ρ = 1000 fail both times). G, G′
+at η = 0 the same bits on 11380 points; l = 0 unchanged. Time per neutral call 0.08 → 0.29 µs.
+
+*Signature.* v8; `tests/ec_m1_exact` case (u) (fixture `stale_v7`) fails on the binary before the change and passes
+after, with and without a table.
+
+*Full check* (`work/director/verify_f0.out`, every project in three bases against `tab-trial99-1`): 30 files differ
+per basis (of 887, 851, 887), none new.
+
+- In each basis: the 23 `intEC.dat.sig` (v8), and `ec_threshold` `ng` `intEC.dat` (509 numbers, at most
+  3.9 × 10⁻¹⁴ per number, 2.3 × 10⁻¹⁶ of each complex value).
+- Brune and formal: `secondary_gamma` `spin2_minus`, `spin2_plus` `parameters.out`: a width printed
+  "1000.000000 eV" before and "1.000000 keV" after; `sum_lab_frame` `sum_data`, `sum_free` `chiSquared.out` and
+  `run.log`: χ² 3.98668 × 10⁻¹⁷ → 3.98735 × 10⁻¹⁷ (1.7 × 10⁻⁴ relative, 6.7 × 10⁻²¹ absolute).
+- Park: the same `sum_lab_frame` files (2.5 × 10⁻⁶; `run.log` 9.0 × 10⁻⁶); `6Li_d` `AZUREOut_aa=1_R=4.out` in the
+  last printed digit (1.39 × 10⁻¹¹) and its `run.log` χ² 9312.1177619 → 9312.11776191.
+
+The eight fits: six identical; `13N` gradient and Levenberg-Marquardt differ only in `intEC.dat.sig`, χ² unchanged
+(28100.1722989, 28100.1722579). `ctest -LE slow` 332 of 332, `tests/run_tests.sh` 172 of 172.
+
+The two rows above 10⁻¹⁰ stopped the step and were read by the reviewer (not the PI), 2026-11-16: the
+`sum_lab_frame` χ² is zero to rounding, not a moved χ²; the `secondary_gamma` row is the choice of unit at an
+exact boundary, and `parameters.out` chooses the unit by the printed value on the integration branch since
+rehearsal 101 (`ReportWidth`, `src/LevelReport.cpp`), which prints "1.000000 keV" there on both sides, so the row
+goes with that merge. The `6Li_d` rows are of the approved size. No expected file, tolerance or reference value
+was changed.
