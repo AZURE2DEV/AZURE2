@@ -70,6 +70,14 @@ class LevelState {
     return groups_[j - 1].d2Energy[la - 1] == energy;
   }
 
+  // -- a group's arrays (the functions of physics/ read them: level after level, (la - 1) n_c + (ch - 1)) -----------
+  const double *Energies(int j) const { return groups_[j - 1].E.data(); }
+  const double *Gammas(int j) const { return groups_[j - 1].gamma.data(); }
+  const double *Shifts(int j) const { return groups_[j - 1].shift.data(); }
+  const double *ShiftDerivatives(int j) const { return groups_[j - 1].d1.data(); }
+  const double *ShiftSecondDerivatives(int j) const { return groups_[j - 1].d2.data(); }
+  const double *ParkNorms(int j) const { return groups_[j - 1].parkNorm.data(); }
+
   /*!
    * A number that changes whenever the energy, an amplitude, a shift function, J or a second derivative of the level
    * is set, unique over all levels of the process: equal versions mean those values are equal (ChannelSpace keys its

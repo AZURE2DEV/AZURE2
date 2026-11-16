@@ -287,9 +287,9 @@ struct LevelMatrixAdjointTables {     // one block; n levels, nc channels; point
   const char *shift_channel;                                // the channels with the shift terms (Brune 'P'; Park)
   bool brune, park;
 };
-struct LevelMatrixAdjointScratch { re_sym, im_sym, dE, acc, brune_p, kernel };
+struct LevelMatrixAdjointScratch { re_sym, im_sym, dE, acc, no_channel, kernel };
 level_matrix_adjoint(tables, Mbar, E, scratch, sink)        // of LevelMatrixAdjoint: Mbar -> E_l, gamma_lc
-inverse_adjoint(A, Abar, Mbar)                              // Mbar = -A^H Abar A^H (TBarAdjoint, ...ABarAdjoint)
+Mbar = inverse_adjoint(A, Abar)                           // Mbar = -A^H Abar A^H (TBarAdjoint, ...ABarAdjoint)
 bilinear_cotangent(in, out, sqrt_pen_in, sqrt_pen_out, tbar)     // of CollectBilinearTerms: T(k,m) -> beta
 amplitude_cotangent(in, out, tbar)                               // conj(-Omega Omega') tbar (the dense path)
 dense_bilinear_adjoint(pen2, g_in, g_out, A, ubar, Abar, sink)   // of TBarAdjoint's loop over level pairs

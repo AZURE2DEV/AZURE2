@@ -3,6 +3,7 @@
 
 #include "GenMatrixFunc.h"
 #include "azure2/physics/CollisionMatrix.h"
+#include "azure2/physics/CollisionMatrixAdjoint.h"
 #include "ChannelSpace.h"
 #include <memory>
 
@@ -25,17 +26,10 @@ struct TMatrixCotangent {
   std::vector<std::pair<int, double>> screen;
 };
 
-/*!
- * One term beta * g_ch^T A g_chp of the level-matrix bilinear forms of a
- * J-group: the internal T-matrix depends on the level matrix only through these
- * (AMatrixFunc::CollectBilinearTerms), so its adjoint is a sum over them
- * (AMatrixFunc::BilinearAdjoint).  beta is the cotangent of the bilinear form.
- */
-struct BilinearTerm {
-  int ch;
-  int chp;
-  complex beta;
-};
+/// One term beta * g_ch^T A g_chp of the level-matrix bilinear forms of a J-group (beta: the cotangent of the
+/// form): the internal T-matrix depends on the level matrix only through these (AMatrixFunc::CollectBilinearTerms),
+/// so its adjoint is a sum over them (AMatrixFunc::BilinearAdjoint; azure2/physics/CollisionMatrixAdjoint.h).
+typedef azure2::physics::BilinearTerm BilinearTerm;
 
 /// A function class to calculate the T-Matrix using the A-Matrix
 
@@ -343,10 +337,15 @@ class AMatrixFunc : public GenMatrixFunc {
   std::vector<std::vector<char>> raw_solve_valid_;
   /// Scratch level-matrix cotangent of BilinearAdjoint.
   matrix_c mbar_scratch_;
-  /// Scratch of LevelMatrixAdjoint.
-  std::vector<double> lma_resym_, lma_imsym_, lma_de_, lma_acc_;
-  std::vector<char> lma_brunep_;
-  std::vector<complex> lma_l_;
+  /// Scratch of azure2::physics::level_matrix_adjoint, and what LevelMatrixAdjoint collects for it of a J-group
+  /// (kept between calls): the channel kernel, B_c and the shift channels; S', S'' and J over a THM block's levels.
+  azure2::physics::LevelMatrixAdjointScratch lma_scratch_;
+  struct LevelAdjointGather {
+    std::vector<complex> kernel;
+    std::vector<double> boundary, d1, d2, parkNorm;
+    std::vector<char> shiftChannel;
+  };
+  LevelAdjointGather lma_gather_;
   std::vector<ChanCapEntry> chan_cap_cache_;
   vector_c chan_cap_entrance_;
   vector_c chan_cap_exit_;
