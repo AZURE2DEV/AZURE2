@@ -243,9 +243,9 @@ scripts. Besides the test, by hand on the merged build: a one-level, one-channel
 a block of five levels and three channels against a direct numpy inverse (off a level, 1e-7 MeV beside one, and
 with a closed channel) agree to rounding (below 1e-15), U unitary and symmetric.
 
-Not offered by the door yet, though `fill_level_matrix` takes them: Brune's and Park's parameters (they need the
-shift function and its derivatives at each level energy), photon channels and R-matrix capture. The observables'
-sums of `Observables.h` are not bound: a Python caller forms a cross section from T with numpy.
+Not offered by the door at stage 4, though `fill_level_matrix` takes them: Brune's and Park's parameters, photon
+channels and R-matrix capture (offered since stage 5, below). The observables' sums of `Observables.h` are not
+bound: a Python caller forms a cross section from T with numpy.
 
 Not done: **the analytic gradient.** The adjoints of the functions of stages 2 and 3 are `AMatrixFunc::PointTBar`
 (cross section to T), `TBarAdjoint`, `LevelMatrixAdjoint`, `BilinearAdjoint`, `FormalBilinearAdjoint`,
@@ -253,3 +253,76 @@ Not done: **the analytic gradient.** The adjoints of the functions of stages 2 a
 `src/AMatrixFunc.cpp`. They read the engine's free-parameter mask, the memo of the channel route and the pathway
 table in one pass; to move them, each needs the same split as its forward function (the arithmetic of one pathway
 as a function, the walk in the engine), with every gradient output identical. That is a stage of its own size.
+
+### Stage 5: the door takes the three parametrizations and photon channels (2026-11-16)
+
+`pyazr.physics.collision_matrix` (pyazr 3.0.0.dev4) has six more keywords; the door names the members of
+`LevelMatrixTables`, no formula is added and no engine file is touched:
+
+| keyword | shape, unit | read by | member of `LevelMatrixTables` |
+|---|---|---|---|
+| `parametrization` | `"formal"` (default), `"brune"`, `"park"` | | `brune`, `park` (Park sets both, as the engine) |
+| `boundary` | channels, dimensionless | formal only; refused otherwise | `boundary`, and B_c of `lo` |
+| `shift_at_levels` | levels x channels, dimensionless | Brune, Park | `shift`: S_c(E_l) |
+| `shift_derivative_at_levels_per_MeV` | levels x channels, MeV^-1 | Brune, Park; coincident levels only | `shift_d1` |
+| `park_norms` | levels, dimensionless | Park | `park_norm`: J_l = 1 - sum_c gamma_lc^2 dS_c/dE at E_l |
+| `photon_channels` | channels, bool | all | `rad_type` ('E' for True), `lo` = 0 |
+| `use_rmc` | bool | formal, with a photon channel | `rmc` |
+
+Choices made in the door, each stated in the docstring:
+
+- B_c is not an argument of Brune's and Park's matrices (S_c(E_l) stands where B_c stood), so `boundary` is refused
+  there instead of being read and cancelled; the door forms L_c with B_c = 0 for them, which removes the round-off
+  of adding and subtracting B_c (the engine adds its B_c and subtracts it; the two agree to rounding).
+- The derivative dS_c/dE enters an element only for two levels closer than `kCoincidentLevelGap_MeV` (1e-6 MeV,
+  `LevelPairShift.h`): it is asked for only then, and its absence is an error naming the two levels. The second
+  derivative enters no element (the gradients read it) and is not an argument.
+- Park's J_l is the caller's: forming it in the door would be a formula there. `Session.park_norms()` gives it for
+  a session's levels; the docstring gives the sum.
+- A photon channel has L_c - B_c = 0 and unit phase factors in the engine's channel tables; the door refuses a
+  shift, boundary value or phase other than 0 for it, so that a number that is not used is never accepted. Its
+  `penetrability` is the caller's factor: the engine's is (E_gamma / hbar c)^(2L+1), the row
+  `photon_penetrability`, or 1 with `use_rmc`. A beta-decay channel of a block is passed the same way (L_c = 0).
+- With `use_rmc` the door returns T by the same formula as otherwise; the engine's R-matrix-capture element of a
+  photon pathway is -i times the resonant amplitude (`rmc_t_matrix_element`), which a caller forms from U.
+
+Tests (`tests/pyazr/`):
+
+- `collision_matrix_test.py` (numpy, no session; 46 checks): A against the inverse of Brune's Eq. (33) and of
+  Park's Eqs. (21), (22) written out in numpy (1e-15); three formal levels in two channels taken to Brune's and
+  Park's parameters by numpy (the eigenvalue problem of Brune's paper, with shift functions written in the test)
+  give the U of the formal levels at eight energies (largest difference 1.4e-14); two levels 0.5 eV apart against
+  the divided difference; one Park level in closed form; one level with a proton and a photon channel in the
+  capture form, with and without the Reich-Moore term; the 18 errors.
+- `collision_matrix_session_test.py` (ctest `pyazr_collision_matrix_session`, 12 s): on T1, T2 and T3, in each
+  parametrization (a session with its defaults, with `use_brune=False`, with `use_park=True`), the arrays of every
+  block are read off the session (the parameter records' `start`, `channel_functions`, `park_norms`, B_c = S_c at
+  the lowest level) and an observable formed in numpy from U or T is compared with `Session.evaluate`:
+
+  | project | observable | points | largest difference (Brune / formal / Park) |
+  |---|---|---|---|
+  | T1 | phase shift p + 12C, 1/2+ (photon channels in the block) | 35 | 1.5e-10 deg in each |
+  | T1, no external capture | sigma(p,gamma_0), sigma(p,gamma_1) | 48, 38 | 1.5e-14 / 1.3e-15 / 9.1e-15 relative |
+  | T2 | sigma(p,alpha_1) / sigma(p,alpha_0) | 20 | 2.3e-15 / 1.1e-15 / 1.2e-15 |
+  | T3 | phase shift alpha + alpha, 2+ (hybrid potential, a beta channel) | 22 | 1.4e-14 / 1.4e-14 / 1.8e-14 deg |
+  | T3 | sigma_total n + 7Be; 7Be(n,p) | 40, 40 | 1.6e-13 in each |
+  | T3 | 7Li(p,n) | 51 | 1.4e-15 / 1.4e-15 / 1.6e-15 |
+
+  The capture cross sections are compared on a copy of T1 whose photon rows take no external capture (the multipole
+  mask of the row set to 0; the test asserts that the copy's cross sections differ from T1's), because the function
+  computes the R-matrix's photon channels and not the external-capture amplitudes. The 1.5e-10 deg of T1 is the
+  same in the three parametrizations and belongs to the Coulomb table: in a session with
+  `use_coulomb_table=False` the same comparison gives 7e-13 deg, so with the table `Session.channel_functions`
+  and the evaluation do not hand out P, S and phi equal to the last digits (not looked into further; both are
+  within the table's stated accuracy of 1e-7). Shown to fail: B_c taken at the
+  highest level fails the eight formal comparisons; S_c(E_l) off by 1e-6 the eight of Brune and the eight of
+  Park; J = 1 the eight of Park; the photon factor of another multipolarity the capture comparisons of each.
+
+`pyazr.physics.optical_scattering` (new, `api/src/pybind_optical.cpp`) is the door to `physics/transfer`'s
+distorted waves: `SolveDistortedWaves`, `ElasticOverRutherford` / `ElasticCrossSection`, `ReactionCrossSection`.
+Test `optical_scattering_test.py` against FRESCO 3.5's reference files of `physics/tests/data/fresco` (p + 15N,
+d + 15N, 6Li + 12C): S to 1.0e-5, sigma / sigma_R to 4.8e-5, the reaction cross section to 2.8e-7 relative.
+
+Not done: the Weisskopf width (no function in `physics/`: it is the one formula of `pyazr/widths.py`); bound
+states, DWBA cross sections and continuum bins of `physics/transfer` (each takes several potentials and a
+reaction; no door); the Physics tab does not show the two functions (they are not rows of the table).

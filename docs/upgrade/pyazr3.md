@@ -1180,3 +1180,60 @@ The findings 9-11, 24, 27 and 28 of `web_ui.md` section 12, each as a call of py
   `isatty()`; an interrupt ends it with status 0); `Project.set_pair`'s refusals name the value and what to give;
   `ChannelWidth.jpi` is the engine's J^pi text ("1/2+"); `is_entrance` of a pair record documented as what it is
   (an entrance of an active data set, set when the session is built: its value was right).
+
+## 10. Is pyazr in step with the engine? (audit of 2026-11-16, pyazr 3.0.0.dev4)
+
+Asked by the PI. What was compared, with what, and the result; the test counts of the day are in the hand-over
+entry (`HANDOFF.md`), not here.
+
+### 10.1 In step
+
+- **Options of the calculation.** The 14 rows of `io::ConfigKeys()` (`pyazr.kinds()["options"]`) are the 14 option
+  keywords of `Session.__init__`: no row without a keyword (a script compared the two; `pyazr_describe` and
+  `pyazr_config_options` test defaults and both values).
+- **Commands of the program.** `calculate` is `Session.evaluate`; `extrapolate` is `Session(file,
+  extrapolations=True)`; `fit` and `minos` are `Session.fit_with_engine(method, minos=)` over the same four
+  fitters (`kinds()["fitters"]`: gsl-lm, lm, migrad-gradient, migrad); `rate` is `pyazr.rate`; the covariance band
+  of `--covariance-band` is `pyazr.bands`; `--convert`, `--convert-params`, `--validate`, `--describe`,
+  `--schema`, the predictions and `--build-coulomb-table` are `pyazr.convert_azr`, `convert_params`, `validate`,
+  `describe`, `schema`, `predictions` and `pyazr coulomb-table build`.
+- **Public names.** The 97 names of `pyazr.__all__` exist, each callable has a docstring, and each is named in
+  `docs/source/user_guide/pyazr.rst` (a script over the built package; consistency checks 4 and 5 hold the
+  version and the exports). Of the 41 public members of `Session`, four are not named in `docs/source`:
+  `SHIFT_PENALTY_FROM_ZERO`, `is_alive`, `mass_number`, `model_gradients`. `tools/check_doc_names.py` reads 200
+  options and 509 pyazr names off the published pages and lists 7 that do not exist; none is a stale name
+  (`pyazr.engine`, three times, is the logger's name; `pyazr.prior` the marker of a prior file; `--no-readline`,
+  twice, is named as a refused option; `--mat` is an option of `pyazr endf`).
+- **Physics functions.** 24 rows, each with a test (check 41); the two functions that are not rows
+  (`collision_matrix`, `optical_scattering`) have tests of their own.
+- **Skills.** `tools/check_skills.py` passes; the ten self-tests (`ctest -R skill_`) ran on this build.
+
+### 10.2 Not in step
+
+- **The engine's ensemble sampler** (command `mcmc`, file `samples.mcmc`) has no pyazr call that runs it.
+  `Objective.log_prob` is the sampler's rule for a Python sampler (emcee), and the binding's
+  `sampler_log_probability` ties the two in a test; a run of the engine's own sampler from Python is not offered.
+- **Run options that are not project state**: `--capture-amplitudes=FILE` (an `intEC.dat` of an earlier run) and
+  `--threads=N` have no session keyword (a session takes OMP_NUM_THREADS), and the switches that can move a number
+  (`--srim-data-dir`, ...) reach pyazr as environment variables only (root `CLAUDE.md`, "Add a diagnostic switch":
+  a pyazr option would be one field of `RuntimeOptions`).
+- **The version was not bumped with the API.** `__version__` stood at `3.0.0.dev3` from 2026-11-13 (the
+  objective and the evaluation) through the additions of 2026-11-14 to 16 (`pyazr.priors`' builder, `rate`,
+  `covariance`, `physics.collision_matrix`), against the rule "a new public name bumps the version". It is
+  `3.0.0.dev4` with the arguments of this audit's branch; the earlier additions share that number.
+- **Two sentences said the API does not expose the penetrability** (`pyazr/widths.py`, the skill `azure2-check`'s
+  `references/widths.md`): it does (`Session.channel_functions`, `pyazr.physics.penetrability`). Corrected.
+- **The binding gaps** of `FOR_THE_OWNER.md` section 10 item 9: the level matrix and optical-model scattering are
+  bound now (`physics_functions.md`, stage 5); the Weisskopf width and the rest of `physics/transfer` are not.
+
+### 10.3 The names section 2.3 planned to rename or remove
+
+None was removed or renamed here: each is a public name, and removing one is the PI's decision.
+
+| Name | What it is | Who uses it | Recommendation |
+|---|---|---|---|
+| `Session.wigner_widths` (`session_physics.py`) | Gamma_W of each free open particle channel from the engine's transformation of a probe vector (every free amplitude set to 1e-4); equals 2 P gamma_W^2 only for a Brune level whose particle widths are all free (its docstring gives the sizes: 0.80-0.99 on T2, orders of magnitude in the formal basis) | `Session.dimensionless_widths` (theta^2 of the skill `azure2-check`, `widths_check.py`, the example `dimensionless_widths.py`), the user guide, the page's server (`ui/engine.py`) | keep the name; compute it as 2 P gamma_W^2 with P of `channel_functions` at the level energy, which is what its users take it for. Numbers of `dimensionless_widths` then change where the probe was not that (a behaviour change: PI) |
+| `pyazr.tabulate`, `TabulatedCrossSection` (`tabulate.py`, 257 lines) | an adaptive energy grid for sigma(E) of pair combinations, by bisection until log-linear interpolation holds to a tolerance; writes temporary projects and opens a session per round | the skills `azure2-calculate` and `azure2-plot`, the example `tabulate_cross_sections.py`, the user guide, `tabulate_thm_test.py`, `library_calls_test.py`, `convert_azr_test.py` | keep. `Session.model_curve(grid="refined")` does the refinement for one data set inside a session; `tabulate` is the only call that does it for pairs without a data set. Remove only after `model_curve` takes a pair |
+| `pyazr.angular_distribution` (`angular.py`, 115 lines) | Legendre coefficients at chosen energies through a temporary project with an extrapolation record and a second session | the example `angular_distribution.py` (run by `examples_test.py`), `convert_azr_test.py`, the skill `azure2-plot` (SKILL.md and `references/recipes.md`), the user guide | keep until the skill and the example are rewritten: an extrapolation record of `Project` and `Session(extrapolations=True).evaluate(x).data[i].extra["legendre"]` give the same numbers without a temporary project, and that rewrite is the first step of a deprecation |
+| `pyazr.modelavg` (583 lines: `Variant`, `ModelAverage`, `model_average`, ...) | model averaging over fitted variants (weights by AIC, BIC, chi^2; statistical and model variance kept apart); bookkeeping, no engine call | the skill `azure2-thm`, `model_average_test.py`, `thm_model_average_test.py`, four pages of the docs | keep as its own module. It is not a band of one model: merging it into `bands.py` (746 lines) would make a file above the 1,000-line limit |
+| `pyazr.priors` (844 lines) | the prior-covariance file: reader and writer on the engine's grammar, the builder of a prior from a fit, a chain or parts | the page's server (`ui/prior.py`, `ui/routes.py`), the example `prior_builder.py`, three tests and `tests/prior_covariance/check.sh`, four pages of the docs | keep as its own module, for the same reason; the plan of section 2.3 predates the builder (2026-11-14), which doubled the file |

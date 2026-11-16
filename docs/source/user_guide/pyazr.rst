@@ -1050,7 +1050,7 @@ the domain raises ``pyazr.DomainError``, or with ``errors="mask"`` gives NaN and
 own setting matters (its Coulomb table, GSL, a nuclear potential), ``azr.channel_functions(pair, e_cm, l)`` gives F,
 G, their derivatives, P, S and the hard-sphere phase shift of one of its pairs.
 
-The collision matrix needs no session either.  ``pyazr.physics.collision_matrix`` takes the formal levels of one
+The collision matrix needs no session either.  ``pyazr.physics.collision_matrix`` takes the levels of one
 :math:`J^\pi` block (energies, reduced-width amplitudes of shape levels x channels) and the channel functions at one
 energy, and returns the level matrix ``A`` and the collision and T-matrices ``U``, ``T`` as complex arrays: the
 engine's own arithmetic (``physics/CollisionMatrix.h``), one factorization and one solve per channel.  It is not a
@@ -1066,6 +1066,57 @@ row of the table, because its arguments are matrices; ``help(pyazr.physics.colli
    m = ph.collision_matrix([2.37], [[0.61]], 2.35,           # one level at 2.37 MeV, gamma = 0.61 MeV^1/2
                            penetrability=[P], shift=[S], boundary=[S], hard_sphere_phase=[phi])
    delta = np.angle(m["U"][0, 0]) / 2                        # the nuclear phase shift (rad)
+
+``parametrization`` says what the levels are, and each choice names the arrays its level matrix reads:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 46
+
+   * - ``parametrization``
+     - Levels
+     - Arrays besides the channel functions at the energy
+   * - ``"formal"`` (default)
+     - formal energies :math:`E_\lambda` (MeV) and amplitudes :math:`\gamma_{\lambda c}` (MeV\ :sup:`1/2`)
+     - ``boundary``: :math:`B_c`, one per channel
+   * - ``"brune"``
+     - observed energies and Brune's amplitudes (Brune, Phys. Rev. C 66, 044611 (2002))
+     - ``shift_at_levels``: :math:`S_c(E_\lambda)`, levels x channels, dimensionless
+   * - ``"park"``
+     - observed energies and the amplitudes of the observed widths,
+       :math:`\Gamma_{\lambda c} = 2 P_c \gamma_{\lambda c}^2` (Park, Phys. Rev. C 104, 064612 (2021))
+     - ``shift_at_levels`` and ``park_norms``:
+       :math:`J_\lambda = 1 - \sum_c \gamma_{\lambda c}^2\, dS_c/dE` at :math:`E_\lambda`, one per level
+
+``boundary`` belongs to the formal levels only; the other two matrices do not contain it and the call refuses it.
+Two levels closer than :math:`10^{-6}` MeV also need ``shift_derivative_at_levels_per_MeV``
+(:math:`dS_c/dE` at each level energy, MeV\ :sup:`-1`).  ``photon_channels`` marks the photon channels of the
+block (True per channel): a photon channel has no shift function, boundary value or phase (each must be 0 there),
+its widths are not in the level matrix, and its ``penetrability`` is the factor between :math:`\gamma^2` and the
+width, for which the engine takes :math:`(E_\gamma/\hbar c)^{2L+1}` (the row ``photon_penetrability``).
+``use_rmc`` adds the Reich-Moore term of each photon channel (formal levels only).  The three parametrizations of
+one block give the same ``U``.  For the levels of a session, ``describe()["parameters"]`` holds the energies and
+amplitudes of its parametrization (``start``), ``channel_functions`` the shift function at any energy and
+``park_norms()`` Park's :math:`J_\lambda`; ``tests/pyazr/collision_matrix_session_test.py`` rebuilds phase shifts
+and cross sections of T1, T2 and T3 this way and finds the session's values to at least 11 digits.
+
+Elastic scattering in an optical potential needs no session either: ``pyazr.physics.optical_scattering`` solves
+the distorted waves of ``physics/transfer`` (the waves of the THM distortion) for a projectile of spin 0, 1/2 or 1
+and returns the nuclear S-matrix element of each partial wave, the Coulomb phases, the elastic cross section over
+Rutherford's at the c.m. angles asked for (mb/sr for a neutral pair) and the reaction cross section in mb.  The
+potential is a dict of Woods-Saxon terms ``(depth in MeV, r0 in fm, diffuseness in fm)`` with one radius
+convention; ``help(pyazr.physics.optical_scattering)`` has the formula and the members.  The numbers agree with
+FRESCO 3.5 to :math:`10^{-5}` in S and :math:`5 \times 10^{-5}` in the ratio on three cases
+(``tests/pyazr/optical_scattering_test.py``).
+
+.. code-block:: python
+
+   potential = dict(radius_convention="target_mass", target_mass_number=15, coulomb_r0_fm=1.25,
+                    real_volume=(50.0, 1.2, 0.65), imaginary_surface=(6.0, 1.3, 0.5),
+                    real_spin_orbit=(6.0, 1.1, 0.6))
+   w = ph.optical_scattering(1, 7, 1.00782503, 15.0001089, 4.6875, potential,      # p + 15N, E_cm in MeV
+                             angles_deg=np.arange(10.0, 181.0, 5.0), projectile_spin=0.5)
+   w["ratio_to_rutherford"], w["reaction_mb"], w["S"]
 
 The bound-channel Whittaker function needs no session: ``pyazr.whittaker_wave(l, eta_b, rho)`` returns
 :math:`W_{-\eta_b,l+1/2}(2\rho)` (unit ANC, :math:`W \sim e^{-\rho}(2\rho)^{-\eta_b}`) on broadcast arrays of the

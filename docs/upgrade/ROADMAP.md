@@ -59,13 +59,13 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 6 | Parallel without copies | largely done | a fit and the sampler evaluate on copies of the working copy (`WorkingCopy::Clone`, one per evaluation running at once, owned by the caller). The `Site` split of `evaluation.md` §4.1 is prepared (`Site::Values`) and not made: the copy is the evaluation's own state, so the split alone would not remove it (§7.8, with the measurement). Decided 2026-11-16: the values are not held by pointer, the copies stay |
 | 6 | No hidden state | done: 14 permanent rows, no pending row, no `mutable` member (`evaluation.md` §7.7) | — |
 | 7 | Validation of transfer | the listed reactions | the ⁶Li bins; ³He and ¹⁴N to the continuum |
-| 8 | Object binding | built | transfer functions on potentials, the level matrix, the Weisskopf width |
+| 8 | Object binding | built; the level matrix in three parametrizations with photon channels and optical-model scattering bound (2026-11-16) | bound states, DWBA cross sections and continuum bins of `physics/transfer`; the Weisskopf width (no engine function) |
 | 8 | Rename and remove | most | `wigner_widths` probe, `tabulate` / `angular`, `modelavg` / `priors` into `bands` |
 | 8 | Wheels | configuration written; the workflow runs on a push that changes a packaging file since 2026-11-16 | the workflow's result (`FOR_THE_OWNER.md` section 10 item 7); no Windows wheel; the Coulomb table's address empty |
 | 9 | `pyazr ui` | done, ticked | — |
 | 9 | The page for the median user | built | what its box lists as open |
 | 9 | Project edits the page lacked | done, ticked | — |
-| 9 | Physics tab plots every function | what the binding has | the level matrix and the transfer functions wait for the binding |
+| 9 | Physics tab plots every function | every row of the physics table | `collision_matrix` and `optical_scattering` are bound but are not rows (matrices, a potential): the tab needs a form for them |
 | 9 | Tests of the page | `/api` tests, one headless-Chrome smoke test | **181 of 201 items of `qt_parity.md` not compared**; Firefox, Safari not run |
 | 9 | ENDF | reading, checking, starting a project, writing | the method of the MF=32 covariance: the owner's decision |
 | 9 | Remove `numcmc/` and the GSL fitter | kept | the owner's decision |

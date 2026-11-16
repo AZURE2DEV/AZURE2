@@ -510,11 +510,13 @@ py::list Describe() {
 void BindStopping(py::module_ &parent);  // pybind_stopping.cpp: stopping/, the submodule _azure2.stopping
 void BindLevelDoors(py::module_ &m);     // pybind_level_doors.cpp: one block's formal <-> observed levels (pyazr.endf)
 void BindCollisionMatrix(py::module_ &m);  // pybind_collision_matrix.cpp: one block's A, U and T at one energy
+void BindOptical(py::module_ &m);          // pybind_optical.cpp: elastic scattering on an optical potential
 
 void BindPhysics(py::module_ &m) {
   BindStopping(m);
   BindLevelDoors(m);
   BindCollisionMatrix(m);
+  BindOptical(m);
   m.def("physics_functions", &Describe,
         "The table of physics functions, one dict per row: name, summary, doc, library (the function called), axis "
         "(the argument a plot puts on its horizontal axis), group (its section of the table), arguments (name, unit, "
