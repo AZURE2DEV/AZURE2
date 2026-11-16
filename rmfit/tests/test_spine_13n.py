@@ -26,7 +26,7 @@ from rmfit import AZURE2_ROOT
 from rmfit.engine import SingleSession, Sharded
 from rmfit.keys import canonical_signs, sign_pattern, flip, take, index_map
 from rmfit.local import polish, default_bounds, BoundsPolicy, sanity, free_mask
-from pyazr import AzrModel
+from pyazr import Project, Nuisance
 
 failures = []
 
@@ -46,10 +46,10 @@ def main(nshards=4):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))
     # free two norms so the penalty rows are exercised
-    mdl = AzrModel.from_file(os.path.join(work, "13N.azr"))
-    mdl.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
-    mdl.set_segment_norm("kettner_55", vary=True, sys_error=10.0)
-    base = mdl.write(os.path.join(work, "base.azr"))
+    mdl = Project.open(os.path.join(work, "13N.azr"))
+    mdl.set("meyer_84", norm=Nuisance(1, "fit", prior=(1, "5%")))
+    mdl.set("kettner_55", norm=Nuisance(1, "fit", prior=(1, "10%")))
+    base = mdl.save(os.path.join(work, "base.azr"))
     flags = {}
 
     print("1. single vs sharded")

@@ -181,6 +181,18 @@ def segments(path, cwd=None) -> SegmentTable:
     return SegmentTable.from_file(path, cwd)
 
 
+def pairs(path) -> list:
+    """The particle pairs of the project (``pyazr.Project.pairs()``: key, kind_name, masses, threshold, ...)."""
+    import pyazr
+    return list(pyazr.Project.open(os.path.abspath(path)).pairs())
+
+
+def levels(path) -> list:
+    """The levels of the project (``pyazr.Project.levels()``: label, jpi, energy, active, channels, ...)."""
+    import pyazr
+    return list(pyazr.Project.open(os.path.abspath(path)).levels())
+
+
 def record_kinds(path) -> set:
     """The kinds of the records of the project (``dataset``, ``target``, ``datum``, ...)."""
     import pyazr

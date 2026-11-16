@@ -387,7 +387,7 @@ def build_shards(base_azr: str, nshards: int, workdir: str,
     sg = shift_groups(base_azr).units()
     # 2026-10-24: a shift-function group's members use the function of its first active member, which declares it;
     # a split member would declare it twice in one shard (an engine error) or not at all, so members are never split
-    fg = shift_fn_groups(base_azr).units()
+    fg = {}     # format 3: one energy_scale record holds the offset and the shift function (sg has its members)
     both = sorted(set(sg) & set(fg))
     if both:
         raise ValueError(f"segments {both} carry both shiftgroup and shiftfngroup (the engine refuses that)")
@@ -440,7 +440,7 @@ def plan_balanced(base_azr: str, nshards: int, weights, no_split, conv_grid, bal
     dflt = float(balance.get("default_factor", 1.0))
     alpha, beta = float(balance["alpha"]), float(balance["beta"])
     sg = shift_groups(base_azr).units()
-    fg = shift_fn_groups(base_azr).units()
+    fg = {}     # format 3: one energy_scale record holds the offset and the shift function (sg has its members)
     p0 = plan_pieces(base_azr, weights=weights, conv_grid=conv_grid, seg_factors=f, default_factor=dflt)
     total = sum(p.cost for p in p0)
     frac = float(os.environ.get("RMFIT_BALANCE_PIECE", "0.35"))      # split target as a fraction of a shard's share

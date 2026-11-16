@@ -1076,11 +1076,12 @@ class Sharded(Evaluator):
     # -- Jacobian-cost balancing -------------------------------------------------
 
     def _balance_signature(self) -> str:
-        from .model import block_lines
-        text = open(self.base_azr).read()
+        # every record of the project that is not a level: the data sets and what they name (targets, beams, ...)
+        import pyazr
+        records = [r.text for r in pyazr.Project.open(self.base_azr).records().values()]
         nshards, weights, no_split = self._plan_args
         env = {k: os.environ.get(k, "") for k in ("RMFIT_SPLIT_SUM", "RMFIT_CONV_PPS", "RMFIT_BALANCE_PIECE")}
-        blob = json.dumps(dict(seg=block_lines(text, "segmentsData"), tint=block_lines(text, "targetInt"),
+        blob = json.dumps(dict(records=records,
                                nshards=nshards, weights=weights, no_split=list(no_split), env=env), sort_keys=True)
         return hashlib.md5(blob.encode()).hexdigest()
 
@@ -1211,7 +1212,7 @@ class Sharded(Evaluator):
                 q_all[ga:gb] = q
                 if p.base_key in self.norm_groups.leader:
                     col, nom = self._norm_owner(p.base_key)
-                    n0 = float(p.tokens[norm_field(p.tokens)])
+                    n0 = float(p.norm0 if p.norm0 is not None else 1.0)
                     self.follow[(si, ei)] = (col, nom, n0, np.where(np.isfinite(q), q, 0.0),
                                              np.asarray(d["cross_err"][ei], float) != 0)
         self.cov = None
@@ -1299,7 +1300,26 @@ class Sharded(Evaluator):
             self.layout.append(entries)
             self.shard_rows.append((a, off))
         self.npts = off
-        self.penalties = Penalties.from_segments(self.keys, self.segments, self.base_azr)
+        # the nuisances of every shard on the global columns and the base model's data-set keys: the priors
+        # (Penalties) and the values of the base table's nuisance fields come from the shards' parameter rows
+        self.nuisances = []
+        for s, m_, i in zip(self.shards, self.maps, infos):
+            smap = s.seg_map
+            for r in i.get("nuisances", []):
+                r = dict(r)
+                if r.get("free_index") is not None:
+                    r["free_index"] = int(m_[int(r["free_index"])])
+                if r.get("segment_key") is not None:
+                    r["segment_key"] = int(smap[int(r["segment_key"])])
+                self.nuisances.append(r)
+        # a normalization-group follower is written into its shard with the fixed norm 1 (model.write_shard): its
+        # row says nothing about the base model, where it follows the group's first member
+        followers = set(self.norm_groups.leader)
+        self.segments.with_nuisances([r for r in self.nuisances
+                                      if not (r["kind"] == "norm" and r.get("segment_key") in followers)])
+        self.penalties = Penalties.from_nuisances(self.keys, self.nuisances)
+        self.nuisance_of_col = {int(r["free_index"]): r for r in self.nuisances
+                                if not r["fixed"] and r.get("free_index") is not None}
         self.wigner_limits = dict(infos[0]["wigner"])
         self.level_energy = infos[0]["level_energy"]
         self.fixed_amplitudes = list(infos[0].get("fixed_amplitudes", []))
@@ -1479,16 +1499,12 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
     (norms and shifts included), and verify the pair by re-evaluating it in a
     fresh session: the objective must agree to ``verify_rtol``.
 
-    This replaces ``pyazr.azure2.save_fit`` for campaign use.  ``save_fit``
-    opens its verification session inside the same process as the fit
-    session, and on a large model that second session has come back
-    with a parameter table that does not match the first (the engine keeps
-    per-process state); here every session is its own process.
+    The files are written by ``pyazr.Session.save_fit`` (in a worker process); the check is rmfit's own, with
+    rmfit's objective, every session in a process of its own.
 
     Returns ``(azr_path, sav_path, Score)``.
     """
     from .keys import take
-    from pyazr import AzrModel
     workdir = workdir or os.path.join(os.path.dirname(os.path.abspath(base_azr)), "variants")
     x, nudged = nudge_zero_widths(x, keys)
     if nudged:
@@ -1524,53 +1540,29 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
                 xs, want = xn, trial
         rmask = np.array([k.kind in ("energy", "width") for k in ev.keys])
         want_levels = ev.score(np.where(rmask, xs, ev.x0))   # norms/shifts at nominal
-        snap = ev.worker.call("snapshot", None)
-        # 2026-10-24: every parameter's physical value, fixed ones included.  A fixed parameter is fixed in rwa
-        # space and its observed value moves with the other amplitudes of its level (Brune's 1 + sum gamma^2 dS/dE,
-        # closed channels included), so keeping the seed file's observed value for it is another model on re-read:
-        # one archived candidate failed this check (14 fixed widths of frozen levels with
-        # free ANCs, up to +13 %).  A pyazr without transform_all_rwa_full (before 2026-10-12) writes the free
-        # parameters only, as before.
-        try:
-            phys_all = np.asarray(ev.worker.call("transform_all", xs), float)
-        except Exception as err:
-            phys_all = None
-            print(f"bake: fixed parameters NOT rewritten (this pyazr cannot transform them: "
-                  f"{str(err).strip().splitlines()[-1]}); a level whose free amplitudes moved may fail the check")
-        phys = None if phys_all is not None else np.asarray(ev.transform(xs), float)
-    mdl = AzrModel.from_file(base_azr)
-    if phys_all is not None:
-        mdl.apply_fit(snap["parameters"], phys_all, physical=True, include_fixed=True, pairs=snap["pairs"])
-    else:
-        mdl.apply_fit(snap["parameters"], phys, physical=True, pairs=snap["pairs"])
-    if output_dir is not None:
-        mdl.set_output_dir(output_dir)
+        src_keys = list(ev.keys)
+    # The snapshot is Session.save_fit, in a process of its own on the source variant as written (its covariance
+    # fields included; the evaluator above ran its .nocov copy): every level's physical values into the rows they
+    # come from, fixed parameters included (a fixed parameter is fixed in the fit's basis, so its observed value
+    # moves with the other amplitudes of its level), the nuisances left at the file's values (norms="nominal": the
+    # prior centres stay where they are), and the companion parameter file with every parameter and its basis tag.
+    # pyazr's own re-read check is off: the check below does it in fresh processes with rmfit's objective.
     path = os.path.abspath(path)
-    mdl.write(path)
+    w = _Worker(src, workdir, flags, None, name=f"{name}_save").start()
+    try:
+        xw = take(xs, src_keys, w.info["keys"], np.asarray(w.info["x0"], float))
+        azr_written, sav_written = w.call("save_fit", (path, xw, dict(param_sav=True, verify=False, norms="nominal")))
+    finally:
+        w.stop()
     sav = os.path.splitext(path)[0] + ".sav"
-    # 2026-10-22: the keyword blocks rmfit handles itself must survive the write (an older pyazr
-    # drops what it does not know, and the written model would silently be another objective)
-    from .covariance import line_keyword, segment_lines
-    # 2026-10-24: and `total` (a pyazr that does not know it may drop it, and the segment becomes elastic only)
-    kw = lambda f: [(line_keyword(t, "covariance"), line_keyword(t, "normgroup"), line_keyword(t, "total"))
-                    for t in segment_lines(f)]
-    if kw(path) != kw(base_azr):
-        os.remove(path)
-        raise RuntimeError("bake: the written model lost or changed `covariance`/`normgroup`/`total` keywords "
-                           "(pyazr AzrModel of this build); file removed")
-    free_index = {p.index: p.free_index for p in snap["parameters"]}
-    # AZURE2 tags every parameter file with the amplitudes it holds (0 standard,
-    # 1 Brune, 2 Park) and converts on read when a run in the other alternative
-    # basis loads it; an untagged file is taken as Brune's, which would be wrong
-    # for a Park-mode campaign.  The '#' keeps positional (numpy.loadtxt) readers
-    # unaffected.
-    basis = 2 if flags.get("use_park") else (1 if flags.get("use_brune", True) else 0)
-    with open(sav, "w") as fh:
-        fh.write(f"{'#parametrization':>28s} {float(basis): .7e} {0.0: .7e}\n")
-        for i, (nm, fx, v) in enumerate(zip(snap["names"], snap["fixed"], snap["all_rwa"])):
-            fi = free_index.get(i)
-            val = xs[fi] if (not fx and fi is not None and fi < xs.size) else v
-            fh.write(f"{nm:>28s} {float(val): .7e} {0.0: .7e}\n")
+    if sav_written and os.path.abspath(sav_written) != sav:
+        os.replace(sav_written, sav)
+    # the snapshot carries the source variant's output directory: give it the caller's, else the base model's
+    import pyazr
+    out = pyazr.Project.open(path)
+    out.set_config(output_dir=(output_dir if output_dir is not None
+                               else pyazr.Project.open(os.path.abspath(base_azr)).config().get("output_dir", "output/")))
+    out.save()
     chk = single_variant(path, f"{name}_chk", workdir)
     with SingleSession(chk, cwd=workdir, flags=flags, name=f"{name}_chk", objective=objective) as ev2:
         x2 = take(xs, ev.keys, ev2.keys, ev2.x0)
