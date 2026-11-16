@@ -1059,13 +1059,18 @@ too, the row ``weisskopf_width`` of :doc:`physics_functions` (two-digit textbook
 
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the
-channel's Wigner limit, :math:`P_l` the penetrability of the session's own channel functions (``channel_functions``:
-its Coulomb table, or the hybrid model's solution for a pair with a nuclear potential) at the channel radius, and
-:math:`E_r` the pair's c.m. energy at the level's physical energy (the level's row of ``azr.transform(x)``, the
-observed energy written into ``<levels>``).  It is the same number in Brune's, the formal and Park's parametrization
-of one level scheme.  Free particle channels that are open at :math:`E_r` have an entry; a closed channel (an ANC,
-not a width), a photon channel and a fixed channel have none, and ``dimensionless_widths`` leaves their
-``wigner_width`` and ``theta2`` ``None``.
+channel's Wigner limit, :math:`P_l` the penetrability the engine formed the observed width with (the session's own
+channel functions, as ``channel_functions`` gives them: its Coulomb table, or the hybrid model's solution for a pair
+with a nuclear potential) at the channel radius, and :math:`E_r` the pair's c.m. energy at the level's physical
+energy (the level's row of ``azr.transform(x)``, the observed energy written into ``<levels>``).  It is the same
+number in Brune's, the formal and Park's parametrization of one level scheme.  Free particle channels that are open
+at :math:`E_r` have an entry; a closed channel (an ANC, not a width), a photon channel and a fixed channel have none.
+``dimensionless_widths`` gives ``wigner_width`` and ``theta2`` (with the row's ``value`` as Γ) of free and fixed open
+particle channels alike, and its ``level_energy``, ``is_open`` and a photon's ``e_gamma`` (with the W.u. that follow)
+are taken at the level's physical energy in every parametrization; a closed channel has ``theta2`` ``None``, a fixed
+one ``theta2_formal`` ``None``.  A fixed channel's ``value`` is its physical value as the session was made, not at
+``x``: under Brune's and the formal parametrization it moves with the level's other widths, and ``azr.transform(x)``
+has the value at ``x``.
 
 .. note::
 
@@ -1076,6 +1081,14 @@ not a width), a photon channel and a fixed channel have none, and ``dimensionles
    property of the channel (up to :math:`8\cdot10^3` times :math:`2P\gamma_W^2` on T2).  A θ² of a level with fixed
    widths, or of a formal-basis session, from an older build should be recomputed.  ``eps`` is still accepted and
    is ignored.
+
+.. note::
+
+   Before pyazr 3.0.0.dev6 ``dimensionless_widths`` left ``wigner_width`` and ``theta2`` of a fixed open particle
+   channel ``None``, and in the formal basis (``use_brune=False``) it reported ``level_energy`` as the formal pole
+   energy of the fit vector and took ``is_open`` and a photon's ``e_gamma`` (and so ``weisskopf`` and ``wu``) there,
+   not at the physical level energy.  Brune and Park sessions gave the same numbers for every other field.  A
+   formal-basis table from an older build should be recomputed.
 
 The external region, and the caches
 -----------------------------------
