@@ -4,7 +4,7 @@ An engine >= dev e239a12 keeps levels with different IDs apart at any gap (engin
   exact    a free 1/2+ put 0.3 keV from a broad and from a narrow 1/2+: bake writes the vector as it is, nothing moved; the file
            reads back with every key and the same objective; sanity passes with a close_pairs warning
   sharded  the baked file evaluated by Sharded (3 shards) gives SingleSession's objective
-  scan     the objective stays finite as the gap shrinks to 1e-6 keV and follows gap^-4 below 1e-3 keV: no round-off in the Brune
+  scan     the objective stays finite as the gap shrinks to 1e-6 keV and levels off below 1e-3 keV (dev's engine: gap^-4 there): no round-off in the Brune
            divided differences.  The growth is the formalism, not a bug: the added level has one channel, so the pair's amplitudes are
            parallel and one combination decouples into a state of width ~gap^2 that capture feeds, with no photon width in the level
            matrix to limit it.  A pair with non-parallel amplitudes stays finite (two-level calculation, 2026-11-08).
@@ -113,7 +113,12 @@ def main():
             x[j] = E_REF[tag] + gap * 1e-3
             obj[gap] = ev.score(x).objective; print(f"   gap {gap:g} keV: objective {obj[gap]:.10f}", flush=True)
         check("scan: finite down to 1e-6 keV", all(np.isfinite(v) for v in obj.values()), str(obj))
-        check("scan: gap^-4 below 1e-3 keV", all(abs(obj[g * 0.1] / obj[g] / 1e4 - 1) < 0.05 for g in (1e-3, 1e-4)), str(obj))
+        # dev's engine takes the coincidence limit below 1e-9 MeV, so there the objective of this parallel-amplitude pair
+        # grows as gap^-4 down to 1e-6 keV; this branch's takes it below 1e-6 MeV with the mean S' (FOR_THE_OWNER.md
+        # section 3, row 4), so the objective rises and then levels off below 1e-3 keV
+        gaps = sorted(obj, reverse=True)
+        check("scan: rises as the gap shrinks and levels off below 1e-3 keV",
+              all(obj[b] >= obj[a] for a, b in zip(gaps, gaps[1:])) and abs(obj[1e-6] / obj[1e-5] - 1) < 0.02, str(obj))
         x[j] = E_REF[tag]
         rep = sanity(ev, x, transform=False)
         check(f"same E: a gap below {SAME_ENERGY_KEV:g} keV fails sanity", len(rep.merge_pairs) == 1 and not rep.ok, rep.summary())
