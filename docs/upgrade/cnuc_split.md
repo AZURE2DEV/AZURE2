@@ -391,6 +391,22 @@ the step-4 engine (a18fe89e code; Coulomb table format 1): 2063/2069 files ident
 expected value moved, so there was no re-baselining commit); 1 vs 8 threads identical (12/12). One-thread
 calculation: 13N 7.24 → 7.26 s, 13N_capture_ay 1.94 → 2.06 s (mean of three).
 
+**The engine's own coefficients, 2026-11-16.**  `AngCoeff::ClebGord` and `AngCoeff::Racah` (the external-capture
+amplitudes, the particle analysing power, the R_k of a secondary decay) called GSL's 3j and 6j symbols until then;
+they now call `clebsch_gordan` and `racah_w` of `physics/`, so the engine has one implementation.  Evidence:
+(a) `physics_engine_coupling_gsl`: 322 959 Clebsch-Gordan and 1 771 561 Racah argument sets (2j <= 12 and 10)
+against the former GSL expressions, largest difference 4.1 x 10^-15, no keep-test mismatch.  (b) Every project in
+three bases against `tab-t74-1`: 23 files differ in each (of 887, 851 and 887 for Brune, formal and Park).  Of
+these 20 are `intEC.dat` (every amplitude within 1.3 x 10^-14 relative), and the observable files are
+`angle_mapping` R = 1, `ec_e1m1_phase` `s_1` R = 3 and (Brune, formal) `gamma_lab_frame` `cm` R = 2: every changed
+number is within 3.2 x 10^-16 of its column's largest value (zeros by cancellation).  In Park's basis
+`ec_threshold` `ng` prints one width as `1.000000 eV` where it printed `1000.000000 meV`: the value sits on the
+unit's boundary.  (c) The eight fits against the engine before: six identical file by file; the two fits of
+`tests/13N` keep their number of iterations, chi-squared (every printed digit) and `parameters.out`, and 131
+numbers of their output files differ in the last printed digit (at most 5 x 10^-11 of the value; the PI accepted
+this on 2026-11-16).  (d) The external-capture file's signature is v7, so a file written before is recomputed
+(`tests/ec_m1_exact` case (t)); with it the 23 signature files of each basis differ too, and nothing else.
+
 ### Step 6a (branch `feature/upgrade-1-pathways`, 2026-11-09)
 
 Design section 10 (365c325f); physics (8f92d046); engine (416bd630). `SortPathways` builds the System, calls

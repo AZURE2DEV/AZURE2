@@ -14,6 +14,7 @@ only to a scratch folder in the working directory; exits 0 when every check pass
 """
 import math
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,10 @@ def check(name, ok, detail=""):
     print(f"  {'ok  ' if ok else 'FAIL'}  {name}" + ("" if ok else f"  -- {str(detail)[:600]}"))
     if not ok:
         failures.append(name)
+        if os.environ.get("GITHUB_ACTIONS"):
+            # One annotation per failed check: the run's log needs a login, its annotations do not.
+            text = f"{name} -- {str(detail)[:600]}".replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=wheel_smoke ({platform.machine()})::{text}", flush=True)
 
 
 def objective_at_start(path):

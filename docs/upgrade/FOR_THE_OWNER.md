@@ -114,6 +114,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 | 15 | Analytic gradient of an E1-only or E2-only sum with a component | gradient | 2026-11 | owner |
 | 16 | A MIGRAD fit stopped by its call limit ends at its lowest objective | see line | 2026-11-14 | owner |
 | 17 | Radiative widths are not in a level's total width (as on `dev`) | none | — | — |
+| 18 | Clebsch–Gordan and Racah coefficients computed here, not GSL's 3j and 6j | last digit | 2026-11-16 | PI |
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
@@ -153,6 +154,11 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     7087.92418676 now, with a notice; `fitStatus.out` has one writer and new keys (`fitter`, `fitter_status`).
 17. The resonance strength stays ω Γ_γ Γ_p / Σ Γ_particle, as on `dev`. New is only the record `gamma_decay` (Γ_γ,
     branchings, mixing ratios; `user_guide/gamma_decay.rst`), which gives the same partial widths as `<levels>`.
+18. The coefficients agree with GSL's within 4.1e-15. External-capture amplitudes move by at most 1.3e-14, a
+    calculated observable only where it is a zero by cancellation; two gradient fits of `tests/13N` end at the
+    same chi-squared and parameters with output numbers differing in the last printed digit (5e-11). An
+    `intEC.dat` written before is recomputed once (signature v7). `cnuc_split.md` section 9;
+    `physics_engine_coupling_gsl`.
 
 Rows 9, 15 and the refusals that stop a project which ran on `dev` (two resolution kernels on one data set, a lab
 point at the kinematic limit, ...) are in the history page, "What users notice".
@@ -643,24 +649,36 @@ re-read against its design at the hand-over.
    `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
    adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
    particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
-   `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal levels,
-   particle channels). There is no `inference/` library: the objective is `src/Objective.cpp`.
+   `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal, Brune's
+   or Park's levels; particle and photon channels; the Reich-Moore term), checked against numpy and against a
+   session's phase shifts and cross sections on T1-T3 in the three parametrizations (`physics_functions.md`,
+   stage 5). There is no `inference/` library: the objective is `src/Objective.cpp`.
 6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
    `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
-   remove once the file is on `main`); look at its newest run. No Windows wheel; the Coulomb table's address is
+   remove once the file is on `main`); look at its newest run. Its first run (2026-11-16): the Linux x86-64
+   wheels build and pass their test; the Linux aarch64 wheels build and the test fails, the failing check not
+   seen (the test writes it as an annotation from the next run on, if an annotation written inside the build's
+   container reaches the run, which was not seen either). No Windows wheel; the Coulomb table's address is
    empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
-9. **pyazr.** Not in the binding: transfer functions on optical potentials, the Weisskopf width, and the level
-   matrix with Brune's or Park's parameters or photon channels (`pyazr.physics.collision_matrix` gives A, U and T
-   for formal levels and particle channels; item 5).
+9. **pyazr.** Bound since 2026-11-16 (pyazr 3.0.0.dev4): the level matrix with Brune's or Park's parameters and
+   photon channels (`pyazr.physics.collision_matrix`, item 5), and elastic scattering on an optical potential
+   (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
+   FRESCO's reference files). Not in the binding: the other functions of `physics/transfer` (bound states in a
+   well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
+   of its own design), and the Weisskopf width (the engine has no such function: `pyazr.widths.weisskopf_width`
+   is a Python formula, the one of pyazr; a door needs the function in `physics/` first, which is new engine
+   code and the owner's decision).
    Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
-   `pyazr/bands.py`). The Physics tab of the page plots what the binding has: the level matrix and the transfer
-   functions are not there.
+   `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the
+   page plots the rows of the physics table (one number per element); `collision_matrix` and
+   `optical_scattering` take matrices or a potential and are not rows, so the tab does not show them: a form
+   for them is page code that is not written.
 10. **`pyazr.sources`.** No reader of the IAEA's measured stopping data; no `pyazr libraries update` command; the
     provenance records of imported numbers were not audited.
 11. **Transfer (DWBA) validation.** The ⁶Li bins, and ³He and ¹⁴N break-up to the continuum, were not validated

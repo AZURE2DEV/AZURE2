@@ -231,7 +231,10 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
   // v5 (2026-10-30): the file holds every digit (17 significant, was 6), so every v4 file is recomputed once.
   // v6 (2026-11-09): the Whittaker function of the final state is physics/coulomb's whittaker, not GSL's U
   // (coulomb.md section 1.4); the integrals move at ~1e-10 relative, so every v5 file is recomputed once.
-  hash.Add("AZURE2 EC signature v6");
+  // v7 (2026-11-16): the Clebsch-Gordan and Racah coefficients of the amplitudes are those of physics/, not GSL's
+  // 3j and 6j (AngCoeff.cpp); the integrals move at ~1e-14 relative, so every v6 file is recomputed once and a
+  // result does not depend on whether a file from before was found.
+  hash.Add("AZURE2 EC signature v7");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.

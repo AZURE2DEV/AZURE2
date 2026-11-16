@@ -65,12 +65,16 @@ with :math:`s` running from :math:`|j_1 - j_2|` to :math:`j_1 + j_2`
 - **Clebsch–Gordan and Racah coefficients.** They follow Condon and Shortley:
   :math:`(j_1 m_1 j_2 m_2|JM) = (-1)^{j_1-j_2+M}\sqrt{2J+1}\,
   \begin{pmatrix} j_1 & j_2 & J\\ m_1 & m_2 & -M\end{pmatrix}`
-  (``AngCoeff.cpp:9-21``). The Racah coefficient is
+  (``AngCoeff::ClebGord``). The Racah coefficient is
   :math:`W(abcd;ef) = (-1)^{a+b+c+d}\{a\,b\,e;\,d\,c\,f\}`
-  (``AngCoeff.cpp:23-34``). The 3j, 6j and 9j symbols are GSL's.
-  :math:`Y_l^m` carries the Condon–Shortley phase (``AngCoeff.cpp:52-69``).
+  (``AngCoeff::Racah``). The 3j, 6j and 9j symbols are computed by the
+  program itself, from Racah's closed forms
+  (``physics/src/AngularCoupling.cpp``); they agree with GSL's to
+  :math:`4\times10^{-15}`.
+  :math:`Y_l^m` carries the Condon–Shortley phase
+  (``AngCoeff::SphericalHarmonic``).
   :math:`P_l^1` does not, following Seyler and Weller, PRC 20 (1979) 453
-  (``AngCoeff.cpp:44-50``).
+  (``AngCoeff::LegendreP1``).
 
 No factor :math:`i^l` appears in the particle channels. It is absent from the
 channel functions, from :math:`U` and from the angular coefficients, which are

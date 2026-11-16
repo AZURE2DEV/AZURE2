@@ -47,9 +47,15 @@ public names are a contract.
   `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
   `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`.
 - `pyazr.physics.collision_matrix(level_energies, reduced_widths, energy, penetrability=, shift=, boundary=,
-  hard_sphere_phase=, coulomb_phase=)`: the level matrix A and the collision and T-matrices of one J^pi block of
-  formal levels at one energy, from arrays, without a session (`physics/CollisionMatrix.h`).  Not a row: its
-  arguments are matrices (`api/src/pybind_collision_matrix.cpp`, `tests/pyazr/collision_matrix_test.py`).
+  hard_sphere_phase=, coulomb_phase=, parametrization=, shift_at_levels=, shift_derivative_at_levels_per_MeV=,
+  park_norms=, photon_channels=, use_rmc=)`: the level matrix A and the collision and T-matrices of one J^pi block
+  at one energy, from arrays, without a session (`physics/CollisionMatrix.h`): formal, Brune's or Park's levels,
+  particle and photon channels.  Not a row: its arguments are matrices (`api/src/pybind_collision_matrix.cpp`,
+  `tests/pyazr/collision_matrix_test.py`; against a session on T1-T3: `collision_matrix_session_test.py`).
+- `pyazr.physics.optical_scattering(z1, z2, m1_u, m2_u, e_cm, potential, angles_deg=, projectile_spin=, l_max=,
+  step_fm=, matching_radius_fm=)`: S per partial wave, sigma/sigma_R and the reaction cross section in an optical
+  potential (`physics/transfer`; `api/src/pybind_optical.cpp`, `tests/pyazr/optical_scattering_test.py` against
+  FRESCO's reference files).  Not a row: its argument is a potential and its answer arrays of several lengths.
 
 ## Recipe: add a physics function
 

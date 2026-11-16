@@ -806,11 +806,27 @@ set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 
 # pyazr.physics.collision_matrix: the level matrix and the collision matrix of one J^pi block at one energy from
 # arrays, without a session (physics/CollisionMatrix.h through api/src/pybind_collision_matrix.cpp), against the
-# level matrix written in numpy, unitarity, the one-level phase shift and Breit-Wigner form, and the errors.
+# level matrix written in numpy (formal, Brune's and Park's parameters, photon channels), unitarity, the one-level
+# phase shift and Breit-Wigner form, the three parametrizations of one block giving one U, and the errors.
 add_test(NAME pyazr_collision_matrix
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/collision_matrix_test.py)
 set_tests_properties(pyazr_collision_matrix PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# The same function against a session's own numbers on T1, T2 and T3 in the three parametrizations: the arrays of
+# every block read off the session, phase shifts and cross sections formed from U and T in numpy, compared with
+# Session.evaluate (the capture cross sections on a copy of T1 without external capture).
+add_test(NAME pyazr_collision_matrix_session
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/collision_matrix_session_test.py)
+set_tests_properties(pyazr_collision_matrix_session PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# pyazr.physics.optical_scattering: elastic scattering in an optical potential (physics/transfer through
+# api/src/pybind_optical.cpp) against FRESCO's reference files of physics/tests/data/fresco, closed forms, the errors.
+add_test(NAME pyazr_optical_scattering
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/optical_scattering_test.py)
+set_tests_properties(pyazr_optical_scattering PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
 # pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against mpmath, the engine's
 # own use on 13N and the Python formula it replaces (the largest difference per formula is printed); broadcasting,

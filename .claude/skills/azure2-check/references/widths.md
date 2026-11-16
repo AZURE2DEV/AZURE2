@@ -27,10 +27,12 @@ larger. State the unit next to every θ² you report.
 
 ## How pyazr obtains Γ_W
 
-Γ_W needs P_l(E_r), which the API does not expose. `wigner_widths` obtains it from AZURE2 itself: it transforms a
-probe vector with every reduced-width amplitude set to a small ε, so the shift denominator is 1 and
-Γ_c(ε) = 2 P_c ε². This costs one extra transform at AZURE2's own radii and Coulomb functions, and reproduces
-Γ_W of the width form (³He+α, 7/2⁻ level at E_x = 4.57 MeV: Γ_W = 3.487 × 10⁵ eV, θ² = 0.494).
+Γ_W needs P_l(E_r). `wigner_widths` obtains it from AZURE2's transformation: it transforms a probe vector with
+every free reduced-width amplitude set to a small ε, so the shift denominator is 1 and Γ_c(ε) = 2 P_c ε². This
+costs one extra transform at AZURE2's own radii and Coulomb functions, and reproduces Γ_W of the width form
+(³He+α, 7/2⁻ level at E_x = 4.57 MeV: Γ_W = 3.487 × 10⁵ eV, θ² = 0.494). The probe is not 2 P γ_W² for a level
+with fixed non-zero widths or in the formal basis (the docstring of `Session.wigner_widths` has the sizes); the
+penetrability itself is `Session.channel_functions(pair, e_cm, l)["P"]` or `pyazr.physics.penetrability`.
 
 ## γ-ray strengths
 
