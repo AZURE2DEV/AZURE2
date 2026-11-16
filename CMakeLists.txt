@@ -421,6 +421,9 @@ if(BUILD_TESTING)
     add_subdirectory(tests/upgrade)
     add_subdirectory(tests/layer_yield)
     add_subdirectory(tests/stopping_yield)
+    if(BUILD_API)
+        add_subdirectory(rmfit/tests)   # rmfit's own scripts (they import pyazr)
+    endif()
 endif()
 
 # Conditional defines

@@ -38,7 +38,7 @@ def main():
     src = os.path.join(AZURE2_ROOT, "tests", "electron_screening", "grad.azr")
     if not os.path.exists(src):
         print(f"SKIP: no {src}")
-        return 2
+        return 77
     tmp = tempfile.mkdtemp(prefix="rmfit_screening_")
     try:
         for d in ("output", "checks"):
