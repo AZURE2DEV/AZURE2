@@ -7,7 +7,7 @@ include/GSLException.h	h	static	table: GSL's error handler is process-wide by GS
 include/GSLException.h	m	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 include/GSLException.h	n	static	table: GSL's error handler is process-wide by GSL's design: the saved handler, a nesting count and their lock
 src/LevelState.cpp	counter	static	table: the version generator: names level states uniquely in the process (the keys of ChannelSpace::Memo), holds no value of a calculation
-src/AZURECalc.cpp	fileMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
+src/AZURECalcDiagnostics.cpp	fileMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/AZURECalc.cpp	traceMutex	static	table: lock of a process-wide output stream (std::cerr, a dump file, the progress line); holds no value
 src/CoulombTable.cpp	f	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock
 src/CoulombTable.cpp	m	static	table: the Coulomb tables loaded from files (immutable once loaded), the files that could not be read, their lock

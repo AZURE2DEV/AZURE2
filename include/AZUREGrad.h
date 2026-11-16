@@ -257,8 +257,8 @@ struct ShiftColumnCount {
  * `fixed` is the full fixed mask.  `skipPacked` (may be null) marks packed
  * columns not to difference; they are left as they are.  `nRes` data rows
  * (before any whitening), row-major `jac` with `nCols` columns.  The model is
- * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
- * analytic gradient shares.
+ * left at `full`.  Defined in AZURECalcJacobian.cpp; the shift helpers the
+ * analytic gradient shares are in ShiftParamTarget.h.
  */
 ShiftColumnCount FillShiftColumns(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,

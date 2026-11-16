@@ -131,7 +131,7 @@ path of the row, or a path of the row never appears.
 ## How it is built
 
 - `session.py` drives the engine **in-process** through the pybind11 module
-  `_azure2` (`api/src/pybind_api.cpp` → `api/src/AZUREAPI.cpp`). It runs no
+  `_azure2` (`api/src/pybind_api.cpp` → `api/src/AZUREAPI*.cpp`). It runs no
   subprocess and opens no socket. Rebuilding with CMake (`-DUSE_API=ON` and
   pybind11 found) writes `pyazr/_azure2*.so` here. That file is git-ignored;
   never commit it.

@@ -27,7 +27,7 @@ class ParameterLimitsManager;
 /// are copies of that fitter's level state and working copy.
 struct FitterStates {
   FitterStates();
-  ~FitterStates();  // where WorkingCopy is complete (AZURECalc.cpp)
+  ~FitterStates();  // where WorkingCopy is complete (AZURECalcPool.cpp)
 
   /// The idle level states and working copies (each with the buffer it writes) of the evaluations that run at the
   /// same time.  Each is a copy of the caller's, made when no idle one is left; no value of an evaluation survives
@@ -156,7 +156,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   bool HasG2() const override { return g2Enabled_; }
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
-  /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
+  /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalcDiagnostics.cpp).
   void DumpNonFinite(const vector_r &p, double chi, const CompoundSystem *lc, WorkingCopy *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;

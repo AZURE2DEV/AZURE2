@@ -130,7 +130,8 @@ with tempfile.TemporaryDirectory() as work:
 
     def decimal(x):
         """The exact decimal of a double (a dyadic rational) as text."""
-        return str(mpmath.mpf(x)) if x == int(x) else format(mpmath.mpf(x), ".40g").rstrip("0")
+        # nstr, not format(): an mpf of the Windows job's mpmath has no __format__
+        return str(mpmath.mpf(x)) if x == int(x) else mpmath.nstr(mpmath.mpf(x), 40, strip_zeros=True)
 
     print("1. units of the columns of a data file")
     rows_b = [(e, "0", decimal(mpmath.mpf(v) / 10**9), decimal(mpmath.mpf(dv) / 10**9)) for e, v, dv in zip(E_MEV, nb, dnb)]

@@ -73,7 +73,8 @@ def run(*args, cwd=None, **extra):
 
 
 def program(*args):
-    p = subprocess.run([BIN, *args], capture_output=True, text=True, env=env(), cwd=TMP)
+    # UTF-8 named: on Windows text=True alone decodes with the code page and the schema's non-ASCII text differs
+    p = subprocess.run([BIN, *args], capture_output=True, text=True, encoding="utf-8", env=env(), cwd=TMP)
     return p.returncode, p.stdout
 
 
@@ -406,6 +407,9 @@ def _standin_bin():
 
 
 def case_endf_check():
+    if os.name == "nt":  # as tests/pyazr/endf_check_test.py: the stand-ins are scripts run by their first line
+        print("  skip  case_endf_check: the stand-in checking codes cannot be started on Windows")
+        return
     code, doc, _ = run("endf", "check", EXTRACT, "--program", "checkr", "--json",
                        AZURE2_ENDF_UTILITIES=_standin_bin(), ENDF_STANDIN_ROLE="findings")
     result = ok_doc("endf check", code, doc, "endf check") or {}
@@ -417,6 +421,9 @@ def case_endf_check():
 
 
 def case_endf_standardize():
+    if os.name == "nt":  # as tests/pyazr/endf_check_test.py: the stand-ins are scripts run by their first line
+        print("  skip  case_endf_standardize: the stand-in checking codes cannot be started on Windows")
+        return
     out = os.path.join(TMP, "extract.stanef.endf")
     code, doc, _ = run("endf", "standardize", EXTRACT, "--write", out, "--json",
                        AZURE2_ENDF_UTILITIES=_standin_bin(), ENDF_STANDIN_ROLE="lossy")

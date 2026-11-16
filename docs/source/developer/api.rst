@@ -27,6 +27,15 @@ fitter table on the session with the program's functions
 (``Session.fit_with_engine``; the binding ``api/src/pybind_fit.cpp`` releases
 the GIL and adds ``StopRequest`` and ``fitters()``).
 
+The class is one header and one source file per job: ``api/src/AZUREAPI.cpp`` (the session's model: its set-up
+and rebuild, the prior covariance, the parameter vectors with their bounds), ``AZUREAPIReports.cpp`` (what a
+calculation reports: the points' arrays, the data, the norms, the output files, the THM tables),
+``AZUREAPIChi2.cpp`` (the objective's value in both bases, the limits manager's priors), ``AZUREAPIGradient.cpp``
+(the gradient, the residual Jacobian, the model values' gradients), ``AZUREAPIObjective.cpp`` (one evaluation with
+its breakdown, the rows, the sampler's log-probability), ``AZUREAPIFit.cpp``, ``AZUREAPIModelData.cpp``,
+``AZUREAPIChannelFunctions.cpp`` and ``AZUREAPIDiagnostics.cpp`` (the external-capture integrals on a grid, the
+cache counters). ``api/src/AZUREAPIInternal.h`` holds the two helpers those files share.
+
 The module ``_azure2``
 ----------------------
 
