@@ -27,13 +27,12 @@ namespace azure2 {
 struct ShiftDerivativeMemo {
   struct Key {
     int z1, z2, l, two_j;  ///< two_j: PPair::SpinOrbitTwoJ
-    bool gsl;
     std::vector<double> hybrid;  ///< azure2::physics::PotentialKey of the pair's potential
     bool table, relativistic;
     double redmass, mass, radius, threshold, energy;  ///< u, u, fm, MeV, MeV
     bool operator<(const Key &o) const {
-      return std::tie(z1, z2, l, two_j, gsl, hybrid, table, relativistic, redmass, mass, radius, threshold, energy) <
-          std::tie(o.z1, o.z2, o.l, o.two_j, o.gsl, o.hybrid, o.table, o.relativistic, o.redmass, o.mass, o.radius,
+      return std::tie(z1, z2, l, two_j, hybrid, table, relativistic, redmass, mass, radius, threshold, energy) <
+          std::tie(o.z1, o.z2, o.l, o.two_j, o.hybrid, o.table, o.relativistic, o.redmass, o.mass, o.radius,
                    o.threshold, o.energy);
     }
   };

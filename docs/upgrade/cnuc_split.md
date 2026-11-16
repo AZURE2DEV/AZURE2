@@ -151,6 +151,7 @@ returns S, S′ and P (sections 5, 7).
    its docs, on top of step 3) is re-cut on the table, its output comparison repeated and its timings required near
    those of step 3; (iii) the hybrid-potential channels as (α, l, j) entries; (iv) `CoulombTable` (an opt-in interpolation
    of the same functions) and `--gsl-coul`: keep, remap to a `coulomb::Method`, or retire (user-visible; to decide).
+   *Decided 2026-11-16 (the PI): `--gsl-coul` retired, `coulomb.md` section 9; the Coulomb table is kept.*
    The non-smooth last digits of S and S′ (section 5) remain until (i)–(ii): `coulsm` is good to 10⁻¹⁰ only.
 4. **External capture**: `CalcExternalWidth` and the bound-state normalization N_f^½ (`SqrtNFFactor`, now in five
    places) into `physics/external_capture`.

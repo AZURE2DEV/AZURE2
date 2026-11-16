@@ -9,8 +9,8 @@
 //   observed_levels_of_block  formal levels with the caller's B_c (any boundary condition, e.g. an ENDF file's) ->
 //                             the Brune levels and their observed widths and ANCs (brune_from_formal, then
 //                             observed_levels).
-// use_coulomb_table and use_gsl_coulomb are the session options of the same names (the engine's defaults: true,
-// false), so that the levels are those of a session with the same options.
+// use_coulomb_table is the session option of the same name (the engine's default: true), so that the levels are those
+// of a session with the same option.
 //
 // Only particle channels: photon and beta channels do not enter the level matrix (LevelParameters.h,
 // boundary_values) and are not asked for.  No physics in this file: it builds the System and the PPair objects and
@@ -107,13 +107,12 @@ struct Block {
   std::vector<std::unique_ptr<PPair>> pairs;  // by partition
   std::unique_ptr<phys::System> system;
   double J = 0.;
-  bool gsl = false;  // GSL's Coulomb functions (the session option use_gsl_coul)
 };
 
 /// channels: (pair key, l, 2s) per block channel; E (MeV, E_x), gamma row-major (levels x channels), B per channel.
 Block MakeBlock(const py::list &pair_records, int two_J, int parity, const std::vector<std::vector<int>> &channels,
                 const std::vector<double> &E, const std::vector<double> &gamma, const std::vector<double> &B,
-                phys::LevelBasis basis, bool use_coulomb_table, bool use_gsl_coulomb) {
+                phys::LevelBasis basis, bool use_coulomb_table) {
   std::map<int, PairFields> byKey;
   for (const py::handle &h : pair_records) {
     const py::dict d = py::cast<py::dict>(h);
@@ -123,7 +122,6 @@ Block MakeBlock(const py::list &pair_records, int two_J, int parity, const std::
   }
   Block out;
   out.J = two_J / 2.0;
-  out.gsl = use_gsl_coulomb;
   std::map<int, int> partitionOfKey;
   std::vector<phys::Partition> partitions;
   std::vector<phys::Channel> chans;
@@ -187,7 +185,7 @@ phys::ChannelFunctions ParticleChannelFunctions(const Block &blk) {
     const double Ec = E - pair->GetSepE() - pair->GetExE();
     const int l = ch.l;
     const int twoJ = pair->SpinOrbitTwoJ(b->J);
-    return ParticleChannelValues(*pair, l, twoJ, Ec, b->gsl);
+    return ParticleChannelValues(*pair, l, twoJ, Ec);
   };
 }
 
@@ -222,11 +220,11 @@ const char *KindName(phys::ObservedKind k) {
 py::dict FormalLevels(const py::list &pairs, int two_J, int parity, const std::vector<std::vector<int>> &channels,
                       const std::vector<double> &E, const std::vector<double> &values,
                       const std::vector<int> &is_amplitude, const std::string &form, const std::string &basis,
-                      bool use_coulomb_table, bool use_gsl_coulomb) {
+                      bool use_coulomb_table) {
   const phys::LevelBasis b = BasisOf(basis);
   const std::vector<double> zeroB(channels.size(), 0.0);
   const std::vector<double> zeroG(E.size() * channels.size(), 0.0);
-  Block blk = MakeBlock(pairs, two_J, parity, channels, E, zeroG, zeroB, b, use_coulomb_table, use_gsl_coulomb);
+  Block blk = MakeBlock(pairs, two_J, parity, channels, E, zeroG, zeroB, b, use_coulomb_table);
   phys::ProjectLevels levels;
   if (form == "observed") {
     levels.form = phys::ProjectLevels::Form::Observed;
@@ -255,9 +253,8 @@ py::dict FormalLevels(const py::list &pairs, int two_J, int parity, const std::v
 
 py::dict ObservedLevels(const py::list &pairs, int two_J, int parity, const std::vector<std::vector<int>> &channels,
                         const std::vector<double> &E, const std::vector<double> &gamma, const std::vector<double> &B,
-                        double energy_tolerance_MeV, bool use_coulomb_table, bool use_gsl_coulomb) {
-  Block blk = MakeBlock(pairs, two_J, parity, channels, E, gamma, B, phys::LevelBasis::Brune, use_coulomb_table,
-                        use_gsl_coulomb);
+                        double energy_tolerance_MeV, bool use_coulomb_table) {
+  Block blk = MakeBlock(pairs, two_J, parity, channels, E, gamma, B, phys::LevelBasis::Brune, use_coulomb_table);
   const phys::ChannelFunctions cf = ParticleChannelFunctions(blk);
   phys::FormalToBruneOptions options;
   options.energy_tolerance_MeV = energy_tolerance_MeV;
@@ -285,7 +282,7 @@ py::dict ObservedLevels(const py::list &pairs, int two_J, int parity, const std:
 void BindLevelDoors(py::module_ &m) {
   m.def("formal_levels_of_block", &FormalLevels, py::arg("pairs"), py::arg("two_J"), py::arg("parity"),
         py::arg("channels"), py::arg("E"), py::arg("values"), py::arg("is_amplitude"), py::arg("form"),
-        py::arg("basis"), py::arg("use_coulomb_table") = true, py::arg("use_gsl_coulomb") = false,
+        py::arg("basis"), py::arg("use_coulomb_table") = true,
         "One J^pi block of particle channels in the project's basis -> its formal levels (physics/ level_parameters, "
         "the engine's channel functions).  pairs: pair records (dicts with key, pair_kind, Z1, Z2, M1, M2, J1, J2, "
         "parity1, parity2, excitation, light_excitation, sep_energy, channel_radius); channels: (pair key, l, 2s); E: "
@@ -296,7 +293,7 @@ void BindLevelDoors(py::module_ &m) {
   m.def("observed_levels_of_block", &ObservedLevels, py::arg("pairs"), py::arg("two_J"), py::arg("parity"),
         py::arg("channels"), py::arg("E"), py::arg("gamma"), py::arg("B"),
         py::arg("energy_tolerance_MeV") = phys::FormalToBruneOptions().energy_tolerance_MeV,
-        py::arg("use_coulomb_table") = true, py::arg("use_gsl_coulomb") = false,
+        py::arg("use_coulomb_table") = true,
         "One J^pi block of particle channels given by formal levels with the caller's boundary values B_c -> the "
         "Brune levels (brune_from_formal, its iteration stopped when a level moves by <= energy_tolerance_MeV, the "
         "engine's 1e-6 MeV by default) and their observed values (observed_levels): {E (MeV, E_x), gamma (Brune, "

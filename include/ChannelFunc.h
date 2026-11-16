@@ -41,7 +41,7 @@ class ShftFunc;
  */
 class ChannelFunc {
  public:
-  ChannelFunc(const PPair *pair, bool useGSLFunctions);
+  explicit ChannelFunc(const PPair *pair);
   ~ChannelFunc();
 
   /// e > 0 and a charged pair with Sommerfeld parameter eta above kEtaClosed.
@@ -73,7 +73,6 @@ class ChannelFunc {
   ShftFunc &shft();
 
   const PPair *pair_;
-  bool useGSL_;
   double threshold_;
   double radius_;
   std::unique_ptr<CoulFunc> coul_;

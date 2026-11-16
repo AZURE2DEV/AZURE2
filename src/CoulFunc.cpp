@@ -1,7 +1,6 @@
 #include "CoulFunc.h"
 #include "PPair.h"
 #include <iostream>
-#include <gsl/gsl_sf_coulomb.h>
 #include "azure2/physics/Derivatives.h"
 #include <vector>
 #include <cstdlib>
@@ -17,8 +16,7 @@
  * The CoulFunc object is created with reference to a PPair object.
  */
 
-CoulFunc::CoulFunc(const PPair *pPair, bool useGSLFunctions) :
-  useGSLFunctions_(useGSLFunctions),
+CoulFunc::CoulFunc(const PPair *pPair) :
   pair_(pPair),
   potential_(pPair->GetHybridPotential()) {
   z1_ = pPair->GetZ(1);
@@ -167,7 +165,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
       radialMemo_->size = 0;
     }
     block = &radialMemo_->blocks[CoulRadialMemo::Key{z1_, z2_, l, two_j, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0,
-                                                     energy, potential_, useGSLFunctions_}];
+                                                     energy, potential_}];
     auto w = block->find(radius);
     if (w != block->end()) {
       setLast(l, two_j, radius, energy, w->second);
@@ -263,22 +261,7 @@ double CoulFunc::PEShift_d2E(int l, int two_j, double radius, double energy) {
 }
 
 CoulWaves CoulFunc::PlainWaves(int l, double radius, double energy) const {
-  CoulWaves result;
-  if (!useGSLFunctions_) {
-    result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
-  } else {
-    double eta = kin_.Eta(energy);
-    double rho = kin_.Rho(radius, energy);
-    double lValue = double(l);
-    double eF, eG;
-    gsl_sf_result F, Fp, G, Gp;
-    gsl_sf_coulomb_wave_FG_e(eta, rho, lValue, 0, &F, &Fp, &G, &Gp, &eF, &eG);
-    result.F = F.val * exp(eF);
-    result.dF = Fp.val * exp(eF);
-    result.G = G.val * exp(eG);
-    result.dG = Gp.val * exp(eG);
-  }
-  return result;
+  return CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
 }
 
 CoulWaves CoulFunc::computeHybrid(int l, int two_j, double radius, double energy) {
@@ -303,17 +286,9 @@ CoulWaves CoulFunc::computeHybrid(int l, int two_j, double radius, double energy
     // H+ = G + iF of the point-Coulomb problem at r (fm), the solution beyond the matching radius.
     auto outgoing = [&](double r) -> std::complex<double> {
       const double rho_val = std::sqrt(2.0 * redmass_MeV) / HBARC * r * std::sqrt(energy);
-      if (!useGSLFunctions_) {
-        // physics/coulomb (coulsm) for the boundary conditions
-        const CoulWaves w = CoulombWavesAt(l, eta_real, rho_val);
-        return std::complex<double>(w.G, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(w.F, 0.0);
-      }
-      double eF, eG;
-      gsl_sf_result F, Fp, G, Gp;
-      gsl_sf_coulomb_wave_FG_e(eta_real, rho_val, static_cast<double>(l), 0, &F, &Fp, &G, &Gp, &eF, &eG);
-      double F_val = F.val * std::exp(eF);
-      double G_val = G.val * std::exp(eG);
-      return std::complex<double>(G_val, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(F_val, 0.0);
+      // physics/coulomb (coulsm) for the boundary conditions
+      const CoulWaves w = CoulombWavesAt(l, eta_real, rho_val);
+      return std::complex<double>(w.G, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(w.F, 0.0);
     };
 
     // H+ at the requested radius (a node of the grid) and its r-derivative; F, G and their rho-derivatives from

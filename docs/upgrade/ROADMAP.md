@@ -42,7 +42,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 0 | Skills on pyazr 3.0's names | done, ticked | the skills' own self-tests were not re-run at the hand-over |
 | 1 | pycoulomb prerequisites | outside this repository | the PI's package; the functions used here are `physics/coulomb` |
 | 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up; the collision matrix and the observables' sums are functions of arrays the engine calls (`physics_functions.md`) | the analytic gradient of those functions, the R_k of a secondary decay and the particle analysing power are engine code; `pyazr.physics.collision_matrix` takes formal levels and particle channels only |
-| 1 | `channel_functions` replaces the old Coulomb code | done: with the default options the engine calls `physics/coulomb` only | GSL's routine is left in `src/CoulFunc.cpp` behind the option `use_gsl_coul`, whose retirement is the owner's decision (`coulomb.md` section 8); the Coulomb table is kept by design |
+| 1 | `channel_functions` replaces the old Coulomb code | done: the engine calls `physics/coulomb` only; the option `use_gsl_coul` (GSL's routine) retired by the PI, 2026-11-16 (`coulomb.md` sections 8, 9) | the Coulomb table is kept by design; GSL's Coulomb functions are called only by the cross-check of `azure2-coulomb-table validate` and by the test `coulomb_gsl_crosscheck` |
 | 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
 | 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |
 | 2 | `inference/` target | built in part (`inference.md`): the parameter vector as plain data (kinds, records, level layout, index map, support), one Gaussian prior, the prior covariance, the sums of the term list | the terms (`src/Objective.cpp`), the vector's values (`AZUREParams`, on Minuit2) and the fitters are engine code: a library of them needs the data χ² on arrays |
@@ -136,7 +136,7 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       `external/coul` deleted, open-channel `channel_functions` and the kinematics in physics/ called by the engine;
       bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
       (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
-      GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
+      GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul` (retired 2026-11-16).*
       *The zero-energy fallback of coulsm just above a heavy-ion threshold takes K_0, K_1 from `bessel_k_scaled`
       (the owner's repair 56512d6a on `dev`, written as a listed local change, `physics/coulomb/README.md`; test
       `physics_coulomb_threshold`; branch `feature/upgrade-5-dev-repairs`, 2026-11-15).*

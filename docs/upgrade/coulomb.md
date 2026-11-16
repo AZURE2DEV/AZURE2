@@ -61,8 +61,8 @@ NaN rule. The third-party sources sit unchanged under `physics/coulomb/<method>/
 interface (complex l, η, ρ; Bessel functions) is not exposed: AZURE2 has no use for it yet.
 
 GSL's `gsl_sf_coulomb_wave_FG_e` is not a method of `physics/coulomb/` (physics/ links nothing). It stays as an
-independent cross-check in a test outside physics/ (section 5), and the engine's `--gsl-coul` path stays in the
-engine (section 4, open question; section 8 has what reaches it and what it gives).
+independent cross-check in a test outside physics/ (section 5). The engine's `--gsl-coul` path stayed in the
+engine until 2026-11-16 (section 8 has what reached it and what it gave, section 9 its retirement).
 
 ### 1.4 Whittaker functions (bound channels)
 
@@ -353,7 +353,8 @@ where energies recur, so it is deleted only with the table that replaces it (§7
 
 The engine always calls `Method::coulsm` in this branch: no new option. `--gsl-coul` keeps its present meaning (GSL's
 routine, called from `CoulFunc`, which may use GSL), because removing or remapping a CLI flag is a user-visible change
-to be decided (section 6). The memo stays in front of `CoulombWavesAt` as before, so `cache_stats()` is unchanged.
+to be decided (section 6; decided on 2026-11-16: retired, section 9). The memo stays in front of `CoulombWavesAt` as
+before, so `cache_stats()` is unchanged.
 
 ## 5. Tests
 
@@ -384,7 +385,7 @@ deleted (outputs classified) — moved to step 3b, after the table (§7). Left f
 deletion of `WhitFunc`, `ShftFunc` and `ChannelFunc` (bound branch into `channel_functions`); the table of §2.3 in
 place of the `EDependentTables` rows and `g_shiftDerivMemo`; the hybrid-potential channels ((α, l, j) entries of the
 table); `CoulombTable` (an interpolation of these same functions, opt-in) and `--gsl-coul`, which are user-visible
-options to keep, remap to a `Method`, or retire.
+options to keep, remap to a `Method`, or retire (`--gsl-coul`: retired, section 9; the table: kept).
 
 ## 7. As built (branch `feature/upgrade-1-coulomb`, 2026-11-07)
 
@@ -579,8 +580,9 @@ longer include a GSL header. Less than a day of code. Then:
   that name the flag (`command_line.rst`, `data_formats.rst`, `output_files.rst`, `pyazr.rst`,
   `coulomb_table.rst`, `README.md`, the skills' `physics-options.md` and `legacy-params.md`).
 
-So the replacement was not made: it is the retirement of a user-visible option, to be decided (section 6 listed
-it). The choices, with what was measured for each:
+So the replacement was not made with this section: it is the retirement of a user-visible option, to be decided
+(section 6 listed it). The PI chose the second of the choices below on 2026-11-16; section 9 has the design and
+what was built. The choices, with what was measured for each:
 
 1. *Keep the option as it is.* It is documented as fast and inaccurate; its numbers are wrong by up to 5 % in P
    below the barrier, and its meaning depends on the table file.
@@ -632,8 +634,9 @@ below its barrier lives; an option that selects it selects wrong numbers.
   `--validate` (exit 2), the run (exit 1, nothing computed), `pyazr.Project.validate` and a session. Before this
   change the key was a row of `io::ConfigKeys()`; a key that is no row gives `E_UNREAD_LINE` ("not a key of
   `<config>`"), which would not say why, so the removed keys are asked first.
-- *The flag*: `parseOptions` throws the message as it does for an unknown option (exit 2, before the project is
-  read). `--help` lists it once as removed, as it does `--use-api`.
+- *The flag*: `parseOptions` throws "Unknown option --gsl-coul." followed by the message, as it does for
+  `--no-readline` (exit 2, before the project is read). `--help` does not list it, as it does not list `--no-readline`;
+  `command_line.rst` keeps its entry, as removed.
 - *The keyword*: `pyazr.Session(..., use_gsl_coul=...)` raises `TypeError` with the message (a Python call with a
   keyword that does not exist is a `TypeError`); the signature loses the keyword. The binding gives the text
   (`_azure2.removed_option_text`), so Python holds no copy. The level doors of the binding lose their argument
@@ -700,3 +703,40 @@ read in an external-capture integrand, against GSL's at η = 0 (good to 2 × 10�
 how many are off by more than 10⁻⁸ relative, in which project; (ii) the same build with those F replaced by GSL's,
 every output file compared with the unreplaced run: the largest relative change of an integral (`intEC.dat`) and of
 an observable. An observable moved by more than 10⁻¹⁰ stops the item and is reported with its project and size.
+
+### 9.4 The retirement as built (2026-11-16)
+
+Built as section 9.1 says, with these points settled on the way:
+
+- The flag's message starts with the parser's words for a flag it does not take, "Unknown option --gsl-coul.",
+  then the sentence of the table. `tests/cli_help` tells an accepted flag from a refused one by those words; the
+  first build, without them, counted the flag as accepted and not printed.
+- `Project.set_config(use_gsl_coul=...)` is refused by `io::ConfigEdits` with "'use_gsl_coul' is not an entry of
+  `<config>` any more: it is not written." and the reason (it said "not an entry" with the list of entries before,
+  as for a misspelt name; `useAdaptiveGrid` gets the same sentence now).
+- A session given the name through the binding's `RuntimeOptions.options` gets the keyword's message
+  (`NotAnOptionText`, `src/ProjectOptions.cpp`).
+- The count of options is 10 where a test or a page said 11: `io_config_section`, `upgrade_project_options`,
+  `tests/pyazr/config_options_test.py`, `describe_test.py`, `tests/config_options/check.sh` (the options block of
+  `--describe`), `data_formats.rst`, `project_format3.md`. The two `--describe` stories under `tests/*/expected/`
+  (`units_scales`, `ratio_to_rutherford`) lose the line `use_gsl_coul = 0 (default)` and nothing else.
+- The description of `E_CONFIG_KEY_REMOVED` names both keys, so `tests/schema/schema_v3.json` and `format3.rst`
+  were generated again (one line each).
+
+**Verified** (the finished tree, with sections 9.5 and 9.6; `work/director/verify_coul_slice3.out`, build
+`work/b-coul3`, GCC 11.5 Release, pyazr on). 0 warnings. Every project in three bases against `tab-trial94-1`: 887,
+851 and 887 output files identical, none differs, none new (the `intEC.dat.sig` files among them: signature v7
+unchanged). The eight fits identical to `work/b-trial95` file by file. `ctest -LE slow` 325 of 325;
+`tests/run_tests.sh` 172 of 172. Without a Coulomb table file (build `work/b-coul2`, the same code): 42 of 42 tests
+matching `pyazr_evaluation|coulomb|config_options|gsl|whittaker|ec_|project_options|io_config|experiment_|
+pyazr_describe`, and the scripts `config_options` and `ec_integrals_signature`. Instructions at one thread against
+`work/b-trial95`, no output differing: `T2` calculation 1,242,561,787 → 1,242,372,132; `13N` calculation
+74,582,449,469 → 74,563,131,713; `13N` gradient fit 183,843,244,523 → 183,817,809,638; `T2` gradient fit
+168,750,567,860 → 169,781,017,131 (+0.61 %) and, run twice more in another directory, 168,731,722,915 →
+169,147,757,454 (+0.25 %, the same both times). The first full check of this step (`verify_coul_slice2.out`) had
+two failures, both repaired before this one: `check_skills` (a date in two skill lines outside the skills' form
+of a version note) and `tests/cli_help` (the flag's message without "Unknown option").
+
+`src/CoulFunc.cpp` includes no GSL header any more. What calls GSL's Coulomb functions now: `azure2-coulomb-table
+validate` (section 9.5) and the test `coulomb_gsl_crosscheck`, which prints "inside the outer turning point, 7
+points against mpmath: coulsm within 1.52e-10 (P and S); GSL's P off by 4.93e-03 to 5.20e-02" (GSL 2.6).

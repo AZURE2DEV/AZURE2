@@ -215,6 +215,9 @@ void parseOptions(const std::vector<std::string> &arguments, Config &configure) 
                                   "nothing from standard input.\n       Drop --no-readline and give the command: "
                                   "AZURE2 <command> [options] FILE (AZURE2 --help lists them; "
                                   "tools/menu_to_command.py turns an old script's answers into the command).");
+    else if (const azure2::io::RemovedConfigKey *removed = azure2::io::RemovedConfigKeyOfFlag(*it))
+      throw std::invalid_argument("Unknown option " + *it + ".  " +  // the parser's words for a flag it does not take
+                                  azure2::io::RemovedConfigKeyText(*removed, azure2::io::OptionSpelling::kFlag));
     else if (ApplyOptionFlag(configure, *it))  // an option of the calculation: its row of io::ConfigKeys()
       continue;
     else if (it->compare(0, 16, "--coulomb-table=") == 0) {  // the option and the table file of this machine

@@ -24,7 +24,7 @@ extern double DoubleFactorial(int);
  */
 
 ECIntegral::ECIntegral(const PPair *pPair, const Config &configure) : scratch_(configure.scratch->ForThisThread().ec) {
-  params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  params_.coulFunc = std::make_unique<CoulFunc>(pPair);
   // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialMemo(&scratch_.radial);
   params_.whitFunc = std::make_unique<WhitFunc>(pPair);

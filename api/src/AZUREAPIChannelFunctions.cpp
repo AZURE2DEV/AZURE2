@@ -50,7 +50,7 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   const int twoJ = spinOrbit ? pair->SpinOrbitTwoJ(requestedTwoJ / 2.0) : azure2::physics::kNoSpinOrbit;
   pair->SpinOrbitFactor(lValue, twoJ);  // throws std::invalid_argument for a J that l and the spin cannot make
 
-  CoulFunc coul(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC));
+  CoulFunc coul(pair);
 
   out.push_back(static_cast<double>(nE));
   for (int i = 0; i < nE; ++i) {
@@ -68,7 +68,7 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
         F = dF = G = dG = P = S = delta = 0.;
       }
     } else if (radius == pair->GetChRad()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
-      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, twoJ, energy);
+      S = ChannelFunc(pair).Shift(lValue, twoJ, energy);
     }
     out.insert(out.end(), {F, dF, G, dG, P, S, delta});
   }

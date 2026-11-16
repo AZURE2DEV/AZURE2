@@ -39,7 +39,7 @@ AMPLITUDE_ANGLE = 90.0
 #: The most points (energies x cosines) of one elastic session (the engine keeps about 2.5 kB per point).
 SESSION_POINTS = 200000
 #: The session options a sweep keeps (the calculation's; the others are the session's own business).
-SWEEP_OPTIONS = ("use_brune", "use_park", "use_rmc", "use_gsl_coul", "use_coulomb_table", "ignore_externals",
+SWEEP_OPTIONS = ("use_brune", "use_park", "use_rmc", "use_coulomb_table", "ignore_externals",
                  "use_long_wavelength", "ec_convection_current")
 
 

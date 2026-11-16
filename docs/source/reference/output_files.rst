@@ -456,8 +456,7 @@ speed up subsequent calculations, as long as:
 - The integration grid has not changed: target thickness, energy straggling,
   convolution width and the adaptive-grid settings all move the sub-point
   energies the integrals are evaluated at.
-- The Coulomb-function routine (``--gsl-coul``) and the hybrid potential are
-  the same.
+- The hybrid potential is the same.
 - Relativistic kinematics (``relativistic=1`` in ``<config>``) are on or off as
   before: the switch changes every channel's eta, rho and flux factor (it was
   missing from the signature before October 2026; a file written with it off is

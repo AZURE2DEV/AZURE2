@@ -115,6 +115,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 | 16 | A MIGRAD fit stopped by its call limit ends at its lowest objective | see line | 2026-11-14 | owner |
 | 17 | Radiative widths are not in a level's total width (as on `dev`) | none | — | — |
 | 18 | Clebsch–Gordan and Racah coefficients computed here, not GSL's 3j and 6j | last digit | 2026-11-16 | PI |
+| 19 | `--gsl-coul` / `use_gsl_coul` (GSL's Coulomb functions) removed: refused | up to 5 % in P | 2026-11-16 | PI |
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
@@ -159,6 +160,14 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     same chi-squared and parameters with output numbers differing in the last printed digit (5e-11). An
     `intEC.dat` written before is recomputed once (signature v7). `cnuc_split.md` section 9;
     `physics_engine_coupling_gsl`.
+19. `dev` has the flag `--gsl-coul` (and the old setup program a box for it, kept in `<lastRun>`). GSL's Coulomb
+    functions are wrong by up to 5.2 % in the penetrability and 6.2 % in the shift function inside the outer
+    turning point (against mpmath on the arguments of the test projects; the program's own are good to 1e-9), so
+    a run with the flag differed from one without by percent: χ² of `tests/13N` 336479.96 → 335217.54. Here the
+    flag, the `<config>` key `use_gsl_coul` (either value) and the pyazr keyword are refused with that reason;
+    a converted old project is computed with the program's own functions, whatever its `<lastRun>` said. No
+    result of a run without the option changes. A capture calculation that used the flag for speed takes 4.5
+    times the instructions (`tests/13N`). `coulomb.md` sections 8 and 9; `coulomb_gsl_crosscheck`.
 
 Rows 9, 15 and the refusals that stop a project which ran on `dev` (two resolution kernels on one data set, a lab
 point at the kinematic limit, ...) are in the history page, "What users notice".
@@ -333,9 +342,8 @@ estimate from the 65 commits read, not a measurement).
 
 - **The Coulomb repair's home**: a listed local change in `physics/coulomb/coulsm` (as now) or pycoulomb.
 - **The coincidence gap**: 1e-6 MeV with the mean S′ (section 3, row 4); proposed for `dev` too.
-- **The option `use_gsl_coul` (`--gsl-coul`)**: keep it (fast, wrong by up to 5 % in P below the barrier, and its
-  effect depends on whether a Coulomb table file exists), retire it, or give it another routine (`coulomb.md`
-  section 8.4, with the numbers). Proposed: retire it, the key refused with a message that names the default.
+- **`--gsl-coul` on `dev`**: retired here by the PI (2026-11-16; section 3, row 19): GSL's Coulomb functions are
+  wrong by up to 5 % in P below the barrier. Proposed for `dev` too.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
@@ -663,14 +671,14 @@ re-read against its design at the hand-over.
    objective's terms are still `src/Objective.cpp` (each reads the working copy, the segments, the level state or
    the caller's `Results`), the vector's values are still `AZUREParams` on Minuit2's parameters, and the fitters
    are still `src/Fit*.cpp`: making those a library means giving the data χ² arrays, a change of the evaluation.
-6. **GSL's Coulomb functions behind the option `use_gsl_coul`.** With the default options the engine calls
-   `physics/coulomb` only. GSL's `gsl_sf_coulomb_wave_FG_e` is left in `src/CoulFunc.cpp` (two places), reached
-   only with `use_gsl_coul` (`--gsl-coul`), and in one printed line of `azure2-coulomb-table validate`;
-   `gsl_sf_hyperg_U` is not called any more. Measured on the arguments of every test project (`coulomb.md`
-   section 8): below the Coulomb barrier GSL's P and S are wrong by up to 5 % (mpmath decides), so a run with
-   the option differs from the default by percent (χ² of `13N` 336479.96 → 335217.54) and takes 78 % fewer
-   instructions in a capture calculation. Calling `physics/coulomb` there moves no default output and is less
-   than a day of code, but it empties a user-visible option: not done, asked in section 8.
+6. **One set of Coulomb functions; what is left of it.** The engine calls `physics/coulomb` only: the option
+   `use_gsl_coul` (`--gsl-coul`) and its two calls of GSL's `gsl_sf_coulomb_wave_FG_e` are gone (the PI,
+   2026-11-16; section 3, row 19; `coulomb.md` sections 8 and 9). GSL's routine is called by the cross-check of
+   `azure2-coulomb-table validate` (beyond the outer turning point, where it is right) and by the test
+   `coulomb_gsl_crosscheck`; the engine links GSL for its quadratures, a fitter and special functions. Left:
+   `coulsm` is good to 1e-9 and takes 36–71 µs per call for a charged pair; `coulcc` is three times faster and
+   good to 6.5e-12 on the sampled arguments but fails at 11 of 2387 of them (η ≥ 48), so a faster default is
+   not a switch away. `coulsm`'s F alone at η = 0, l ≥ 2 and ρ ≪ 1 is inaccurate (`coulomb.md` section 9.3).
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
