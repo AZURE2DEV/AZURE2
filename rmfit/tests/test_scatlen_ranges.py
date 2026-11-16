@@ -102,7 +102,7 @@ def part_b():
     from rmfit.model import single_variant
     from rmfit.azr3 import Model as AzrModel
     print("Part B: scattering-length rows (13N fixture)")
-    fix = next(d for d in (AZURE2_ROOT, os.path.expanduser("~/AZURE2")) if os.path.isdir(os.path.join(d, "tests", "13N")))
+    fix = next(d for d in (AZURE2_ROOT, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))) if os.path.isdir(os.path.join(d, "tests", "13N")))
     tmp = tempfile.mkdtemp(prefix="rmfit_scatlen_")
     shutil.copytree(os.path.join(fix, "tests", "13N", "data"), os.path.join(tmp, "data"))
     os.makedirs(os.path.join(tmp, "output"))

@@ -7,7 +7,7 @@ import os, sys, tempfile, shutil
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 from rmfit.model import build_shards, plan_pieces
-from pyazr.datasets import SegmentSet
+from rmfit.azr3 import SegmentTable as SegmentSet
 AZR = os.path.join(os.environ.get("RMFIT_ARCHIVE", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))), "an archived campaign")  # archive model; RMFIT_ARCHIVE
 
 

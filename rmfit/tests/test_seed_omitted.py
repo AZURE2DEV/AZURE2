@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 from rmfit import AZURE2_ROOT                                   # noqa: E402  (puts pyazr on the path)
 from rmfit.structure import add_level_variant, LevelCandidate   # noqa: E402
-from pyazr import AzrModel                                      # noqa: E402
+from rmfit.azr3 import Model as AzrModel  # noqa: E402
 
 failures = []
 def check(name, ok, detail=""):

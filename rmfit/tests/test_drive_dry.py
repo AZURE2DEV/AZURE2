@@ -180,7 +180,7 @@ def main():
     drv = os.path.join(tmp, "13N_drive.azr")
     check("SCALE_ANCHOR wrote the working copy", os.path.exists(drv) and d.state.get("model") == drv, str(d.state.get("model")))
     if os.path.exists(drv):
-        from pyazr.datasets import SegmentSet
+        from rmfit.azr3 import SegmentTable as SegmentSet
         segs = SegmentSet.from_file(drv)
         anchored = [s for s in segs if "meyer_84" in s.data_file]
         check("anchor set's norm fixed in the working copy", anchored and all(not s.vary_norm for s in anchored))

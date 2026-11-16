@@ -15,7 +15,7 @@ def codes(fs):
 
 
 def test_spec(tmp):
-    from pyazr.datasets import SegmentSet
+    from rmfit.azr3 import SegmentTable as SegmentSet
     segs = SegmentSet.from_file(AZR)
     s0 = segs[0]
     name = os.path.basename(s0.data_file)

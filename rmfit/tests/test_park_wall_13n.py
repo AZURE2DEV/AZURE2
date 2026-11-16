@@ -31,7 +31,7 @@ from rmfit.azr3 import Model as AzrModel
 
 failures = []
 # the 13N fixture: from AZURE2_ROOT, or ~/AZURE2 when AZURE2_ROOT is a frozen build copy without tests/
-FIX = next(d for d in (AZURE2_ROOT, os.path.expanduser("~/AZURE2")) if os.path.isdir(os.path.join(d, "tests", "13N")))
+FIX = next(d for d in (AZURE2_ROOT, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))) if os.path.isdir(os.path.join(d, "tests", "13N")))
 PARK = dict(use_park=True, use_brune=True)
 
 

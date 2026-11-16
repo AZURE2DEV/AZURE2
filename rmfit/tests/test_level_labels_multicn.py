@@ -135,7 +135,7 @@ def main():
             check(True, "(e) a level of the other nucleus is not matched")
 
         # (f) one nucleus: labels as before the fix
-        root = os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2"))
+        root = os.environ.get("AZURE2_ROOT", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
         one = os.path.join(work, "13N")
         shutil.copytree(os.path.join(root, "tests", "13N"), one)
         os.makedirs(os.path.join(one, "output"), exist_ok=True)

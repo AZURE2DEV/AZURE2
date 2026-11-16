@@ -48,7 +48,7 @@ def _pairs_text(model):
         try:
             light = f"Z={c.Z1} M={c.M1:g} J={c.J1:g}"
             heavy = f"Z={c.Z2} M={c.M2:g} J={c.J2:g}"
-            thr = c.entrance_sep_energy - c.sep_energy + c.excitation      # Ex of the pair's threshold
+            thr = c.threshold      # Ex of the pair's threshold
             rows.append(f"- pair {key}: ({light}) + ({heavy}), separation energy {c.sep_energy:.4f} MeV, Ex(heavy) = {c.excitation:.4f}, "
                         f"threshold at Ex = {thr:.4f} MeV, a = {c.channel_radius:g} fm")
         except Exception as err:
@@ -57,16 +57,15 @@ def _pairs_text(model):
 
 
 def _segment_table(segs, base):
-    head = ("| key | active | in->out | observable | file | E window (lab) | angle | norm (nominal, vary, err %) | shift | cov | group |\n"
-            "|---|---|---|---|---|---|---|---|---|---|---|")
+    head = ("| key | name | active | reaction (pairs in->out) | quantity | file | E window (lab) | angle | norm (as written) | "
+            "shift (as written) | cov | shared norm |\n|---|---|---|---|---|---|---|---|---|---|---|---|")
     rows = []
     for s in segs:
-        ang = f"{s.angle_min:g}-{s.angle_max:g}" if s.observable == "differential" else "-"
-        norm = f"{s.norm:g}, {'free' if s.vary_norm else 'fixed'}, {s.norm_error:g}"
-        shift = f"{s.energy_shift:g}, {'free' if s.vary_shift else 'fixed'}, {s.energy_shift_error:g}" if (s.vary_shift or s.energy_shift) else "-"
-        obs = s.observable + (" SUM" if s.total else "") + (" composite" if s.composite else "")
-        rows.append(f"| {s.key} | {'1' if s.active else '0'} | {s.entrance_key}->{s.exit_key} | {obs} | {s.data_file} | "
-                    f"{s.energy_min:g}-{s.energy_max:g} | {ang} | {norm} | {shift} | {s.covariance or '-'} | {s.norm_group or '-'} |")
+        ang = f"{s.angle_min:g}-{s.angle_max:g}" if s.differential else "-"
+        obs = s.observable + (f" ({s.operation} of {len(s.terms)} reactions)" if s.composite else "")
+        rows.append(f"| {s.key} | {s.name} | {'1' if s.active else '0'} | {s.tree} ({s.entrance_key}->{s.exit_key}) | {obs} | "
+                    f"{s.data_file} | {s.energy_min:g}-{s.energy_max:g} | {ang} | {s.norm_text or '-'} | {s.shift_text or '-'} | "
+                    f"{s.covariance or '-'} | {s.norm_group or '-'} |")
     return head + "\n" + "\n".join(rows)
 
 

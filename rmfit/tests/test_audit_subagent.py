@@ -1,5 +1,6 @@
 """audit_subagent.py (2026-11-07): the three idle-time review prompts and the FINDINGS.md parser.  Engine-free, seconds."""
-import os, shutil, sys, tempfile, json
+import os
+import re, shutil, sys, tempfile, json
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 from rmfit import AZURE2_ROOT
@@ -37,7 +38,7 @@ def main():
             txt = open(r["prompt"]).read()
             check(f"{kind}: prompt written", os.path.exists(r["prompt"]) and len(txt) > 2000, str(len(txt)))
             check(f"{kind}: no unfilled $placeholders", "$" not in txt.replace("$(", ""), [ln for ln in txt.splitlines() if "$" in ln][:2])
-            check(f"{kind}: segment table present", "| key | active |" in txt and "| 1 | 1 |" in txt)
+            check(f"{kind}: segment table present", "| key | name | active |" in txt and re.search(r"\| 1 \| \S+ \| 1 \|", txt) is not None)
             check(f"{kind}: standing decision carried", "norms fixed at 1 for the test" in txt)
             check(f"{kind}: readme head carried", "the evaluator's framing line" in txt)
             check(f"{kind}: report path and rules", r["report"] in txt and "READ-ONLY" in txt)

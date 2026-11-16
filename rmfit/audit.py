@@ -73,10 +73,33 @@ def read_points(path):
 
 def in_window(d, seg):
     m = (d[:, 0] >= seg.energy_min - 1e-9) & (d[:, 0] <= seg.energy_max + 1e-9)
-    if seg.observable in ("differential", "analyzing-power") or seg.angle_max > seg.angle_min:
-        if seg.observable not in ("angle-integrated", "total-capture", "total"):
-            m &= (d[:, 1] >= seg.angle_min - 1e-9) & (d[:, 1] <= seg.angle_max + 1e-9)
+    if seg.differential:
+        m &= (d[:, 1] >= seg.angle_min - 1e-9) & (d[:, 1] <= seg.angle_max + 1e-9)
     return m
+
+
+#: the layout of a data file whose rows this audit reads itself: lab energy in MeV, an angle or a placeholder, the
+#: value and its uncertainty.  Files with other columns are checked by the engine's validator only.
+_PLAIN_COLUMNS = ("E_lab[MeV] _ value error", "E_lab[MeV] theta_lab[deg] value error", "E_lab[MeV] theta_cm[deg] value error")
+
+
+def _engine_nuisances(azr_path):
+    """The nuisance rows of a session of the project (:func:`rmfit.azr3.nuisance_rows`), from a worker process on a
+    copy in a temporary directory, so that nothing is written beside the project; no evaluation is made."""
+    import shutil
+    import tempfile
+    from .engine import _Worker
+    from .model import single_variant
+    tmp = tempfile.mkdtemp(prefix="rmfit_audit_")
+    try:
+        src = single_variant(azr_path, "audit", tmp)
+        w = _Worker(src, tmp, {}, None, name="audit").start()
+        try:
+            return list(w.info.get("nuisances", []))
+        finally:
+            w.stop()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg: Optional[dict] = None,
@@ -100,12 +123,14 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
             out.append(Finding("LOW", "engine-pin", "no engine pin in campaign.json (campaign made before 2026-11-07)"))
 
     # -- output path -------------------------------------------------------------------------------
-    cfg = _block(text, "config")
+    project = None
     outdir = None
-    for line in cfg.splitlines():          # "<path>   #Full Path to Output Directory" (pyazr set_output_dir writes the same)
-        if line.rstrip().endswith("#Full Path to Output Directory"):
-            outdir = line[:line.index("#")].strip()
-            break
+    try:
+        import pyazr
+        project = pyazr.Project.open(azr_path)
+        outdir = str(project.config().get("output_dir", "") or "") or None
+    except Exception as err:
+        out.append(Finding("HIGH", "model-parse", f"pyazr could not open the project: {err}"))
     if outdir:
         od = outdir if os.path.isabs(outdir) else os.path.join(base, outdir)
         home = os.path.normpath(campaign_dir or base)
@@ -123,21 +148,17 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
         out.append(Finding("HIGH", "model-parse", f"pyazr could not read the model: {err}"))
         model = None
     if model is not None:
+        # what the engine's own validator says of the project (pair masses and separation energies, data files,
+        # references between records, ...): one finding per code, an error HIGH, a warning LOW
         try:
-            for row in model.mass_check():
-                if row.ptype != 0 and row.light is None and row.heavy is None:
-                    continue
-                for name, mval, tval in (("M1", row.M1, row.M1_table), ("M2", row.M2, row.M2_table)):
-                    if tval is not None and abs(mval - round(mval)) < 1e-9 and abs(mval - tval) > 1e-6:
-                        out.append(Finding("MEDIUM", "pair-mass", f"pair {row.pair} {name} = {mval:g} is a mass NUMBER, not an atomic mass "
-                                           f"(table {tval:.6f}; Golden rule 1)"))
-                    elif tval is not None and abs(mval - tval) > 5e-4:
-                        out.append(Finding("MEDIUM", "pair-mass", f"pair {row.pair} {name} = {mval!r} u, table {tval!r} u"))
-                if row.dS_kev is not None and abs(row.dS_kev) > 1.0:
-                    out.append(Finding("HIGH" if abs(row.dS_kev) > 10 else "MEDIUM", "pair-separation",
-                                       f"pair {row.pair}: S {row.S:.6f} MeV vs table {row.S_table:.6f} ({row.dS_kev:+.1f} keV)"))
+            by = defaultdict(list)
+            for dgn in project.validate():
+                by[(str(dgn.get("severity", "")), str(dgn.get("code", "")))].append(str(dgn.get("message", "")))
+            for (sev, code), msgs in sorted(by.items()):
+                out.append(Finding("HIGH" if sev == "error" else "LOW", "engine-validate",
+                                   f"{code}: {len(msgs)} {sev}(s) from the engine's validator", "; ".join(msgs[:3])))
         except Exception as err:
-            out.append(Finding("INFO", "pair-mass", f"mass check skipped ({err})"))
+            out.append(Finding("INFO", "engine-validate", f"validator not run ({err})"))
         zero_free, nlev, nchan = [], 0, 0
         byjpi = defaultdict(list)
         for lv in model.levels:
@@ -145,6 +166,10 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
                 continue
             nlev += 1
             byjpi[lv.jpi].append((float(lv.energy), lv.level_id))
+            if len(lv.ids) > 1:
+                # the project's reader has already joined the rows of several level IDs into this one level
+                out.append(Finding("HIGH", "level-merge", f"the rows of level IDs {list(lv.ids)} are read as ONE {lv.jpi} level at "
+                                   f"{float(lv.energy):.5f} MeV (the same J^pi at the identical energy)"))
             for c in lv.channels:
                 if not c.active:
                     continue
@@ -167,16 +192,20 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
 
     # -- segments and data ------------------------------------------------------------------------------
     try:
-        from pyazr.datasets import SegmentSet, TestSegmentSet
-        segs = SegmentSet.from_file(azr_path)
+        from .azr3 import segments as _segments
+        segs = _segments(azr_path)
     except Exception as err:
-        out.append(Finding("HIGH", "segments-parse", f"segment table unreadable: {err}"))
+        out.append(Finding("HIGH", "segments-parse", f"data-set table unreadable: {err}"))
         segs = []
-    tests = []
-    try:
-        tests = TestSegmentSet.from_file(azr_path)
-    except Exception:
-        pass
+    # the values and priors of the nuisances are the engine's (a session's parameter rows)
+    have_nuisances = False
+    if segs:
+        try:
+            segs.with_nuisances(_engine_nuisances(azr_path))
+            have_nuisances = True
+        except Exception as err:
+            out.append(Finding("HIGH", "model-setup", "the engine does not set the project up, so the normalizations "
+                               "and shifts were not checked", str(err).strip().splitlines()[-1][:300] if str(err).strip() else ""))
     thresholds = _lab_thresholds(model) if model is not None else {}
     byfile = defaultdict(list)
     for s in segs:
@@ -184,6 +213,8 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
         if not s.active:
             continue
         cov = bool(s.covariance)        # a covariance file may carry the norm prior (t0 method): LOW, for the evaluator to confirm
+        if not have_nuisances:
+            continue
         if abs(s.norm - 1.0) > 1e-9:
             out.append(Finding("LOW" if cov else "MEDIUM", "norm-nominal", f"seg {s.key} {os.path.basename(s.data_file)}: nominal norm {s.norm} != 1 "
                                + ("(covariance file present: the prior may live there, t0 method -- confirm)" if cov else
@@ -191,12 +222,14 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
         if s.vary_norm and s.norm_error == 0:
             out.append(Finding("LOW" if cov else "MEDIUM", "norm-unpenalized", f"seg {s.key} {os.path.basename(s.data_file)}: free norm with no "
                                "systematic error" + (" (covariance file present: cov_free_norm_ok?)" if cov else "")))
-        if 0 < s.norm_error < 1.0:
-            out.append(Finding("HIGH", "norm-error-units", f"seg {s.key} {os.path.basename(s.data_file)}: normError {s.norm_error} -- AZURE2 reads PERCENT; "
-                               "a fraction gives a penalty 100x too tight"))
+        if 0 < s.norm_error < 0.1:
+            # format 3 states a prior's width with its unit (a number, or per cent of the centre), so the old
+            # percent-read-as-fraction trap is gone; a prior this tight is still worth a look
+            out.append(Finding("MEDIUM", "norm-prior-tight", f"seg {s.key} {os.path.basename(s.data_file)}: the norm's prior is "
+                               f"{s.norm_error:g} % wide -- a fraction written where per cent was meant?"))
         if s.vary_shift and s.energy_shift_error == 0:
             out.append(Finding("MEDIUM", "shift-unpenalized", f"seg {s.key} {os.path.basename(s.data_file)}: free energy shift with no error"))
-        if s.observable == "differential" and (s.angle_min < -1 or s.angle_max > 180.5):
+        if s.differential and (s.angle_min < -1 or s.angle_max > 180.5):
             out.append(Finding("LOW", "frames", f"seg {s.key}: angle window [{s.angle_min}, {s.angle_max}] outside 0-180"))
     active_files = sorted({s.data_file for s in segs if s.active})
     keysets = {}
@@ -205,6 +238,10 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
         name = os.path.basename(f)
         if not os.path.exists(path):
             out.append(Finding("HIGH", "data-file", f"{name}: file not found ({path})"))
+            continue
+        if any(x.active and x.get("columns") not in _PLAIN_COLUMNS for x in byfile[f]):
+            out.append(Finding("INFO", "data-file", f"{name}: columns {byfile[f][0].get('columns')!r}: rows checked by the engine's "
+                               "validator only"))
             continue
         d, probs = read_points(path)
         if probs:
@@ -218,7 +255,7 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
             d = d[~bad]
         E, A, V, U = d.T
         segs_f = [s for s in byfile[f] if s.active]
-        is_ay = all(s.observable == "analyzing-power" for s in segs_f) and segs_f
+        is_ay = all(s.observable == "analyzing_power" for s in segs_f) and segs_f
         used = np.zeros(len(d), bool)
         for s in segs_f:
             mwin = in_window(d, s)
@@ -280,16 +317,19 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
             if n >= 3:
                 out.append(Finding("MEDIUM", "data-crossdup", f"{a} & {b}: {n} identical (E, value, error) rows -- the same data twice?"))
 
-    # -- target integration on test segments ----------------------------------------------------------------
+    # -- folded extrapolations ---------------------------------------------------------------------------------
+    # format 3: an extrapolation is folded only when its own record names a target, a beam or a detector (the old
+    # <targetInt> line that silently caught test segments by number is gone); say so, since a bare cross section
+    # is what a reader usually expects of an extrapolation
     try:
-        from .model import target_int_entries
-        tkeys = {t.key for t in tests if t.active}
-        for active, keys, line in target_int_entries(text):
-            if active and tkeys & set(keys):
-                out.append(Finding("HIGH", "targetint-test", f"active <targetInt> line names test segment(s) {sorted(tkeys & set(keys))}: "
-                                   "a mode-3 extrapolation here is FOLDED (Golden rule 7); run it on a copy with the line inactive"))
+        for name, rec in (project.records().items() if project is not None else ()):
+            if rec.record_kind == "extrapolation" and str(rec.get("active", "yes")) != "no":
+                named = [f for f in ("target", "beam", "detector") if rec.get(f)]
+                if named:
+                    out.append(Finding("LOW", "extrapolation-folded", f"extrapolation {name} names a {', a '.join(named)}: its curve "
+                                       "is folded, not the bare cross section"))
     except Exception as err:
-        out.append(Finding("INFO", "targetint-test", f"not checked ({err})"))
+        out.append(Finding("INFO", "extrapolation-folded", f"not checked ({err})"))
 
     # -- legacy parameter files, stale caches ------------------------------------------------------------------
     for pf in sorted(glob.glob(os.path.join(base, "*.sav")) + glob.glob(os.path.join(base, "output", "param.*"))):
@@ -303,29 +343,12 @@ def audit_model(azr_path: str, campaign_dir: Optional[str] = None, campaign_cfg:
                                "AZURE2 ignores them silently -- convert (azure2-legacy-params skill)"))
     od = os.path.join(base, "output")
     for cache in glob.glob(os.path.join(od, "intEC.*")):
+        if cache.endswith(".sig") or os.path.exists(cache + ".sig"):
+            continue                      # the engine checks a cache against its signature at session start
         if os.path.getmtime(cache) < os.path.getmtime(azr_path):
-            out.append(Finding("LOW", "intec-stale", f"{os.path.relpath(cache, base)} is older than the .azr: delete it if segments changed (Golden rule 8)"))
-
-    # -- target energies (beam vs effective) -------------------------------------------------------------------
-    chk = os.path.expanduser("~/.claude/skills/azure2-target-energies/check_target_energies.py")
-    if run_target_energies and os.path.exists(chk) and "<targetInt>" in text and _has_active_target_int(text):
-        import subprocess, sys
-        try:
-            r = subprocess.run([sys.executable, chk, azr_path], capture_output=True, text=True, timeout=300, cwd=base)
-            tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
-            sev = "INFO" if r.returncode == 0 else "MEDIUM"
-            out.append(Finding(sev, "target-energies", f"check_target_energies exit {r.returncode}", " | ".join(tail)))
-        except Exception as err:
-            out.append(Finding("INFO", "target-energies", f"not run ({err})"))
+            out.append(Finding("LOW", "intec-stale", f"{os.path.relpath(cache, base)} is older than the project and has no signature "
+                               "file: delete it if data sets changed"))
     return out
-
-
-def _has_active_target_int(text):
-    for line in _block(text, "targetInt").splitlines():
-        t = line.split()
-        if t and t[0] == "1":
-            return True
-    return False
 
 
 def _rows(d, mask, n=3):

@@ -28,7 +28,7 @@ def check(name, ok, detail=""):
 
 def make_fixture(tmp):
     from rmfit import AZURE2_ROOT
-    fix = next(d for d in (AZURE2_ROOT, os.path.expanduser("~/AZURE2")) if os.path.isdir(os.path.join(d, "tests", "13N")))
+    fix = next(d for d in (AZURE2_ROOT, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))) if os.path.isdir(os.path.join(d, "tests", "13N")))
     src = os.path.join(fix, "tests", "13N")
     orig = os.path.join(tmp, "orig"); moved = os.path.join(tmp, "moved")
     for d in (orig, moved):

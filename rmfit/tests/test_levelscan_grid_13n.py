@@ -17,12 +17,12 @@ import tempfile
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-sys.path.insert(1, os.path.expanduser("~/AZURE2"))
+sys.path.insert(1, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 
 from rmfit.levelscan import (_patterns, grid_coverage, partition_fractions,
                              pattern_distance, template_variant)
 
-AZURE2_ROOT = os.path.expanduser("~/AZURE2")
+AZURE2_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 BASE = os.path.join(AZURE2_ROOT, "tests", "13N", "13N.azr")
 fails = []
 

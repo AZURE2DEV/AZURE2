@@ -15,7 +15,7 @@ Run: python3 rmfit/tests/test_bake_separate_13n.py   (a few minutes; needs an en
 import os, sys, shutil, tempfile, io, contextlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
-sys.path.insert(0, os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2")))
+sys.path.insert(0, os.environ.get("AZURE2_ROOT", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))))
 import numpy as np
 from rmfit.azr3 import Model as AzrModel
 import rmfit.enginepin as enginepin
@@ -23,7 +23,7 @@ from rmfit.engine import SingleSession, Sharded, bake
 from rmfit.local import sanity, SAME_ENERGY_KEV
 from rmfit.keys import take
 from rmfit.model import single_variant
-AZ = os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2"))
+AZ = os.environ.get("AZURE2_ROOT", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 failures = []
 
 

@@ -15,12 +15,12 @@ import os, sys, shutil, tempfile, io, contextlib, importlib.util
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_PARENT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, PKG_PARENT)
-sys.path.insert(0, os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2")))
+sys.path.insert(0, os.environ.get("AZURE2_ROOT", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))))
 import numpy as np
 from rmfit.azr3 import Model as AzrModel
 from rmfit.engine import SingleSession, bake
 from rmfit.model import single_variant
-AZ = os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2"))
+AZ = os.environ.get("AZURE2_ROOT", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 failures = []
 FLAGS = dict(use_brune=True)
 

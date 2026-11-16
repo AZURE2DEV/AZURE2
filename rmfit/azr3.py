@@ -419,6 +419,7 @@ class ModelLevel:
     label = property(lambda self: self._lv.label)
     nucleus = property(lambda self: self._lv.nucleus)
     level_id = property(lambda self: (self._lv.ids[0] if self._lv.ids else None))
+    ids = property(lambda self: tuple(self._lv.ids))
     channels = property(lambda self: [ModelChannel(self, c) for c in self._lv.channels])
 
     def _refresh(self):
@@ -436,6 +437,11 @@ class ModelLevel:
 
     def set_active(self, active=True):
         self._model.project.set_level(self._lv, active=bool(active))
+        self._refresh()
+
+    def set_energy(self, energy):
+        """Move the level to E_x ``energy`` (MeV)."""
+        self._model.project.set_level(self._lv, energy=float(energy))
         self._refresh()
 
     def __str__(self):
@@ -534,9 +540,18 @@ class Model:
         new = [lv for lv in self.project.levels() if lv.ids not in before]
         return ModelLevel(self, new[-1])
 
-    def remove_level(self, level) -> None:
-        """Remove a level (a ModelLevel, a label, or ``(J^pi, E_x)``) and its rows."""
-        self.project.remove_level(level._lv if isinstance(level, ModelLevel) else level)
+    def remove_level(self, level=None, jpi=None, energy=None, tol=1e-3) -> int:
+        """Remove a level and its rows: a ModelLevel, a label or ``(J^pi, E_x)``; or every active level of
+        ``jpi`` within ``tol`` MeV of ``energy``.  Returns the number removed."""
+        if level is not None:
+            self.project.remove_level(level._lv if isinstance(level, ModelLevel) else level)
+            return 1
+        victims = self.find(jpi=jpi, energy=energy, tol=tol)
+        if not victims:
+            raise KeyError(f"no level {jpi} at {energy} MeV")
+        for lv in victims:
+            self.project.remove_level(lv._lv)
+        return len(victims)
 
     def datasets(self, file_substr=None) -> List[str]:
         """The names of the dataset records (those whose name or data file contains ``file_substr``)."""
