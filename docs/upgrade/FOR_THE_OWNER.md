@@ -557,6 +557,8 @@ re-read against its design at the hand-over.
      address 69) is the first with T2 since the project was converted: both jobs pass, no step fails and
      neither sanitizer writes a report.** So everything the script runs is clean under clang 18's address,
      undefined-behaviour and thread sanitizers, with the three entries for the OpenMP runtime's own libraries.
+     That run was of the code before the collision matrix moved to `physics/` (item 5); the thirteenth push
+     runs the two jobs on the moved code, and its result is the one to look at.
 
    **The CI is not green.** Linux in the ninth push: every unit test passes (`docs_build` is skipped, no Sphinx
    there) and 171 of the 172 regression checks. The one is `tests/shared_point_tables` (d), a bound on the peak
