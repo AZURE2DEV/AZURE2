@@ -351,6 +351,11 @@ A new option of a command (a question a run needs answered):
 4. Its row in the options table of ``reference/command_line.rst``
    (``tests/cli_help``, ``tests/cli_commands``) and, when it changes what a
    command writes, a case of ``tests/cli_commands/check.sh``.
+5. For an option of ``mcmc``: an argument of ``SamplerRequest``
+   (``api/src/AZUREAPISampler.cpp``, which writes the session's keywords as
+   a command line for ``ReadRunCommand``) and the keyword of
+   ``Session.sample_with_engine`` (``pyazr/session_sampler.py``), so that the
+   session's sampler takes what the command takes.
 
 A new command: a ``RunCommand`` value and its row of ``RunCommands()``
 (name, help), its bits in ``SelectCalculation``

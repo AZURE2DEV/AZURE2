@@ -132,3 +132,10 @@ for particle exits, a few per cent off, and changed results even with every Q = 
   multiplied by √J_λ again. Brune and standard runs are unaffected.
 - builds before 2026-10-08 (expires: 2027-02-01): a few builds wrote the tag as a plain `parametrization` row, which
   shifts any positional reader by one line; strip it or prefix it with `#`.
+- builds before 2026-11-17 (expires: 2027-02-10) computed `Session.wigner_widths` (the Γ_W of θ² = Γ/Γ_W in
+  `dimensionless_widths` and `widths_check.py`) from a probe of the transformation, not as 2 P_l(E_r) γ²_W. For a
+  Brune level with fixed non-zero particle widths Γ_W was smaller by 1/(1 + Σ_c γ_c² dS_c/dE) of the fixed
+  channels, so θ² of its free channels was larger by that factor (up to 25 % on the test project T2) and the level
+  norm J = θ²/θ²_formal was too large by it. In the formal basis (`use_brune=False`) Γ_W could be wrong by orders
+  of magnitude. Park sessions and Brune levels whose particle widths are all free are unaffected. Recompute θ² and
+  J with a current build before comparing.
