@@ -668,7 +668,10 @@ re-read against its design at the hand-over.
    remove once the file is on `main`); look at its newest run. Its first run (2026-11-16): the Linux x86-64
    wheels build and pass their test; the Linux aarch64 wheels build and the test fails, the failing check not
    seen (the test writes it as an annotation from the next run on, if an annotation written inside the build's
-   container reaches the run, which was not seen either). No Windows wheel; the Coulomb table's address is
+   container reaches the run, which was not seen either). macOS on Intel: the wheels build and the same test
+   fails, the check not seen. macOS on arm64: GitHub refused the runner (`macos-14`: "The configuration
+   'macos-14-arm64-us-default' is not supported"); the workflow asks for `macos-15` now, not seen to be
+   accepted. No Windows wheel; the Coulomb table's address is
    empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
