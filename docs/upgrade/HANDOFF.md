@@ -22,8 +22,11 @@ changed: two tests, their models, two READMEs, two lines of `dev_features.md` se
    the owner, with the level of the boundary condition.
 
 **Run here** (CRC, GCC 11.5): both scripts pass with the build of `feature/upgrade-5-dev-seed` (base `486d746e`);
-`repo_consistency_test.py` passes. The build and gate of this branch itself: see the entry's end once the queue job
-is back. **Not run:** CI.
+`repo_consistency_test.py` passes. **The gate of this branch itself** (queue job 1756600, base `7a1d96d0`): consistency, configure and build pass;
+unit tests 307 of 310, failing the base's two (`pyazr_park_dsde`, `pyazr_units_scales`) and `upgrade_predictions`,
+which lists every project under `tests/`: the seven new models are added to `tests/upgrade/predictions.txt` in a
+follow-up commit (19 lines added, none changed) and the test passes; physics suites 172 pass, the base's two fail
+(`capture_ay_coupling`, the ancai06 warning); the pages build. **Not run:** CI.
 
 ## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
 
