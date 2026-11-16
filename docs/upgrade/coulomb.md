@@ -780,7 +780,7 @@ largest is at the smallest ρ):
 | F | 4.6 × 10⁻¹⁴ | 1.6 × 10⁻¹⁰ | 4.2 × 10⁻³ | 2.6 × 10⁵ | 2.9 × 10¹³ | 5.2 × 10²¹ | 1.3 × 10³⁰ |
 | F′ | 9.5 × 10⁻¹⁶ | 7.9 × 10⁻¹¹ | 2.8 × 10⁻³ | 2.0 × 10⁵ | 2.3 × 10¹³ | 4.3 × 10²¹ | 1.1 × 10³⁰ |
 
-F′ has the same defect as F (section 8.2 named F only).
+F′ has the same defect as F (section 8.2 named F only). The table is the routine before section 10.
 
 *In the test projects* (scratch build of 27652262 with a probe at the two reads of `ECIntegral`; every project
 file, `calculate`, Brune, with the table; scripts and results in the director's `work/director/coul_probe/`,
@@ -791,7 +791,8 @@ output files are identical; the integrals (`intEC.dat` of `ng`) move by at most 
 number of one observable file (`ng`, R = 3) changes in its last printed digit (8.4202213885 → …886 × 10⁻⁸,
 1.2 × 10⁻¹¹, the print's step). So no test project is affected: nothing above 10⁻¹⁰.
 
-*What is exposed.* A capture through a neutral channel with l ≥ 2 at ρ ≪ 1 (a d-wave neutron at eV energies), and a
+*What was exposed* (until 2026-11-16; section 10 repaired it: F and F′ at η = 0 are now within 6.1 × 10⁻¹⁵ of
+mpmath for l = 0–8, ρ = 10⁻⁶–5 × 10⁴). A capture through a neutral channel with l ≥ 2 at ρ ≪ 1 (a d-wave neutron at eV energies), and a
 caller of `pyazr.physics.coulomb_functions` or `Session.channel_functions` who asks for F or F′ of a neutral pair at
 small ρ: at l = 4 and ρ ≈ 0.02 the F returned is off by about its own size (section 8.2). The routine was not changed; a
 repair (the closed forms ρ j_l(ρ), −ρ y_l(ρ) at η = 0, or `coulcc` there) moves P, S and φ of every neutral channel
