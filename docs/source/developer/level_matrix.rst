@@ -306,7 +306,12 @@ LU of the level matrix, at every channel-route solve).  The formal
 representation is cached per thread and J-group and rebuilt when a level's
 parameters change (``LevelState::Version``).
 
-**Gradient.**  In the formal representation the adjoint of a bilinear term
+**Gradient.**  The arithmetic of the routines named in this paragraph is in
+``physics/`` (``CollisionMatrixAdjoint.h``, ``ChannelSolveAdjoint.h``:
+functions of a block's arrays that add into a sink the caller hands over,
+tested against finite differences in ``physics/tests/``); the ``AMatrixFunc``
+routines keep the memo of the solves, the free-parameter mask and the choice
+of the route.  In the formal representation the adjoint of a bilinear term
 :math:`\beta F_{ab}` is :math:`O(n c)`: with :math:`u_c = A_f \Gamma_c` and
 :math:`Y = 1 + \Lambda F`,
 :math:`\bar e_\lambda = -\mathrm{Re}(\bar\beta u_{a\lambda} u_{b\lambda})` and

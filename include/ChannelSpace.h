@@ -5,6 +5,7 @@
 #include <cstdint>
 #include "LevelState.h"
 #include "azure2/physics/ChannelSolve.h"
+#include "azure2/physics/CollisionMatrixAdjoint.h"
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -101,12 +102,9 @@ const LevelArrays &CurrentLevelArrays(Memo &memo, const JGroup *jg, const LevelS
  */
 struct LevelDerivatives {
   std::vector<std::uint64_t> key;  ///< state, levels, versions, formalism and free mask
-  struct Entry {
-    int level;  ///< 0-based
-    int ch;     ///< 0-based channel, or -1 for the level energy
-    bool zero;  ///< k = q = 0 (only the kernel and explicit terms remain)
-    std::vector<double> k, q;
-  };
+  /// One free parameter: level, channel (-1: the level energy), the vectors k and q
+  /// (azure2/physics/CollisionMatrixAdjoint.h, level_parameter_adjoint).
+  typedef azure2::physics::LevelParameterDerivative Entry;
   std::vector<Entry> entries;
 };
 
