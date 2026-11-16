@@ -250,7 +250,7 @@ class AZURECalcMCMC {
   void ReturnPooledData(WorkingData *obj) const;
 
  private:
-  struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMC.cpp)
+  struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMCRun.h)
   /// The log-likelihood of a filled compound and working copy at the fit's vector p (both returned to the pools).
   double LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *working, const vector_r &p) const;
   /// The support of the posterior in the parameters (docs/upgrade/objective.md section 6): every varying component of

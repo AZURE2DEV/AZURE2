@@ -44,7 +44,8 @@ LevelInputMessages.cpp ProjectSetup.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
-    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp SamplerSupport.cpp)
+    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp AZURECalcMCMCPriors.cpp AZURECalcMCMCRun.cpp AZURECalcMCMCChain.cpp
+         AZURECalcMCMCPool.cpp SamplerSupport.cpp)
 endif()
 
 include_directories(${AZURE2_SOURCE_DIR}/include)
