@@ -11,7 +11,6 @@
 #include "azure2/experiment/Frames.h"
 #include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/SetupSpecs.h"
-#include "azure2/inference/GaussianPrior.h"
 
 namespace azure2 {
 namespace experiment {
@@ -85,8 +84,6 @@ class Segment {
    * its multivariate Gaussian takes their place (docs/upgrade/objective.md D3), set once at set-up
    * (ReplaceDiagonalPriors, Objective.h).
    */
-  /// The three parts of AddShiftPenalty separately: the constant shift, the sqrt(E) coefficient, the shift function.
-  void ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const;
   void ReplaceNormPrior() { normPriorReplaced_ = true; }
   bool IsNormPriorReplaced() const { return normPriorReplaced_; }
   void ReplaceShiftPrior() { shiftPriorReplaced_ = true; }
@@ -290,11 +287,6 @@ class Segment {
   void SetCovarianceGroup(int g) { covGroup_ = g; }
   /// The whole lab-energy shift of the segment's `state` at a point's original lab energy: a + b*sqrt(E) + f(E).
   double TotalEnergyShift(const SegmentState &state, double labEnergy) const;
-  /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
-  /// shift term with sigma != 0, to chi.  The one definition every chi^2 path uses; the
-  /// index form (gradient, curvature, least-squares priors) is ForEachShiftPenalty in
-  /// Objective.h and must list the same terms.
-  void AddShiftPenalty(const SegmentState &state, double &chi) const;
   /// Shift function ("shiftfn" block): does this segment's own line declare one?  Such a
   /// segment owns the function's fit parameters (and their penalties).
   bool OwnsShiftFn() const;

@@ -103,18 +103,19 @@ outputs (887, 851, 887 files identical); the eight fits identical to the base bu
 
 ## 6. The output writer (audit of `WorkingCopy::WriteChiSquaredFile`, `src/DataOutputFiles.cpp`)
 
-`chiSquared.out` takes its numbers from three places. (a) What the terms of the last evaluation stored in the
+`chiSquared.out` takes its numbers from two places. (a) What the terms of the last evaluation stored in the
 caller's `Results::objective`: each segment's χ² and the normalization used, Park's wall, the abundances, the
 nuisance priors, the model data, the prior covariance. (b) Sums the writer forms again from the working copy with
-the functions the terms call (`Segment::AddShiftPenalty`; since `objective_arrays.md` slice 1 the target and
-apparatus totals from the term's gather `AppendTargetPriors` and `PriorsChi2`): equal to the terms' while the working
-copy is the one the last evaluation filled. (c) The normalization prior of each segment, written out a second time in the writer.
+the gathers and the arithmetic the terms use (since `objective_arrays.md` slices 1 and 2: `AppendNormPrior`,
+`AppendShiftPriors`, `AppendTargetPriors` of `include/DiagonalPriors.h` and `PriorsChi2`): each segment's
+normalization prior, the shift total and the target and apparatus totals, equal to the terms' while the working copy
+is the one the last evaluation filled.  (Until slice 2 the normalization prior was written out a second time in the
+writer, with its own rule.)
 Found: T11 (the priors of the `gamma_decay` records) had no field, so for such a project the file's totals did not
 add up to the minimised χ² (since 2026-11-16 the term stores its value in `Results::objective.gammaDecay` and the
-writer prints `Total-Gamma-Decay-Chi-Squared` whenever the project has a record; the PI's word); a session's `write_outputs` refreshes the model-only terms and the prior covariance but
-not the nuisance total. A writer that asks the terms needs the compound, the level state and the nuisance function,
-which a `WorkingCopy` method does not have, and a new field changes an output file: not done here. Slice 2 removes
-(c): the writer and the term call the one `GaussianPrior`.
+writer prints `Total-Gamma-Decay-Chi-Squared` whenever the project has a record; the PI's word); a session's `write_outputs` refreshes the model-only terms (`ModelChi2`: T6, T7, T9, T11)
+but neither the nuisance total nor the prior covariance's (that one is set by the session's last `CalculateChi2RWA`). A writer that asks the terms needs the compound, the level state and the nuisance function,
+which a `WorkingCopy` method does not have, and a new field changes an output file: not done here.
 
 ## 7. Done (2026-11-16)
 

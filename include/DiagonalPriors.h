@@ -21,4 +21,40 @@ class WorkingCopy;
  */
 void AppendTargetPriors(const WorkingCopy &data, PriorSource source, const ParamIndexMap *pmap, DiagonalPriors &out);
 
+/*!
+ * T3: the normalization prior of segment `s` (1-based), when it has one: the norm varied and not profiled (a THM
+ * segment's free norm is profiled, and a segment of a THM experiment pays none), not replaced by the prior covariance,
+ * and sigma_n = n0 sigma% / 100 != 0 (a norm-group follower's sigma is 0).  Value: the working copy's norm.
+ */
+void AppendNormPrior(const WorkingCopy &data, int s, const ParamIndexMap *pmap, DiagonalPriors &out);
+
+/*!
+ * T4: the energy-shift priors of segment `s`, in the order the objective adds them: the constant shift (MeV), the
+ * sqrt(E) coefficient (MeV^1/2), then each parameter of the shift function the segment owns (a function shared by a
+ * group is penalised once, on its owner); each when varied, its sigma != 0 and not replaced.  Values: the working
+ * copy's.
+ */
+void AppendShiftPriors(const WorkingCopy &data, int s, const ParamIndexMap *pmap, DiagonalPriors &out);
+
+/// T3 and T4 of segment `s`: the norm, then the shifts (the order SegmentTerms adds them in).
+void AppendSegmentPriors(const WorkingCopy &data, int s, const ParamIndexMap *pmap, DiagonalPriors &out);
+
+/// T7's per-nucleus priors, in the order of the abundance parameters: sigma > 0 and not replaced.  (The sum-to-one
+/// term couples the abundances of a sample and is not diagonal.)
+void AppendAbundancePriors(const WorkingCopy &data, const ParamIndexMap *pmap, DiagonalPriors &out);
+
+/*!
+ * Every diagonal prior of the objective with its index in `pmap`, in the order the least-squares rows of the API
+ * expect (AZUREAPIObjective.cpp): the norms of all segments, the shifts of all segments, screening, density, Doppler,
+ * thickness, apparatus, abundances.  An entry whose parameter `pmap` does not hold (index -1) is left out.
+ */
+DiagonalPriors DiagonalPriorsOf(const WorkingCopy &data, const ParamIndexMap &pmap);
+
+/// f(full index, centre, sigma) for each entry of DiagonalPriorsOf, in its order: the derivatives, the curvature and
+/// the least-squares rows of the diagonal priors (each path keeps its own form of the expression).
+template <class F>
+inline void ForEachDiagonalPrior(const WorkingCopy *data, const ParamIndexMap &pmap, F f) {
+  for (const DiagonalPrior &e : DiagonalPriorsOf(*data, pmap)) f(e.index, e.centre, e.sigma);
+}
+
 #endif  // DIAGONALPRIORS_H

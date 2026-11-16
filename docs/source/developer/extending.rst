@@ -222,9 +222,10 @@ A term of the objective
    ``ModelOnly``, ``AddForSampler`` and ``ExcludesForSampler`` have defaults
    (not of the model alone; the sampler takes the whole term; no point is
    excluded). A Gaussian prior on one parameter is ``GaussianPriorChi2`` of
-   ``GaussianPrior.h`` and a line of ``ForEachDiagonalPrior``
-   (``include/Objective.h``), which gives it its gradient, Minuit's
-   :math:`G_2` and its least-squares row. Its
+   ``GaussianPrior.h`` and a line of its gather in ``src/DiagonalPriors.cpp``
+   (``include/DiagonalPriors.h``), which gives the term its value and
+   ``ForEachDiagonalPrior`` its gradient, Minuit's :math:`G_2` and its
+   least-squares row. Its
    gradient beside the others in ``src/AZUREGrad.cpp``, and its residual rows
    in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. No term
    is added anywhere else (check 11).

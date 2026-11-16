@@ -204,15 +204,13 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     AddAbundancePenaltyGradient(*ld, configure(), accum);  // abundance priors, sum-to-one
     accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
     AddNuisanceGradient(p, grad);                   // nuisance penalty
-    ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
-      if (idx < (int)grad.size()) grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
-    });
-    ForEachDopplerPrior(ld, pmap, [&](int idx, double nominal, double e) {  // Doppler-temperature priors
-      if (idx < (int)grad.size()) grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
-    });
-    ForEachThicknessPrior(ld, pmap, [&](int idx, double nominal, double e) {  // sample-thickness priors
-      if (idx < (int)grad.size()) grad[idx] += GaussianPriorGradient(p[idx], nominal, e);
-    });
+    // The diagonal priors (DiagonalPriors.h) of screening, Doppler temperature and sample thickness on p; density and
+    // apparatus priors are in the central differences of the whole chi^2 below, the norms' in the loop after this.
+    const DiagonalPriors priors = DiagonalPriorsOf(*ld, pmap);
+    for (const DiagonalPrior &e : priors)
+      if ((e.source == PriorSource::kScreening || e.source == PriorSource::kDoppler || e.source == PriorSource::kThickness) &&
+          e.index < (int)grad.size())
+        grad[e.index] += GaussianPriorGradient(p[e.index], e.centre, e.sigma);
     for (int s = 1; s <= ld->Data().NumSegments(); s++) {  // normalizations
       const Segment *seg = ld->Data().GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
@@ -223,9 +221,9 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       int idx = pmap.NormIndex(s);
       if (idx < 0 || idx >= (int)grad.size()) continue;
       double g = normData[s];
-      double n0 = seg->GetNominalNorm();
-      double nerr = n0 / 100.0 * seg->GetNormError();
-      if (nerr != 0.0 && !seg->IsNormPriorReplaced()) g += GaussianPriorGradient(ld->State(*seg).norm, n0, nerr);
+      // The norm's prior, on the working copy's norm (set from p: FillNormsFromParams).
+      for (const DiagonalPrior &e : priors)
+        if (e.source == PriorSource::kNorm && e.group == s) g += GaussianPriorGradient(e.value, e.centre, e.sigma);
       grad[idx] = g;
     }
   }

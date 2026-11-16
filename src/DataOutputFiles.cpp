@@ -313,18 +313,13 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   double totalN = 0.;
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     SegmentIterator thisSegment = segment;
-    // The normalization penalty as the fit sees it (AZURECalc::operator()):
-    // the deviation from the nominal normalization in units of its uncertainty,
-    // which the segment stores as a percentage.  This used to add a literal 1
-    // per segment, so the reported total was just the number of segments.
-    // A fixed norm pays no prior (docs/upgrade/objective.md D5), nor does a profiled THM norm, which is not a
-    // parameter: the fit adds no prior for it (D4).
-    double normChiSquared = 0.;
-    double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
-    if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
-        !thisSegment->IsNormPriorReplaced()) normChiSquared =
-                             GaussianPriorChi2(State(*thisSegment).norm, thisSegment->GetNominalNorm(), normError);
+    // The normalization prior as the objective adds it (AppendNormPrior): the deviation from the nominal
+    // normalization in units of its uncertainty, which the segment stores as a percentage; 0 for a fixed norm
+    // (docs/upgrade/objective.md D5) and a profiled THM norm, which is not a parameter (D4).
     const int thisIndex = (int)(thisSegment - Data().GetSegments().begin()) + 1;
+    DiagonalPriors normPrior;
+    AppendNormPrior(*this, thisIndex, nullptr, normPrior);
+    const double normChiSquared = PriorsChi2(normPrior, PriorSource::kNorm);
     totalChiSquared += results.objective.segmentChi2[thisIndex];
     totalNormChiSquared += normChiSquared;
     totalN += thisSegment->NumPoints();
@@ -349,19 +344,18 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   // Park formalism: the J > 0 wall, when a level sits beyond it.
   if (configure.paramMask & Config::USE_PARK_FORMALISM)
     chiOut << " Total-Park-Chi-Squared: " << results.objective.park;
-  // The energy-shift penalties the fit minimised (Segment::AddShiftPenalty), when
-  // any shift is a fit parameter.  Without this the file reported less than the
-  // minimiser's own total by exactly this amount.
+  // The energy-shift priors the fit minimised (AppendShiftPriors), when any shift is a fit parameter.  Without this
+  // the file reported less than the minimiser's own total by exactly this amount.
   bool anyShiftVaried = false;
-  double totalShiftChiSquared = 0.;
+  DiagonalPriors shiftPriors;
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
     if (segment->OwnsShiftFn())
       for (int q = 0; q < segment->NumShiftFnParams(); q++)
         if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
-    segment->AddShiftPenalty(State(*segment), totalShiftChiSquared);
+    AppendShiftPriors(*this, (int)(segment - Data().GetSegments().begin()) + 1, nullptr, shiftPriors);
   }
-  if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
+  if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << PriorsChi2(shiftPriors);
   // Isotopic abundances: their priors and the sum-to-one term.
   if (results.objective.abundance != 0.0)
     chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
@@ -511,9 +505,9 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
       // Shift functions: one line per function, after the per-segment rows.  The
       // lines start with '#' so that readers of the rows above skip them.
       bool header = false;
-      double totalShiftChi = 0.;
-      for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
-        segment->AddShiftPenalty(State(*segment), totalShiftChi);
+      DiagonalPriors shiftPriors;
+      for (int s = 1; s <= Data().NumSegments(); s++) AppendShiftPriors(*this, s, nullptr, shiftPriors);
+      const double totalShiftChi = PriorsChi2(shiftPriors);
       for (int pos = 0; pos < (int)set_->segments_.size(); pos++) {
         const Segment &owner = set_->segments_[pos];
         if (!owner.OwnsShiftFn() || !owner.HasShiftFn()) continue;
@@ -537,10 +531,12 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
         }
         // The function's own penalty: the owner's shift penalties minus those of its
         // constant and sqrt(E) terms.
-        double pen = 0.0, penOwn = 0.0;
-        owner.AddShiftPenalty(State(owner), pen);
+        DiagonalPriors ownerPriors;
+        AppendShiftPriors(*this, pos + 1, nullptr, ownerPriors);
+        const double pen = PriorsChi2(ownerPriors);
+        double penOwn = 0.0;
         if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = GaussianPriorChi2(State(owner).energyShift, owner.GetNominalEnergyShift(), owner.GetEnergyShiftError());  // as AddShiftPenalty
+          penOwn = GaussianPriorChi2(State(owner).energyShift, owner.GetNominalEnergyShift(), owner.GetEnergyShiftError());
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << State(owner).energyShift << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << State(owner).shiftFnValues[q];
