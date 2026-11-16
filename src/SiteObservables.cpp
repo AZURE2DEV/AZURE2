@@ -58,7 +58,8 @@ double ContractElastic(const double *r, const AngularRow &row, double *) {
 }
 
 /// A_y of particle coefficients (ay_record, kParticle): the amplitude matrix from C and the row's Y_l'^mu, the
-/// Coulomb amplitude on its diagonal for elastic scattering, then Polarization::AmplitudeMatrix::AnalyzingPowerAy.
+/// Coulomb amplitude on its diagonal for elastic scattering, then Polarization::AmplitudeMatrix::AnalyzingPowerAy, or
+/// SpinObservableValue for a reader of a general spin observable (its row's).
 double ParticleAnalyzingPower(const double *r, const AngularRow &row) {
   using namespace ay_record;
   Polarization::AmplitudeMatrix m(0.5 * r[kSpins], 0.5 * r[kSpins + 1], 0.5 * r[kSpins + 2], 0.5 * r[kSpins + 3]);
@@ -85,7 +86,7 @@ double ParticleAnalyzingPower(const double *r, const AngularRow &row) {
     m.SetAmplitude(a, value);
   }
   if (r[kElastic] != 0.0) m.AddCoulomb(row.fd, row.fx);
-  return m.AnalyzingPowerAy();
+  return row.spin ? m.SpinObservableValue(*row.spin) : m.AnalyzingPowerAy();
 }
 
 /// A_y of capture coefficients (ay_record, kCapture): sum_k n_k P_k^1 / sum_k d_k P_k over the orders of the
@@ -187,6 +188,7 @@ AngularRow RowOf(const Site &reader, int slot) {
   row.length = reader.GetMaxLOrder() + 1;
   reader.CoulombAt(slot, row.fd, row.fx);
   row.theta = reader.GetCMAngle() * pi / 180.0;
+  row.spin = reader.GetSpinObservable();
   return row;
 }
 

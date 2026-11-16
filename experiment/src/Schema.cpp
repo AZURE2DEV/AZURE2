@@ -319,6 +319,10 @@ std::vector<FieldDef> QuantityFields() {
   return {ByQ("J", "J", Spec(ValueType::Spin), "total spin of the phase shift"),
           ByQ("l", "l", IntAtLeast(0), "orbital angular momentum of the phase shift"),
           ByQ("s", "s", Spec(ValueType::Spin), "channel spin of the phase shift"),
+          ByQ("operator", "Spin operator", Spec(ValueType::SpinOperator),
+              "the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the "
+              "target analysing power, b:y*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, "
+              "b:y>e1:y a polarization transfer"),
           ByQ("expansion", "Legendre expansion", Words({"a_over_a0", "absolute", "rsl", "2l2", "4pi"}),
               "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"),
           Rare(ByQ("multipole", "Multipole", Words({"E1", "E2"}),
@@ -599,6 +603,7 @@ std::string Grammar(const ValueSpec &spec) {
     case ValueType::NumberList: return "<number> ...";
     case ValueType::Spin: return "<J>";
     case ValueType::SpinParity: return "<J><parity>";
+    case ValueType::SpinOperator: return "<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]";
     case ValueType::Nucleus: return "<A><Symbol>";
     case ValueType::Pair: return "<particle>+<nucleus>[<E_x>]";
     case ValueType::Composition: return "<Symbol> <atoms> ...";

@@ -15,6 +15,7 @@
 #include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/physics/Elements.h"
+#include "azure2/physics/SpinObservable.h"
 
 namespace azure2 {
 namespace experiment {
@@ -407,6 +408,41 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
     }
     if (angleFrame != "cm") {
       c.Error(codes::kNotBuilt, r, "", "an analyzing power at a lab angle: this engine computes it at c.m. angles");
+      return false;
+    }
+    return true;
+  }
+  if (q == "spin_observable") {
+    // A_y's route with the operator's trace in place of A_y's (physics/SpinObservable.h): the amplitude in the product
+    // basis of the four particles' spin projections, so a reaction between two particle pairs.
+    spec.observable = O::AnalyzingPower;
+    const Value *op = r.Get("operator");
+    if (!op) return false;  // the validator refused it
+    physics::SpinObservable observable;
+    std::string why;
+    if (!observable.Parse(op->word, why)) return false;  // refused by the value's parser
+    spec.spinObservable = op->word;
+    if (spec.combination != ReactionSpec::Combination::None || spec.exitKey < 0) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction", "a spin observable is that of one reaction: one entrance and one exit pair");
+      return false;
+    }
+    const PairInfo *entrance = c.Pair(spec.entranceKey), *exit = c.Pair(spec.exitKey);
+    if (!entrance || !exit) return false;  // the pairs were refused already
+    if (entrance->kind != 0 || exit->kind != 0) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "a spin observable needs particle pairs on both sides; " + std::string(entrance->kind != 0 ? "entrance" : "exit") +
+                  " pair " + std::to_string(entrance->kind != 0 ? spec.entranceKey : spec.exitKey) + " is " +
+                  ((entrance->kind != 0 ? entrance->kind : exit->kind) == 20 ? "a beta decay" : "a photon pair") +
+                  " (for capture only A_y, quantity analyzing_power, is computed)");
+      return false;
+    }
+    if (!observable.Check(0.5 * entrance->twoJLight, 0.5 * entrance->twoJHeavy, 0.5 * exit->twoJLight, 0.5 * exit->twoJHeavy,
+                          why)) {
+      c.Error(codes::kReactionNotAllowed, r, "operator", "operator " + op->word + ": " + why);
+      return false;
+    }
+    if (angleFrame != "cm") {
+      c.Error(codes::kNotBuilt, r, "", "a spin observable at a lab angle: this engine computes it at c.m. angles");
       return false;
     }
     return true;

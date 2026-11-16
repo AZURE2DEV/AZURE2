@@ -14,6 +14,7 @@
 #include "Unit.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "azure2/physics/SpinObservable.h"
 #include "azure2/support/Environment.h"
 
 namespace Polarization {
@@ -74,7 +75,8 @@ AmplitudeMatrix::AmplitudeMatrix(const CompoundSystem *compound, int aa, int ir)
   ir_ = ir;
 }
 
-AmplitudeMatrix::AmplitudeMatrix(double j1, double j2, double jp1, double jp2) : j1_(j1), j2_(j2) {
+AmplitudeMatrix::AmplitudeMatrix(double j1, double j2, double jp1, double jp2)
+    : j1_(j1), j2_(j2), jp1_(jp1), jp2_(jp2) {
   muMax_ = MaxProjection(j1, j2, jp1, jp2);
   for (double s = std::fabs(j1 - j2); s <= j1 + j2 + 1.e-6; s += 1.0) entranceSpins_.push_back(s);
   for (double s = std::fabs(jp1 - jp2); s <= jp1 + jp2 + 1.e-6; s += 1.0) exitSpins_.push_back(s);
@@ -417,6 +419,58 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   }
   if (denominator <= 0.0) return 0.0;
   return 2.0 * std::imag(interference) / denominator;
+}
+
+std::vector<complex> AmplitudeMatrix::ProductBasis(std::vector<std::vector<std::pair<int, double>>> *slots) const {
+  // Both channel-spin indices decomposed into the particles' projections with the same Lane-Thomas coefficients A_y
+  // uses (particle 1, the light one, first):
+  //   F(m3 m4; m1 m2) = sum_{s s'} (j1 m1 j2 m2|s nu)(j3 m3 j4 m4|s' nu') M(s nu -> s' nu').
+  // Projections are ordered m = j, j-1, ..., -j, as in SpinObservable::TermMatrix, and a two-particle index is
+  // (row of particle 1) * dim2 + (row of particle 2).
+  const double j[5] = {0.0, j1_, j2_, jp1_, jp2_};
+  int d[5];
+  for (int p = 1; p <= 4; p++) d[p] = (int)std::lround(2.0 * j[p] + 1.0);
+  const int din = d[1] * d[2], dout = d[3] * d[4];
+  std::vector<complex> F((std::size_t)dout * din, complex(0.0, 0.0));
+  if (slots) slots->assign(amplitudes_.size(), {});
+  for (std::size_t a = 0; a < amplitudes_.size(); a++) {
+    const Amplitude &am = amplitudes_[a];
+    for (int r1 = 0; r1 < d[1]; r1++)
+      for (int r2 = 0; r2 < d[2]; r2++) {
+        const double m1 = j[1] - r1, m2 = j[2] - r2;
+        if (!Same(m1 + m2, am.v)) continue;
+        const double cin = ParticleCG(j[1], j[2], am.s, m1, m2, am.v);
+        if (std::fabs(cin) < 1.e-14) continue;
+        for (int r3 = 0; r3 < d[3]; r3++)
+          for (int r4 = 0; r4 < d[4]; r4++) {
+            const double m3 = j[3] - r3, m4 = j[4] - r4;
+            if (!Same(m3 + m4, am.vp)) continue;
+            const double cout = ParticleCG(j[3], j[4], am.sp, m3, m4, am.vp);
+            if (std::fabs(cout) < 1.e-14) continue;
+            const int idx = (r3 * d[4] + r4) * din + (r1 * d[2] + r2);
+            F[idx] += cin * cout * am.value;
+            if (slots) (*slots)[a].push_back(std::make_pair(idx, cin * cout));
+          }
+      }
+  }
+  return F;
+}
+
+double AmplitudeMatrix::SpinObservableValue(const azure2::physics::SpinObservable &obs) const {
+  return azure2::physics::SpinObservableValue(obs, j1_, j2_, jp1_, jp2_, ProductBasis(nullptr));
+}
+
+std::vector<complex> AmplitudeMatrix::SpinObservableBar(const azure2::physics::SpinObservable &obs) const {
+  std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
+  std::vector<std::vector<std::pair<int, double>>> slots;
+  const std::vector<complex> F = ProductBasis(&slots);
+  std::vector<complex> g;  // dO/dF*
+  azure2::physics::SpinObservableValue(obs, j1_, j2_, jp1_, jp2_, F, &g);
+  // F is linear in M with real coefficients, so a slot's cotangent is the coefficient-weighted sum; the factor of
+  // two is the cotangent convention AMatrixFunc uses (as in AnalyzingPowerBar).
+  for (std::size_t a = 0; a < amplitudes_.size(); a++)
+    for (const std::pair<int, double> &sl : slots[a]) bar[a] += 2.0 * sl.second * g[sl.first];
+  return bar;
 }
 
 }  // namespace Polarization

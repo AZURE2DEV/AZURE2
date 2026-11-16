@@ -76,6 +76,18 @@ Estimate 10–20 h (the refactor 4–6). An unfinished attempt exists (section 8
 Test: dev's three projects converted, with their independent data; the gradient against finite differences.
 Estimate 12–24 h. An unfinished attempt exists (section 8).
 
+*Written* on `feature/upgrade-5-dev-spin-observables` (2026-11-16, the owner's session; not from the attempt of
+section 8): the quantity `spin_observable` with its required field `operator` (a value type of its own,
+`E_SPIN_OPERATOR`), built into the analysing-power observable with the token (`ReactionSpec::spinObservable`); the
+token, the operator matrices and the trace with its gradient in `physics/` (`SpinObservable.h`,
+`physics_spin_observable`); no new `SiteObservable` kind, because the analysing-power record holds the amplitudes'
+coefficients and no operator: the operator is the reader's and travels in its angular row (`AngularRow::spin`,
+`RowSet::spin`), and two terms with different operators do not share sites (`SameObservable`); the adjoint in
+`AMatrixFunc::PointTBar` through `AmplitudeMatrix::SpinObservableBar`; the converter (dev's type 10 followed by its
+operator; the bare type 10 stays THM's offset). dev's three test projects converted, with the independent data, time
+reversal and the gradient. *Not written:* the table of literature names (dev's `pyazr/spin.py`, `resolve`); capture;
+in-plane exit components. HANDOFF has the entry.
+
 ## 4. Time-of-flight resolution at low energy
 
 *On dev:* four absolute floors written for charged particles broke the UDR kernel at thermal energies.

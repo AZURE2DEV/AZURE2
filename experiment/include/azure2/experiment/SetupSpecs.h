@@ -86,6 +86,9 @@ struct ReactionSpec {
   int exitKey = 0;      ///< pair key of <levels>; -1 = every capture pair (TotalCapture)
   Observable observable = Observable::CrossSection;
   bool thm = false;     ///< a THM (half-off-shell) observable of the same kind
+  /// AnalyzingPower: "" for A_y of a spin-1/2 projectile, else the operator token of a general spin observable
+  /// (azure2/physics/SpinObservable.h: b:y, t:y, b:y*t:y, b:yy, b:iT11, e1:y, b:y>e1:y ...), computed on A_y's route.
+  std::string spinObservable;
   double phaseJ = 0.0;  ///< PhaseShift: total spin J of the partial wave
   int phaseL = 0;       ///< PhaseShift: orbital angular momentum l
   double phaseS = -1.0; ///< PhaseShift: channel spin s, < 0 when not given

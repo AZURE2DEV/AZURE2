@@ -950,6 +950,29 @@ int main() {
     }
   }
 
+  // ---- spin_observable: A_y's observable with the operator's token; the pairs' kinds and spins decide what is refused
+  {
+    auto data = [](const BuiltProject &b) -> const DatasetSpec & { return b.data.datasets.items.at(0).spec; };
+    const std::string spin = Set(Set(Set(kDataset, "quantity", "    quantity spin_observable"), "unit", "    unit 1"), "columns",
+                                 "    columns E_lab[MeV] theta_cm[deg] value error");
+    const BuiltProject b = BuildText(Data(spin + "    operator b:y*t:y\n"));
+    check("spin_observable b:y*t:y on 15N(p,a)12C: the analysing-power observable with its operator",
+          b.Ok() && data(b).reaction.observable == Observable::AnalyzingPower && data(b).reaction.spinObservable == "b:y*t:y");
+    const BuiltProject ay = BuildText(Data(Set(spin, "quantity", "    quantity analyzing_power")));
+    check("analyzing_power: no operator in the spec", ay.Ok() && data(ay).reaction.spinObservable.empty());
+    // the alpha and 12C have spin 0; the proton has spin 1/2
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(spin + "    operator e1:y\n")));
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(spin + "    operator b:yy\n")));
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(spin + "    operator b:T20\n")));
+    // a photon pair has no product basis here: for capture only analyzing_power is computed
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(spin, "reaction", "    reaction 15N(p,g)16O") + "    operator b:y\n")));
+    // a lab angle
+    ExpectOne("E_NOT_BUILT", BuildText(Data(Set(spin, "columns", "    columns E_lab[MeV] theta_lab[deg] value error") + "    operator b:y\n")));
+    // the operator is required, and its grammar is the validator's
+    ExpectOne("E_FIELD_REQUIRED", BuildText(Data(spin)));
+    ExpectOne("E_SPIN_OPERATOR", BuildText(Data(spin + "    operator b:y*b:x\n")));
+  }
+
   std::printf("experiment_build: %d checks, %d failed\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

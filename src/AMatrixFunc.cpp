@@ -813,7 +813,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       if (aa == exitPairNum) angles->CoulombAt(rowSlot, fdAy, fxAy), M.AddCoulomb(fdAy, fxAy);
       if (M.size() == 0) return false;
 
-      const std::vector<complex> bar = M.AnalyzingPowerBar();
+      const std::vector<complex> bar =
+          point->GetSpinObservable() ? M.SpinObservableBar(*point->GetSpinObservable()) : M.AnalyzingPowerBar();
       for (int k = 1; k <= nK; k++) {
         if (P.Group(theDecay, k).CrossSpin()) continue;
         for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {

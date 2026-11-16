@@ -2,6 +2,66 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — general spin observables: the quantity `spin_observable`
+
+**Branch** `feature/upgrade-5-dev-spin-observables`, cut from `feature/upgrade` `0c6167c1`. The port of
+`dev_features.md` section 3, written anew on this branch's structures (the unfinished attempt of section 8 was not
+used). Record and quantity names by the PI's decision of 2026-11-16: this branch's.
+
+**The quantity.** `spin_observable` (`experiment/src/Quantities.cpp`), data sets and extrapolations, unit `1`, a
+required angle, apparatus as `analyzing_power`, and a required field `operator`: one token of the grammar of
+`azure2/physics/SpinObservable.h` (`b:y`, `t:y`, `b:y*t:y`, `b:yy`, `b:iT11`, `b:T20`, `e1:y`, `b:y>e1:y`). The
+field has a value type of its own, `ValueType::SpinOperator` (`spin_operator` in the schema), whose parser is the
+physics library's, so `--validate`, `Project.add` and the web page refuse a bad token with `E_SPIN_OPERATOR`.
+`Schema::Build` (`ReadObservable`) makes the analysing-power observable with the token in
+`ReactionSpec::spinObservable` ("" is A_y) and refuses with `E_REACTION_NOT_ALLOWED` a composite, a photon or beta
+pair on either side, and an operator the four particles' spins cannot carry (spin 0; a Cartesian tensor off spin 1;
+rank k > 2j), with `E_NOT_BUILT` a lab angle. `--describe` names the operator; the prediction tree's leaf is
+`spin(a->b; op=<token>)`.
+
+**The engine.** No new `SiteObservable` kind: a `kAnalyzingPower` record holds the coefficients of the channel-spin
+amplitudes and no operator, so the operator belongs to the reader. `TermSettings::spinObservable` (the segment's,
+parsed once in `Segment::SetReaction`), compared in `SameObservable` by its token (two operators do not share
+sites or row sets); `AngularRow::spin` and `RowSet::spin` carry it to `ParticleAnalyzingPower`
+(`src/SiteObservables.cpp`), which calls `AmplitudeMatrix::SpinObservableValue` in place of `AnalyzingPowerAy`.
+`AmplitudeMatrix` (`src/PolarizationFunc.cpp`) gained the exit spins, `ProductBasis` (F in the product basis of the
+four particles' projections, with `ParticleCG`, so `AZURE2_SWAP_COUPLING_ORDER` acts on it as on A_y) and
+`SpinObservableBar`; `AMatrixFunc::PointTBar` takes that bar for a point with an operator. The token, the operator
+matrices, the trace and its Wirtinger gradient are `physics/src/SpinObservable.cpp`. The set-up check
+(`AnalyzingPowerAllowed`, `src/WorkingCopy.cpp`) repeats the build's refusals for a spec made without the build.
+`analyzing_power` runs the code it ran: its value function and its bar are untouched.
+
+**The converter.** dev's `isDiff 10` followed by the operator becomes a `spin_observable` record at c.m. angles
+(`convert/include/azure2/convert/SegLine.h`, `ExtrapLine.h`: the token after the type decides, because the bare
+type 10 is this branch's THM offset of an angle-integrated line; `BuildData.cpp`, `SpecsFromOldLines.cpp`,
+`Construct::kSpinObservable`). The refusal `NewerLineType` (`OldProject.cpp`) stays for a type other than 10 followed
+by an operator (dev wrote type 9 before 2026-11-11): it says to write 10.
+
+**Tests.** `physics/tests/spin_observable_test.cpp` (grammar, the Madison closed forms of tau_kq for spin 1, the
+value for spin 1/2 on spin 0, the gradient against central differences). `experiment_quantities`, `_build`,
+`_diagnostics`, `_parsers`, `convert_constructs` cases. dev's three projects, converted by `AZURE2 --convert` with
+0 notes: `tests/spin_observables_p3He` (15 observables) and `tests/spin_observables_dd` (19, identical spin-1
+bosons, tensor powers), whose data are an independent calculation with an alternating offset of one error, so that
+chi2/N = 1.0000 per data set is the agreement (315 of 315, 399 of 399, as dev); `tests/spin_observables_reaction`
+(`check.sh`: time reversal between t(p,n)3He and 3He(n,p)t to 1e-9, five refusals, and the analytic gradient
+against finite differences on the three projects, worst 6e-8 of the largest component). The chi2 of every data set
+of the three equals dev's `expected/` (1e-5 of a six-digit number). `tests/upgrade/predictions.txt`,
+`tests/schema/schema_v3.json` and `docs/source/reference/format3.rst` regenerated.
+
+**Docs.** `theory/polarization_implementation.rst` (a section with the grammar, the trace, the adjoint, the
+refusals, the validation; "What is not done" updated), `theory/polarization_theory.rst`,
+`getting_started/capabilities.rst`, `docs/upgrade/data_model.md` (the leaf kind `spin`), `dev_features.md`.
+
+**Open.** The table of literature names beside the quantity (dev's `pyazr/spin.py`, `resolve`: A_yy is a spin
+correlation or a tensor power according to the spins) is not written. Capture has A_y only. In-plane exit
+components need the exit frame. A folded spin observable (target, beam) is folded as A_y is, O sigma over sigma,
+and, as A_y, has no analytic derivative through a target integration. The site record is shared by the readers of
+one operator only; sharing it across operators (the record is the same) would need the operator in the row-set
+identity instead of the term's sharing key.
+
+**Run here** (CRC, GCC 11.5): build; the unit tests named above; the three projects; `repo_consistency_test.py`. The
+full gate: see the end of this entry. **Not run:** CI.
+
 ## 2026-11-16 (director, 10:00) — the PI's decisions of 2026-11-16; the wheel workflow can now start; a new session
 
 A new session of the director took over from `work/director/NEXT_AGENT.md` (local). This entry is documents and

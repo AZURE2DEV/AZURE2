@@ -51,6 +51,9 @@ const char *TypeDoc(ValueType t) {
     case ValueType::NumberList: return "one or more numbers";
     case ValueType::Spin: return "a spin: 0, 1, 3/2, ...";
     case ValueType::SpinParity: return "a spin and parity: 0+, 3-, 1/2+, ...";
+    case ValueType::SpinOperator: return "the operator of a spin observable: terms <who>:<op> joined by '*', entrance '>' exit for a "
+                                         "transfer; who b|t|e1|e2 (beam, target, light and heavy exit particle); op x|y|z (vector), "
+                                         "xx|yy|zz|xy|xz|yz (Cartesian tensor, spin 1), T<k><q>|iT<k><q> (spherical, Madison)";
     case ValueType::Nucleus: return "a nuclide <A><Symbol>";
     case ValueType::Pair: return "a particle pair, light particle first";
     case ValueType::Composition: return "element symbols with their atoms per formula unit";

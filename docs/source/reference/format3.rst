@@ -85,6 +85,9 @@ Value types
    * - ``spin_parity``
      - ``<J><parity>``
      - a spin and parity: 0+, 3-, 1/2+, ...
+   * - ``spin_operator``
+     - ``<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]``
+     - the operator of a spin observable: terms <who>:<op> joined by '\*', entrance '>' exit for a transfer; who b\|t\|e1\|e2 (beam, target, light and heavy exit particle); op x\|y\|z (vector), xx\|yy\|zz\|xy\|xz\|yz (Cartesian tensor, spin 1), T<k><q>\|iT<k><q> (spherical, Madison)
    * - ``nucleus``
      - ``<A><Symbol>``
      - a nuclide <A><Symbol>
@@ -136,7 +139,7 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|spin_observable|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what the numbers are (section 7.2)
    * - ``unit``
@@ -203,6 +206,10 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``<J>``
      - by quantity
      - channel spin of the phase shift
+   * - ``operator``
+     - ``<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]``
+     - by quantity
+     - the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the target analysing power, b:y\*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, b:y>e1:y a polarization transfer
    * - ``expansion``
      - ``a_over_a0|absolute|rsl|2l2|4pi``
      - by quantity
@@ -330,7 +337,7 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|spin_observable|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what is computed (section 7.2)
    * - ``unit``
@@ -381,6 +388,10 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``<J>``
      - by quantity
      - channel spin of the phase shift
+   * - ``operator``
+     - ``<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]``
+     - by quantity
+     - the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the target analysing power, b:y\*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, b:y>e1:y a polarization transfer
    * - ``expansion``
      - ``a_over_a0|absolute|rsl|2l2|4pi``
      - by quantity
@@ -1142,6 +1153,40 @@ Analyzing power (``dataset``, ``extrapolation``).  A_y of a spin-1/2 projectile;
      - ``,POL/DA,,ANA``
    * - refused (validate)
      - spin: A_y is the vector analysing power of a spin-1/2 projectile (n, p, t, h); tensor analysing powers are not supported (``E_REACTION_NOT_ALLOWED``)
+
+spin_observable
+~~~~~~~~~~~~~~~
+
+Spin observable (``dataset``, ``extrapolation``).  A polarization observable named by its operator (tensor analysing powers, spin correlations, outgoing polarizations, polarization transfers) of a reaction between particle pairs; folded as O sigma over sigma.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - property
+     - value
+   * - engine unit
+     - ``1``
+   * - units
+     - ``1`` (1)
+   * - energy column
+     - ``E_lab``, ``E_cm``
+   * - angle column
+     - required: ``theta_lab``, ``theta_cm``
+   * - ``operator``
+     - required
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
+   * - tree
+     - ``O(r, theta) = Re(c Tr(F A F^dagger B))/Tr(F F^dagger), folded as O sigma over sigma``
+   * - refused (build)
+     - a photon or beta pair, or a particle without the spin of its operator: the operator acts on the spins of the four particles of a reaction between particle pairs: a vector operator needs spin >= 1/2, a Cartesian tensor spin 1, T_kq rank k <= 2j; for capture only A_y (analyzing_power) is computed (``E_REACTION_NOT_ALLOWED``)
 
 phase_shift
 ~~~~~~~~~~~
@@ -1914,6 +1959,9 @@ Diagnostic codes
    * - ``E_SPIN_SYNTAX``
      - error
      - a spin that is not 0, 1, 3/2, ... (with + or - where a parity is needed)
+   * - ``E_SPIN_OPERATOR``
+     - error
+     - the operator of a spin observable that does not follow its grammar (b:y, b:y\*t:y, b:T20, b:y>e1:y)
    * - ``E_NUCLEUS_SYNTAX``
      - error
      - a nuclide that is not <A><Symbol>, or with A < Z

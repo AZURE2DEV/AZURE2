@@ -98,6 +98,7 @@ constexpr const char *kPartMissing = "E_PART_MISSING";
 constexpr const char *kPartTwice = "E_PART_TWICE";
 constexpr const char *kFormulaSyntax = "E_FORMULA_SYNTAX";
 constexpr const char *kSpinSyntax = "E_SPIN_SYNTAX";
+constexpr const char *kSpinOperator = "E_SPIN_OPERATOR";
 constexpr const char *kNucleusSyntax = "E_NUCLEUS_SYNTAX";
 constexpr const char *kUnknownElement = "E_UNKNOWN_ELEMENT";
 constexpr const char *kPairSyntax = "E_PAIR_SYNTAX";

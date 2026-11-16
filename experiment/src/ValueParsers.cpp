@@ -7,6 +7,7 @@
 
 #include "azure2/experiment/Parsers.h"
 #include "azure2/physics/Elements.h"
+#include "azure2/physics/SpinObservable.h"
 
 namespace azure2 {
 namespace experiment {
@@ -518,6 +519,20 @@ bool ParseValue(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, Valu
                       "; half-integers are written n/2");
         return false;
       }
+      cur.Next();
+      return true;
+    }
+    case ValueType::SpinOperator: {
+      if (!NeedToken(cur, ctx, "the operator")) return false;
+      const io::Token &t = cur.Peek();
+      physics::SpinObservable observable;
+      std::string error;
+      if (!observable.Parse(t.text, error)) {
+        ctx.Error(codes::kSpinOperator, t.col, t.text, {"b:y", "t:y", "b:y*t:y", "b:yy", "b:iT11", "b:T20", "e1:y", "b:y>e1:y"},
+                  ctx.Where() + ": '" + t.text + "' is not the operator of a spin observable: " + error);
+        return false;
+      }
+      out.word = t.text;
       cur.Next();
       return true;
     }

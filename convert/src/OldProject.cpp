@@ -34,19 +34,21 @@ std::string Trim(const std::string &s) {
   return s.substr(a, b - a + 1);
 }
 
-// The reason a <segmentsData> or <segmentsTest> line the old parser cannot read is one of a newer AZURE2 (its dev
+// The reason a <segmentsData> or <segmentsTest> line the old parser cannot read is one of another AZURE2 (its dev
 // branch), "" otherwise: its type (the token at 0-based place `typeAt`) followed by a spin operator such as b:y,
-// t:y, b:y*t:y or b:T20 (dev's general spin observables, type 10; type 9 before dev renumbered it), where this
-// program's grammar has the normalization.
+// t:y, b:y*t:y or b:T20, where this program's grammar has the normalization.  dev's general spin observables are
+// type 10 with the operator (read: SegLine.h, ExtrapLine.h; a spin_observable record); before 2026-11-11 dev wrote
+// them as type 9, which is Legendre-coefficient data since, and that line is refused with the way out.
 std::string NewerLineType(const std::string &line, std::size_t typeAt) {
   std::istringstream in(line);
   std::vector<std::string> tokens;
   for (std::string t; in >> t;) tokens.push_back(t);
   if (tokens.size() <= typeAt + 1 || tokens[typeAt + 1].find(':') == std::string::npos) return "";
+  if (tokens[typeAt] == "10") return "";
   return " has type " + tokens[typeAt] + " followed by the spin operator '" + tokens[typeAt + 1] +
-         "': a general spin observable (an analysing power, a spin correlation, a polarization or a tensor power) of "
-         "a newer AZURE2 (its dev branch), which this build does not compute yet.  Keep running the project with that "
-         "program, or convert a copy without this line";
+         "': a general spin observable (an analysing power, a spin correlation, a polarization or a tensor power) is "
+         "type 10 followed by its operator (AZURE2's dev branch wrote type 9 before 2026-11-11).  Write 10 for the "
+         "type on this line";
 }
 
 // The refusal of a line's end that no keyword block of the old grammar reads: the old engine stopped reading there

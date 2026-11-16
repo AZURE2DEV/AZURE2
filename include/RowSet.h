@@ -55,6 +55,8 @@ struct RowSet {
   std::size_t harmonicsLength = 0;
   int muMax = 0;
   vector_r p1;
+  /// An analysing power: the readers' spin observable, null for A_y (their term's, TermSettings::spinObservable).
+  const physics::SpinObservable *spin = nullptr;
   /// Data given at a lab angle: the readers' conversion (their term's, experiment::LabAngleAt), their lab angle
   /// (deg) and dOmega_lab/dOmega_cm per slot; `jacobian` is empty otherwise (J = 1).
   bool labFrame = false;
@@ -88,6 +90,7 @@ struct RowSet {
     if (!harmonics.empty()) row.y = harmonics.data() + At(k) * harmonicsLength, row.muMax = muMax;
     if (!p1.empty()) row.p1 = p1.data() + At(k) * rowLength;
     row.theta = AngleAt(k) * pi / 180.0;
+    row.spin = spin;
     return row;
   }
   /// The index in Results::contracted of value `i` of slot k.

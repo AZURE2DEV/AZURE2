@@ -59,6 +59,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kPartTwice, E, "a keyword given twice in a structured value"},
       {kFormulaSyntax, E, "a formula that is not quoted, or a parameter that is not <name>=<number>"},
       {kSpinSyntax, E, "a spin that is not 0, 1, 3/2, ... (with + or - where a parity is needed)"},
+      {kSpinOperator, E, "the operator of a spin observable that does not follow its grammar (b:y, b:y*t:y, b:T20, b:y>e1:y)"},
       {kNucleusSyntax, E, "a nuclide that is not <A><Symbol>, or with A < Z"},
       {kUnknownElement, E, "an element symbol that is not in the table (physics/Elements.h)"},
       {kPairSyntax, E, "a particle pair that is not <particle>+<nucleus>[<E_x>]"},

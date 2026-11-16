@@ -46,6 +46,7 @@ Observable DataObservable(int code) {
     case 6: return Observable::CrossSectionE2;
     case 7: return Observable::AnalyzingPower;
     case 9: return Observable::AngularCoefficients;
+    case 10: return Observable::AnalyzingPower;  // dev's spin observable: with its token (ReadReaction)
     default: return Observable::CrossSection;
   }
 }
@@ -59,6 +60,7 @@ Observable ExtrapolationObservable(int code) {
     case 4: return Observable::TotalCapture;
     case 5: return Observable::DifferentialCM;
     case 7: return Observable::AnalyzingPower;
+    case 10: return Observable::AnalyzingPower;  // dev's spin observable: with its token (ReadReaction)
     default: return Observable::CrossSection;
   }
 }
@@ -70,6 +72,7 @@ std::string ReadReaction(const Line &line, Observable observable, bool thm, Reac
   r.exitKey = line.exitKey();
   r.observable = observable;
   r.thm = thm;
+  r.spinObservable = line.spinObservable();
   if (observable == Observable::PhaseShift) {
     r.phaseJ = line.phaseJ();
     r.phaseL = line.phaseL();
@@ -114,7 +117,7 @@ DatasetSpec DatasetOf(const SegLine &s, int key, std::string &why) {
   DatasetSpec d;
   d.key = key;
   d.active = s.isActive() == 1;
-  const bool thm = s.isDiff() >= 10;
+  const bool thm = s.spinObservable().empty() && s.isDiff() >= 10;
   why = ReadReaction(s, DataObservable(thm ? s.isDiff() - 10 : s.isDiff()), thm, d.reaction);
   d.minE = s.minE();
   d.maxE = s.maxE();
@@ -158,7 +161,7 @@ ExtrapolationSpec ExtrapolationOf(const ExtrapLine &s, int key, std::string &why
   x.key = key;
   x.names = OldParameterNames(key, 0);
   x.active = s.isActive() == 1;
-  const bool thm = s.isDiff() >= 10;
+  const bool thm = s.spinObservable().empty() && s.isDiff() >= 10;
   why = ReadReaction(s, ExtrapolationObservable(thm ? s.isDiff() - 10 : s.isDiff()), thm, x.reaction);
   x.minE = s.minE();
   x.maxE = s.maxE();

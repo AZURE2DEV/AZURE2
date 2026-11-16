@@ -355,8 +355,8 @@ predict "<expr>"
 expr   := leaf | "sum(" expr {"," expr} ")" | "ratio(" expr "," expr ")" | number "*" expr
         | "abundance(" sample ")*" expr | "transmission(" n "," expr ")" | "yield(" n "," expr "," expr ")"
 leaf   := kind "(" pair "->" pair {";" option} ")"
-kind   := sigma | dsdo_cm | ay | phase | ak | Ak | sigma_total | upos | rutherford
-option := mult=E1|E2|M1|... | J=1/2+ | l=0 | s=1/2 | part=internal|external | angle=<deg c.m.> | k=<order>
+kind   := sigma | dsdo_cm | ay | spin | phase | ak | Ak | sigma_total | upos | rutherford
+option := mult=E1|E2|M1|... | J=1/2+ | l=0 | s=1/2 | part=internal|external | angle=<deg c.m.> | k=<order> | op=<spin operator>
 ```
 
 Examples: `predict "ratio(dsdo_cm(1->1), rutherford(1->1))"`, `predict "sum(sigma(1->2; mult=E1), 0.5*sigma(1->3))"`.

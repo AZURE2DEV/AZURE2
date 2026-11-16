@@ -129,6 +129,7 @@ struct Construct {
   static constexpr const char *kDataCode = "data isDiff";
   static constexpr const char *kTestCode = "test isDiff";
   static constexpr const char *kThm = "isDiff + 10 (THM)";
+  static constexpr const char *kSpinObservable = "isDiff 10 with an operator token (spin observable)";
   static constexpr const char *kSpin = "spin s";
   static constexpr const char *kNorm = "norm, varyNorm, normError";
   static constexpr const char *kShift = "shift, shiftError, vary";

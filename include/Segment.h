@@ -11,6 +11,7 @@
 #include "azure2/experiment/Frames.h"
 #include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/SetupSpecs.h"
+#include "azure2/physics/SpinObservable.h"
 
 namespace azure2 {
 namespace experiment {
@@ -109,6 +110,8 @@ class Segment {
    * dimensionless and bounded by one.
    */
   bool IsAnalyzingPower() const { return isAnalyzingPower_; };
+  /// With IsAnalyzingPower: the general spin observable of the data set (ReactionSpec::spinObservable), null for A_y.
+  const azure2::physics::SpinObservable *GetSpinObservable() const { return spinObservable_.get(); };
   /// Unobserved-primary, observed-secondary reaction?
   bool IsUPOS() const;
   /// Number of segments summed for total capture; 0 if this is not a total-capture segment.
@@ -563,6 +566,7 @@ class Segment {
   bool varyNorm_;
   bool isAngDist_;
   bool isAnalyzingPower_;
+  std::shared_ptr<const azure2::physics::SpinObservable> spinObservable_;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;
