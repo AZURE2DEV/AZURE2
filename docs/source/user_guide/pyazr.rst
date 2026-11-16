@@ -1068,9 +1068,10 @@ at :math:`E_r` have an entry; a closed channel (an ANC, not a width), a photon c
 ``dimensionless_widths`` gives ``wigner_width`` and ``theta2`` (with the row's ``value`` as Γ) of free and fixed open
 particle channels alike, and its ``level_energy``, ``is_open`` and a photon's ``e_gamma`` (with the W.u. that follow)
 are taken at the level's physical energy in every parametrization; a closed channel has ``theta2`` ``None``, a fixed
-one ``theta2_formal`` ``None``.  A fixed channel's ``value`` is its physical value as the session was made, not at
-``x``: under Brune's and the formal parametrization it moves with the level's other widths, and ``azr.transform(x)``
-has the value at ``x``.
+one ``theta2_formal`` ``None``.  Every row's ``value``, free and fixed, is the physical value at ``x``, the row of
+``azr.transform(x)``: a fixed channel holds its reduced-width amplitude, so under Brune's and the formal
+parametrization its observed width moves with the level's other widths, and in every parametrization with the
+level's energy (through :math:`P_l`); its ``theta2`` (and a photon's ``wu``) are formed with that value.
 
 .. note::
 
@@ -1087,8 +1088,11 @@ has the value at ``x``.
    Before pyazr 3.0.0.dev6 ``dimensionless_widths`` left ``wigner_width`` and ``theta2`` of a fixed open particle
    channel ``None``, and in the formal basis (``use_brune=False``) it reported ``level_energy`` as the formal pole
    energy of the fit vector and took ``is_open`` and a photon's ``e_gamma`` (and so ``weisskopf`` and ``wu``) there,
-   not at the physical level energy.  Brune and Park sessions gave the same numbers for every other field.  A
-   formal-basis table from an older build should be recomputed.
+   not at the physical level energy.  A fixed channel's ``value`` (and so its ``theta2`` and a photon's ``wu``) was
+   its value as the session was made (``Parameter.value``), not at ``x``: equal at ``parameters.x0``, off by up to
+   21 % on the test project T2 for a vector away from it (Brune; in the formal basis a fixed zero amplitude read 0
+   where its observed width is not).  A formal-basis table, or a table at a vector other than ``parameters.x0``
+   (a fit result), from an older build should be recomputed.
 
 The external region, and the caches
 -----------------------------------

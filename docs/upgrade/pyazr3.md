@@ -1548,3 +1548,24 @@ was made, not at `params`. Under Brune's and the formal parametrization it moves
 on T2 with every free width times 1.2 the fixed `width_2_3` reads -747275 eV where `transform(x)` has -674499 eV
 (11 %), and its `theta2` is formed with the first. At `parameters.x0` the two agree. Taking the value of
 `transform(params)` would change `value` of fixed rows away from x0, which this change was not to do.
+
+### 13.5 A fixed row's value at `params` (design; approved by the PI on 2026-11-16)
+
+The PI approved the repair of the last paragraph ("Okay, I agree about the widths"). A fixed channel holds its
+reduced-width amplitude, not its observed width; its observed width at a fit vector is the engine's transformation
+of the whole level, the slot's value in the observed-level record that `transform(params)` returns
+(`GetTransformParams` of `TransformOut`). `dimensionless_widths(params)` takes every row's `value`, free and fixed,
+from one call `transform(params)` at the row's `index` (one route: the free rows read it there already, at
+`free_index` of the free part); `Parameter.value` is no longer read. `theta2 = |value| / wigner_width` and a photon
+row's `wu = |value| / weisskopf` follow. Nothing else moves: `level_energy`, `is_open`, `e_gamma`, `wigner_width`
+and the free rows already came from the record. No engine code changes.
+
+Measured before the change (build of f89c5dae, the session's Coulomb table) on T1, T2, T3 and 13N in the three
+bases, at `parameters.x0` and at three displaced points (every free width x 1.2; every free energy x (1 + 1e-3);
+both): stale are `value`, `theta2` and `wu` of fixed rows only, and only away from x0 -- in Brune's basis on T2 and
+T3 (up to 21 %), in the formal basis on all four (a fixed zero amplitude of the formal basis is a non-zero observed
+width there: relative 1), in Park's basis only when an energy moves (the observed width is Park's amplitude times
+2 P(E); widths x 1.2 leave every fixed value of Park's basis as it was, bit for bit). `level_energy`, `is_open` and
+every free row equal `transform(params)` at every point. Test: `tests/pyazr/wigner_widths_test.py` (k), every row's
+`value` equal to `transform(params)`'s bit for bit at x0 and at the displaced points, `theta2` and `wu` formed with
+it; it fails before the change. pyazr's version stays 3.0.0.dev6 (not released).

@@ -30,7 +30,12 @@ On T1, T2, T3 (tests/upgrade) and tests/13N, in Brune's, the formal and Park's p
     and Park's parametrization equal bit for bit to the fit vector's energy (what they were before), in the formal
     one every row equal to Brune's (level_energy and e_gamma to 1e-6, is_open the same);
 (j) the entries equal 2 P gamma_W^2 with P of channel_functions at E_r = E_x - (S + e), the route of pyazr
-    3.0.0.dev5, bit for bit (the record's P is the same function at the same channel energy).
+    3.0.0.dev5, bit for bit (the record's P is the same function at the same channel energy);
+(k) every row's value, free and fixed, is transform(params)'s at the row's index, bit for bit, at parameters.x0 and
+    at three displaced points (free widths x 1.2; free energies x (1 + 1e-3); both), with theta2 = |value| /
+    wigner_width and a photon's wu = |value| / weisskopf formed with it (pyazr3.md section 13.5: a fixed row read
+    Parameter.value, the value as the session was made, before); in Park's basis a fixed width does not move when only
+    the free widths do.
 
 Run from anywhere:  python3 tests/pyazr/wigner_widths_test.py
 """
@@ -196,6 +201,33 @@ try:
                                                   q.L, J=q.J if spin_orbit else None)["P"])
                     same_route = same_route and v == 2.0 * P * q.wigner_limit * 1e6
                 check(f"(j) {name}, {mode}: {len(got)} entries equal the channel_functions route bit for bit", same_route)
+                # (k) every row's value at params, fixed rows included
+                displaced = {"x0": x, "widths x 1.2": x.copy(), "energies x (1 + 1e-3)": x.copy()}
+                for q in s.parameters.free:
+                    if q.kind == "width":
+                        displaced["widths x 1.2"][q.free_index] *= 1.2
+                    elif q.kind == "energy":
+                        displaced["energies x (1 + 1e-3)"][q.free_index] *= 1.0 + 1e-3
+                both = displaced["widths x 1.2"].copy()
+                moved_e = displaced["energies x (1 + 1e-3)"] != x
+                both[moved_e] = displaced["energies x (1 + 1e-3)"][moved_e]
+                displaced["both"] = both
+                fixed_at, value0 = {}, s.transform(x)
+                for label, xd in displaced.items():
+                    want = s.transform(xd)
+                    rows_k = s.dimensionless_widths(xd)
+                    bad = [c.name for c in rows_k if c.value != float(want[c.index])
+                           or (c.theta2 is not None and c.theta2 != abs(c.value) / c.wigner_width)
+                           or (c.wu is not None and c.wu != abs(c.value) / c.weisskopf)]
+                    n_fixed = sum(1 for c in rows_k if c.fixed)
+                    moved = sum(1 for c in rows_k if c.fixed and want[c.index] != value0[c.index])
+                    fixed_at[label] = {c.name: c.value for c in rows_k if c.fixed and not c.is_photon}
+                    check(f"(k) {name}, {mode}, {label}: every row's value (fixed {n_fixed}) is transform(params)'s "
+                          f"bit for bit, theta2 and wu formed with it ({moved} fixed values moved from x0)",
+                          not bad, f"{len(bad)} rows differ, e.g. {bad[:4]}")
+                if mode == "Park":
+                    check(f"(k) {name}, Park: free widths x 1.2 leave every fixed particle width as it was",
+                          fixed_at["widths x 1.2"] == fixed_at["x0"])
                 if mode == "Brune":
                     with pyazr.locking.session_lock(s):
                         amplitudes = np.asarray(s._engine.params_all_rwa(), float)   # the binding: fixed amplitudes

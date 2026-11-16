@@ -163,13 +163,16 @@ class SessionPhysics:
         widths, or leave it out for the ``.azr``'s own values.  ``eps`` is
         accepted and ignored (:meth:`wigner_widths`).
 
-        A fixed channel's ``value`` (and so its ``theta2``) is its physical
-        value as the session was made (``Parameter.value``), not at
-        ``params``: under Brune's and the formal parametrization it moves with
-        the level's other widths (``transform(params)`` has it there).
+        Every row's ``value`` -- free and fixed -- is the physical value at
+        ``params``, the row of :meth:`transform` (``params``): a fixed
+        channel holds its amplitude, so under Brune's and the formal
+        parametrization its observed width moves with the level's other
+        widths (and in every basis with the level's energy, through P).
 
         Before pyazr 3.0.0.dev6 a fixed channel had ``wigner_width`` and
-        ``theta2`` ``None``, and in the formal basis ``level_energy``,
+        ``theta2`` ``None``, its ``value`` (and so ``theta2`` and a photon's
+        ``wu``) was the value as the session was made (``Parameter.value``),
+        not at ``params``, and in the formal basis ``level_energy``,
         ``is_open`` and ``e_gamma`` were taken at the formal pole energy.
 
         >>> t = m.dimensionless_widths(best)
@@ -179,7 +182,7 @@ class SessionPhysics:
         from .widths import ChannelWidth, WidthTable, weisskopf_width
 
         x = np.asarray(self.parameters.x0 if params is None else params, float)
-        phys = self.transform(x)[self.parameters.free_mask]
+        phys = self.transform(x)  # one entry per row of parameters, fixed ones included: the observed values at x
         record = self._observed_levels(x)
         A = self.mass_number
 
@@ -188,11 +191,10 @@ class SessionPhysics:
             pair = self.pairs.by_number(p.pair)
             ex = float(record[(p.jgroup, p.level, p.channel)][3])  # the level's physical energy (MeV)
             free = p.free_index if (not p.fixed and p.free_index is not None) else None
-            # the rwa of a fixed channel is not exposed by the API; its physical
-            # value does not move with the fit, so report that and leave gamma out
             g = float(x[free]) if free is not None and free < x.size else None
-            value = (float(phys[free]) if free is not None and free < phys.size
-                     else p.value)
+            # the physical value at x, free and fixed alike: a fixed channel holds its amplitude, so its observed
+            # width moves with the level's other parameters (pyazr3.md section 13.5)
+            value = float(phys[p.index])
             photon = p.radiation_type in ("E", "M")
             row = ChannelWidth(
                 name=p.name, index=p.index, free_index=p.free_index,
