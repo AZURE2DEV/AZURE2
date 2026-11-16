@@ -921,7 +921,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     // Away from UPOS the sum is linear in the Legendre polynomials with
     // angle-independent coefficients: the cotangent of each pathway is a sum
     // over orders of products taken once per T-matrix (TBarProducts).
-    if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(P, theDecay, inelasticParticle)) {
+    const bool captureCascade = (exitPairDiff->GetPType() == 10 && point->IsUPOS());  // as in GenMatrixFunc
+    if (!(inelasticParticle && point->IsUPOS()) && !captureCascade && this->TBarProducts(P, theDecay, inelasticParticle)) {
       const complex scale = fitBar * cR;
       const azure2::InterferencePathway *paths = P.interference_pathways.data() + theDecay.first_interference_pathway;
       const size_t numPaths = theDecay.num_interference_pathways;
@@ -956,24 +957,16 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
             addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
           }
           if (lp1 == lp2 && point->IsUPOS() && type == "RR") {
-            // R_L coefficient (constant w.r.t. parameters), even lOrder only.
-            double finalL = (double)point->GetSecondaryDecayL();
-            double Ic = point->GetIc();
-            double j2f = compound()->GetPair(exitPairNum)->GetJ(2);  // the exit pair, not the decay index (GenMatrixFunc)
-            double delta = point->GetDelta();
-            double R_L = 0.0;
-            if ((int)lOrder % 2 == 0) {
-              R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
-              if (delta != 0.0) {
-                double finalLp = finalL + 1.0;
-                double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
-                double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-                // unconditionally, as in GenMatrixFunc (checklist t3-24)
-                R_L = (R_L + 2.0 * delta * R_LLp + delta * delta * R_LpLp) / (1.0 + delta * delta);
-              }
-            }
+            // R_L of the secondary decay (constant w.r.t. parameters; 0 for odd orders), the exit pair's residual nucleus
+            const double R_L = this->SecondaryRk(point, compound()->GetPair(exitPairNum)->GetJ(2), lOrder + 1)[lOrder];
             double W = cR * itf.z_upos * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;
             addQuad(K, m1, 'R', m2, 'R', W);
+          }
+        } else if (captureCascade) {
+          // Secondary gamma ray after an unobserved primary capture photon (GenMatrixFunc::LegendreCoefficientsOf).
+          if (itf.z_upos != 0.0) {
+            const double R_L = this->SecondaryRk(point, exitPairDiff->GetJ(2), lOrder + 1)[lOrder];
+            addQuad(K, m1, rad1, m2, rad2, cR * itf.z_upos * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP);
           }
         } else {
           // Standard case (entrance==exit pair, or gamma exit).

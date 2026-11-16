@@ -8,7 +8,7 @@
 //  - every interference, interference pathway and diagonal pathway names rows that exist, with the stated kind;
 //  - for a photon exit, a_k = 4 Z1Z2 for the pathway pairs of one spin group: the Legendre coefficient of Seyler and
 //    Weller's Eq. (20) is the unpolarized coefficient of the differential cross section (the capture
-//    A_y record of GenMatrixFunc::AnalyzingPowerCoefficientsOf states the relation); every (k, L, m1, m2) with an interference has its capture-A_y term and the converse.
+//    A_y record of GenMatrixFunc::AnalyzingPowerCoefficientsOf states the relation); every (k, L, m1, m2) with an interference coefficient Z1Z2 has its capture-A_y term and the converse (a row kept for the cascade coefficient z_upos alone has none).
 // Arguments: .azr files or directories (every *.azr below, outside output/ and the converter's fixtures, which the
 // engine refuses), loaded as pathways_of_compound_test does
 // (every particle and beta pair an entrance, capture A_y requested for every photon exit), Brune basis.
@@ -144,7 +144,8 @@ void CheckEntrance(const CompoundSystem &c, int a, const std::string &tag) {
       }
       Check(std::fabs(f.z) > 1e-10 || std::fabs(f.z_upos) > 1e-10, tag, at + ": kept coefficient");
       orders = std::max(orders, f.l + 1);
-      z[std::make_tuple(f.l, f.k, f.m1, f.r1, f.m2, f.r2)] = f.z;
+      // (a row of a photon exit kept for its cascade coefficient alone, z = 0, has no capture-A_y term)
+      if (std::fabs(f.z) > 1e-10) z[std::make_tuple(f.l, f.k, f.m1, f.r1, f.m2, f.r2)] = f.z;
     }
     Check(orders == x.num_orders, tag, "exit " + std::to_string(e) + ": number of orders");
     Check(x.has_interferences == !beta, tag, "exit " + std::to_string(e) + ": interferences only for a non-beta entrance");

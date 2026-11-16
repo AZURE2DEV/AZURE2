@@ -154,6 +154,43 @@ exit 1
 == tests/capture_ay_coupling/models/twolevel.azr
 extrapolation x1: ay(1->2)
 extrapolation x2: dsdo_cm(1->2)
+== tests/capture_cascade/models/ec_p.azr
+data ec_p_upos: dsdo_cm(1->2; upos L=2; Ic=0; delta=0)
+data ec_p_int: sigma(1->2)
+data ec_p_prim: dsdo_cm(1->2)
+data ec_p_iupos: sigma(1->2; upos L=2; Ic=0; delta=0)
+== tests/capture_cascade/models/ec_s.azr
+data ec_s_upos: dsdo_cm(1->2; upos L=1; Ic=0; delta=0)
+data ec_s_int: sigma(1->2)
+data ec_s_prim: dsdo_cm(1->2)
+data ec_s_iupos: sigma(1->2; upos L=1; Ic=0; delta=0)
+== tests/capture_cascade/models/ecres_both.azr
+data ecres_both_upos: dsdo_cm(1->2; upos L=2; Ic=0; delta=0)
+data ecres_both_int: sigma(1->2)
+data ecres_both_prim: dsdo_cm(1->2)
+data ecres_both_iupos: sigma(1->2; upos L=2; Ic=0; delta=0)
+== tests/capture_cascade/models/grad.azr
+data grad_upos: dsdo_cm(1->2; upos L=2; Ic=0; delta=0)
+== tests/capture_cascade/models/multipoles.azr
+data multipoles_upos: dsdo_cm(2->5; upos L=1; Ic=0.5; delta=0.35)
+data multipoles_int: sigma(2->5)
+data multipoles_prim: dsdo_cm(2->5)
+data multipoles_iupos: sigma(2->5; upos L=1; Ic=0.5; delta=0.35)
+== tests/capture_cascade/models/single_e1.azr
+data single_e1_upos: dsdo_cm(2->5; upos L=2; Ic=0.5; delta=0)
+data single_e1_int: sigma(2->5)
+data single_e1_prim: dsdo_cm(2->5)
+data single_e1_iupos: sigma(2->5; upos L=2; Ic=0.5; delta=0)
+== tests/capture_cascade/models/twoj_minus.azr
+data twoj_minus_upos: dsdo_cm(2->5; upos L=2; Ic=0.5; delta=0)
+data twoj_minus_int: sigma(2->5)
+data twoj_minus_prim: dsdo_cm(2->5)
+data twoj_minus_iupos: sigma(2->5; upos L=2; Ic=0.5; delta=0)
+== tests/capture_cascade/models/twoj_plus.azr
+data twoj_plus_upos: dsdo_cm(2->5; upos L=2; Ic=0.5; delta=0)
+data twoj_plus_int: sigma(2->5)
+data twoj_plus_prim: dsdo_cm(2->5)
+data twoj_plus_iupos: sigma(2->5; upos L=2; Ic=0.5; delta=0)
 == tests/channel_space/channel_space.azr
 data elastic_90: dsdo_cm(1->1)
 data elastic_150: dsdo_cm(1->1)

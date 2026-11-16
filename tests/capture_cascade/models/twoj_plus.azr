@@ -1,0 +1,75 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+3.5  1  11.0  1  1  2  1  6  1  1  1  1000.0  0  1  0.5  -1  0  4.0026  13.0033  2  6  4.14313  6.35869  0  0  0.0  0  5.4  0  0  0
+3.5  1  11.0  1  1  5  5  2  1  1  1  2.0  1  1  2.5  -1  3.0  0  17.0  0  8  4.14313  0  0  0  0.0  10  0  0  0  0
+
+2.5  1  11.0  1  1  2  1  6  2  1  1  600.0  0  1  0.5  -1  0  4.0026  13.0033  2  6  4.14313  6.35869  0  0  0.0  0  5.4  0  0  0
+2.5  1  11.0  1  1  5  5  2  2  1  1  3.0  1  1  2.5  -1  3.0  0  17.0  0  8  4.14313  0  0  0  0.0  10  0  0  0  0
+
+</levels>
+<data>
+# <segmentsData> line 1
+dataset twoj_plus_upos
+    reaction        13C(a,g)17O[3.0]
+    quantity        dsigma_domega
+    unit            b/sr
+    secondary_gamma L 2 Ic 1/2 delta 0
+    file            data/twoj_plus_upos.dat
+    columns         E_lab[MeV] theta_cm[deg] value error
+    energy_window   5.569971 6.569971 MeV
+    angle_window    0 180 deg
+    norm            1 fixed
+    shift           offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 2
+dataset twoj_plus_int
+    reaction       13C(a,g)17O[3.0]
+    quantity       sigma
+    unit           b
+    file           data/twoj_plus_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  5.569971 6.569971 MeV
+    norm           1 fixed
+    shift          offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 3
+dataset twoj_plus_prim
+    reaction       13C(a,g)17O[3.0]
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/twoj_plus_prim.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  5.569971 6.569971 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 4
+dataset twoj_plus_iupos
+    reaction        13C(a,g)17O[3.0]
+    quantity        sigma
+    unit            b
+    secondary_gamma L 2 Ic 1/2 delta 0
+    file            data/twoj_plus_iupos.dat
+    columns         E_lab[MeV] _ value error
+    energy_window   5.569971 6.569971 MeV
+    norm            1 fixed
+    shift           offset 0 MeV fit prior 0 0.02
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

@@ -1,0 +1,83 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+2.0  1  5.0  1  1  1  2  2  1  1  1  2.0  0.5  1  0.5  -1  0  1.00728  13.00335  1  6  7.55056  7.55056  0  0  0.0  0  4.5  0  0  0
+
+2.0  -1  8.48056  1  1  1  2  4  5  1  1  20000.0  0.5  1  0.5  -1  0  1.00728  13.00335  1  6  7.55056  7.55056  0  0  0.0  0  4.5  0  0  0
+2.0  -1  8.48056  1  1  2  4  2  5  1  1  0.0002  1  1  2  1  5.0  0  14.00307  0  7  7.55056  0  0  0  0.0  10  0  0  0  1
+
+1.0  -1  20.0  1  1  1  2  4  2  1  1  0.0  0.5  1  0.5  -1  0  1.00728  13.00335  1  6  7.55056  7.55056  0  0  0.0  0  4.5  0  0  0
+1.0  -1  20.0  1  1  2  4  2  2  1  1  0.0  1  1  2  1  5.0  0  14.00307  0  7  7.55056  0  0  0  0.0  10  0  0  0  1
+
+2.0  -1  20.0  1  1  1  2  4  3  1  1  0.0  0.5  1  0.5  -1  0  1.00728  13.00335  1  6  7.55056  7.55056  0  0  0.0  0  4.5  0  0  0
+2.0  -1  20.0  1  1  2  4  2  3  1  1  0.0  1  1  2  1  5.0  0  14.00307  0  7  7.55056  0  0  0  0.0  10  0  0  0  1
+
+3.0  -1  20.0  1  1  1  2  4  4  1  1  0.0  0.5  1  0.5  -1  0  1.00728  13.00335  1  6  7.55056  7.55056  0  0  0.0  0  4.5  0  0  0
+3.0  -1  20.0  1  1  2  4  2  4  1  1  0.0  1  1  2  1  5.0  0  14.00307  0  7  7.55056  0  0  0  0.0  10  0  0  0  1
+
+</levels>
+<data>
+# <segmentsData> line 1
+dataset ecres_both_upos
+    reaction        13C(p,g)14N[5.0]
+    quantity        dsigma_domega
+    unit            b/sr
+    secondary_gamma L 2 Ic 0 delta 0
+    file            data/ecres_both_upos.dat
+    columns         E_lab[MeV] theta_cm[deg] value error
+    energy_window   0.500000 1.500000 MeV
+    angle_window    0 180 deg
+    norm            1 fixed
+    shift           offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 2
+dataset ecres_both_int
+    reaction       13C(p,g)14N[5.0]
+    quantity       sigma
+    unit           b
+    file           data/ecres_both_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.500000 1.500000 MeV
+    norm           1 fixed
+    shift          offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 3
+dataset ecres_both_prim
+    reaction       13C(p,g)14N[5.0]
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/ecres_both_prim.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.500000 1.500000 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+    shift          offset 0 MeV fit prior 0 0.02
+
+# <segmentsData> line 4
+dataset ecres_both_iupos
+    reaction        13C(p,g)14N[5.0]
+    quantity        sigma
+    unit            b
+    secondary_gamma L 2 Ic 0 delta 0
+    file            data/ecres_both_iupos.dat
+    columns         E_lab[MeV] _ value error
+    energy_window   0.500000 1.500000 MeV
+    norm            1 fixed
+    shift           offset 0 MeV fit prior 0 0.02
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

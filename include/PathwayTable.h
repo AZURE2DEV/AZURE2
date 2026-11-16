@@ -32,7 +32,8 @@ struct FlatInterference {
   int l;          ///< Legendre order
   char r1, r2;    ///< 'R' internal, 'E' external capture pathway
   double z;       ///< Z1Z2 coefficient (0 for a cross-spin UPOS group)
-  double z_upos;  ///< the unobserved-primary, observed-secondary coefficient (0 unless a particle exit != entrance)
+  double z_upos;  ///< the unobserved-primary, observed-secondary coefficient: a particle exit != entrance, or a photon
+                  ///< exit (the secondary gamma ray of a capture cascade: pathways of one multipole); else 0
   bool spEqual;   ///< the group has s' equal to s2' (s2' = 0 for a group without one)
   int s1, s2;     ///< positions of the two pathways in the exit's interference pathways (0-based)
 };
