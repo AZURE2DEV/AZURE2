@@ -940,6 +940,8 @@ extrapolation x1: sum(sigma(1->2))
 data: set-up failed
 extrapolation x1: sum(sigma(1->2))
 exit 1
+== tests/udr_low_energy/model.azr
+data koehler1991: sigma(1->2)
 == tests/units_scales/models/yield_story.azr
 data Y_curve: 113595465155.1859*sigma(1->2)
 extrapolation Y_thick: sigma(1->2)

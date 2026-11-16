@@ -21,8 +21,11 @@ value), `experiment/src/KernelDoppler.cpp` (the floor under a UDR kernel),
 edited into it): passes here, fails on the base (3 of 3; zeros at 17, 7 and 3 of the 67 points).
 `tests/upgrade/mesh_planner_test.cpp`: the case "time of flight" (8 checks).
 
-**Run here** (CRC, GCC 11.5): the two above; `repo_consistency_test.py`. The full gate: see the end of this entry
-once the queue job is back. **Not run:** CI; a `udr` detector with a fitted energy shift at a thermal point.
+**Run here** (CRC, GCC 11.5): the two above; `repo_consistency_test.py`. **The full gate** (queue job 1756614, base `7a1d96d0`): consistency, configure and build pass; unit tests 307 of
+310, failing the base's two (`pyazr_park_dsde`, `pyazr_units_scales`) and `upgrade_predictions`, which lists every
+project under `tests/`: the new model is added to `tests/upgrade/predictions.txt` in a follow-up commit (2 lines
+added, none changed) and the test passes; physics suites 171 pass, the base's two fail (`capture_ay_coupling`, the
+ancai06 warning) -- no project without a `udr` detector moved; the pages build. **Not run:** CI; a `udr` detector with a fitted energy shift at a thermal point.
 
 **Seen on the way, not changed:** `--convert` writes dev's negative channel width (|n| bins per decade of energy)
 as `channel -7.55 ns`; the engine still reads a negative number that way, so the unit on the line is wrong for it.
