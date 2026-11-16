@@ -2,6 +2,54 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — external capture into an unbound final state, stage 1 (a narrow resonance)
+
+**Branch** `feature/upgrade-5-dev-ec-unbound`, cut from `feature/upgrade` `0c6167c1`. dev's change of 2026-11-13
+(PR #8), on this branch's files. It replaces what the entry of 2026-11-15 ("a capture final state above a threshold
+is refused") refused: the table of that entry is the list of the places changed.
+
+**The physics.** A final state above the threshold of a particle pair with a channel in its J^pi group is unbound in
+that channel. It is treated as a narrow resonance: its exterior is the outgoing wave O_l(k_f r)/O_l(k_f a),
+O = G + iF (Mukhamedzhanov et al., PRC 96, 024623 (2017), eq. 16), its strength the level's observed width in the
+channel, and N_f = (hbar^2/2 mu a) dS/dE at E_f, which for a bound state is the integral of W^2/W(a)^2 and is smooth
+through the threshold. Valid while the width is small next to the photon energy and next to E_f - threshold; a broad
+final state needs dev's line-shape integration (stage 2, not written here).
+
+**Changed.**
+- `src/ECIntegral.cpp`, `include/ECIntegral.h`: `IntegrateUnbound` (Gauss-Legendre panels from a to R, the tail by
+  Abel-regularized integration by parts), the unbound branch of `CalculateDirect`, 0 where E <= E_f. The
+  Gauss-Legendre table is made and freed per call (dev holds it in a `static thread_local`, which check 38 refuses).
+- `src/ExternalCaptureFinalStates.cpp`: `ECFinalStateFactors` (N_f and the amplitude conversion, bound or unbound) and
+  `NoteUnboundFinalState` (a NOTE once per capture pair and particle pair; an ERROR and a refused set-up for
+  eta > 100, the engine's copy of the build's refusal for a set-up without the build).
+- `src/ECTable.cpp`: an unbound final state is integrated directly at every energy, also where the point's channel
+  table holds the entrance channel (the table's stencil cannot follow (k_i - k_f)^-2 towards E = E_f; with the table
+  the pure direct capture was 1.5e-3 off dev).
+- `src/UnitExternalCapture.cpp` (`ECPathwayAmplitude`) and `src/ChannelTables.cpp` (the photon channel's
+  penetrability): no photon below the final state, the pathway and the channel are closed (they were NaN).
+- `src/ExternalCaptureSetup.cpp`: the signature of the capture-integral file gains "unbound final state v1" for an
+  unbound final channel only; every other file keeps its signature.
+- `experiment/src/FinalStates.cpp`, `FinalStates.h`, `BuildFinalStates.cpp`, `Diagnostics.cpp`: `UnboundFinalStates`
+  now finds a final state with external capture at the threshold of a pair with a channel in its group, or above it
+  with eta > `kMaxOutgoingWaveEta` (100; non-relativistic eta from the `<levels>` masses), one finding per photon
+  pair; the kind `Entrance` is gone (a capture whose entrance opens below the final state is computed). The
+  diagnostic keeps its code, `E_FINAL_STATE_UNBOUND`, with a new message.
+
+**Tests.** `tests/ec_unbound_final` (dev's: the NOTE and no NaN; pure direct capture against an independent integral,
+0.18 %; continuity through the threshold; formal = Brune; the gradient), its ten models dev's, converted with 0
+notes; this engine's curves equal dev's on all of them (1e-10; compared in a scratch directory, not a test).
+`tests/ec_final_state_unbound` and `tests/pyazr/ec_final_state_unbound_test.py` rewritten for the new rule (0.05 keV
+above S_p refused; 2.5 MeV computed with and without external capture; 3.5 keV below: the start commit's chi^2).
+`experiment/tests/build_test.cpp`: the cases of the rule.
+
+**Open.** dev's stage 2 (`linewindow W`: the line shape of a broad final state), its internal-only form, the line
+centre that follows a fitted final level, and the capture cascade (UPOS on a capture pair) are not ported. The build's
+eta is non-relativistic and the engine's check uses the run's kinematics: they can disagree within 1e-3 of the limit.
+A THM data set exiting into an unbound photon pair is not covered (read only, as before).
+
+**Run here** (CRC, GCC 11.5): build; `experiment_build`; the two test directories; the pyazr test. The full gate: see
+the end of this entry. **Not run:** CI.
+
 ## 2026-11-16 (director, 10:00) — the PI's decisions of 2026-11-16; the wheel workflow can now start; a new session
 
 A new session of the director took over from `work/director/NEXT_AGENT.md` (local). This entry is documents and

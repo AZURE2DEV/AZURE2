@@ -236,20 +236,24 @@ ambiguous (before October 2026 the first one in the file was taken silently):
 move the extra level by more than 1 keV, or give the pair the energy of the
 level it decays to.
 
-**A final state above a particle threshold is refused.** External capture
-treats its final state as bound in every particle channel of the final
-state's :math:`J^\pi` group: the bound-state normalization :math:`N_f`, the
-conversion of an ANC to an amplitude and the radial integral take
-:math:`S - E_f` of each such pair as a binding energy. Below a final state at
-:math:`E_f`, the photon energy :math:`E_\gamma = E_x - E_f` is negative and the
-photon penetrability :math:`E_\gamma^{2L+1}` has no meaning. So a project is
-refused (``E_FINAL_STATE_UNBOUND``, by ``AZURE2 --validate``, by every run and
-by pyazr) when a photon pair with external capture has its final state at or
-above the threshold (:math:`S` plus the pair's excitations) of a particle pair
-with a channel in that :math:`J^\pi` group, or when a data set or
-extrapolation captures from an entrance pair whose threshold lies below the
-final state, with external capture or without. Capture into an unbound final
-state is not computed by this version. Internal capture into a final state
-that lies above another pair's threshold but below the entrance threshold
-(the :math:`^8`\ Be ground state in :math:`^7`\ Li(p,γ), say, without external
-capture) is computed, with the final state taken as sharp.
+**A final state above a particle threshold is a narrow resonance.** A final
+state of external capture that lies above the threshold (:math:`S` plus the
+pair's excitations) of a particle pair with a channel in its :math:`J^\pi`
+group is unbound in that channel. Its exterior is then the outgoing wave
+:math:`O_l(k_f r)/O_l(k_f a)`, :math:`O = G + iF`, at :math:`E_f` above the
+threshold, in place of the Whittaker function of a bound state; its strength
+is the level's observed width in that channel, and the normalization
+:math:`N_f` is continued as :math:`(\hbar^2/2\mu a)\,dS/dE`, which joins the
+bound value at the threshold. The run says so in a ``NOTE``. This is right
+while the width is small next to the photon energy and next to the distance
+to the threshold; a broad final state needs its line shape integrated, which
+this version does not do. Below the final state there is no photon
+(:math:`E_\gamma = E_x - E_f \le 0`): the capture is zero there, for internal
+and external capture alike.
+
+One case is refused (``E_FINAL_STATE_UNBOUND``, by ``AZURE2 --validate``, by
+every run and by pyazr): a final state with external capture at such a
+threshold, or so close above the threshold of a charged pair that its
+Sommerfeld parameter exceeds 100 (within about a keV for light nuclei), where
+the outgoing wave cannot be evaluated. Lower the state below the threshold
+(it is then bound) or move it higher.

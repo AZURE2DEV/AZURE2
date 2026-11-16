@@ -5,6 +5,7 @@
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <cmath>
@@ -18,7 +19,9 @@
 #include "EngineChannelFunctions.h"
 #include "SystemOfCompound.h"
 #include "Config.h"
+#include "CoulFunc.h"
 #include "ECIntegral.h"
+#include "Kinematics.h"
 #include "JGroup.h"
 #include "PPair.h"
 #include "NFIntegral.h"
@@ -62,6 +65,65 @@ void ThrowIfFailed(const phys::LevelSet &set) {
 }
 }  // namespace
 
+namespace {
+/*!
+ * The two factors an external-capture final state needs in one particle channel (pair, l): the conversion from its
+ * reduced width amplitude to the normalization of its exterior wave function, and the N_f integral,
+ * int_a^inf u^2 / u(a)^2 dr.
+ *
+ * Bound (E_f = levelEnergy - threshold < 0): exterior C W(r), so the conversion is sqrt(2 mu a)/hbar / W(a)
+ * (gamma -> ANC) and the integral that of W^2 / W(a)^2.
+ *
+ * Unbound (E_f > 0), a narrow resonance: ECIntegral integrates the outgoing wave normalized at a, u_f = O(r)/O(a), so
+ * the conversion is sqrt(2 mu a)/hbar alone, and the N_f integral is continued as (hbar^2 / 2 mu a) dS/dE at E_f --
+ * for a bound state that is exactly int W^2/W(a)^2 (checked to 1e-8 for p+12C l = 1 at three energies on dev), and S
+ * and dS/dE are smooth through the threshold, so N_f joins the bound case continuously.
+ */
+void ECFinalStateFactors(const PPair *pair, int l, int twoJ, double levelEnergy, const Config &configure,
+                         double &nfIntegral, double &conversion) {
+  const double radius = pair->GetChRad();
+  const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
+  const double toAmplitude = sqrt(2.0 * pair->GetRedMass() * radius * uconv / pow(hbarc, 2.0));
+  if (finalEnergy > 0.0) {
+    CoulFunc coul(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+    nfIntegral = pow(hbarc, 2.0) / (2.0 * pair->GetRedMass() * uconv * radius) * coul.PEShift_dE(l, twoJ, radius, finalEnergy);
+    conversion = toAmplitude;
+  } else {
+    NFIntegral newNFIntegral(pair);
+    nfIntegral = newNFIntegral(l, twoJ, levelEnergy);
+    WhitFunc newWhitFunc(pair);
+    conversion = toAmplitude / newWhitFunc(l, twoJ, radius, fabs(finalEnergy));
+  }
+}
+
+/*!
+ * An external-capture final state above the threshold of `particlePair`, a pair with a channel in its J^pi group: a
+ * narrow resonance (ECIntegral::IntegrateUnbound).  Said once per capture pair and particle pair (`noted`); refused
+ * (false) where the outgoing wave cannot be evaluated: eta beyond the open-channel limit, i.e. within about a keV of
+ * the threshold of a charged pair.
+ */
+bool NoteUnboundFinalState(const Config &configure, const PPair *exitPair, const PPair *particlePair,
+                           std::set<std::pair<int, int>> &noted) {
+  const double finalEnergy = exitPair->GetHeavyExE() - particlePair->GetSepE() - particlePair->GetExE();
+  if (!(finalEnergy > 0.0)) return true;
+  const double eta = Kinematics::Channel(particlePair).Eta(finalEnergy);
+  if (eta > 100.0) {
+    configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": its final state E_x = "
+                        << exitPair->GetHeavyExE() << " MeV lies only " << finalEnergy * 1e3 << " keV above the threshold of pair "
+                        << particlePair->GetPairKey() << " (eta = " << eta << " > 100), too close for its outgoing wave."
+                        << "  Treat it as bound (E_x just below the threshold) or move it." << std::endl;
+    return false;
+  }
+  if (noted.insert(std::make_pair(exitPair->GetPairKey(), particlePair->GetPairKey())).second)
+    configure.outStream << "NOTE: external capture into pair " << exitPair->GetPairKey() << ": its final state E_x = "
+                        << exitPair->GetHeavyExE() << " MeV is UNBOUND, " << finalEnergy * 1e3 << " keV above the threshold of pair "
+                        << particlePair->GetPairKey() << ".  It is treated as a narrow resonance: outgoing-wave exterior,"
+                        << " strength from the level's observed width in that pair.  Valid while that width is small next to the photon"
+                        << " energy and next to " << finalEnergy * 1e3 << " keV." << std::endl;
+  return true;
+}
+}  // namespace
+
 /*!
  * Marks the final state of each photon pair with external capture (`ecPairs`: pair number -> multipole mask) and
  * stores its N_f integrals and Whittaker conversion factors; the final states are decided by
@@ -75,6 +137,7 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
   const azure2::experiment::LevelTables tables = azure2::experiment::LevelTablesOfRows(rows);
   const std::vector<azure2::experiment::FinalStateOfPair> finals = azure2::experiment::ExternalCaptureFinalStates(tables, ecKeys);
   std::set<int> usedExitKeys = ProjectExitPairKeys(configure);  // the exit pairs of the active data sets (their specs)
+  std::set<std::pair<int, int>> unboundNoted;  // (capture pair, particle pair) an unbound final state was noted for
   // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.
   if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
     for (int key : CapturePairKeys(configure.rateParams.entrancePair)) usedExitKeys.insert(key);
@@ -125,13 +188,9 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
       double nfIntegralValue = 0.;
       double ecConvert = 0.;
       if (theFinalPair->GetPType() == 0) {
-        NFIntegral newNFIntegral(theFinalPair);
-        nfIntegralValue = newNFIntegral(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE());
-        WhitFunc newWhitFunc(theFinalPair);
-        double whitConv = newWhitFunc(this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
-                                      theFinalPair->GetChRad(),
-                                      fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
-        ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
+        if (!NoteUnboundFinalState(configure, exitPair, theFinalPair, unboundNoted)) return -1;
+        ECFinalStateFactors(theFinalPair, this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
+                            exitPair->GetHeavyExE(), configure, nfIntegralValue, ecConvert);
       }
       this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
       this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);

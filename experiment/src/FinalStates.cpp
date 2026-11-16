@@ -5,6 +5,8 @@
 #include <cmath>
 #include <map>
 
+#include "azure2/physics/ChannelFunctions.h"
+
 namespace azure2 {
 namespace experiment {
 
@@ -59,7 +61,6 @@ std::vector<UnboundFinalState> UnboundFinalStates(const LevelTables &tables, con
     if (r.exitKey >= 0) return photon.key == r.exitKey;
     return photon.heavyZ == in->lightZ + in->heavyZ && photon.heavyA == in->lightA + in->heavyA;
   };
-  std::vector<int> refusedAsBound;
   for (const FinalStateOfPair &f : finals) {
     // no final state, or an ambiguous one: E_FINAL_STATE_NOT_LEVEL, or its external capture switched off
     if (f.levels.size() != 1) continue;
@@ -70,13 +71,25 @@ std::vector<UnboundFinalState> UnboundFinalStates(const LevelTables &tables, con
     for (const LevelChannelInfo &ch : tables.levels[f.levels[0]].channels) {
       const PairInfo *p = PairByKey(ch.pairKey, tables.pairs);
       if (!p || p->kind != 0 || finalEnergy < p->threshold) continue;
-      if (u.particlePairKey == 0 || p->threshold < u.threshold) {
+      const double above = finalEnergy - p->threshold;
+      double eta = 0.0;
+      if (above > 0.0) {
+        physics::ChannelKinematics kin;
+        kin.z1 = p->lightZ;
+        kin.z2 = p->heavyZ;
+        kin.mu_u = p->lightMass * p->heavyMass / (p->lightMass + p->heavyMass);
+        eta = physics::eta(kin, above);
+        if (!(eta > kMaxOutgoingWaveEta)) continue;  // an unbound final state the engine computes
+      }
+      // at the threshold, or too close above it: the pair nearest its threshold
+      if (u.particlePairKey == 0 || above < u.finalEnergy - u.threshold) {
         u.particlePairKey = p->key;
         u.threshold = p->threshold;
+        u.finalEnergy = finalEnergy;
+        u.eta = eta;
       }
     }
     if (u.particlePairKey == 0) continue;
-    u.kind = UnboundFinalState::Kind::Bound;
     u.finalEnergy = finalEnergy;
     u.level = f.levels[0];
     for (const CaptureRequest &r : requests)
@@ -85,24 +98,6 @@ std::vector<UnboundFinalState> UnboundFinalStates(const LevelTables &tables, con
         break;
       }
     out.push_back(u);
-    refusedAsBound.push_back(f.pairKey);
-  }
-  for (const CaptureRequest &r : requests) {
-    const PairInfo *in = PairByKey(r.entranceKey, tables.pairs);
-    for (const PairInfo &photon : tables.pairs) {
-      if (!asks(r, photon)) continue;
-      if (std::find(refusedAsBound.begin(), refusedAsBound.end(), photon.key) != refusedAsBound.end()) continue;
-      const double finalEnergy = finalEnergyOf(photon);
-      if (!(finalEnergy > in->threshold)) continue;
-      UnboundFinalState u;
-      u.kind = UnboundFinalState::Kind::Entrance;
-      u.photonPairKey = photon.key;
-      u.particlePairKey = in->key;
-      u.finalEnergy = finalEnergy;
-      u.threshold = in->threshold;
-      u.request = r.request;
-      out.push_back(u);
-    }
   }
   return out;
 }

@@ -2018,7 +2018,7 @@ Diagnostic codes
      - two photon pairs with external capture whose final states are the same level
    * - ``E_FINAL_STATE_UNBOUND``
      - error
-     - a capture final state above a particle threshold: with external capture, at or above the threshold of a pair with a channel in its J^pi group; or above the entrance threshold of a capture asked into it (not computed by this version)
+     - an external-capture final state at the threshold of a pair with a channel in its J^pi group, or too close above the threshold of a charged one (eta > 100) for its outgoing wave
    * - ``E_NOT_BUILT``
      - error
      - a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)

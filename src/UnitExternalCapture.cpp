@@ -141,6 +141,8 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   complex expHSP = (row && row->P > 0.0) ? row->expHSP
                                          : theCoulombFunction.HardSpherePhase(pathway.l, entranceTwoJ, entrancePair->GetChRad(), cmEnergy);
 
+  // No photon below the final level (an unbound final state above the entrance energy): the pathway is closed.
+  if (!(inEnergy - levelEnergy > 0.0)) return complex(0.0, 0.0);
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, pathway.mult + 0.5);
 
   const AChannel *theFinalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
