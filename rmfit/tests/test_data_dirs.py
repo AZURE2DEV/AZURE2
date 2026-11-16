@@ -51,14 +51,8 @@ def part_a(orig, moved, tmp):
     check("original model: data only", data_dirs(os.path.join(orig, "13N.azr")) == ["data"], data_dirs(os.path.join(orig, "13N.azr")))
     dd = data_dirs(os.path.join(moved, "13N.azr"))
     check("moved model: data, other, sub", dd == ["data", "other", "sub"], dd)
-    # a "/" inside an expression or a non-existent dir is not a data directory
-    p = os.path.join(moved, "expr.azr")
-    t = open(os.path.join(moved, "13N.azr"), encoding="latin-1").read()
-    m = re.search(r"<segmentsData>\n(.*?)\n", t)
-    line = m.group(1)
-    t = t.replace(line, line + '  shiftfn "a0/x+b/c"  1 0 0.02 1  nothere/x.dat', 1)
-    open(p, "w", encoding="latin-1").write(t)
-    check("expressions and missing dirs ignored", data_dirs(p) == ["data", "other", "sub"], data_dirs(p))
+    # (pyazr 2 read the directories from the tokens of a segment line, where a "/" inside a shift expression had
+    # to be told apart; the names now come from the records' file fields, so that case cannot arise)
     w = os.path.join(tmp, "w1")
     got = link_data_dirs(os.path.join(moved, "13N.azr"), w)
     check("links made", got == ["data", "other", "sub"] and all(os.path.islink(os.path.join(w, s)) for s in got), got)

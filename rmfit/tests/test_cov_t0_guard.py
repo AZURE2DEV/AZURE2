@@ -22,7 +22,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 import numpy as np
-from rmfit.covariance import line_keyword, norm_field
 from rmfit.engine import SingleSession, ObjectiveSpec
 
 FIX = os.path.join(HERE, "fixtures", "relvector_p12c")
@@ -37,18 +36,25 @@ def check(name, ok, detail=""):
 
 
 def fix_norms(src, dst):
-    """``src`` with varyNorm 0 on every segment line that names a covariance file."""
-    text = open(src).read()
-    a = text.index("\n", text.index("<segmentsData>")) + 1
-    b = text.index("</segmentsData>")
-    out = []
-    for l in text[a:b].splitlines():
-        t = l.split()
-        if t and line_keyword(t, "covariance") is not None:
-            t[norm_field(t) + 1] = "0"
-            l = " ".join(t)
-        out.append(l)
-    open(dst, "w").write(text[:a] + "\n".join(out) + "\n" + text[b:])
+    """``src`` with the normalization fixed (its nuisance's ``fit`` -> ``fixed``) for every data set that names a
+    covariance file: its own ``norm``, or the ``value`` of the shared normalization record it names."""
+    import pyazr
+    prj = pyazr.Project.open(src)
+    kinds = {n: r.record_kind for n, r in prj.records().items()}
+    done = set()
+    for name, rec in list(prj.records().items()):
+        if rec.record_kind != "dataset" or not rec.get("covariance"):
+            continue
+        norm = str(rec.get("norm"))
+        owner, field = ((norm, "value") if kinds.get(norm) == "normalization" else (name, "norm"))
+        if (owner, field) in done:
+            continue
+        done.add((owner, field))
+        words = str(prj[owner].get(field)).split()
+        if "fit" in words:
+            words[words.index("fit")] = "fixed"
+            prj.set(owner, **{field: " ".join(words)})
+    prj.save(dst)
 
 
 def main():

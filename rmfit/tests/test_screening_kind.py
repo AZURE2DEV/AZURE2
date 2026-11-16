@@ -34,7 +34,7 @@ def check(name, ok, detail=""):
 
 
 def main():
-    from pyazr import azure2
+    from pyazr import Session
     src = os.path.join(AZURE2_ROOT, "tests", "electron_screening", "grad.azr")
     if not os.path.exists(src):
         print(f"SKIP: no {src}")
@@ -56,12 +56,12 @@ def main():
             pen = float(ev.penalties.value(x))
             check("(b) penalty includes ((1100 - 1000)/200)^2", abs((pen - r0) - 0.25) < 1e-9, f"{pen} - {r0}")
             obj = float(ev.objective(x))
-            with azure2(azr, cwd=tmp, **ev.flags) as s:
-                ref = float(s.objective(x))
+            with Session(azr, cwd=tmp, **ev.flags) as s:
+                ref = float(s.objective()(x))
             check("(b) objective = pyazr's objective()", abs(obj - ref) <= 1e-9 * abs(ref), f"{obj} vs {ref}")
             b = default_bounds(ev, ev.x0.copy(), BoundsPolicy())
             check("(c) U_e bounds [0, inf)", b.lb[j] == 0.0 and np.isinf(b.ub[j]) and not b.fixed[j], (b.lb[j], b.ub[j], b.fixed[j]))
-            with azure2(azr, cwd=tmp, **ev.flags) as s:
+            with Session(azr, cwd=tmp, **ev.flags) as s:
                 try:
                     build_keys(s, seg_map={k: k for k in range(1, 20)})
                     check("(d) a shard map is refused", False, "no exception")

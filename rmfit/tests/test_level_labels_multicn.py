@@ -140,17 +140,17 @@ def main():
         shutil.copytree(os.path.join(root, "tests", "13N"), one)
         os.makedirs(os.path.join(one, "output"), exist_ok=True)
         os.makedirs(os.path.join(one, "checks"), exist_ok=True)
-        from pyazr import azure2
+        from pyazr import Session
         S1 = SingleSession(os.path.join(one, "13N.azr"), cwd=one, flags=flags, name="one")
-        E1 = azure2(os.path.join(one, "13N.azr"), cwd=one, **flags)
+        E1 = Session(os.path.join(one, "13N.azr"), cwd=one, **flags)
         try:
             old_level = lambda p: f"{jpi_string(p.J, p.parity)}#{int(p.level)}"     # the pre-fix label
             old = {p.free_index: old_level(p) for p in E1.parameters
                    if p.kind in ("energy", "width") and not p.fixed and p.free_index is not None}
             check(all(S1.keys[j].level == lab for j, lab in old.items()) and old,
                   f"(f) single nucleus: the {len(old)} level keys are the pre-fix labels")
-            old_le = {old_level(k): (0.0 if k.energy is None else float(k.energy))
-                      for k in E1.parameters.by_physical_level()}
+            old_le = {old_level(k): (0.0 if k.level_energy is None else float(k.level_energy))
+                      for k in E1.parameters.of_kind("energy")}
             check(S1.level_energy == old_le, "(f) single nucleus: level_energy identical to the pre-fix table")
             check(not any("@" in l for l in S1.level_energy), "(f) single nucleus: no '@' anywhere")
         finally:
