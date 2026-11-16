@@ -69,7 +69,7 @@ The engine is not edited: the fold (``src/PointFold.cpp``), the extent of the
 mesh (``EffectSupport``, ``src/TargetSetup.cpp``) and the gradient's weights
 (``FoldWeights``) read the table.
 
-1. One file ``experiment/src/KernelGaussian.cpp``-like (``Kernel<Name>.cpp``):
+1. One file ``experiment/src/KernelRectangular.cpp``-like (``Kernel<Name>.cpp``):
    the fold as a template on the value type (``double`` gives the value,
    ``LinearForm`` the exact weights), its support, and a function returning
    its ``Kernel`` row; its parameters are ``KernelParameter`` rows (name,

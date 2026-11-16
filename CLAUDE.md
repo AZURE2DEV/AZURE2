@@ -492,7 +492,12 @@ one), the schema and docs as above; later its tree builder (step 3).
 **A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
 engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}` (a new dimension is also a row of `Dimensions()` there, its
 base unit with factor 1, as `inverse_energy`, 1/MeV); `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
-on every quantity; then the schema and docs as above.  A factor is applied only by `Units.h` `Rescale` (through
+on every quantity (a unit is offered to every quantity of its dimension); its place in the table is its place in every
+`units` list of the schema.  The row tests pass for any positive factor, so state the factor in one line of
+`experiment/tests/parsers_test.cpp` ("The unit table", beside `keV`) and use the unit once in a fixture of
+`experiment/tests/data/`.  Then build and regenerate: `AZURE2 --schema > tests/schema/schema_v3.json`, `python3
+tools/gen_schema_docs.py`, and run `ctest -R 'experiment_schema|pyazr_schema'` (the two tests that see a stale schema;
+the consistency script does not).  A factor is applied only by `Units.h` `Rescale` (through
 `ToBase`, `ToUnit`, `Context::InBase`; the columns of a data file through `experiment/DataRows.h`, where the points
 are made), never as a literal in `Build`.  A quantity that is a scale of an observable the engine computes (an S
 factor, a yield per unit charge) is `ReactionSpec::scale`, one tree kind `Scaled`: a constant factor is set in
@@ -508,7 +513,8 @@ that triggers it alone [check 24].
 **A new apparatus kernel** (a resolution or broadening of a folded point: `experiment/include/azure2/experiment/Kernels.h`,
 `docs/upgrade/energy_grid.md` section 3.3). A kernel is plain functions of the point's nodes, the point and the effect's
 parameters; the engine applies whatever the table holds.
-1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
+1. One file `experiment/src/Kernel<Name>.cpp` (`KernelRectangular.cpp` is the pattern of a kernel with parameters of
+   its own; `KernelGaussian.cpp` shows the fold template and the support only): the fold as a template on V
    (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
    c.m. interval the point's nodes must span; the set-up gives the point the shared mesh's nodes over it, whose two
    outer nodes lie up to one interval beyond it: the fold integrates over `nodes.Low()` .. `nodes.High()`, never over
@@ -516,16 +522,24 @@ parameters; the engine applies whatever the table holds.
    row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
    values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
    <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser
-   code. An analytic derivative in a parameter goes in `derivative`.
-2. Its line in `Kernels()` (`experiment/src/Kernels.cpp`) and the file in `experiment/CMakeLists.txt`.
+   code. An analytic derivative in a parameter goes in `derivative`. An energy parameter arrives in lab MeV as the
+   record gives it: multiply by `KernelPoint::cmFactor` (fold) and `SupportPoint::cmFactor` (support). The one
+   quadrature is `GridQuadrature` / `InterpolateNodes` (`experiment/include/azure2/experiment/KernelQuadrature.h`): a
+   weight with a kink or an edge is integrated over its own window, one call per piece on which it is smooth. A
+   normalised average sets `k.thinLimit = AverageThinLimit` (without it a one-node point is NaN). A kernel whose
+   parameters are all `fittable = false` takes `<parameter> <value> <unit>` with no `fixed|fit` tail.
+2. Two lines in `experiment/src/Kernels.cpp` (the declaration `Kernel <Name>Kernel();` and the entry in `Kernels()`)
+   and the file in `experiment/CMakeLists.txt`.
 3. Tests: cases in `experiment/tests/kernels_test.cpp` against closed forms (the table's own checks run on every row),
-   a derivative against central differences; a format-3 fixture that validates (`experiment/tests/data/`, listed in
-   `schema_test.cpp`); `AZURE2 --schema > tests/schema/schema_v3.json`, `python3 tools/gen_schema_docs.py` [check 18,
-   21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
+   a derivative against central differences (the node values are linear between nodes: a closed form for a curved σ
+   carries + σ'' h²/12, h the node spacing); a format-3 fixture that validates (a `detector` record with
+   `energy_resolution <form> <parameter> <value> <unit>` in `experiment/tests/data/section_examples.azr`, which
+   `schema_test.cpp` lists); after a build, `AZURE2 --schema > tests/schema/schema_v3.json`, `python3
+   tools/gen_schema_docs.py`, then `ctest -R 'experiment_schema|pyazr_schema'` [check 18, 21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
    the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
    --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
-4. Docs: its row in `energy_grid.md` section 3.3, its form in `reference/data_formats.rst` (generated part) and a line in
-   `developer/edata_and_target_effects.rst`.
+4. Docs: its row in the table of `docs/upgrade/energy_grid.md` section 3.3, its line in the kernel table of
+   `docs/source/developer/data_model.rst`; its form in `docs/source/reference/format3.rst` is generated (step 3).
 The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`EffectSupport`, `src/TargetSetup.cpp`) and
 the gradient's weights (`FoldWeights`) read the table. Limits (2026-11): a table kernel cannot be combined with a
 target, a beam spread, a beam profile or a UDR on one data set (refused in `TargetEffect::SelectKernels`; kernels are
