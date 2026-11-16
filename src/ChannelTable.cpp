@@ -16,14 +16,13 @@
 #endif
 
 ChannelTable::Row ChannelTable::Compute(const PPair *pair, int l, int two_j, double energy, const Config &configure) {
-  const bool gsl = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
-  ChannelFunc channelFunc(pair, gsl);
+  ChannelFunc channelFunc(pair);
   if (channelFunc.IsClosed(energy)) {
     // At and below threshold, and just above it where the Coulomb barrier makes P = 0 to double precision: the
     // shift function continued through E = 0 (ChannelFunc).  The Coulomb-wave routines are not usable there.
     return Row{0.0, channelFunc.Shift(l, two_j, energy), 1.0, 1.0};
   }
-  CoulFunc coulomb(pair, gsl);
+  CoulFunc coulomb(pair);
   const double radius = pair->GetChRad();
   Row row;
   row.P = coulomb.Penetrability(l, two_j, radius, energy);
@@ -46,10 +45,10 @@ std::vector<std::vector<double>> PairSignatures(const CompoundSystem *compound, 
   std::vector<std::vector<double>> s;
   for (int p = 1; p <= compound->NumPairs(); p++) {
     const PPair *pair = compound->GetPair(p);
-    CoulFunc coulomb(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+    CoulFunc coulomb(pair);
     s.push_back({(double)pair->GetPType(), (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2),
                  pair->GetRedMass(), pair->GetChRad(), pair->GetSepE(), pair->GetExE(),
-                 coulomb.UsesTable() ? 1.0 : 0.0, (configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1.0 : 0.0,
+                 coulomb.UsesTable() ? 1.0 : 0.0,
                  pair->FunctionSettings().relativistic ? 1.0 : 0.0});
     // the pair's hybrid potential, by value
     const std::vector<double> potential = azure2::physics::PotentialKey(pair->GetHybridPotential());

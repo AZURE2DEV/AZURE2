@@ -235,7 +235,10 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
   // 3j and 6j (AngCoeff.cpp); the integrals move at ~1e-14 relative, so every v6 file is recomputed once and a
   // result does not depend on whether a file from before was found.
   hash.Add("AZURE2 EC signature v7");
-  hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
+  // The place of the option use_gsl_coul, retired on 2026-11-16 (docs/upgrade/coulomb.md section 9.1): a run with the
+  // program's own Coulomb functions hashed 0 here, and they are the only ones now, so the signature of every such
+  // run is what it was and the version stays v7.
+  hash.Add(0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.
   if (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX))

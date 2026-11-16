@@ -75,7 +75,6 @@ double ThmLevelWidth(const CompoundSystem *compound, int j, int la, double energ
   const JGroup *jgroup = compound->GetJGroup(j);
   const ALevel *level = jgroup->GetLevel(la);
   const int numChannels = jgroup->NumChannels();
-  const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const bool rmc = !!(configure.paramMask & Config::USE_RMC_FORMALISM);
   // Park's amplitudes are the observed ones: Gamma = 2 P gamma^2 with no
   // 1 + sum gamma^2 dS/dE (Brune's gamma^2 / (1 + sum) is Park's gamma^2).
@@ -91,7 +90,7 @@ double ThmLevelWidth(const CompoundSystem *compound, int j, int la, double energ
     double localEnergy = energy - pair->GetSepE() - pair->GetExE();
     char type = channel->GetRadType();
     if (type == 'P') {
-      ChannelFunc channelFunc(pair, useGSL);
+      ChannelFunc channelFunc(pair);
       const int twoJ = pair->SpinOrbitTwoJ(jgroup->GetJ());
       normSum += channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy) * gamma * gamma;
       if (!channelFunc.IsClosed(localEnergy))

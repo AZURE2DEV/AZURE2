@@ -83,7 +83,7 @@ class Session(
     @session_options.records_given
     def __init__(self, file, *, cwd=None, extrapolations=False, use_brune=True,
                  ignore_externals=True, transform=True,
-                 use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
+                 use_long_wavelength=True, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
                  replace_grids=True, use_ec_table=True, ec_convection_current=True, parameter_file=None):
         """Build the R-matrix engine for ``file`` in this interpreter.
@@ -113,7 +113,8 @@ class Session(
             wins over the key, the key over the default shown; a keyword left out is not given.
             :attr:`options` holds the values in effect, :attr:`option_sources` where each came from
             (``"default"``, ``"project"``, ``"keyword"``).
-        use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
+            ``use_gsl_coul`` is no longer a keyword (2026-11-16): GSL's Coulomb functions are gone from the engine,
+            and a call that names it is refused with a ``TypeError`` that says why.
         use_coulomb_table : take P, S and the hard-sphere phase of charged
             channels from the universal Coulomb table (the default; CLI
             ``--no-coulomb-table`` turns it off), falling back to the exact

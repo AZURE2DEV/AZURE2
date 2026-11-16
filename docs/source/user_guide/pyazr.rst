@@ -70,7 +70,7 @@ Session options
 ---------------
 
 ``Session(file, *, cwd=None, extrapolations=False, use_brune=True, ignore_externals=True, transform=True,
-use_long_wavelength=True, use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime options of the
+use_long_wavelength=True, use_rmc=False, use_park=False, ...)`` takes the runtime options of the
 CLI (:doc:`../reference/command_line`) as keywords.  All but ``cwd``, ``extrapolations`` and ``coulomb_table`` are also
 keys of the project's ``<config>`` under the same name (:ref:`options-as-config-keys`): a keyword given wins over the
 key, the key over the default the signature shows, and a keyword left out is not given.  ``session.options`` holds the
@@ -1222,8 +1222,8 @@ The sessions of one process share a cache of the input files: a new session (of 
 radius or potential, say) reads from disk only the files that changed (the ``input_files_*`` counters of
 ``cache_stats()``, for the whole process).
 
-The Coulomb functions follow the run's own configuration, so the same call returns the accurate routine's values,
-GSL's (``--gsl-coul``), or the Numerov solution through a nuclear potential (the hybrid model of the ``<potential>``
+The Coulomb functions follow the run's own configuration, so the same call returns the exact routine's values,
+the Coulomb table's, or the Numerov solution through a nuclear potential (the hybrid model of the ``<potential>``
 block). Comparing them is how one sees what those options do to the external region.
 
 The hybrid values come from a Numerov integration of H⁺ = G + iF inward from

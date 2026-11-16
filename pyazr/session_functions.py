@@ -68,7 +68,7 @@ SESSION_FUNCTIONS = {
     "channel_functions": _row(
         "channel_functions", "The session's channel functions of a pair: Coulomb functions, P, S and the hard-sphere "
         "phase.",
-        "As the session computes them: the Coulomb table when one is in use, GSL with use_gsl_coul, the hybrid model's "
+        "As the session computes them: the Coulomb table when one is in use, the hybrid model's "
         "Numerov solution for a pair with a nuclear potential.  Where open is False every field but S is 0 and S is "
         "the closed-channel shift function at the channel radius.",
         [dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels>", domain="a particle pair of the "

@@ -129,8 +129,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
   // A relative table file is the session's directory's, as it was when pyazr entered that directory per call.
   config.coulombTablePath = opt.coulomb_table.empty() ? opt.coulomb_table : config.OpenPath(opt.coulomb_table);
   for (const auto &given : opt.options)
-    if (!azure2::io::ConfigOptionNamed(given.first))
-      throw py::value_error("'" + given.first + "' is not an option of the calculation (pyazr.kinds()[\"options\"])");
+    if (!azure2::io::ConfigOptionNamed(given.first)) throw py::value_error(NotAnOptionText(given.first));
   // In the table's order (use_brune before use_park: use_park=True with use_brune=False gives both on, as before)
   for (const azure2::io::ConfigKey &k : azure2::io::ConfigKeys()) {
     const auto given = k.option ? opt.options.find(k.name) : opt.options.end();

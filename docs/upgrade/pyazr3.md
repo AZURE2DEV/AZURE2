@@ -158,7 +158,8 @@ formats), `tabulate` (interpolation of engine values).
 
 **Command-line options** (35 in `AZURE2 --help`): 4 concern the program itself (`--help`, `--no-gui`, `--no-readline`,
 `--use-api`); 17 are session options (`transform`, `use_long_wavelength`, `use_brune`, `use_park`,
-`ignore_externals`, `use_rmc`, `use_gsl_coul`, `use_coulomb_table`, `coulomb_table`, `use_ec_table`,
+`ignore_externals`, `use_rmc`, `use_gsl_coul` (retired 2026-11-16), `use_coulomb_table`, `coulomb_table`,
+`use_ec_table`,
 `ec_convection_current`, `replace_grids`, with their negations); 6 are functions (`convert_azr`, `convert_params`,
 `validate`, `describe`, `predictions`, `schema`); `--refreeze-covariance` is reached in part (one
 `refreeze_covariance()`, the refits are the caller's); 7 are not reachable: `--build-coulomb-table`,
@@ -186,7 +187,7 @@ band, `reactionrates.out`, `cross_section_grid.dat`, the MCMC chain. Some of the
 `physics/` 10 of 78, Coulomb 1 of 7, transfer 1 of 78). Against the list of §8:
 
 - Coulomb F, G, F′, G′: through a session only (`azure2.coulomb_functions`, at a pair's radius, on energies, not
-  on ρ); the methods of pycoulomb side by side: no (only `use_gsl_coul` per session).
+  on ρ); the methods of pycoulomb side by side: no (`use_gsl_coul` per session until 2026-11-16).
 - P_l, S_l, φ_l: through a session (`coulomb_functions`: `P`, `S`, `delta_hs`); σ_l: no (the library has
   `coulomb_phase` in `Coulomb.h`, not bound; use case (c) used scipy).
 - Whittaker functions: yes (`whittaker_wave`, bound; and `transform.whittaker` in Python).

@@ -50,7 +50,7 @@ class SessionPhysics:
         rho-derivatives), ``P`` (penetrability), ``S`` (shift function), ``delta_hs`` (hard-sphere phase shift, rad,
         = -phi of :func:`pyazr.physics.hard_sphere_phase`), ``open`` (bool: E > 0 and the engine's functions defined
         there) and ``e_cm``.  The numbers follow the session's options: the Coulomb table when one is in use (about
-        1e-7 from the exact routine of :mod:`pyazr.physics`), GSL with ``use_gsl_coul``, the hybrid model's Numerov
+        1e-7 from the exact routine of :mod:`pyazr.physics`), the hybrid model's Numerov
         solution for a pair with a nuclear potential.  Where ``open`` is False every field but ``S`` is 0, and ``S``
         is the engine's closed-channel shift function at the channel radius (0 at another radius).
 
