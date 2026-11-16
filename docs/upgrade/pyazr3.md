@@ -1472,3 +1472,51 @@ command's `param.par` and check files (the session's set-up is not the program's
   chosen step; a refusal of each keyword out of its range (the option's row); an exception in `progress`.
 - The program's own chains must not move: the regression scripts with MCMC (`tests/mcmc_physical_norm`,
   `tests/prior_covariance`, `tests/gamma_decay`, `sampler_objective_test`) and the full check.
+
+## 13. `Session.dimensionless_widths` at the physical level energy, and for fixed channels (design; approved by the PI on 2026-11-16)
+
+### 13.1 What changes
+
+Two items of the hand-over of section 10.4, both approved by the PI ("I agree with the other points"):
+
+1. **The physical level energy.** `ChannelWidth.level_energy`, `is_open` and a photon row's transition energy
+   `e_gamma` (with the `weisskopf` and `wu` that follow from it) were taken at the level's energy in the fit vector
+   (a fixed energy: the session's input), which in the formal basis is the formal pole energy. They become the
+   level's physical energy E_x, the energy of the observed-level record (`data_model.md` section 10: the Brune (Park)
+   energy, after `brune_from_formal` in the formal basis), the one `wigner_widths` takes Gamma_W at and the one the
+   program writes into `<levels>`. `is_open` is E_x > S + e of the pair; `e_gamma` = E_x - e. In Brune's and Park's
+   parametrizations the record's E is the fit vector's (a copy, `TransformToBrune`): nothing changes there, and the
+   test says so number for number.
+2. **Fixed open particle channels.** `wigner_width` = Gamma_W = 2 P_l(E_r) gamma_W^2 and `theta2` = |Gamma| /
+   Gamma_W, by the definition of a free channel (section 11.1), where they were `None`. Gamma is the row's `value`,
+   as for a free channel.
+
+### 13.2 Where P comes from: the record
+
+The engine's observed-level record carries, per channel, the factor P its observed width was formed with, and the
+pair's mu and a (`data_model.md` section 10). The binding hands the session the record of a vector
+(`_engine.observed_levels(all_rwa)`: per J group, level and channel the record's E (MeV), the kind of the observed
+value, W (MeV), P, mu (u) and a (fm); not a public name). `wigner_widths` and `dimensionless_widths` read P and E
+there, for free and fixed channels alike: one route, no second evaluation of the channel functions. An entry exists
+for a particle channel whose record kind is a width with P > 0 (above threshold and outside the Coulomb threshold
+where P = 0 in double precision: what `channel_functions`' `open` said), and a Wigner limit in its row. The product
+2 P gamma_W^2 is formed in Python in the order it was (as `theta2 = |Gamma| / Gamma_W` is).
+
+`wigner_widths` must not move by this: its P was `channel_functions` at E_r = E_x - (S + e) with E_x the row of
+`transform(x)` (the same `TransformOut`), the record's is `ChannelFunc::Penetrability` (the same `CoulFunc` call) at
+(E_x - S) - e. The two orders of the subtraction gave the same bits on every channel of T1, T2, T3 and 13N in the
+three bases (measured before the change); the test asks for equality with the earlier route.
+
+The skill `azure2-check` (`widths_check.py`) filled a fixed channel's Gamma_W itself with
+`pyazr.physics.single_particle_width` (the exact Coulomb routine, not the session's table or potential, at the row's
+energy, the formal pole energy in the formal basis); it reads the row's numbers now and its own computation goes.
+
+### 13.3 Tests
+
+- `tests/pyazr/wigner_widths_test.py`, extended: (h) a fixed open particle channel's `wigner_width` against 2 P
+  gamma_W^2 of mpmath at the physical energy (1e-8, as a free one) and `theta2 = |value| / wigner_width`; (i)
+  `level_energy`, `is_open`, `e_gamma` are the record's (physical) in the three bases, Brune and Park equal to the
+  earlier fit-vector values bit for bit, and every row (free and fixed) of the formal basis equal to Brune's to 1e-6;
+  (j) `wigner_widths` equal to `channel_functions`' 2 P gamma_W^2 bit for bit (the earlier route). Check (e)'s "a fixed
+  channel has neither" becomes (h).
+- The skill's self-test (`skill_azure2-check`): its T2 checks read the fixed channels from the table.
