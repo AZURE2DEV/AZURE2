@@ -293,6 +293,113 @@ void level_matrix_adjoint(const LevelMatrixAdjointTables &t, const LevelMatrixSo
   }
 }
 
+/// T of an internal pathway c -> c' (t_matrix_element) contains its resonant amplitude u as -Omega_c Omega_c' u:
+/// ubar = conj(-Omega_c Omega_c') tbar.
+inline std::complex<double> amplitude_cotangent(const ChannelPhases &in, const ChannelPhases &out,
+                                                std::complex<double> tbar) {
+  const std::complex<double> uphase = in.coulomb * in.hard_sphere * out.coulomb * out.hard_sphere;
+  return std::conj(-uphase) * tbar;
+}
+
+/// The factor of the bilinear form in the resonant amplitude (pathway_amplitude): 2 i sqrt(P_c) sqrt(P_c').
+inline std::complex<double> penetrability_factor(double sqrt_pen_in, double sqrt_pen_out) {
+  return 2.0 * std::complex<double>(0.0, 1.0) * sqrt_pen_in * sqrt_pen_out;
+}
+/// The same with the square roots held as complex numbers (the products then are complex ones, as the dense
+/// adjoint of the engine forms them).
+inline std::complex<double> penetrability_factor(std::complex<double> sqrt_pen_in, std::complex<double> sqrt_pen_out) {
+  return 2.0 * std::complex<double>(0.0, 1.0) * sqrt_pen_in * sqrt_pen_out;
+}
+
+/// u = factor b gives the cotangent of the bilinear form b = g_c^T A g_c': beta = conj(factor) ubar.
+inline std::complex<double> bilinear_cotangent(std::complex<double> factor, std::complex<double> ubar) {
+  return std::conj(factor) * ubar;
+}
+
+/// Is level l left out of a masked form?  `zero_input` marks, per level and channel (n x nc), a width that was
+/// zero in the input; mask_channel < 0: no level is left out.
+inline bool masked_level(const unsigned char *zero_input, int nch, int l, int mask_channel) {
+  return mask_channel >= 0 && zero_input[(std::size_t)l * nch + mask_channel] != 0;
+}
+
+/// sum_{l,m} factor g_{l,ch} g_{m,chp} A_lm over the levels not masked: the factor of channel capture as the dense
+/// adjoint recomputes it (channel_capture_factor on a masked level set).  Zero where A is empty (no solve).
+inline std::complex<double> masked_amplitude(std::complex<double> factor, const double *gamma, int nch, int ch, int chp,
+                                             const LevelMatrixSolver::matrix_c &A, const unsigned char *zero_input,
+                                             int mask_channel) {
+  std::complex<double> sum(0.0, 0.0);
+  const int n = (int)A.size();
+  for (int la = 0; la < n; la++) {
+    if (masked_level(zero_input, nch, la, mask_channel)) continue;
+    for (int lap = 0; lap < n; lap++) {
+      if (masked_level(zero_input, nch, lap, mask_channel)) continue;
+      sum += factor * gamma[(std::size_t)la * nch + ch] * gamma[(std::size_t)lap * nch + chp] * A[la][lap];
+    }
+  }
+  return sum;
+}
+
+/*!
+ * The dense adjoint of u = sum_{l,m} factor g_{l,ch} g_{m,chp} A_lm (the resonant amplitude of a pathway, or the
+ * factor of channel capture on a masked level set) for its cotangent ubar: the cotangent of A,
+ * Abar_lm += conj(factor g_l g_m) ubar (n x n, the caller's), and through the sink the widths as they stand,
+ * dL/dg_{l,ch} += Re(conj(ubar) factor g_{m,chp} A_lm), dL/dg_{m,chp} += Re(conj(ubar) factor g_{l,ch} A_lm).
+ * gamma: n x nch; ch, chp from 0.  Nothing where A is empty (the block has no solve at this energy).
+ */
+template <class Sink>
+void dense_bilinear_adjoint(std::complex<double> factor, const double *gamma, int nch, int ch, int chp,
+                            const LevelMatrixSolver::matrix_c &A, const unsigned char *zero_input, int mask_channel,
+                            std::complex<double> uBar, LevelMatrixSolver::matrix_c &aBar, Sink &&sink) {
+  typedef std::complex<double> complex;
+  const int n = (int)A.size();
+  auto pair = [&](int la, int lap, double gEn) {
+    const double gEx = gamma[(std::size_t)lap * nch + chp];
+    const complex Aval = A[la][lap];
+    const complex w = factor * gEn * gEx;  // weight of A[la][lap]
+    aBar[la][lap] += std::conj(w) * uBar;
+    sink.width(la, ch, std::real(std::conj(uBar) * (factor * gEx * Aval)));
+    sink.width(lap, chp, std::real(std::conj(uBar) * (factor * gEn * Aval)));
+  };
+  if (mask_channel < 0) {  // the loop of every internal pathway: kept free of the mask's tests
+    for (int la = 0; la < n; la++) {
+      const double gEn = gamma[(std::size_t)la * nch + ch];
+      for (int lap = 0; lap < n; lap++) pair(la, lap, gEn);
+    }
+    return;
+  }
+  for (int la = 0; la < n; la++) {
+    if (masked_level(zero_input, nch, la, mask_channel)) continue;
+    const double gEn = gamma[(std::size_t)la * nch + ch];
+    for (int lap = 0; lap < n; lap++) {
+      if (masked_level(zero_input, nch, lap, mask_channel)) continue;
+      pair(la, lap, gEn);
+    }
+  }
+}
+
+/// External capture: T = gamma_f s c a (external_capture_element; s = N_f^-1/2 the
+/// final state's normalisation, c the conversion factor, a the amplitude, with the factor of channel capture
+/// where there is one).  dL/dgamma_f at fixed s, for the cotangent tbar of T.
+inline double external_capture_width_cotangent(std::complex<double> tbar, double sqrt_nf, double conversion,
+                                               std::complex<double> amplitude) {
+  return std::real(std::conj(tbar) * (sqrt_nf * conversion * amplitude));
+}
+
+/// dT/ds of the same element: gamma_f c a.
+inline std::complex<double> external_capture_norm_derivative(double ec_gamma, double conversion,
+                                                             std::complex<double> amplitude) {
+  return ec_gamma * conversion * amplitude;
+}
+
+/// s = (1 + sum_d A_d g_d^2)^-1/2 (physics/ExternalCapture.h; Park: J in place of 1 and A_d - S'_d) depends on the
+/// width of every channel d of the final level: ds/dg_d = -A_d g_d s^3.  dL/dg_d for the cotangent tbar of T,
+/// `dT_ds` from external_capture_norm_derivative, `sqrt_nf_cubed` = s^3.
+inline double bound_norm_width_cotangent(std::complex<double> tbar, std::complex<double> dT_ds, double Ad, double gd,
+                                         double sqrt_nf_cubed) {
+  const double dSqrtNF = -Ad * gd * sqrt_nf_cubed;
+  return std::real(std::conj(tbar) * (dT_ds * dSqrtNF));
+}
+
 /// The inverse lemma: with A = M^-1 and the cotangent Abar of A, Mbar = -A^H Abar A^H (n x n, two products).
 inline LevelMatrixSolver::matrix_c inverse_adjoint(const LevelMatrixSolver::matrix_c &A,
                                                    const LevelMatrixSolver::matrix_c &Ab) {

@@ -117,7 +117,8 @@ foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters
              external_capture_unit_test.cpp observable_coupling_test.cpp pathways_unit_test.cpp
              resonance_quantities_test.cpp astrophysical_factor_test.cpp widths_test.cpp
              collision_matrix_test.cpp channel_solve_test.cpp observables_test.cpp
-             collision_matrix_adjoint_test.cpp channel_solve_adjoint_test.cpp)
+             collision_matrix_adjoint_test.cpp channel_solve_adjoint_test.cpp
+             observables_adjoint_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)

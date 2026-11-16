@@ -77,6 +77,7 @@ class LevelState {
   const double *ShiftDerivatives(int j) const { return groups_[j - 1].d1.data(); }
   const double *ShiftSecondDerivatives(int j) const { return groups_[j - 1].d2.data(); }
   const double *ParkNorms(int j) const { return groups_[j - 1].parkNorm.data(); }
+  const unsigned char *ZeroInputWidths(int j) const { return groups_[j - 1].zero.data(); }
 
   /*!
    * A number that changes whenever the energy, an amplitude, a shift function, J or a second derivative of the level

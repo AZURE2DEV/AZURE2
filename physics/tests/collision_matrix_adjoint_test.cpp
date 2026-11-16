@@ -9,7 +9,13 @@
 //    level_matrix_adjoint against differences of fill_level_matrix + LevelMatrixSolver + width_bilinear, in the three
 //    formalisms; deferred_bilinear_adjoint (K and N summed, resolved with a zero kernel) gives the same numbers;
 //  - level_parameter_adjoint (standard matrix: dK = e_l e_l^T for an energy, the kernel alone for a width) gives the
-//    same numbers again, parameter by parameter.
+//    same numbers again, parameter by parameter;
+//  - the step from a T-matrix element to its bilinear form (amplitude_cotangent, penetrability_factor,
+//    bilinear_cotangent) against differences of t_matrix_element(pathway_amplitude(b)) in Re b and Im b;
+//  - the dense adjoint (dense_bilinear_adjoint, then inverse_adjoint and level_matrix_adjoint) against differences of
+//    masked_amplitude, without and with a masked level;
+//  - external capture: the cotangents of the final level's widths against differences of external_capture_element
+//    with the normalisation (1 + sum_d A_d gamma_d^2)^-1/2.
 // Differences: Richardson's (4 D(h/2) - D(h)) / 3 of the central difference D, h = 1e-4 (MeV or MeV^1/2); the
 // agreement reached is printed with each check.
 //   physics_collision_matrix_adjoint_test
@@ -335,6 +341,85 @@ int main() {
                               });
       check("standard: level_parameter_adjoint, parameter by parameter", worst(L, p, par, h), 1.0e-9);
     }
+  }
+
+  std::printf("the T-matrix element of a pathway, L = Re(conj(tbar) T), against differences of t_matrix_element\n");
+  {
+    const ChannelPhases in{std::polar(1.0, 0.4), std::polar(1.0, -0.9)}, out{std::polar(1.0, -1.2), std::polar(1.0, 0.3)};
+    const double spIn = 0.83, spOut = 1.21;
+    const complex tbar(-0.6, 0.45), b0(0.37, -0.52);
+    for (int diagonal = 0; diagonal < 2; diagonal++) {
+      auto L = [&](complex b) {
+        return std::real(std::conj(tbar) * t_matrix_element(diagonal, in, diagonal ? in : out,
+                                                            pathway_amplitude(spIn, diagonal ? spIn : spOut, b)));
+      };
+      const complex bb = bilinear_cotangent(penetrability_factor(spIn, diagonal ? spIn : spOut),
+                                            amplitude_cotangent(in, diagonal ? in : out, tbar));
+      const complex bc = bilinear_cotangent(penetrability_factor(complex(spIn), complex(diagonal ? spIn : spOut)),
+                                            amplitude_cotangent(in, diagonal ? in : out, tbar));
+      const double dRe = (L(b0 + h) - L(b0 - h)) / (2.0 * h), dIm = (L(b0 + complex(0.0, h)) - L(b0 - complex(0.0, h))) / (2.0 * h);
+      check(diagonal ? "diagonal pathway: amplitude_cotangent, penetrability_factor, bilinear_cotangent"
+                     : "off-diagonal pathway: the same",
+            std::max(std::abs(bb - complex(dRe, dIm)), std::abs(bc - complex(dRe, dIm))) / std::abs(bb), 1.0e-9);
+    }
+  }
+
+  std::printf("the dense adjoint, L = Re(conj(ubar) u), u = sum factor g_l g_m A_lm, against differences\n");
+  for (int masked = 0; masked < 2; masked++) {
+    const Params p = start();
+    const complex factor(0.0, 1.7), ubar(0.9, -0.4);
+    std::vector<unsigned char> zero(n * nc, 0);
+    const int maskChannel = masked ? 1 : -1;
+    if (masked) zero[2 * nc + 1] = 1;  // level 2 has no input width in channel 1: left out of both indices
+    auto L = [&](const Params &q) {
+      LevelMatrixSolver solver;
+      solver.Decompose(level_matrix(q, kStandard));
+      return std::real(std::conj(ubar) * masked_amplitude(factor, &q[n], nc, cha, chb, solver.Inverse(), zero.data(), maskChannel));
+    };
+    const Block b = block(p, kStandard);
+    LevelMatrixSolver solver;
+    solver.Decompose(level_matrix(p, kStandard));
+    const matrix_c &A = solver.Inverse();
+    LevelCotangents bar(n, nc);
+    matrix_c Abar(n, std::vector<complex>(n, complex(0.0, 0.0)));
+    dense_bilinear_adjoint(factor, b.G.data(), nc, cha, chb, A, zero.data(), maskChannel, ubar, Abar, bar);
+    LevelMatrixAdjointScratch scratch;
+    level_matrix_adjoint(b.adjoint(kStandard, b.lo.data(), true), inverse_adjoint(A, Abar), kEin, scratch, bar);
+    check(masked ? "with a masked level: masked_amplitude, dense_bilinear_adjoint"
+                 : "dense_bilinear_adjoint + inverse_adjoint + level_matrix_adjoint",
+          worst(L, p, bar, h), 1.0e-9);
+    if (!masked) {
+      // without a mask the amplitude is factor g_a^T A g_b
+      const complex u = masked_amplitude(factor, &p[n], nc, cha, chb, A, zero.data(), -1);
+      check("masked_amplitude without a mask is factor g_a^T A g_b",
+            std::abs(u - factor * bilinear(p, kStandard, cha, chb)) / std::abs(u), 1.0e-13);
+    }
+  }
+
+  std::printf("external capture, T = gamma_f s c a with s = (1 + sum_d A_d gamma_d^2)^-1/2, against differences\n");
+  {
+    const double Ad[nc] = {0.8, 0.0, 2.3}, conv = 1.4;
+    const complex amp(0.6, -1.1), tbar(0.35, 0.8);
+    const int fc = 2;
+    Params g = {0.4, -0.7, 0.55};
+    auto norm = [&](const Params &q) {
+      double sum = 1.0;
+      for (int d = 0; d < nc; d++) sum += Ad[d] * q[d] * q[d];
+      return 1.0 / std::sqrt(sum);
+    };
+    auto L = [&](const Params &q) { return std::real(std::conj(tbar) * external_capture_element(q[fc], norm(q), conv, amp)); };
+    const double s = norm(g);
+    std::vector<double> bar(nc, 0.0);
+    bar[fc] += external_capture_width_cotangent(tbar, s, conv, amp);
+    const complex dTds = external_capture_norm_derivative(g[fc], conv, amp);
+    for (int d = 0; d < nc; d++) bar[d] += bound_norm_width_cotangent(tbar, dTds, Ad[d], g[d], s * s * s);
+    double scale = 0.0, diff = 0.0;
+    for (int d = 0; d < nc; d++) {
+      const double fd = difference(L, g, d, h);
+      scale = std::max(scale, std::fabs(fd));
+      diff = std::max(diff, std::fabs(bar[d] - fd));
+    }
+    check("external_capture_width_cotangent, bound_norm_width_cotangent", diff / scale, 1.0e-9);
   }
 
   std::printf("%s\n", failures ? "FAILED" : "all checks passed");

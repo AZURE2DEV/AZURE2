@@ -5,6 +5,7 @@
 #include "azure2/physics/CollisionMatrix.h"
 #include "azure2/physics/CollisionMatrixAdjoint.h"
 #include "azure2/physics/ChannelSolveAdjoint.h"
+#include "azure2/physics/ObservablesAdjoint.h"
 #include "ChannelSpace.h"
 #include <memory>
 

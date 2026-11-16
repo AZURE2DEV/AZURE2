@@ -590,7 +590,6 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
 bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                             int xsComponent, bool ayCrossSection, const Site &rows, int rowSlot) {
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradTBar);
-  const complex I(0.0, 1.0);
   const Site *angles = &rows;  // the angular row (Legendre rows, coefficient order) is the reader's; the rest the site's
 
   // --- Common gating. ---
@@ -719,8 +718,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       }
       std::vector<complex> tBarGroup(groups.size());
       for (int g = 0; g < (int)groups.size(); g++) {
-        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2 * symmetryFactor;
-        tBarGroup[g] = bar * (2.0 / 100.0) * w * groups[g].tsum;
+        tBarGroup[g] = azure2::physics::partial_wave_cotangent(bar, geom, groups[g].j, i1i2, symmetryFactor, groups[g].tsum);
       }
       // accumulate (not assign): a normalised Legendre coefficient adds this to its order-k cotangents
       for (int m = 1; m <= numM; m++)
@@ -742,7 +740,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
         if (mg->ch != mg->chp) continue;
         const double jValue = compound()->GetJGroup(mg->group)->GetJ();
-        tBar[k - 1][m - 1] += fitBar * geom * i1i2 / 100. * 2. * (2. * jValue + 1.);
+        tBar[k - 1][m - 1] += azure2::physics::optical_theorem_cotangent(fitBar, geom, i1i2, jValue);
       }
     }
   } else if (isBetaDelayed) {
@@ -754,7 +752,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //      the cotangent convention used throughout this function. ----
     for (int k = 1; k <= nK; k++)
       for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++)
-        tBar[k - 1][m - 1] += fitBar * (2.0 * 25.0 / 100.0) * this->GetTMatrixElement(k, m);
+        tBar[k - 1][m - 1] += azure2::physics::beta_delayed_cotangent(fitBar, this->GetTMatrixElement(k, m));
   } else if (point->IsAnalyzingPower() && !ayCrossSection) {
     // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
     //      matrix, which is linear in T(k,m) with the coefficients AddPathway
@@ -791,14 +789,13 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       for (int i = 0; i < nTerms; i++) {
         const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
-        complex prod = element(t->kGroup1, t->path1, t->isEC1) * conj(element(t->kGroup2, t->path2, t->isEC2));
-        if (t->ak != 0.0) den += t->ak * real(prod) * angles->RowP(rowSlot, t->kOrder);
-        if (t->bk != 0.0) num += t->bk * (-imag(prod)) * assocP[t->kOrder];
+        azure2::physics::add_capture_ay_sums(t->ak, t->bk, angles->RowP(rowSlot, t->kOrder), assocP[t->kOrder],
+                                             element(t->kGroup1, t->path1, t->isEC1),
+                                             element(t->kGroup2, t->path2, t->isEC2), den, num);
       }
       if (fabs(den) < 1.e-300) return false;
       const double ay = num / den;
 
-      const complex I2(0.0, 1.0);
       for (int i = 0; i < nTerms; i++) {
         const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
@@ -806,8 +803,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const complex T2 = element(t->kGroup2, t->path2, t->isEC2);
         const double pk = angles->RowP(rowSlot, t->kOrder);
         const double pk1 = assocP[t->kOrder];
-        const complex d1 = (-I2 * t->bk * pk1 * T2 - ay * t->ak * pk * T2) / den;
-        const complex d2 = (I2 * t->bk * pk1 * T1 - ay * t->ak * pk * T1) / den;
+        complex d1, d2;
+        azure2::physics::capture_ay_cotangents(t->ak, t->bk, pk, pk1, ay, den, T1, T2, d1, d2);
         if (t->isEC1)
           ecBar[t->kGroup1 - 1][t->path1 - 1] += fitBar * d1;
         else
@@ -852,7 +849,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     struct PM {
       int k;
       int m;
-      complex invExpCP2;
+      complex expCP;
     };
     std::vector<PM> matches;
     complex U(0.0, 0.0);
@@ -864,20 +861,18 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const AChannel *ex = jg->GetChannel(mg->chp);
         if (jg->GetJ() == segJ && en->GetL() == segL && en == ex) {
           complex expCP = point->GetExpCoulombPhase(mg->group, mg->ch);
-          complex expCP2 = expCP * expCP;
-          U += (expCP2 - this->GetTMatrixElement(k, m)) / expCP2;
-          matches.push_back(PM{k, m, 1.0 / expCP2});
+          U += azure2::physics::collision_from_t_matrix(expCP, this->GetTMatrixElement(k, m));
+          matches.push_back(PM{k, m, expCP});
         }
       }
     }
     double absU2 = std::norm(U);
     if (absU2 > 0.0) {
       // phase = (90/pi) arg(U) -> Ubar = fitBar (90/pi)(-Im U + i Re U)/|U|^2.
-      complex Ubar = fitBar * (90.0 / pi) *
-          complex(-std::imag(U), std::real(U)) / absU2;
+      const complex Ubar = azure2::physics::phase_shift_cotangent(fitBar, U);
       // U = sum [1 - T/expCP^2]  ->  dU/dT = -1/expCP^2.
       for (const PM &pm : matches)
-        tBar[pm.k - 1][pm.m - 1] += conj(-pm.invExpCP2) * Ubar;
+        tBar[pm.k - 1][pm.m - 1] += azure2::physics::collision_cotangent_to_t_matrix(pm.expCP, Ubar);
     }
   } else if (!isDiff && (!angles->IsCoefficient() || a0Mode)) {
     // The reported angle-integrated cross section carries (1+delta_12) of an identical entrance pair
@@ -903,7 +898,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         rtFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
       }
     }
-    double cR = geom * i1i2 * rtFactor / (pi * 100.0);
+    double cR = azure2::physics::legendre_sum_factor(geom, i1i2, rtFactor);
     // An angular-coefficient point (Segment isDiff 9): the forward value is
     //   a_k = (4 geom i1i2 / (100 sigma_int)) sum_{L=k} z T1 T2*   (normalised)   or   A_k = a_k sigma_int / 4 pi,
     // i.e. the differential model's Legendre coefficient of order k, coeff_k = cR sum_{L=k} z T1 T2*, times
@@ -915,7 +910,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0(results) : 0.0;
     if (coef && point->IsUPOS()) UnreachableGate("UPOS coefficients: quantity legendre takes no secondary_gamma");
     if (coef && !(sigmaInt > 0.0)) return false;  // a vanishing integrated cross section (parameter values)
-    const double dfac = coef ? (angles->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
+    const double dfac =
+        coef ? azure2::physics::legendre_coefficient_factor(angles->GetCoefficientAbsolute(), rtFactor, sigmaInt) : 0.0;
     auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : angles->RowP(rowSlot, l); };
 
     // Fetch a T value (internal 'R' or external-capture 'E') and route a
@@ -933,8 +929,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     // model += W Re(T1 conj T2)  ->  T1bar += fitBar W T2 ;  T2bar += fitBar W T1.
     auto addQuad = [&](int K, int m1, char r1, int m2, char r2, double W) {
       complex T1 = Tval(K, m1, r1), T2 = Tval(K, m2, r2);
-      Tadd(K, m1, r1, fitBar * W * T2);
-      Tadd(K, m2, r2, fitBar * W * T1);
+      Tadd(K, m1, r1, azure2::physics::interference_pair_cotangent(fitBar, W, T2));
+      Tadd(K, m2, r2, azure2::physics::interference_pair_cotangent(fitBar, W, T1));
     };
 
     const bool inelasticParticle = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
@@ -950,9 +946,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       const int nP = std::min(nl, angles->GetMaxLOrder() + 1);
       for (int l = 0; l < nP; l++) tbar_legendre_[l] = pl(l);
       for (size_t p = 0; p < numPaths; p++) {
-        const complex *q = &tbar_q_[p * nl];
-        complex s(0.0, 0.0);
-        for (int l = 0; l < nl; l++) s += q[l] * tbar_legendre_[l];
+        const complex s = azure2::physics::legendre_contraction(&tbar_q_[p * nl], tbar_legendre_.data(), nl);
         if (s != complex(0.0, 0.0)) Tadd(paths[p].k, paths[p].m, paths[p].rad, scale * s);
       }
     } else
@@ -973,7 +967,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
           int lp1 = compound()->GetJGroup(P.Internal(kg, m1).group)->GetChannel(P.Internal(kg, m1).chp)->GetL();
           int lp2 = compound()->GetJGroup(P.Internal(kg, m2).group)->GetChannel(P.Internal(kg, m2).chp)->GetL();
           if (sp1 == sp2 && !point->IsUPOS()) {
-            addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
+            addQuad(K, m1, rad1, m2, rad2, azure2::physics::interference_weight(cR, itf.z, legP));
           }
           if (lp1 == lp2 && point->IsUPOS() && type == "RR") {
             // R_L coefficient (constant w.r.t. parameters), even lOrder only.
@@ -989,15 +983,15 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
                 double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
                 double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
                 // unconditionally, as in GenMatrixFunc (checklist t3-24)
-                R_L = (R_L + 2.0 * delta * R_LLp + delta * delta * R_LpLp) / (1.0 + delta * delta);
+                R_L = azure2::physics::upos_mixed_rk(R_L, R_LLp, R_LpLp, delta);
               }
             }
-            double W = cR * itf.z_upos * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;
+            double W = azure2::physics::upos_interference_weight(cR, itf.z_upos, lOrder, R_L, legP);
             addQuad(K, m1, 'R', m2, 'R', W);
           }
         } else {
           // Standard case (entrance==exit pair, or gamma exit).
-          addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
+          addQuad(K, m1, rad1, m2, rad2, azure2::physics::interference_weight(cR, itf.z, legP));
         }
       }
     }
@@ -1010,16 +1004,16 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     // f_C of channel spin s, the reader's at its slot (Site::CoulombAt): f_d + (-1)^s f_x (f_x = 0 but with spin exchange)
     complex fd(0.0, 0.0), fx(0.0, 0.0);
     if (!coef && aa == exitPairNum) angles->CoulombAt(rowSlot, fd, fx);
-    auto readerCoulomb = [&](double s) { return (((std::lround(2.0 * s) / 2) % 2 == 0) ? 1.0 : -1.0) * fx + fd; };
+    auto readerCoulomb = [&](double s) { return azure2::physics::channel_spin_coulomb_amplitude(s, fd, fx); };
     if (!coef && aa == exitPairNum && theDecay.has_interferences) {  // elastic Coulomb-nuclear interference
-      const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      const complex cI = azure2::physics::coulomb_interference_factor(geom, itFactor);
       for (int n = 0; n < theDecay.num_diagonal; n++) {
         const azure2::DiagonalPathway &d = P.diagonal[theDecay.first_diagonal + n];
-        const complex B = cI * d.statSpin * readerCoulomb(d.s) * angles->RowP(rowSlot, d.l);
-        tBar[d.k - 1][d.m - 1] += fitBar * B;
+        tBar[d.k - 1][d.m - 1] += azure2::physics::coulomb_interference_cotangent(fitBar, cI, d.statSpin, readerCoulomb(d.s),
+                                                                                 angles->RowP(rowSlot, d.l));
       }
     } else if (!coef && aa == exitPairNum) {  // elastic Coulomb-nuclear interference
-      complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      complex cI = azure2::physics::coulomb_interference_factor(geom, itFactor);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
           const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
@@ -1027,9 +1021,9 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
           const AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
           if (en == ex) {
             int l = en->GetL();
-            complex B = cI * mg->stat_spin_factor * readerCoulomb(en->GetS()) * angles->RowP(rowSlot, l);
             // model += Re(B conj T)  ->  Tbar += fitBar B.
-            tBar[k - 1][m - 1] += fitBar * B;
+            tBar[k - 1][m - 1] += azure2::physics::coulomb_interference_cotangent(
+                fitBar, cI, mg->stat_spin_factor, readerCoulomb(en->GetS()), angles->RowP(rowSlot, l));
           }
         }
       }
@@ -1085,9 +1079,9 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
       if (!terms[j - 1].empty()) this->BilinearAdjoint(point, j, terms[j - 1], accum, shiftDeriv);
     return;
   }
+  // The dense path takes the level index as the active one (PointTBar refuses anything else).
+  if (!all_levels_active_) throw std::logic_error("TBarAdjoint: a level outside the R matrix");
   const double inEnergy = this->InEnergy(point);
-  (void)exitPairNum;
-  (void)nK;
   // Per-JGroup A-matrix cotangent accumulators (active == original indexing).
   std::vector<matrix_c> aBar(compound()->NumJGroups());
   std::vector<bool> aBarUsed(compound()->NumJGroups(), false);
@@ -1129,7 +1123,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
         double gamma_fc = state().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
-        complex base = gamma_fc * sqrtNF * conv * ecAmp;
+        complex base = azure2::physics::external_capture_element(gamma_fc, sqrtNF, conv, ecAmp);
 
         // "effective amplitude" carrying the umatrix_cc factor for the
         // gamma_fc / sqrtNF derivatives (= ecAmp for direct capture).
@@ -1145,48 +1139,25 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           int ccLevels = jgcc->NumLevels();
           complex sqrtPcc = point->GetSqrtPenetrability(jcc, ccChN);  // single sqrtP
 
-          // Forward umatrix_cc (mirrors the IGNORE_ZERO_WIDTHS skips).
-          complex umatrix_cc(0.0, 0.0);
-          for (int la = 1; la <= ccLevels; la++) {
-            if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
-            if (internalChannel && ignoreZero &&
-                state().ZeroInputWidth(jcc, la, internalChannel)) continue;
-            for (int lap = 1; lap <= ccLevels; lap++) {
-              if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
-              if (internalChannel && ignoreZero &&
-                  state().ZeroInputWidth(jcc, lap, internalChannel)) continue;
-              umatrix_cc += I2 * sqrtPcc *
-                  state().Gamma(jcc, la, ccChN) *
-                  state().Gamma(jcc, lap, ccChpN) *
-                  this->GetAMatrixElement(jcc, la, lap);
-            }
-          }
+          // Forward umatrix_cc on the level set of the forward pass (the IGNORE_ZERO_WIDTHS mask), and its adjoint:
+          // T_ec = base * umatrix_cc -> ubar = conj(base) * eb.
+          const complex factor = I2 * sqrtPcc;
+          const int maskChannel = (internalChannel && ignoreZero) ? internalChannel - 1 : -1;
+          const matrix_c &Acc = this->GetAMatrix(jcc);
+          const double *gcc = state().Gammas(jcc);
+          const unsigned char *zero = state().ZeroInputWidths(jcc);
+          const int nchcc = jgcc->NumChannels();
+          const complex umatrix_cc =
+              azure2::physics::masked_amplitude(factor, gcc, nchcc, ccChN - 1, ccChpN - 1, Acc, zero, maskChannel);
           effAmp = ecAmp * umatrix_cc;
-
-          // umatrix_cc cotangent:  T_ec = base * umatrix_cc -> ubar = conj(base)*eb.
           complex uBarcc = conj(base) * eb;
           ensureABar(jcc, ccLevels);
-          for (int la = 1; la <= ccLevels; la++) {
-            if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
-            if (internalChannel && ignoreZero &&
-                state().ZeroInputWidth(jcc, la, internalChannel)) continue;
-            double gEn = state().Gamma(jcc, la, ccChN);
-            for (int lap = 1; lap <= ccLevels; lap++) {
-              if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
-              if (internalChannel && ignoreZero &&
-                  state().ZeroInputWidth(jcc, lap, internalChannel)) continue;
-              double gEx = state().Gamma(jcc, lap, ccChpN);
-              complex Aval = this->GetAMatrixElement(jcc, la, lap);
-              complex w = I2 * sqrtPcc * gEn * gEx;  // weight of A[la][lap]
-              aBar[jcc - 1][la - 1][lap - 1] += conj(w) * uBarcc;
-              accum.AddGamma(jcc, la, ccChN, std::real(conj(uBarcc) * (I2 * sqrtPcc * gEx * Aval)));
-              accum.AddGamma(jcc, lap, ccChpN, std::real(conj(uBarcc) * (I2 * sqrtPcc * gEn * Aval)));
-            }
-          }
+          azure2::physics::dense_bilinear_adjoint(factor, gcc, nchcc, ccChN - 1, ccChpN - 1, Acc, zero, maskChannel,
+                                                  uBarcc, aBar[jcc - 1], LevelSink(accum, jcc));
         }
 
         // Explicit gamma_fc:  d T_ec / d gamma_fc = sqrtNF * conv * effAmp.
-        accum.AddGamma(jf, lf, fc, std::real(conj(eb) * (sqrtNF * conv * effAmp)));
+        accum.AddGamma(jf, lf, fc, azure2::physics::external_capture_width_cotangent(eb, sqrtNF, conv, effAmp));
 
         // sqrtNF couples to every NF channel d of the final level:
         //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d (physics/ExternalCapture.h),
@@ -1194,7 +1165,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         // Park: sqrtNF = (J + sum_d A_d gamma_d^2)^{-1/2} with J = 1 - sum_d gamma_d^2 S'_d
         // over the particle channels (CompoundSystem::CalcShiftFunctions), so every particle
         // channel contributes  d sqrtNF / d gamma_d = (S'_d - A_d) gamma_d sqrtNF^3.
-        complex pre = gamma_fc * conv * effAmp;  // d T_ec / d sqrtNF
+        complex pre = azure2::physics::external_capture_norm_derivative(gamma_fc, conv, effAmp);  // d T_ec / d sqrtNF
         int numNF = finalLevel->NumNFIntegrals();
         double sqrtNF3 = sqrtNF * sqrtNF * sqrtNF;
         const bool parkFinal = park && finalLevel->IsInRMatrix();
@@ -1208,8 +1179,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
             Ad -= state().ShiftDerivative(jf, lf, d);
           if (Ad == 0.0) continue;
           double gd = state().ECGamma(jf, lf, d);
-          double dSqrtNF = -Ad * gd * sqrtNF3;
-          accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
+          accum.AddGamma(jf, lf, d, azure2::physics::bound_norm_width_cotangent(eb, pre, Ad, gd, sqrtNF3));
         }
       }
     }
@@ -1227,42 +1197,22 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
       int chpNum = mg->chp;
       const JGroup *jg = compound()->GetJGroup(jNum);
 
-      complex uphase = point->GetExpCoulombPhase(jNum, chNum) *
-          point->GetExpHardSpherePhase(jNum, chNum) *
-          point->GetExpCoulombPhase(jNum, chpNum) *
-          point->GetExpHardSpherePhase(jNum, chpNum);
+      const azure2::physics::ChannelPhases entrance{point->GetExpCoulombPhase(jNum, chNum),
+                                                    point->GetExpHardSpherePhase(jNum, chNum)};
+      const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
+                                                point->GetExpHardSpherePhase(jNum, chpNum)};
       complex sqrtPenEn = point->GetSqrtPenetrability(jNum, chNum);
       complex sqrtPenEx = point->GetSqrtPenetrability(jNum, chpNum);
 
       // d T / d umatrix = -uphase  ->  ubar = conj(-uphase) * tBar.
-      complex uBar = conj(-uphase) * tb;
+      const complex uBar = azure2::physics::amplitude_cotangent(entrance, exit, tb);
 
-      int numLevels = jg->NumLevels();
-      if (!aBarUsed[jNum - 1]) {
-        aBar[jNum - 1].assign(numLevels, vector_c(numLevels, complex(0.0, 0.0)));
-        aBarUsed[jNum - 1] = true;
-      }
-      complex pen2 = 2.0 * I * sqrtPenEn * sqrtPenEx;  // common factor of w_{l,l'}
-
-      for (int la = 1; la <= numLevels; la++) {
-        if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-        double gammaEn = state().Gamma(jNum, la, chNum);
-        for (int lap = 1; lap <= numLevels; lap++) {
-          if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
-          double gammaEx = state().Gamma(jNum, lap, chpNum);
-          complex Aval = this->GetAMatrixElement(jNum, la, lap);
-          complex w = pen2 * gammaEn * gammaEx;  // weight of A[la][lap]
-
-          // A cotangent:  Abar += conj(w) * ubar.
-          aBar[jNum - 1][la - 1][lap - 1] += conj(w) * uBar;
-
-          // Explicit gamma paths (umatrix depends on gamma_en and gamma_ex too):
-          //   d umatrix / d gamma_en,la += pen2 * gamma_ex * A
-          //   d umatrix / d gamma_ex,lap += pen2 * gamma_en * A
-          accum.AddGamma(jNum, la, chNum, std::real(conj(uBar) * (pen2 * gammaEx * Aval)));
-          accum.AddGamma(jNum, lap, chpNum, std::real(conj(uBar) * (pen2 * gammaEn * Aval)));
-        }
-      }
+      ensureABar(jNum, jg->NumLevels());
+      // A cotangent Abar += conj(w) ubar with w = pen2 gamma_en gamma_ex, and the widths as they stand in umatrix.
+      const complex pen2 = azure2::physics::penetrability_factor(sqrtPenEn, sqrtPenEx);
+      azure2::physics::dense_bilinear_adjoint(pen2, state().Gammas(jNum), jg->NumChannels(), chNum - 1, chpNum - 1,
+                                              this->GetAMatrix(jNum), nullptr, -1, uBar, aBar[jNum - 1],
+                                              LevelSink(accum, jNum));
     }
   }
 
@@ -1498,7 +1448,6 @@ const std::vector<complex> &AMatrixFunc::KernelLambda(Site *point, int j) {
 bool AMatrixFunc::CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent &bar,
                                        std::vector<std::vector<BilinearTerm>> &terms) {
   Site *point = energyPoint;
-  const complex I(0.0, 1.0);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   // The exit of the point's exit pair (CalculateTMatrix has refused a point without one).
@@ -1518,11 +1467,15 @@ bool AMatrixFunc::CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent
       const int jNum = mg->group;
       const int chNum = mg->ch;
       const int chpNum = mg->chp;
-      complex uphase = point->GetExpCoulombPhase(jNum, chNum) * point->GetExpHardSpherePhase(jNum, chNum) *
-          point->GetExpCoulombPhase(jNum, chpNum) * point->GetExpHardSpherePhase(jNum, chpNum);
-      complex uBar = conj(-uphase) * tb;
-      complex pen2 = 2.0 * I * point->GetSqrtPenetrability(jNum, chNum) * point->GetSqrtPenetrability(jNum, chpNum);
-      const complex beta = conj(pen2) * uBar;
+      const azure2::physics::ChannelPhases entrance{point->GetExpCoulombPhase(jNum, chNum),
+                                                    point->GetExpHardSpherePhase(jNum, chNum)};
+      const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
+                                                point->GetExpHardSpherePhase(jNum, chpNum)};
+      const complex uBar = azure2::physics::amplitude_cotangent(entrance, exit, tb);
+      const complex beta = azure2::physics::bilinear_cotangent(
+          azure2::physics::penetrability_factor(point->GetSqrtPenetrability(jNum, chNum),
+                                                point->GetSqrtPenetrability(jNum, chpNum)),
+          uBar);
       std::vector<BilinearTerm> &list = terms[jNum - 1];
       bool merged = false;
       for (BilinearTerm &t : list)
@@ -1933,8 +1886,8 @@ bool AMatrixFunc::TBarProducts(const azure2::EntrancePathways &P, const azure2::
     }
     const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
     const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
-    tbar_q_[(size_t)f.s1 * nl + f.l] += f.z * T2;
-    tbar_q_[(size_t)f.s2 * nl + f.l] += f.z * T1;
+    azure2::physics::add_interference_cotangents(f.z, T1, T2, tbar_q_[(size_t)f.s1 * nl + f.l],
+                                                 tbar_q_[(size_t)f.s2 * nl + f.l]);
   }
   tbar_decay_ = &theDecay;
   tbar_particle_ = particleExit;
