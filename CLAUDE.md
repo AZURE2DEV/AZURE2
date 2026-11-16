@@ -316,10 +316,12 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    a code each, recipe "A format-3 diagnostic code"). Only check 27 sees a missing `ModelQuantities()` row; the
    `switch (d.quantity)` of `LevelPairs` and of `LevelValue` have no `default`: a missing case is seen by no check.
 3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CompoundSystem::ObservedOfFitValues` returns (never
-   formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds E, the observed widths W, the observed
-   values and their kinds, not P, mu or a: a quantity that needs the channel functions at the level's energy calls
-   `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; mu and a are
-   `PPair::GetRedMass()` and `GetChRad()`; E_c = E_x - `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
+   formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds the physical E, and per channel the
+   observed width W, the observed value and its kind, and the factor `P` W was formed with (an open particle channel's
+   penetrability at E), the pair's reduced mass `mu_u` (u) and channel radius `a_fm` (fm): read them there, never
+   through a second evaluation (`docs/upgrade/data_model.md` section 10). Only S or dS/dE at the level's energy still
+   need `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; E_c = E_x -
+   `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
    quantity of the table has its `ModelQuantities()` row and a function so named (that it is called is not checked:
    add it to the list under "every quantity, three bases")]; `reference/data_formats.rst` (the list of datum
