@@ -1472,3 +1472,100 @@ command's `param.par` and check files (the session's set-up is not the program's
   chosen step; a refusal of each keyword out of its range (the option's row); an exception in `progress`.
 - The program's own chains must not move: the regression scripts with MCMC (`tests/mcmc_physical_norm`,
   `tests/prior_covariance`, `tests/gamma_decay`, `sampler_objective_test`) and the full check.
+
+## 13. `Session.dimensionless_widths` at the physical level energy, and for fixed channels (design; approved by the PI on 2026-11-16)
+
+### 13.1 What changes
+
+Two items of the hand-over of section 10.4, both approved by the PI ("I agree with the other points"):
+
+1. **The physical level energy.** `ChannelWidth.level_energy`, `is_open` and a photon row's transition energy
+   `e_gamma` (with the `weisskopf` and `wu` that follow from it) were taken at the level's energy in the fit vector
+   (a fixed energy: the session's input), which in the formal basis is the formal pole energy. They become the
+   level's physical energy E_x, the energy of the observed-level record (`data_model.md` section 10: the Brune (Park)
+   energy, after `brune_from_formal` in the formal basis), the one `wigner_widths` takes Gamma_W at and the one the
+   program writes into `<levels>`. `is_open` is E_x > S + e of the pair; `e_gamma` = E_x - e. In Brune's and Park's
+   parametrizations the record's E is the fit vector's (a copy, `TransformToBrune`): nothing changes there, and the
+   test says so number for number.
+2. **Fixed open particle channels.** `wigner_width` = Gamma_W = 2 P_l(E_r) gamma_W^2 and `theta2` = |Gamma| /
+   Gamma_W, by the definition of a free channel (section 11.1), where they were `None`. Gamma is the row's `value`,
+   as for a free channel.
+
+### 13.2 Where P comes from: the record
+
+The engine's observed-level record carries, per channel, the factor P its observed width was formed with, and the
+pair's mu and a (`data_model.md` section 10). The binding hands the session the record of a vector
+(`_engine.observed_levels(all_rwa)`: per J group, level and channel the record's E (MeV), the kind of the observed
+value, W (MeV), P, mu (u) and a (fm); not a public name). `wigner_widths` and `dimensionless_widths` read P and E
+there, for free and fixed channels alike: one route, no second evaluation of the channel functions. An entry exists
+for a particle channel whose record kind is a width with P > 0 (above threshold and outside the Coulomb threshold
+where P = 0 in double precision: what `channel_functions`' `open` said), and a Wigner limit in its row. The product
+2 P gamma_W^2 is formed in Python in the order it was (as `theta2 = |Gamma| / Gamma_W` is).
+
+`wigner_widths` must not move by this: its P was `channel_functions` at E_r = E_x - (S + e) with E_x the row of
+`transform(x)` (the same `TransformOut`), the record's is `ChannelFunc::Penetrability` (the same `CoulFunc` call) at
+(E_x - S) - e. The two orders of the subtraction gave the same bits on every channel of T1, T2, T3 and 13N in the
+three bases (measured before the change); the test asks for equality with the earlier route.
+
+The skill `azure2-check` (`widths_check.py`) filled a fixed channel's Gamma_W itself with
+`pyazr.physics.single_particle_width` (the exact Coulomb routine, not the session's table or potential, at the row's
+energy, the formal pole energy in the formal basis); it reads the row's numbers now and its own computation goes.
+
+### 13.3 Tests
+
+- `tests/pyazr/wigner_widths_test.py`, extended: (h) a fixed open particle channel's `wigner_width` against 2 P
+  gamma_W^2 of mpmath at the physical energy (1e-8, as a free one) and `theta2 = |value| / wigner_width`; (i)
+  `level_energy`, `is_open`, `e_gamma` are the record's (physical) in the three bases, Brune and Park equal to the
+  earlier fit-vector values bit for bit, and every row (free and fixed) of the formal basis equal to Brune's to 1e-6;
+  (j) `wigner_widths` equal to `channel_functions`' 2 P gamma_W^2 bit for bit (the earlier route). Check (e)'s "a fixed
+  channel has neither" becomes (h).
+- The skill's self-test (`skill_azure2-check`): its T2 checks read the fixed channels from the table.
+
+### 13.4 As built (pyazr 3.0.0.dev6): old against new
+
+`Session._observed_levels(x)` reads the record through `_engine.observed_levels_all_rwa` (`AZUREAPI::
+ObservedLevelRowsAllRWA`, the record of the `TransformOut` that `transform` makes); `_wigner_width(p, record)` is the
+one rule of an entry, called by `wigner_widths` (free channels) and `dimensionless_widths` (every row). Measured with
+the build before the change and after, at `parameters.x0`, the session's Coulomb table:
+
+| Project, basis | What changed | Old -> new (examples) |
+|---|---|---|
+| T1, T2, T3, 13N; Brune, Park | `wigner_width`, `theta2` of the fixed open particle channels (2, 16, 8, 8), None -> a value; **nothing else**: every other field of every row bit for bit, free channels' Gamma_W included | -- |
+| T1 formal | `level_energy` of 3 levels; `e_gamma`, `weisskopf`, `wu` of their photon rows; fixed channels as above | 3/2-: 3.736361 -> 3.502000 MeV; `width_3_2` (M1 to the ground state): weisskopf 1.0954 -> 0.9019 eV, wu 0.4565 -> 0.5544; `width_3_4`: e_gamma 2.73636 -> 2.50200 MeV, wu 0.4648 -> 0.6081; 1/2+ poles: 15.87915 -> 15.00000, 15.61939 -> 15.00000 MeV |
+| T2 formal | `level_energy` of 3 levels; fixed channels as above | 13.38407 -> 13.10500, 20.01682 -> 17.00000, 13.27192 -> 13.26520 MeV |
+| T3 formal | `level_energy` of 1 level; fixed channels as above | 25.31282 -> 22.00000 MeV |
+| 13N formal | `level_energy` of 4 levels, their photon rows' `e_gamma`, `weisskopf`, `wu`; fixed channels as above | 21.88103 -> 20.00000 MeV (`width_2_2` weisskopf 220.0 -> 168.0 eV); `width_6_3`: wu 186.1 -> 229.5; 22.83132 -> 20.00000 MeV |
+
+No row's `is_open` changed on these projects. The formal basis's rows now equal Brune's: level_energy to 2.2e-7 MeV,
+e_gamma to 3.6e-8 MeV, wigner_width (free and fixed) to 1.0e-6 (`wigner_widths_test.py` (i)). A fixed open channel's
+Gamma_W is 2 P gamma_W^2 of mpmath to 8.6e-10 (T2; (h)). `wigner_widths` did not move: its entries equal the
+`channel_functions` route of 3.0.0.dev5 bit for bit on the four projects in three bases and on the spin-orbit project
+((j), (g)). No test's expected value changed; check (e)'s assertion "a fixed channel has neither" (the old behaviour
+of item 2) became check (h).
+
+Seen and not changed (for the PI): the `value` of a fixed row is `Parameter.value`, the physical value as the session
+was made, not at `params`. Under Brune's and the formal parametrization it moves with the level's other widths:
+on T2 with every free width times 1.2 the fixed `width_2_3` reads -747275 eV where `transform(x)` has -674499 eV
+(11 %), and its `theta2` is formed with the first. At `parameters.x0` the two agree. Taking the value of
+`transform(params)` would change `value` of fixed rows away from x0, which this change was not to do.
+
+### 13.5 A fixed row's value at `params` (design; approved by the PI on 2026-11-16)
+
+The PI approved the repair of the last paragraph ("Okay, I agree about the widths"). A fixed channel holds its
+reduced-width amplitude, not its observed width; its observed width at a fit vector is the engine's transformation
+of the whole level, the slot's value in the observed-level record that `transform(params)` returns
+(`GetTransformParams` of `TransformOut`). `dimensionless_widths(params)` takes every row's `value`, free and fixed,
+from one call `transform(params)` at the row's `index` (one route: the free rows read it there already, at
+`free_index` of the free part); `Parameter.value` is no longer read. `theta2 = |value| / wigner_width` and a photon
+row's `wu = |value| / weisskopf` follow. Nothing else moves: `level_energy`, `is_open`, `e_gamma`, `wigner_width`
+and the free rows already came from the record. No engine code changes.
+
+Measured before the change (build of f89c5dae, the session's Coulomb table) on T1, T2, T3 and 13N in the three
+bases, at `parameters.x0` and at three displaced points (every free width x 1.2; every free energy x (1 + 1e-3);
+both): stale are `value`, `theta2` and `wu` of fixed rows only, and only away from x0 -- in Brune's basis on T2 and
+T3 (up to 21 %), in the formal basis on all four (a fixed zero amplitude of the formal basis is a non-zero observed
+width there: relative 1), in Park's basis only when an energy moves (the observed width is Park's amplitude times
+2 P(E); widths x 1.2 leave every fixed value of Park's basis as it was, bit for bit). `level_energy`, `is_open` and
+every free row equal `transform(params)` at every point. Test: `tests/pyazr/wigner_widths_test.py` (k), every row's
+`value` equal to `transform(params)`'s bit for bit at x0 and at the displaced points, `theta2` and `wu` formed with
+it; it fails before the change. pyazr's version stays 3.0.0.dev6 (not released).

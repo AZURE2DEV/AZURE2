@@ -2,6 +2,194 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 23:40) — merged: F of a neutral pair repaired; the observed-level record; widths' table
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 102: `feature/upgrade-1-coulomb-neutral-f`,
+`feature/upgrade-8-observed-level`, `feature/upgrade-8-fixed-row-value` (agents'; their entries follow). The base
+build is `work/b-trial102`, **the reference tag is `tab-trial102-1`**, the quick set is 333 tests, pyazr is
+3.0.0.dev6, the external-capture signature is v8.
+
+**F and F' at eta = 0** (the PI: "Yes to all 3 your proposals"). `coulsm` stepped F upward in l from sin and cos,
+the unstable direction for rho < l: wrong by 2e-4 at l = 1 and by many orders above, at small rho. F and F' of a
+neutral pair with l >= 1 now come from the Riccati-Bessel function `riccati_bessel` (physics/transfer's routine,
+moved into `physics/coulomb`, one implementation): within 6.1e-15 of mpmath for l = 0..8, rho 1e-6..5e4; G, G'
+and every charged pair bit for bit as before (1,404 charged points compared by the agent). A capture project
+recomputes its integral file once (signature v8; stale-file case (u) of `tests/ec_m1_exact`).
+
+**The observed-level record** carries, per channel, the P its width was formed with, the reduced mass and the
+channel radius (`include/ObservedLevelTable.h`; P handed on by `observed_levels` of `physics/`, equal to the
+independent route with difference 0 on T1, T2, T3, 13N in three bases). **`Session.dimensionless_widths`** (the
+PI's words: "I agree with the other points"; "Okay, I agree about the widths"): the physical level energy in the
+formal basis (T1's 3/2- level 3.736361 -> 3.502000 MeV, with its photon rows' Weisskopf units); Gamma_W and
+theta^2 for fixed open channels; every row's value, fixed ones included, is `transform(params)`'s (a fixed
+width's row showed the session's start value: 11 % stale on T2 with the free widths times 1.2).
+
+**Verified** (`work/director/verify_l102.out`, before the last branch, which changes Python only): 0 warnings;
+against `tab-trial101-1` 859, 823 and 857 of 887, 851 and 887 files identical; the 86 others are: 23
+`intEC.dat.sig` per basis (v8); `ec_threshold` `ng`'s `intEC.dat` per basis (no number differing by value);
+`sum_lab_frame`'s chi-squared, a zero of 4e-17, in `chiSquared.out` and `run.log` (2 projects, each basis); in
+Park's basis `6Li_d` in the last printed digit (1.4e-11; its chi-squared 1.1e-12). The eight fits: six identical
+to `work/b-trial101`, the two of 13N differing in `intEC.dat.sig` alone, chi-squared the same. 333 of 333 quick
+tests; 172 of 172 regression scripts. After the last branch: `repo_consistency`, `check_skills`,
+`pyazr_wigner_widths`, `skill_azure2-check`, `pyazr_small_defects`, `docs_build`. Not run by me: the slow tests,
+sanitizers, other platforms.
+
+**The CI's Windows job of `3579fb87`** (the first with the repairs of entry e101): 172 of 172 regression scripts;
+324 of 327 unit tests. The three: an mpmath version (`format` of an `mpf`); two tests that compare a worker
+thread's values with the main thread's bit for bit. Shown on Linux by an agent: lowering a thread's x87
+precision control to 53 bits moves T1's objective by 8e-16, its gradient by up to 1.3e-13; inferred, not shown:
+that a Python thread on MinGW starts so. The repair (a precision scope at every binding call, every parallel
+region and `main`) is `feature/upgrade-0-windows-tests-3`, not merged yet; an agent closes its gap.
+
+**Running:** slices 4 to 6 of the objective note (`feature/upgrade-7-objective-arrays-2`).
+
+## 2026-11-16 (neutral-F agent) — coulsm's F and F' at eta = 0 repaired; two >1e-10 rows read benign by the reviewer
+
+Branch feature/upgrade-1-coulomb-neutral-f, worktree wt-f0, cut at 01a701ad. The PI's word: "Yes to all 3 your
+proposals" (this one: closed forms for F, F' at eta = 0, moving neutral P, S, phi at ~1e-16). Not pushed.
+
+Commits:
+- f36cac82 docs(coulomb): section 10, the repair of coulsm's F and F' at eta = 0 (design)
+- 7c925f70 fix(coulomb): coulsm's F and F' at eta = 0 from the Riccati-Bessel function (coulomb.md section 10)
+- b7c21c63 docs(coulomb): section 10.5, the neutral-F repair as built, with the full check and the reviewer's reading
+
+Cause (coulsm/src/cwfcomp_accurate.cpp, solve_cwf, eta = 0 branch): F and G both climb in l from sin, cos with
+A&S 14.2.1-2; for rho < l F is the recessive solution, each step cancels a factor L(2L+1)/rho^2.  The estimate
+eps prod L(2L+1)/rho^2 reproduces the measured errors.  G climbs in its stable direction (right).
+Repair: adaptor method_coulsm.cpp, eta == 0 and l >= 1: F = u_l, F' = u_{l-1} - (l/rho) u_l of riccati_bessel,
+which is physics/transfer's RiccatiBessel moved unchanged into physics/coulomb (Coulomb.h/.cpp); DistortedWaves.cpp
+calls it there.  G, G', l = 0 keep their bits.  Third-party file untouched.
+
+Accuracy, largest relative error over rho = 1e-6 ... 5e4 (369 mpmath points), F / F', before -> after:
+l=1 2.0e-4/1.0e-4 -> 1.8e-15/5.4e-16; l=2 3.0e9/2.0e9 -> 7.4e-16/8.6e-16; l=3 1.0e23 -> 2.2e-15/6.1e-15;
+l=4 6.6e36 -> 3.0e-15/2.8e-15; l=8 4.7e93 -> 8.0e-16/7.6e-16; G, G' unchanged (<= 5.9e-15); Wronskian <= 6.7e-16.
+New test physics_coulomb_neutral fails on the old library (98 of 369 points), passes now.
+Bitwise: 1404 charged arguments (l 0-8, 13 eta from 1e-300 to 300 and -0.5, 12 rho 1e-3-1000) identical incl.
+status; G, G' at eta = 0 identical on 11380 points.  0.08 -> 0.29 us per neutral call.
+EC signature v7 -> v8; tests/ec_m1_exact case (u), fixture stale_v7 (fails on the old binary, passes now).
+
+Full check (verify_f0.out, against tab-trial99-1): 30 files differ per basis (887/851/887), none new:
+23 intEC.dat.sig (v8) + ng intEC.dat (509 numbers, 3.9e-14 per number, 2.3e-16 per complex value) in each basis;
+brune and no-brune: secondary_gamma spin2_minus/spin2_plus parameters.out "1000.000000 eV" -> "1.000000 keV" (the
+same width across the unit boundary; maxrel 0.999 is the unit), sum_lab_frame sum_data/sum_free chiSquared.out and
+run.log 3.98668e-17 -> 3.98735e-17 (a chi2 that is zero to rounding: 1.7e-4 relative, 6.7e-21 absolute);
+use-park: the same sum_lab_frame rows (2.5e-6 rel; run.log 9.0e-6), 6Li_d R=4 last digit (1.39e-11) and its run.log
+chi2 9312.1177619 -> 9312.11776191.  Eight fits: six identical, 13N-grad and 13N-lm differ only in intEC.dat.sig;
+chi2 unchanged.  STOPPED as instructed (rows above 1e-10): no expected/golden file, tolerance or reference touched.
+Tests in the check: 0 warnings, ctest -LE slow 332/332, tests/run_tests.sh 172/172.  Before it, by hand: 73 ctests
+(coulomb|channel_function|transfer|gsl|whittaker|ec_|thm|physics_table|hybrid|bound_functions|pyazr_evaluation) with
+and without AZURE2_COULOMB_TABLE, ec_* check.sh scripts with and without the table, repo_consistency.
+The step stopped on the two rows above 1e-10; the reviewer (not the PI) read them, 2026-11-16: (1) the
+sum_lab_frame chi2 of 4e-17 is zero to rounding (6.7e-21 absolute), not a moved chi2; (2) the secondary_gamma
+"1000.000000 eV" -> "1.000000 keV" is the unit choice at an exact boundary, and parameters.out chooses the unit by
+the printed value since rehearsal 101 (ReportWidth, src/LevelReport.cpp), so the row goes with that merge.  The
+6Li_d last-digit rows are the approved size.  No expected file, tolerance or reference changed; no merge; the full
+check not rerun.  coulomb.md section 10.5 "as built" written with these numbers: commit b7c21c63.
+
+## 2026-11-16 (observed-level agent) — the record carries P, mu, a; dimensionless_widths physical and fixed
+
+**Merged.** Branch `feature/upgrade-8-observed-level` in `wt-olevel`, cut at a196ff82. Build `work/b-olevel`.
+Commits: 179717eb (design, `data_model.md` section 10), 7900664b (the record), 6d45ce2b (design, `pyazr3.md`
+section 13), 1e6f34f8 (pyazr). pyazr 3.0.0.dev5 -> 3.0.0.dev6. Both jobs approved by the PI on 2026-11-16.
+
+**A. The observed-level record.** `ObservedLevel` (`include/ObservedLevelTable.h`) gains per channel `P` (the factor
+the observed W was formed with, W = s 2 |gamma|^2 P / N, at the record's physical E: an open particle channel's
+P_l(E_c); a closed one's mu a / (hbar^2 W_l^2), MeV^-1 fm^-1; 0 at a threshold; a photon channel's factor; 0 beta),
+`mu_u` (u) and `a_fm` (fm) of a particle channel's pair (0 otherwise). P is handed on: physics/ `ObservedLevels` has
+a member `P` set where `observed_levels` forms W; `CompoundSystem::ObservedWidths` copies it and sets mu, a. Readers
+switched: none in the engine -- no reader of the record recomputed P, mu or a at a level's energy (grep in `src/`,
+`api/src/`: `LevelValue` reads W, value, E; `pybind_level_doors`' channel functions are a caller-given block;
+`AdaptiveIntegrationGrid` and `ThmLineshape` take P from input widths for an estimate, not from the record, left
+alone). The one reader that recomputed P was pyazr's `wigner_widths` (job B). CLAUDE.md, recipe "A model-only
+datum" step 3, names the members now. Test `tests/upgrade/observed_level_record_test.cpp` (ctest
+`upgrade_observed_level_record`): T1, T2, T3, 13N in three bases, 53 particle channels each: P against
+`ParticleChannelValues` at the record's E identical in every case (largest difference 0, table set and unset), mu,
+a equal the pair's, W = s 2 gamma^2 P / N to 2.4e-16. No printed number can change by it (P was W's factor already;
+nothing writes the new members) -- the full check below.
+
+**B. `dimensionless_widths`.** P from the record (binding `_engine.observed_levels_all_rwa`, not public;
+`AZUREAPI::ObservedLevelRowsAllRWA`), one rule `_wigner_width` for `wigner_widths` and every row. (1) level_energy,
+is_open, a photon's e_gamma (weisskopf, wu) at the physical energy. (2) A fixed open particle channel gets
+wigner_width = 2 P gamma_W^2 and theta2 = |value| / wigner_width. Old -> new at x0 (pyazr3.md 13.4): Brune and Park
+on the four projects: only the fixed channels' two fields (None -> value; 2, 16, 8, 8 channels), all else bit for
+bit. Formal: level_energy of 3, 3, 1, 4 levels (T1 3/2- 3.736361 -> 3.502000 MeV, T2 20.01682 -> 17.00000, T3
+25.31282 -> 22.00000, 13N 22.83132 -> 20.00000) and their photon rows (T1 width_3_4 wu 0.4648 -> 0.6081, 13N
+width_6_3 186.1 -> 229.5). No is_open changed. `wigner_widths` unchanged: equal to the dev5 `channel_functions`
+route bit for bit (the two orders of E_c's subtraction gave the same bits on all channels, measured first). Test
+`tests/pyazr/wigner_widths_test.py` (h)-(j): fixed channels against mpmath (8.6e-10), the formal rows equal to
+Brune's (level_energy 2.2e-7 MeV, wigner_width 1.0e-6). Check (e)'s "a fixed channel has neither" became (h); no
+expected value changed. The skill `azure2-check`: `widths_check.py` reads the numbers (its `single_particle_width`
+computation removed), self-test covers 8 fixed T2 channels; `widths.md`, `older-results.md` (note, expires
+2027-02-10), `pyazr.rst` (note for builds before 3.0.0.dev6), `widths.py`.
+
+**What was run.** `verify_branch.sh wt-olevel olevel tab-trial99-1 trial100 6` on 1e6f34f8
+(`work/director/verify_olevel.out`, logs `vlolevel/`): 0 warnings; **887/882, 851/846, 887/875 files identical**
+(not the expected 887, 851, 887): 22 `parameters.out` differ, all by a width's printed unit (`G = 1000.000000 meV`
+-> `1.000000 eV`, same value). They are the base's fix bce1d61f (merged in 25004d02), which the reference
+tab-trial99-1 predates: the 22 files are byte-identical to those of tab-trial101-1 (wt-trial101, a build with
+bce1d61f and without this branch), and verify_l101.out lists the same 22. No other file differs, no new file.
+Eight fits identical to `b-trial100`. Quick tests 331 of 332: `pyazr_evaluation` failed once in the full run and
+passed on 4 reruns (alone and at -j3); it has a timing check (evaluate < 1.3 x objective) and touches no changed
+code. Regression scripts 172 of 172. Besides: `upgrade_observed_level_record` and `pyazr_wigner_widths` with
+AZURE2_COULOMB_TABLE set and unset; the skill self-test (set and unset); `tools/check_skills.py` (exit 0);
+`repo_consistency_test.py`. Not run: the other slow pyazr tests (`pyazr_examples_slow` was run and passed), a
+sanitizer build, other platforms.
+
+**For the PI.** A fixed row's `value` is `Parameter.value`, the physical value as the session was made, not at
+`params`: under Brune's and the formal basis it moves with the level's other widths (T2, free widths x1.2: fixed
+`width_2_3` -747275 eV against -674499 eV of `transform(x)`, 11 %), and its new theta2 is formed with it. At x0
+they agree. Taking `transform(params)` would change `value` of fixed rows away from x0: not done (not approved).
+
+**Not done / noticed.** No injection of a wrong P into the record to see check (c) fail. `pyazr_library_answers` and
+`pyazr_library_calls` fail (skip, exit 1) when ctest runs without PYAZR_ENGINE_DIR exported: their registration has
+no PYAZR_ENGINE_DIR (pre-existing; they pass with it). A record P of a pair with a nonzero excitation could, on a
+project not tested, differ in the last bit from the dev5 route ((E - S) - e against E - (S + e)); none of T1-T3,
+13N, spin_orbit_potential does.
+
+## 2026-11-17 (fixed-row agent) — dimensionless_widths: a fixed row's value at params
+
+**Merged.** Branch `feature/upgrade-8-fixed-row-value` in `wt-frow`, cut at f89c5dae. Build `work/b-frow`
+(0 warnings; no C++ changed, the build is the base's). Commits: 0c552294 (design, `pyazr3.md` 13.5), cf65c130
+(fix, test, docs). Approved by the PI on 2026-11-16 ("Okay, I agree about the widths"). pyazr stays 3.0.0.dev6
+(not released).
+
+**The defect.** `Session.dimensionless_widths(params)` took a fixed row's `value` from `Parameter.value` (the value as
+the session was made), so `value`, `theta2` and a photon's `wu` of fixed rows were stale away from x0. Measured
+before the change on T1, T2, T3, 13N in three bases at x0 and at three displaced points (free widths x 1.2; free
+energies x (1 + 1e-3); both): only those three fields of fixed rows; `level_energy`, `is_open`, `e_gamma`,
+`wigner_width` and every free row already equal to `transform(params)` (they read the record). Stale in Brune on T2,
+T3 (T2 width_2_3 at widths x 1.2: -747275 -> -674499 eV, theta2 0.16147 -> 0.14575; T2 width_1_1 at energies
+x (1 + 1e-3): 547.90 -> 693.67 eV, 21 %), in the formal basis on all four (a fixed zero amplitude is a non-zero
+observed width there: T1 width_6_2 1.5e-20 -> -3.02 eV, its wu 1.2e-23 -> 2.35e-3), in Park only when an energy
+moves (T2 width_1_1 547.90 -> 695.00 eV, through P(E)); Park with widths x 1.2: every fixed width as it was, bit for
+bit. T1 and 13N Brune, Park: no fixed row moves.
+
+**The repair.** One line in `pyazr/session_physics.py`: `value = transform(params)[p.index]` for every row (the free
+rows read the same call already). Design `pyazr3.md` 13.5. Test `tests/pyazr/wigner_widths_test.py` (k): every row's
+value equal to transform's bit for bit, theta2 and wu formed with it, at x0 and the three points, three bases, four
+projects; Park's fixed widths unmoved by widths x 1.2. Before: 22 (k) checks FAIL; after: all ok. No expected value
+changed. Docs: `pyazr.rst` (text and the dev6 note), skill `azure2-check` `widths.md`, `older-results.md` (the same
+note: `widths_check.py --params` showed the project's fixed values, not the fit's), `widths.py` (field comment).
+
+**Neighbours.** `wigner_widths` skips fixed rows (keyed by free index): no value read. No other per-channel report at
+`params` reads `Parameter.value`: grep of `pyazr/` finds one other reader, `LevelScheme.from_azr` (`Session.scheme`),
+which takes no vector and describes the project as stated. The fixed readers of `p.start` (`bands.py`,
+`endf/model.py`, `endf/covariance.py`, `endf/engine_values.py`) read a fixed parameter's fit-basis value, which is
+constant: correct.
+
+**What was run.** Build `work/b-frow` (JOBS=4, 0 warnings). ctest -j2 with the table: pyazr_wigner_convention,
+pyazr_wigner_widths, pyazr_gamma_decay, pyazr_small_defects, pyazr_describe, all 18 pyazr_ui_* (smoke, node
+included), pyazr_examples, pyazr_examples_slow, repo_consistency, docs_build, skill_azure2-check: 30/30. Table unset:
+pyazr_wigner_widths, skill_azure2-check, pyazr_small_defects, pyazr_examples: 4/4. The test directly: 141 ok, set and
+unset. `tools/check_skills.py` exit 0. Callers of dimensionless_widths (grep): the skill's widths_check.py, the
+example, small_defects_test (x0), wigner_widths_test; the web UI does not serve it (SESSION_NOT_SERVED).
+
+**Not run / unsure.** Not run: `ctest -LE slow` in full, `tests/run_tests.sh`, the full check (no C++ or engine
+file changed; nothing an engine output reads). A project with a `gamma_decay` section was not measured: its
+numbers are parameters of kind `radiative`, not `width`, so they are no rows of the table (pyazr_gamma_decay passed).
+Unsure: the Park energy shift moves T2 width_1_1 by 21 % for a 1e-3 relative energy step: a
+level close to its channel's threshold (P steep); read as physics, not checked further.
+
 ## 2026-11-16 (director, 21:50) — merged: the macOS findings, three objective repairs, the converter's GSL note
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 101: `feature/upgrade-0-macos-3`,

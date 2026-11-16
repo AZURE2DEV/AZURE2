@@ -10,6 +10,9 @@ ObservedLevelTable::ObservedLevelTable(const std::vector<int> &numLevels, const 
     empty.W.assign(nc, 0.0);
     empty.value.assign(nc, 0.0);
     empty.kind.assign(nc, 0);
+    empty.P.assign(nc, 0.0);
+    empty.mu_u.assign(nc, 0.0);
+    empty.a_fm.assign(nc, 0.0);
     levels_[j].assign((std::size_t)numLevels[j], empty);
   }
 }

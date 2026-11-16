@@ -288,6 +288,15 @@ class AZUREAPI {
   vector_r ParkNorms(const vector_r &rwaParams);
 
   /*!
+   * The observed-level record (CompoundSystem::TransformOut, as TransformAllRWAParameters makes it) at every parameter
+   * value of `p` (the params_all_rwa() layout, every value; std::invalid_argument otherwise): 10 numbers per channel of every level,
+   * J group, level and channel (1-based), E (MeV, the physical energy), the kind of the observed value
+   * (physics::ObservedKind), W (MeV), the reported value, P (the factor W was formed with), mu (u) and a (fm)
+   * (docs/upgrade/data_model.md section 10).
+   */
+  vector_r ObservedLevelRowsAllRWA(const vector_r &p);
+
+  /*!
    * Data covariances ("covariance <file>" segments): forget the model frozen for their
    * relvector terms, so the next chi2 evaluation freezes it again at its parameters
    * (iterative refits).  Returns the number of covariance groups with relvector terms.

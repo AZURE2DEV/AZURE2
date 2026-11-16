@@ -2,9 +2,9 @@
 // (Steed's method with its own continued fractions) that physics/ does not link (docs/upgrade/coulomb.md
 // section 5).  Grid: l = 0-10, eta = 0 and 1e-3-50, rho = 1e-3-100.  Compared where GSL is accurate (pycoulomb's
 // measurements against mpmath: everywhere for eta = 0, and beyond the outer turning point rho_tp = eta +
-// sqrt(eta^2 + l(l+1)) for eta > 0, to 5e-15): G and G' for eta = 0 (coulsm's F there comes from an unstable
-// recurrence and is not used alone, coulomb.md), F, F', G, G' relative to the amplitude beyond rho_tp.  coulsm is
-// good to 1e-9 there, so a disagreement above 1e-8 means a wrong source, sign or normalisation.
+// sqrt(eta^2 + l(l+1)) for eta > 0, to 5e-15): F, F', G and G' each relative for eta = 0 inside rho_tp (F and F'
+// since coulsm's were repaired, coulomb.md section 10), F, F', G, G' relative to the amplitude beyond rho_tp.  coulsm
+// is good to 1e-9 there, so a disagreement above 1e-8 means a wrong source, sign or normalisation.
 //
 // Inside the outer turning point GSL's routine is not accurate, which is why the engine's option use_gsl_coul was
 // retired on 2026-11-16 (docs/upgrade/coulomb.md sections 8.2 and 9.1).  The second part holds that reason as numbers:
@@ -45,7 +45,8 @@ int main() {
         }
         double d;
         if (eta == 0.0 && !beyond) {
-          d = std::fmax(std::fabs(w.G - gG) / std::fabs(gG), std::fabs(w.Gp - gGp) / std::fabs(gGp));
+          d = std::fmax(std::fmax(std::fabs(w.G - gG) / std::fabs(gG), std::fabs(w.Gp - gGp) / std::fabs(gGp)),
+                        std::fmax(std::fabs(w.F - gF) / std::fabs(gF), std::fabs(w.Fp - gFp) / std::fabs(gFp)));
         } else {
           const double a = std::hypot(gF, gG), ap = std::hypot(gFp, gGp);
           d = std::fmax(std::fmax(std::fabs(w.F - gF), std::fabs(w.G - gG)) / a, std::fmax(std::fabs(w.Fp - gFp), std::fabs(w.Gp - gGp)) / ap);

@@ -393,12 +393,10 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
-- The Coulomb routine's F and F′ alone are inaccurate for a neutral pair with l ≥ 2 at ρ ≪ 1 (R, against mpmath:
-  relative error 4e-3 for l = 2, 3e5 for l = 3 at ρ = 7.5e-4); P, S and the phase are not (the error is below
-  2.5e-16 of the amplitude). Read alone only by the external-capture integrand and by the callers of
-  `pyazr.physics.coulomb_functions` and `Session.channel_functions`. No test project is affected (R: one project
-  reads such an F, at ρ ≥ 1.3, good to 2.7e-12); a d-wave neutron capture at eV energies would be.
-  `coulomb.md` section 9.6.
+- Until 2026-11-16 the Coulomb routine's F and F′ alone were inaccurate for a neutral pair with l ≥ 2 at ρ ≪ 1
+  (relative error 4e-3 for l = 2, 3e5 for l = 3 at ρ = 7.5e-4: an upward recurrence in its unstable direction). They
+  are now the Riccati-Bessel function, within 6.1e-15 of mpmath for l = 0–8 and ρ = 1e-6–5e4 (R,
+  `physics_coulomb_neutral`); G, G′ and every charged pair are unchanged bit for bit. `coulomb.md` section 10.
 - The web page was tested in a headless Chrome and used by the PI; Firefox and Safari were not run.
 
 ## 10. What is not finished
@@ -709,7 +707,8 @@ re-read against its design at the hand-over.
    `coulomb_gsl_crosscheck`; the engine links GSL for its quadratures, a fitter and special functions. Left:
    `coulsm` is good to 1e-9 and takes 36–71 µs per call for a charged pair; `coulcc` is three times faster and
    good to 6.5e-12 on the sampled arguments but fails at 11 of 2387 of them (η ≥ 48), so a faster default is
-   not a switch away. `coulsm`'s F alone at η = 0, l ≥ 2 and ρ ≪ 1 is inaccurate (`coulomb.md` section 9.3).
+   not a switch away. `coulsm`'s F and F′ at η = 0, wrong for l ≥ 2 and ρ ≪ 1 before, were repaired on
+   2026-11-16 (`coulomb.md` section 10).
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
