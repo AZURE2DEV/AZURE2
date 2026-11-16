@@ -76,8 +76,6 @@ class AbundanceSamples {
   std::vector<double> StartValues() const;
   /// The current abundance of (sample, nucleus) in \p values (1 when there is no such sample).
   double Value(const std::vector<double> &values, int sample, int nucleus) const;
-  /// The sum of the current abundances of one sample.
-  double Sum(const std::vector<double> &values, int sample) const;
 
   // -- the abundance block of the parameter vectors ----------------------------------------------------------------
   /// Writes the block into the fit's vector: one parameter per (sample, nucleus) at \p values, with its record, a

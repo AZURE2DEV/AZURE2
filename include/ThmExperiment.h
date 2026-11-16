@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "ThmProfile.h"
+#include "InferenceTypes.h"
 
 struct ThmWeightTable;
 
@@ -305,34 +305,8 @@ std::string ReadThmAngleTable(const std::string &path, std::vector<double> &thet
 /// rows and some positive value.  "" or what is wrong.
 std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std::vector<double> &w);
 
-
-/// The profile of m, d, e, E (all of equal length) with `terms` background terms.
-ThmProfile SolveThmProfile(const std::vector<double> &m, const std::vector<double> &d,
-                           const std::vector<double> &e, const std::vector<double> &energy, int terms);
-
-/*!
- * Total derivatives through the profile.  `Jm` is d m_i/d p_c (n x nCols,
- * row-major).  Returns in `J` the derivative of the standardized residual
- * r_i = (f_i - d_i)/e_i with the linear parameters at their optimum c*(p),
- * and in `G` the derivative of the curve as the output files show it next to
- * data scaled by n*(p0): q_i = f_i(p) / s(p0), i.e. G = (s Jm + A dc/dp)/s.
- *
- * With A~(p) = A(p)/e, rho = y~ - A~c (minus the residual) and
- * dA~/dp = [Jm/e, 0, ...] (only the model column depends on p), the
- * derivative of the least-squares solution is exact (Golub & Pereyra 1973):
- *   dc/dp = G^-1 ( (dA~/dp)^T rho - A~^T (dA~/dp) c ),
- *   dr/dp = (dA~/dp) c + A~ dc/dp.
- * The second term of dc/dp alone gives dr/dp = P_perp (dA~/dp) c, the
- * projection onto the orthogonal complement of the columns of A~ (Kaufman's
- * approximation, exact at zero residual); the first carries the curvature
- * that the residual adds.  With the model column alone this is the
- * ds/dp = (sum d J/e^2 - 2 s sum m J/e^2)/S_mm of ComputeTHMRows.  A column
- * that is not profiled has no row in dc/dp.
- */
-void ThmProfileDerivative(const ThmProfile &profile, const std::vector<double> &m,
-                          const std::vector<double> &d, const std::vector<double> &e,
-                          const std::vector<double> &energy, const std::vector<double> &Jm, int nCols,
-                          std::vector<double> &J, std::vector<double> &G);
+/// The profile of an experiment's points (SolveThmProfile) and the derivatives through it (ThmProfileDerivative):
+/// inference/'s LinearProfile.h.
 
 /// What the output file and pyazr report for one experiment.
 struct ThmExperimentReport {

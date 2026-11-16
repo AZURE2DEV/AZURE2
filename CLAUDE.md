@@ -91,7 +91,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
-| `inference/` | The fit's parameter vector as plain data (kinds and records, the level block's layout, the index map full ↔ packed, the posterior's support), one Gaussian prior, the prior covariance (grammar and arithmetic), the sums of a list of terms | Uses nothing (no engine headers, no Minuit2: check 8b, `inference_standalone`); the engine names its types through `include/InferenceTypes.h` and keeps the walks, the values of the vector (`AZUREParams`) and the terms (`src/Objective.cpp`); `docs/upgrade/inference.md` |
+| `inference/` | The fit's parameter vector as plain data (kinds and records, the level block's layout, the index map full ↔ packed, the posterior's support), one Gaussian prior, the prior covariance (grammar and arithmetic), the sums of a list of terms, and the arithmetic of the objective's terms on arrays (the diagonal priors, the abundances, Park's wall, the profiled norms and THM profiles) | Uses nothing (no engine headers, no Minuit2: check 8b, `inference_standalone`); the engine names its types through `include/InferenceTypes.h` and keeps the walks (the gathers that fill the arrays), the values of the vector (`AZUREParams`) and the terms (`src/Objective.cpp`); `docs/upgrade/inference.md` |
 | `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by the engine's THM distortion (`src/ThmDistortion.cpp`) and the binding; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `numcmc/` | Ensemble MCMC sampler | |
@@ -249,8 +249,11 @@ section (check 34).
    formula: `GaussianPriorChi2` / `GaussianPriorGradient` / `GaussianPriorCurvature`
    (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients,
    the rows, the sampler and the writer read.
-   Arithmetic that needs no engine object goes in `inference/` with its test in `inference/tests/` [check 8b: only
-   its own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
+   The term's walk of the engine's objects is a gather in the engine that fills plain arrays; its arithmetic (value,
+   gradient, rows) is one header of `inference/` with its test in `inference/tests/` (values by hand, the gradient and
+   the rows against central differences), which the value, the gradient and the rows all call: `AbundancePriors.h`
+   with `AbundanceBlockOf`, `ParkWall.h` with `ParkLevelsOf` are the pattern [check 8b: `inference/` uses only its
+   own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
    [check 11: no term is added outside `src/Objective.cpp`].
 2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
    the same χ² (`tests/pyazr/objective_test.py`).

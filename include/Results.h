@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "TaskScratch.h"
-#include "ThmProfile.h"
+#include "azure2/inference/LinearProfile.h"
 #include "azure2/support/Environment.h"
 
 namespace azure2 {
@@ -45,7 +45,8 @@ namespace azure2 {
  * WorkingCopy::FillEnergyShiftsFromParams, the last step of the hand-over (WorkingCopy::BeginEvaluation), which sizes it for the
  * data set's layout and, under AZURE_POISON_RESULTS=1, fills it with NaN.
  *
- * The struct is plain (no engine headers; ThmProfile.h is plain too), so it can move to the experiment library.
+ * The struct is plain (no engine headers; inference/'s LinearProfile.h is plain too), so it can move to the experiment
+ * library.
  */
 struct Results {
   enum Quantity : std::size_t { kSigma = 0, kSigmaE1 = 1, kSigmaE2 = 2, kAy = 3, kA0 = 4, kNumFixed = 5 };
@@ -79,7 +80,7 @@ struct Results {
     /// the point's share of d(chi^2)/d(r_i) / 2, which the gradient reads.  Indexed as Results::model (the point's
     /// model record, Unit::SetModelRecord); sized only when the data set has a covariance group.
     std::vector<double> covarianceSeed;
-    std::vector<ThmProfile> thmProfiles;
+    std::vector<inference::ThmProfile> thmProfiles;
     double nuisance = 0.0, park = 0.0, abundance = 0.0, priorCovariance = 0.0;
     /// The <modelData> section's part of the model-data term, and whether the project has the section (the total is
     /// written to chiSquared.out whenever it has).

@@ -76,12 +76,16 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    block (``LevelParameterLayout.h``), the place of every parameter in the
    full and the packed vector (``ParameterIndexMap.h``), the limits as the
    posterior's support (``PosteriorSupport.h``), one Gaussian prior
-   (``GaussianPrior.h``), the prior covariance with its file grammar
+   (``GaussianPrior.h``), the list of the objective's diagonal priors
+   (``DiagonalPriors.h``), the abundance term (``AbundancePriors.h``), Park's
+   wall (``ParkWall.h``), the profiled norms and the THM experiment's profile
+   (``LinearProfile.h``), the prior covariance with its file grammar
    (``PriorCovariance.h``) and the sums of an ordered list of terms
    (``TermList.h``). It links nothing and builds as a project of its own. The
    engine names its types through ``include/InferenceTypes.h``; the values of
    the vector (``AZUREParams``, on Minuit2's parameters), the terms of the
-   objective and the fitters are engine code.
+   objective with their gathers (the walks of the engine's objects that fill
+   the library's arrays), and the fitters are engine code.
 
 ``convert/`` (``azure2_convert``, ``azure2_convert_specs``, ``azure2_convert_lines``)
    Everything that knows the old project formats: their line parsers

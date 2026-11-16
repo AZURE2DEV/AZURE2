@@ -41,8 +41,17 @@ void AppendShiftPriors(const WorkingCopy &data, int s, const ParamIndexMap *pmap
 /// T3 and T4 of segment `s`: the norm, then the shifts (the order SegmentTerms adds them in).
 void AppendSegmentPriors(const WorkingCopy &data, int s, const ParamIndexMap *pmap, DiagonalPriors &out);
 
-/// T7's per-nucleus priors, in the order of the abundance parameters: sigma > 0 and not replaced.  (The sum-to-one
-/// term couples the abundances of a sample and is not diagonal.)
+/*!
+ * T7: the abundance block of the working copy as inference/'s arrays (AbundancePriors.h): per ordinal the value the
+ * working copy holds (NaN before the first hand-over), the prior's centre and width and whether it is active (sigma > 0
+ * and not replaced by the prior covariance); per sample the sum's centre and its width (the sample's own "sum" line,
+ * else `globalSumSigma`, the config's abundanceSumSigma).  Empty without an <abundances> block.  The value, the
+ * gradient, the rows, the sampler and AppendAbundancePriors read it.
+ */
+AbundanceBlock AbundanceBlockOf(const WorkingCopy &data, double globalSumSigma);
+
+/// T7's per-nucleus priors, the active ones of AbundanceBlockOf, in the order of the abundance parameters.  (The
+/// sum-to-one term couples the abundances of a sample and is not diagonal.)
 void AppendAbundancePriors(const WorkingCopy &data, const ParamIndexMap *pmap, DiagonalPriors &out);
 
 /*!

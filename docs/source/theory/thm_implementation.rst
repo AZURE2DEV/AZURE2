@@ -512,7 +512,7 @@ background columns as terms), :math:`\tilde A = A/e`, :math:`\tilde y = d/e`,
    \operatorname{cov}(c) = G^{-1},
 
 solved by Cholesky on the Jacobi-scaled :math:`G` (``SolveThmProfile`` in
-``src/ThmExperiment.cpp``). Points with :math:`e_i = 0` carry no weight. The
+``inference/src/LinearProfile.cpp``). Points with :math:`e_i = 0` carry no weight. The
 output file writes :math:`m_i + b(E_i)` as the fitted curve next to the data
 scaled by :math:`n^*`. The background may come out negative: it is a
 phenomenological term (non-quasi-free or sequential contributions, an
