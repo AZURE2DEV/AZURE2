@@ -2,6 +2,123 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 15:05) — merged: the gradient's arithmetic in `physics/`; wheels green; Windows read
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 97: the branch `feature/upgrade-1-gradient-functions`
+(an agent's; its entry follows). The base build is `work/b-trial97`, the reference stays `tab-trial94-1`, the
+quick set is 328 tests.
+
+**The gradient split.** The arithmetic of the analytic gradient is three header-only files of `physics/`
+(`CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`; 944 lines; they include `physics/`
+headers and the standard library only), each function tested against finite differences of its forward
+function; `src/AMatrixFunc.cpp` went from 2,380 to 1,966 lines and keeps the walk. In `physics_functions.md`
+it is **stage 6** (the agent wrote "stage 5", which the Python door of the morning already was; renumbered at
+the merge, with the three headers' comments). Two new `std::logic_error` on paths `PointTBar` already refuses.
+The agent's questions, not put to the PI yet: keeping GCC from vectorizing the dense loop (about 1 % on fits
+with external capture, a compiler-specific line in a `physics/` header); `CurrentLevelDerivatives` to
+`physics/` next; whether the Brune `shiftDeriv` indexed by active level in a THM block's `levelOf` is intended.
+
+**Verified** (`work/director/verify_l97.out`; the merge is on today's other changes, which the agent's own
+checks did not have): 0 warnings; 887, 851 and 887 files identical to `tab-trial94-1`; the eight fits identical
+to `work/b-trial95`; 328 of 328 quick tests; 172 of 172 regression scripts. Not run by me: the instruction
+counts (the agent's: within 0.34 % on the 13N gradient fit, 0.004 % on T2), the slow tests, sanitizers.
+
+**The wheels are green on all four platforms** (run 43863727165 of the push of entry e99): Linux x86-64 and
+aarch64, macOS on Intel and arm64, each wheel built and tested after installation, the program included.
+
+**The CI's build run of `0c6167c1`** (the first with the fourteenth push's repairs): Linux passes. Windows: 170
+of 172 regression checks, 12 unit tests failing (165 and 27 before). Their causes and the repairs are
+`FOR_THE_OWNER.md` section 10 item 1, last bullet; the repairs are the branch
+`feature/upgrade-0-windows-tests-2`, not in this rehearsal. macOS: not ended.
+
+**The PI on 2026-11-16, "I agree with your suggestions"**, to three points on the Coulomb functions (the
+Coulomb agent's finding, the director having confirmed one point against mpmath: GSL's penetrability 5.2 % high
+at l = 3, eta = 0.6449, rho = 1.2011): the option `use_gsl_coul` / `--gsl-coul` is retired with a message that
+says why; the Coulomb-table tool's `validate` line is restricted to beyond the turning point; `coulsm`'s F alone
+at eta = 0, l >= 2, small rho is looked at. The agent is on it (`feature/upgrade-1-coulomb-engine`).
+
+**Not merged yet:** `feature/upgrade-6-large-classes` (reported; the director's own comparison finds every code
+line of the three old files in the new ones), `feature/upgrade-0-windows-tests-2`,
+`feature/upgrade-1-coulomb-engine`, `feature/upgrade-8-pyazr-approved` (running).
+
+## 2026-11-16 (gradient agent, 14:10) — the analytic gradient's arithmetic as functions of `physics/`
+
+**Not merged.** Branch `feature/upgrade-1-gradient-functions` in `wt-grad`, cut from `feature/upgrade` at 0c6167c1,
+five commits: 8902f656 (design), 0a8611d3 (level-matrix adjoint), 5b01e10b (channel route), 72385761 (observables
+and the T-matrix step), and the documents. Builds `work/b-grad`, `work/b-grad2`, `work/b-grad3`. The whole account
+is `docs/upgrade/physics_functions.md`, "Stage 5".
+
+**What was changed.**
+
+- Three new headers of `physics/` (944 lines, header only, nothing of the engine, no GSL):
+  `CollisionMatrixAdjoint.h` (578), `ChannelSolveAdjoint.h` (222), `ObservablesAdjoint.h` (144). A function adds
+  its terms through a sink the caller hands over (`energy(level, v)`, `width(level, channel, v)`, `widths(level)`),
+  in the order of the engine routine it was moved from; `AMatrixFunc` passes a sink over `GradAccum`.
+- *Slice 1* (0a8611d3): `level_matrix_adjoint` (the body of `AMatrixFunc::LevelMatrixAdjoint`: standard, Brune,
+  Park), `inverse_adjoint`, `add_explicit_widths`, `add_rank_one_cotangent`, `deferred_bilinear_adjoint` (the
+  three forms of `BilinearAdjoint`), `width_solve_products`, `level_parameter_adjoint` (`LevelAdjoint`).
+- *Slice 2* (5b01e10b): `formal_channel_solve` (`FormalSolve`), `level_solve_from_formal`, `pencil_channel_solve`
+  (`GetRawChannelSolve`), `kernel_column`, `formal_bilinear_adjoint` (`FormalBilinearAdjoint`),
+  `resolve_formal_cotangents`, `add_level_widths_from_formal`, `deferred_level_cotangents`
+  (`ResolveFormalCotangents`).
+- *Slice 3* (72385761): the expressions of `PointTBar`, `TBarProducts`, `CollectBilinearTerms` and of the dense
+  path of `TBarAdjoint` (`ObservablesAdjoint.h`; `amplitude_cotangent`, `penetrability_factor`,
+  `bilinear_cotangent`, `masked_amplitude`, `dense_bilinear_adjoint`, three external-capture functions).
+- The engine keeps the walk: `src/AMatrixFunc.cpp` 2380 -> 2127 -> 2013 -> 1966 lines, `include/AMatrixFunc.h`
+  387 -> 388. `PointTBar` is still about 450 lines (gates, the walk over spin groups, pathways, interferences).
+  `LevelState` gives a group's arrays as pointers; `BilinearTerm` and `ChannelSpace::LevelDerivatives::Entry` are
+  structs of `physics/` now. No new `mutable`, static, global or `const_cast`; no new dependency.
+- Tests, no project file: `physics_collision_matrix_adjoint` (18 checks), `physics_channel_solve_adjoint` (9),
+  `physics_observables_adjoint` (12): every function against Richardson central differences of its forward
+  function; agreement between 8e-14 and 6e-12 of the largest derivative (5e-9 for two coincident levels, where
+  the level matrix and its adjoint use Taylor forms; forward solves against the factorized level matrix 5e-16 to
+  7e-15). With two errors injected into slice 1's header 7 checks failed.
+- Documents: `physics_functions.md` (stage 5), `FOR_THE_OWNER.md` sections 5, 6, 10 item 5, `ROADMAP.md` row 1,
+  `ARCHITECTURE.md` section 3, the Developer Guide (`extending.rst`, `physics_core.rst`, `level_matrix.rst`),
+  `CLAUDE.md` (recipe "An observable of a reaction at a mesh energy"), `tests/consistency/file_sizes.tsv`
+  (`--tighten-sizes`: it also lowered the records of seven files this branch did not touch).
+
+**What was run** (`work/director/verify_branch.sh wt-grad <name> tab-t74-1 trial92 5`, once per slice, on the
+working tree that was then committed unchanged).
+
+- Slice 1: `work/director/verify_grad_slice1.out` (logs `work/director/vlgrad/`). 0 warnings; 887, 851, 887 files
+  identical in the three bases, 0 differ, 0 new; eight fits identical to `work/b-trial92`; 315 of 315 quick tests;
+  172 of 172 regression scripts.
+- Slice 2: `verify_grad_slice2.out` (`vlgrad2/`). The same, with 316 of 316 quick tests.
+- Slice 3: `verify_grad_slice3.out` (`vlgrad3/`). The same, with 317 of 317 quick tests.
+- Instructions at one thread against `work/b-trial92` (`work/director/grad_speed.sh`, outputs
+  `grad_speed_*.out`), T2 gradient fit / 13N gradient fit: base of the branch 169,075,377,914 / 185,399,199,601
+  (the first trial92 run of that session read 169,510,003,388; every later one 169,174,3xx,xxx); slice 1
+  169,181,249,011 (+0.004 %) / 185,596,558,145 (+0.10 %); slice 2 169,179,114,861 (+0.003 %) / 185,578,765,076
+  (+0.09 %); slice 3 169,181,010,815 (+0.004 %) / 186,030,278,169 (+0.34 %). No output file differs.
+- On the documents' commit: `python3 tests/consistency/repo_consistency_test.py` (consistent), `ctest -R
+  docs_build` (60 pages, no warning). The full check was not repeated for that commit (documents and the size
+  table only).
+
+**What is not done.**
+
+- `GenMatrixFunc::GetRk` and `src/AngCoeff.cpp`: left alone as told.
+- The particle analysing power (`Polarization::AmplitudeMatrix`, its `AnalyzingPowerBar` / `PathwayAdjoint`).
+- `ChannelSpace::Update` as `formal_levels(arrays, flags)`, and `ChannelSpace::CurrentLevelArrays` /
+  `CurrentLevelDerivatives` (the per-parameter-set arrays of the gradient: the k and q vectors of Brune's and
+  Park's K and N are built there, so `level_parameter_adjoint` has a unit test for the standard matrix only).
+- The adjoint functions are not bound in pyazr.
+- Not run: the slow ctest label, the converted-tree gate, a comparison at several thread counts, macOS and
+  Windows compilers (the headers use only the standard library).
+
+**Found on the way.**
+
+- A first version of slice 1 cost +0.90 % on the 13N fit: two `vector::assign` per call of the level-matrix
+  adjoint and a matrix returned through an out-parameter. Removed (+0.10 %).
+- After slice 3 the compiler (GCC 11, `-O3`) vectorizes the dense loop over level pairs and, having
+  if-converted it, calls libgcc's `__muldc3` beside each of the five inline complex products of a pair (26.4
+  million calls each in the 13N fit; same numbers). That is the +0.34 %; the loop without those calls would be
+  about 1 % below the base, since it no longer calls `GetAMatrixElement` per pair.
+- `LevelMatrixAdjoint` with a THM block's `levelOf` indexes the Brune `shiftDeriv` by the active level, not by
+  the level number (kept as it was; equal when no level is left out).
+- `tools`' `--tighten-sizes` drops a file's record when it falls below 1,000 lines (`src/AZURE2.cpp`,
+  `src/ThmExperiment.cpp`).
+
 ## 2026-11-16 (director, 13:25) — merged: the wheel's program inside the package; the PI's five answers
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 96: the branch `feature/upgrade-8-wheel-program`

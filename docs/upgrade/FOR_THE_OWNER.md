@@ -210,7 +210,8 @@ one calculation, in the program and in pyazr alike:
 3. **Working copy on the shared mesh.** The data as set up are one immutable `DataSet`; what an evaluation changes
    (norms, shifts, apparatus values) is a `WorkingCopy`. Each mesh node is one calculation site (`Site`).
 4. **Model pass.** One level-matrix solve per compound energy (`src/EnergyPass.cpp`; the arithmetic is in
-   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`) into the caller's `Results`,
+   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`, and for the analytic gradient their
+   adjoints `CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`) into the caller's `Results`,
    then each folded point over its sites (`src/PointFold.cpp`); each data set's value is an expression tree (sum,
    ratio, scale, yield) with one forward and one adjoint implementation (`src/ModelPass.cpp`).
 5. **Objective.** One ordered list of terms (`src/Objective.cpp`): data χ², nuisance priors, Park's wall, model
@@ -236,7 +237,7 @@ Each kind of extension is a row of one table and a test (`docs/source/developer/
 | Kind | The named places | The test that fails |
 |---|---|---|
 | A data quantity | `experiment/src/Quantities.cpp` row; its tree in `Schema::Build` | `experiment_quantities` |
-| An observable at a mesh energy | `Observables.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
+| An observable at a mesh energy | `Observables.h`, `ObservablesAdjoint.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
 | An apparatus kernel | one `experiment/src/Kernel<Name>.cpp`; a line in `Kernels()` | `experiment_kernels` |
 | A parameter kind | `ParamKindTable()` row (`inference/`); a `FillMnParams`; `BuildParamIndexMap` | `pyazr_parameter_records`, `inference_parameter_kinds` |
 | A level parameter | a `LevelParameterLayout` slot (`inference/`); `LevelState`, `LevelInputs` | `upgrade_level_parameter_layout` |
@@ -606,6 +607,17 @@ re-read against its design at the hand-over.
      test now prints which and what the fit reported) and `tests/upgrade` (the golden comparison of T1 or T3;
      the failing line was not shown).
 
+   - *Windows with the fourteenth push's repairs* (run 43828542125 of `0c6167c1`, 2026-11-16): 170 of the 172
+     regression checks pass (`gamma_decay` and `upgrade` fail) and 12 unit tests fail (27 before); Linux passes
+     again. Read from the annotations, which now show every failing test's first lines, and answered in the
+     commit "test: the Windows job's failures ...", **again without a Windows machine**: nine are faults of the
+     tests there (CRLF from a program's standard output and from generated files, the code page, a path with
+     mixed separators, a path without `.exe`, the built module `.pyd` taken as a data file, a filter that looked
+     for forward slashes: the 186 failures of `physics_pathway_table`); `tools_runall` is answered with a guess
+     (the system directory's `bash.exe` is WSL's); three self-tests of skills need matplotlib or emcee, which
+     the Windows job does not install: two report skipped there, one skips its one emcee check. The macOS job
+     of that run had not ended when this was written.
+
    **The CI is green on Linux and for the sanitizers, not on Windows and macOS.** Linux passes since the
    eleventh push (every regression check and every unit test; `docs_build` is skipped, no Sphinx there). The
    one failure of the ninth push was `tests/shared_point_tables` (d), a bound on the peak memory of a fit
@@ -643,14 +655,18 @@ re-read against its design at the hand-over.
    target values); what copy-on-write could share is the sites of a project without energy shifts and without
    fitted target parameters (`evaluation.md` section 7.8, the last part). The cost today is memory, not
    correctness. The locks are as they were.
-5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
+5. **Large classes.** `src/AMatrixFunc.cpp` (1,966 lines; 2,766 before the moves below), `api/src/AZUREAPI.cpp`
    (1,532), `src/AZURECalc.cpp` (1,395), `src/AZURECalcMCMC.cpp` (1,309). The arithmetic of the collision matrix
    (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
    sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
    `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and
-   `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
-   adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
-   particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
+   `GenMatrixFunc` collect the arrays of a site and call them. The arithmetic of the analytic gradient is there
+   too since 2026-11-16 (`CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`, each
+   function tested against finite differences of its forward function; `physics_functions.md`, stage 6), with
+   every gradient output identical; `AMatrixFunc` keeps the walk, and `PointTBar` is still about 450 lines of
+   gates and of that walk. Still engine code: the R_k of a secondary decay, the particle analysing power and its
+   adjoint, the set-up of the formal levels (`ChannelSpace::Update`) and the arrays `ChannelSpace` keeps per
+   parameter set for the gradient. From Python,
    `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal, Brune's
    or Park's levels; particle and photon channels; the Reich-Moore term), checked against numpy and against a
    session's phase shifts and cross sections on T1-T3 in the three parametrizations (`physics_functions.md`,
@@ -675,8 +691,9 @@ re-read against its design at the hand-over.
    - macOS: the installed program `AZURE2` did not start (the wheel's own libgsl not found): delocate gives the
      program a path relative to its place in the wheel, the scripts, and pip moves a script. The program is now
      inside the package (`pyazr/bin/AZURE2`) and the console script `AZURE2` runs it (`pyazr/program.py`).
-     **Not seen to work on macOS yet**: the run after this change shows it. On Linux the test's container has a
-     system libgsl, so the test there cannot show whether auditwheel repaired the program.
+     **The third run (43863727165) passes on all four platforms**: every wheel builds and its test passes, the
+     installed program on macOS included. On Linux the test's container has a system libgsl, so the test there
+     cannot show whether auditwheel repaired the program.
    No Windows wheel; the Coulomb table's address is empty (`pyazr/coulomb_table.py`); no wheel was installed on
    a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
