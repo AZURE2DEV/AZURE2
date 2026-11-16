@@ -603,3 +603,100 @@ Two places of the engine, an include and a comment, no statement: `include/CoulF
 GSL's Coulomb functions are named in `src/CoulFunc.cpp` and `src/coulomb_table_main.cpp` only; and the comment of
 `src/ECIntegral.cpp` that named `gsl_sf_hyperg_U` as the present cost says what it is now. The option, the two
 calls and the tool's line are as they were.
+
+## 9. The option `use_gsl_coul` retired; the tool's cross-check; F alone at η = 0 (design, 2026-11-16)
+
+The PI decided on the three points of section 8 (2026-11-16, relayed by the director): the option is retired, the
+cross-check line of `azure2-coulomb-table validate` is restricted to where GSL is right, and the F of `coulsm` at
+η = 0 is measured, not changed.
+
+### 9.1 Retiring `use_gsl_coul` / `--gsl-coul`
+
+*What it is physically.* One routine for F_l, G_l is left in the engine, `physics/coulomb`'s `coulsm`. GSL's
+routine is wrong by up to 5 % in P inside the outer turning point (section 8.2), which is where a charged channel
+below its barrier lives; an option that selects it selects wrong numbers.
+
+*The rule, for the three spellings.* The pattern is that of `useAdaptiveGrid` (`project_format3.md` section 3.1,
+`E_CONFIG_KEY_REMOVED`): a removed key is refused with either value and the message says to delete it. A value of
+0 is not accepted quietly: the line names an option that does not exist.
+
+- One table in `io/`, `RemovedConfigKeys()` (`ConfigSection.h`): name, the flag it had, and why it is gone. Rows:
+  `useAdaptiveGrid` (its text unchanged) and `use_gsl_coul` (`--gsl-coul`). One function gives the message in the
+  spelling of the front end, `RemovedConfigKeyText(row, OptionSpelling)`: "use_gsl_coul is no longer a key of
+  `<config>`: delete the line. …", "--gsl-coul is no longer an option of AZURE2: leave it out. …", "use_gsl_coul is
+  no longer a keyword of pyazr.Session: leave it out. …", each followed by the same reason: GSL's Coulomb functions
+  are wrong by up to 5 % in the penetrability inside the outer turning point; AZURE2's own functions
+  (`physics/coulomb`) are the only ones, and they are what the default always used.
+- *A format-3 file with the key* (either value): `E_CONFIG_KEY_REMOVED` at its line, from the reader
+  (`experiment/src/ProjectReader.cpp`, which asks the table instead of comparing with one name), hence from
+  `--validate` (exit 2), the run (exit 1, nothing computed), `pyazr.Project.validate` and a session. Before this
+  change the key was a row of `io::ConfigKeys()`; a key that is no row gives `E_UNREAD_LINE` ("not a key of
+  `<config>`"), which would not say why, so the removed keys are asked first.
+- *The flag*: `parseOptions` throws the message as it does for an unknown option (exit 2, before the project is
+  read). `--help` lists it once as removed, as it does `--use-api`.
+- *The keyword*: `pyazr.Session(..., use_gsl_coul=...)` raises `TypeError` with the message (a Python call with a
+  keyword that does not exist is a `TypeError`); the signature loses the keyword. The binding gives the text
+  (`_azure2.removed_option_text`), so Python holds no copy. The level doors of the binding lose their argument
+  `use_gsl_coulomb` (private: `pyazr.endf` is their only caller).
+- *The converter.* Old files (formats 1 and 2) have no such key: the GSL choice of the old setup program was a bit
+  of `<lastRun>`, which the converter removes with the rest of that section (the PI, 2026-11-13, `qt_parity.md`):
+  the converted project is computed with the program's own functions, as any project without the key. Nothing
+  changes in `convert/`. This differs from what the old program did for a user who had ticked the box, by the
+  amounts of section 8.3, and is row 19 of `FOR_THE_OWNER.md` section 3.
+
+*What goes.* The two `gsl_sf_coulomb_wave_FG_e` calls and `useGSLFunctions_` in `CoulFunc`; the constructor
+argument of `CoulFunc` and `ChannelFunc`; `Config::USE_GSL_COULOMB_FUNC` (bit 12 stays unused) and its 22
+hand-overs; the `gsl` member of `CoulRadialMemo::Key`, `ShiftDerivativeMemo::Key` and `ThmShiftMemo`; the argument
+of `EngineChannelFunctions`, `PhotonAmplitudes`, `FinalSqrtNF`; the argument `useGSL` of `ThmCoulombTerm`, which
+had no effect; the rows of `io::ConfigKeys()` and `OptionStorages()` (no implication or contradiction named the
+option), so `--describe`, `pyazr.kinds()["options"]` and the web page's form lose it with the row.
+
+*Signatures (no default result may change).* `WorkingCopy::ECSignature` hashes the option's value as an integer
+between the version text and the long-wavelength flag. A default run hashed 0 there; the line becomes the
+constant 0 with a comment, so every signature of a default run is the one it was and the version stays v7. The
+in-memory keys (the channel tables' pair signature, the external-capture table's term key) are compared only
+within one run and lose the entry.
+
+*What still links GSL.* The engine keeps GSL for the quadratures of the capture integrals and the folds
+(`gsl_integration_*`), the fitter `FitGslTrustRegion`, Bessel and Gamma functions in `ThmFunc`,
+`IntegratedFermiFunc` and others, and the opt-in numerical bound-shift route; `azure2-coulomb-table validate`
+keeps its one call of GSL's Coulomb functions (section 9.2). The dependency stays.
+
+*Tests.* A test of the option's two values becomes a test of the refusal:
+
+- `experiment/tests/build_test.cpp`: `use_gsl_coul=0` and `=1` each give `E_CONFIG_KEY_REMOVED` alone, at the
+  line, with "delete the line" and the reason; the every-option text loses the key.
+- `tests/config_options/check.sh`: the two rows of the key-equals-flag table become three refusals: the key
+  (`--validate` exit 2, the run exit 1 without output), and the flag (exit 2, the message, no output).
+- `tests/pyazr/config_options_test.py`: the keyword with either value raises `TypeError` with the reason; a
+  project with the key is refused by a session; the option is not in `pyazr.kinds()["options"]`.
+- `tests/ec_integrals_signature` case 6 (the file of the other routine is refused) becomes: the run with
+  `--gsl-coul` is refused, and the saved file is still taken by the next run without a warning.
+- `tests/reference/thm_coulomb_term_test.cpp` ran every case with `useGSL` off and on to show it did not matter;
+  with the argument gone each case runs once.
+- The reason itself: `coulomb_gsl_crosscheck` gets stored mpmath values of P at points inside the turning point
+  (among them l = 3, η = 0.6449, ρ = 1.2011): `coulsm` must agree to 10⁻⁹ and GSL must be off by more than 10⁻³
+  (it is 5.2 × 10⁻² there). If a later GSL repairs its routine the test says so; the retirement would still hold.
+
+*Gate.* 0 warnings; every project in three bases identical to `tab-trial94-1`, except the two `--describe`
+stories under `tests/*/expected/` that list the options (one line less); the eight fits identical to
+`work/b-trial95`; `ctest -LE slow`, `tests/run_tests.sh`; the affected tests also without a table file.
+
+### 9.2 The cross-check line of `azure2-coulomb-table validate`
+
+The 5000 random points are kept (same seed, same draws); a point enters the comparison only when
+ρ ≥ ρ_tp = η + [η² + l(l+1)]^½, where GSL is good to 10⁻¹⁵ (section 8.2). The line says so and counts: "references
+beyond the outer turning point (N of 5000 points; M more refused or scaled by GSL): Michel vs GSL Coulomb P …,
+S …". The numbers become a check of the table's reference routine at the level of its own accuracy (10⁻⁹); they
+stay printed and outside PASS/FAIL, whose limit is the interpolation error. No test compares the line.
+
+### 9.3 F alone at η = 0 (measurement only)
+
+Where the engine reads F by itself: the external-capture integrand (`ECIntegral`: `fgEvaluate` → FW, the rate's
+fixed grid, the channel-capture integrand) and the Coulomb functions the binding returns to a caller
+(`pyazr.physics.coulomb_functions`). Everything else forms P, S, φ or H⁺ = G + iF, where the error of F is below
+2.5 × 10⁻¹⁶ of the amplitude. Measured with a scratch build over every test project: (i) every F of a neutral pair
+read in an external-capture integrand, against GSL's at η = 0 (good to 2 × 10⁻¹⁵ against mpmath, section 8.2):
+how many are off by more than 10⁻⁸ relative, in which project; (ii) the same build with those F replaced by GSL's,
+every output file compared with the unreplaced run: the largest relative change of an integral (`intEC.dat`) and of
+an observable. An observable moved by more than 10⁻¹⁰ stops the item and is reported with its project and size.
