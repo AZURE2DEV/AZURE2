@@ -42,7 +42,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 0 | Skills on pyazr 3.0's names | done, ticked | the skills' own self-tests were not re-run at the hand-over |
 | 1 | pycoulomb prerequisites | outside this repository | the PI's package; the functions used here are `physics/coulomb` |
 | 1 | `physics/` target, `System`, `JpiBlock` | built, used at set-up; the collision matrix and the observables' sums are functions of arrays the engine calls (`physics_functions.md`) | the adjoints of those functions are functions of `physics/` too (stage 6 of `physics_functions.md`); the R_k of a secondary decay, the particle analysing power and the set-up of the formal levels are engine code; `pyazr.physics.collision_matrix` takes the three parametrizations and photon channels (stage 5) |
-| 1 | `channel_functions` replaces the old Coulomb code | done for the channel tables | GSL still called in `src/CoulFunc.cpp` and `src/ECIntegral.cpp`; the Coulomb table is kept by design |
+| 1 | `channel_functions` replaces the old Coulomb code | done: with the default options the engine calls `physics/coulomb` only | GSL's routine is left in `src/CoulFunc.cpp` behind the option `use_gsl_coul`, which the PI decided on 2026-11-16 to retire (`coulomb.md` section 8; in work); the Coulomb table is kept by design |
 | 1 | Split `CNuc` | done, ticked (the steps under Phase 4) | — |
 | 1 | Convention record | record and `level_parameters` used by the engine | no project key; invariance tested at parameter level only; no independent check of the internal–external capture sign |
 | 2 | `inference/` target | built in part (`inference.md`): the parameter vector as plain data (kinds, records, level layout, index map, support), one Gaussian prior, the prior covariance, the sums of the term list | the terms (`src/Objective.cpp`), the vector's values (`AZUREParams`, on Minuit2) and the fitters are engine code: a library of them needs the data χ² on arrays |
@@ -283,6 +283,8 @@ immutable, built at set-up and read by everything outside the data classes; the 
 built at set-up. Remaining: external-capture amplitudes at set-up (with the decay-position defect of the data
 classes), the pathway trees deleted, the parameter vector and the set-up out, `CNuc` deleted. The file-size ratchet
 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file passes 1,000 lines.
+Since 2026-11-16 `src/AZURECalc.cpp`, `src/AZURECalcMCMC.cpp` and `api/src/AZUREAPI.cpp` are off that list: each is
+split into files of one job (`FOR_THE_OWNER.md` section 10 item 5), no function changed.
 *Design of the last steps, six branches: `cnuc_split.md` §12 (2026-11-13); it replaces the "Remaining" list above.*
 - [x] The structure frozen after set-up: the entrance pairs an input of the set-up, the `System` built once in `Fill`,
       the pairs, groups and channels read through `const` pointers only (`cnuc_split.md` §12.3, step 1 as built).

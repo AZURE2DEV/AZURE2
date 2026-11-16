@@ -517,7 +517,8 @@ DEFINERS = {"src/Objective.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp"
 ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
-    ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
+    ("api/src/AZUREAPIChi2.cpp", "CovarianceChi2Correction"),
+    ("api/src/AZUREAPIGradient.cpp", "CovarianceChi2Correction"),
     # The output writer, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
     # target-effect prior totals, which Results::objective does not hold yet (decision D2 of the note).
     ("src/DataOutputFiles.cpp", "ScreeningPenalty"),
@@ -1278,6 +1279,8 @@ try:
         if not _rel.startswith("pyazr/") or _rel.endswith(".py"):
             continue
         _rel = _rel[len("pyazr/"):]
+        if _rel.startswith("_azure2"):
+            continue  # the engine module of an in-tree build (no file of git; seen where git cannot list: Windows CI)
         _in, _out = _datafiles.shipped(_rel), _datafiles.excluded(_rel)
         if _in and _out:
             problems.append(f"pyazr/{_rel}: both in DATA_FILES and in NOT_SHIPPED of pyazr/datafiles.py (check 48)")

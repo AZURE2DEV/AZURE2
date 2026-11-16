@@ -293,7 +293,7 @@ class Segment {
   /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
   /// shift term with sigma != 0, to chi.  The one definition every chi^2 path uses; the
   /// index form (gradient, curvature, least-squares priors) is ForEachShiftPenalty in
-  /// AZURECalc.cpp and must list the same terms.
+  /// Objective.h and must list the same terms.
   void AddShiftPenalty(const SegmentState &state, double &chi) const;
   /// Shift function ("shiftfn" block): does this segment's own line declare one?  Such a
   /// segment owns the function's fit parameters (and their penalties).
