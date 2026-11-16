@@ -66,6 +66,7 @@ LIVECHART_URL = "https://www-nds.iaea.org/relnsd/v1/data"
 ENSDF_API_URL = "https://www.nndc.bnl.gov/ensdf-api"
 CROSSREF_URL = "https://api.crossref.org/works"
 UA = {"User-Agent": "pyazr/nds (research tool)"}
+EXFOR_UA = {"User-Agent": "Exfor-Azure2/1.0"}  #: for EXFOR_URL: the string IAEA-NDS gave AZURE2 (2026-11-09)
 
 #: Projectile shorthand used by EXFOR reaction strings -> mass number.
 #: ``(Z, A)`` of the light particles EXFOR names with a shorthand instead of a
@@ -101,10 +102,9 @@ def _http_get(url, params=None, timeout=60):
     data-fetching convenience is not worth adding a dependency the rest of the
     package does not need.
     """
-    if params:
-        url = f"{url}?{urllib.parse.urlencode(params)}"
-    request = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    url = f"{url}?{urllib.parse.urlencode(params)}" if params else url
+    agent = EXFOR_UA if url.startswith(EXFOR_URL) else UA  # the EXFOR firewall refuses most other clients
+    with urllib.request.urlopen(urllib.request.Request(url, headers=agent), timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
 
 

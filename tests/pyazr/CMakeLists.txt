@@ -564,6 +564,12 @@ add_test(NAME pyazr_nds_local_exfor
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_local_exfor_test.py)
 
+# EXFOR Web-API requests send the user-agent the IAEA Nuclear Data Section gave AZURE2 (Exfor-Azure2/1.0);
+# LiveChart, the NNDC ENSDF API and Crossref keep pyazr's own.  Offline: urlopen is replaced by a recorder.
+add_test(NAME pyazr_nds_exfor_user_agent
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_exfor_user_agent_test.py)
+
 # Ratio-to-Rutherford EXFOR data with a lab angle column: to_azr converts the lab angle to the c.m.
 # frame and divides by the Jacobian, so the engine sees ratio x sigma_R,cm(theta_cm) (audit item 8);
 # the observable guess follows the angle column's frame.  Offline fixture subentries T0001004/5; the
