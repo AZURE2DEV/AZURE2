@@ -23,7 +23,7 @@
  * according to how the calculation was set up -- which is how one sees what the
  * hybrid model actually does to the external region.
  *
- * request = {pair key, l, 2J (< 0: none), radius (fm, <= 0: the channel radius), n, E_1 ... E_n (MeV, c.m.)}.  A pair
+ * request = {pair key, l, 2J (< 0: none), radius (fm, <= 0: the radius of the pair's channels of this l), n, E_1 ... E_n (MeV, c.m.)}.  A pair
  * whose potential has a spin-orbit term needs J (its functions depend on it: E_SO_NEEDS_J); any other pair refuses
  * one (E_SO_NO_TERM).  Throws std::invalid_argument for those and for a J that l and the spin cannot make.
  */
@@ -41,7 +41,28 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   if (!compound_ || !compound_->IsPairKey(pairKey)) return out;
   const PPair *pair = compound_->GetPair(compound_->GetPairNumFromKey(pairKey));
   if (!pair) return out;
-  if (radius <= 0.0) radius = pair->GetPairRadius();  // the pair's radius by default
+  // The radius by default: the one the model's channels of this pair and l have (a channel_radius record gives a
+  // channel its own); the pair's when the model has no such channel.  Channels of the l with more than one radius
+  // (records with s or J) have no one default: the caller names the radius.
+  double defaultRadius = pair->GetPairRadius();
+  {
+    const int pairNum = compound_->GetPairNumFromKey(pairKey);
+    bool found = false;
+    for (int j = 1; j <= compound_->NumJGroups(); j++) {
+      const JGroup *group = compound_->GetJGroup(j);
+      for (int ch = 1; ch <= group->NumChannels(); ch++) {
+        const AChannel *channel = group->GetChannel(ch);
+        if (channel->GetPairNum() != pairNum || channel->GetL() != lValue || channel->GetRadType() != 'P') continue;
+        if (found && channel->GetRadius() != defaultRadius && radius <= 0.0)
+          throw std::invalid_argument("ERROR: the channels of pair " + std::to_string(pairKey) + " with l = " +
+                                      std::to_string(lValue) + " have more than one radius (channel_radius records "
+                                      "with s or J): give the radius");
+        if (!found) defaultRadius = channel->GetRadius();
+        found = true;
+      }
+    }
+  }
+  if (radius <= 0.0) radius = defaultRadius;
 
   const bool spinOrbit = pair->GetHybridPotential() && pair->GetHybridPotential()->spin_orbit;
   const azure2::experiment::SpinOrbitRefusal refusal =
@@ -67,7 +88,7 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
         // A failed evaluation returns zeros for that energy rather than aborting the grid.
         F = dF = G = dG = P = S = delta = 0.;
       }
-    } else if (radius == pair->GetPairRadius()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
+    } else if (radius == defaultRadius) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
       S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC), radius).Shift(lValue, twoJ, energy);
     }
     out.insert(out.end(), {F, dF, G, dG, P, S, delta});

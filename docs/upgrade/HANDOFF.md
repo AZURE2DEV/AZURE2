@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — per-channel radii, step 3: the session side
+
+**Branch** `feature/upgrade-5-dev-channel-radii`, on the entry below. dev's step 3 was a session method
+(`set_channel_radius(pair, radius, L, S, J)` over `AZUREAPI::SetChannelRadius`). This branch took the session's
+radius method away (`tests/pyazr/radius_override_test.py`, check 4: a radius is a Project edit and a new session),
+and `AZUREAPI::SetRadius` is bound to nothing in pyazr, so no channel form was added to it: a channel's own radius
+is `Project.add("channel_radius", name, pair=, l=, radius=[, s=, J=])`, `Project.set` and `Project.remove`, which
+needed no code.
+
+**Changed.** `AZUREAPI::GetCoulombFunctions` (`api/src/AZUREAPIChannelFunctions.cpp`): with no radius in the request
+it took the pair's radius; it now takes the radius of the model's channels of that pair and l, which a
+`channel_radius` record may have given them, and the pair's when the model has no such channel. When records with s
+or J give those channels more than one radius there is no default: `std::invalid_argument` ("... have more than one
+radius ...: give the radius"), a `ValueError` in `Session.channel_functions`. The closed-channel shift is given at
+that default radius as it was at the pair's. A project without `channel_radius` records: the same numbers.
+
+**Test.** `tests/pyazr/channel_radius_record_test.py` (ctest `pyazr_channel_radius_record`), on
+`tests/channel_space`: records for every l of pair 1 at 4.2 fm give the reduced widths (rel 1e-12) and chi2
+(rel 1e-10) of `Project.set_pair(1, radius=4.2)`; l = 1 alone is neither model; `channel_functions` at the
+channel's own radius; the refusal on pair 2 (l = 1, s = 3/2 and 5/2 at two radii); `Project.set` and
+`Project.remove`, the removal giving the file's model back; a second record of one selection refused by the edit
+(`E_CHANNEL_RADIUS_TWICE`).
+
+**Open.** The compound-nucleus check and `describe` do not list the entries (`Project.describe` of a
+`channel_radius` answers that it is not a record that computes). A session reports a pair's radius
+(`Pair.channel_radius`) and no channel's.
+
+**Run here** (CRC, GCC 11.5): build; the test above, `radius_override_test.py`. The full gate: see the end of this entry. **Not run:** CI.
+
 ## 2026-11-16 (owner's session, dev port) — per-channel radii, steps 2, 4, 5: the `channel_radius` record
 
 **Branch** `feature/upgrade-5-dev-channel-radii`, on `feature/upgrade` `f252ba30` merged into it (the handoff log

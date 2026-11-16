@@ -65,8 +65,14 @@ leaves open (THM, the system's merged channels, the two signatures).
 the PI's decision of 2026-11-16: this branch's), its build and its application at set-up, the converter of dev's
 block, the refusal of an external-capture transition across two radii, the radii in the signature of the capture
 integrals' file, and `tests/channel_radii`. A `channel_radius` on the entrance pair of a THM data set is refused
-(`E_CHANNEL_RADIUS_THM`). *Not written:* step 3 (the session's channel form of `AZUREAPI::SetRadius`), the radii in
-the compound-nucleus check's report and in `describe`.
+(`E_CHANNEL_RADIUS_THM`).
+
+*Step 3 is written* as this branch does a pair's radius (2026-11-16): a session has no method that changes a radius,
+so a channel's own radius is `Project.add("channel_radius", ...)` and a new session, and `AZUREAPI::SetRadius`
+(bound to nothing in pyazr) gains no channel form. What the session gained: `Session.channel_functions` with no
+radius is evaluated at the radius of the pair's channels of that l (refused when records with s or J give them more
+than one). `tests/pyazr/channel_radius_record_test.py`. *Not written:* the radii in the compound-nucleus check's
+report and in `describe` (`Project.describe` of a `channel_radius` says it is not a record that computes).
 
 ## 3. General spin observables
 

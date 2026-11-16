@@ -43,6 +43,13 @@ add_test(NAME pyazr_radius_override
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
 set_tests_properties(pyazr_radius_override PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A channel's own radius is a channel_radius record added by Project.add and a new session: every l of a pair at one
+# radius is the pair's radius edit; channel_functions with no radius is at the channel's own radius.
+add_test(NAME pyazr_channel_radius_record
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/channel_radius_record_test.py)
+set_tests_properties(pyazr_channel_radius_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A session parses its .azr once: evaluate().data[i].model / objective do not re-read the file per segment per
 # call (before 2026-11-03: 83 ms per call from NFS on the 3H+d model instead of 8 ms).
 add_test(NAME pyazr_azr_parse_cache
