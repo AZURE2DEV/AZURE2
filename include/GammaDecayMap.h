@@ -18,7 +18,7 @@ class Config;
 class LevelInputs;
 class LevelState;
 class ObservedLevelTable;
-class ParamIndexMap;
+#include "InferenceTypes.h"
 struct GradAccum;
 namespace azure2 {
 namespace io {

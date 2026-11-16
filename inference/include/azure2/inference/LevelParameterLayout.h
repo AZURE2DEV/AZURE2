@@ -1,8 +1,11 @@
-#ifndef LEVEL_PARAMETER_LAYOUT_H
-#define LEVEL_PARAMETER_LAYOUT_H
+#ifndef AZURE2_INFERENCE_LEVELPARAMETERLAYOUT_H
+#define AZURE2_INFERENCE_LEVELPARAMETERLAYOUT_H
 
 #include <string>
 #include <vector>
+
+namespace azure2 {
+namespace inference {
 
 /*!
  * Where each level's parameters sit in the fit's parameter vector: the level block, which opens the vector (the
@@ -16,7 +19,7 @@
  * level's amplitude in channel ch sits at EnergyIndex + ch (the gamma_decay records' numbers rely on it).
  *
  * Built once from the structure (CompoundSystem::Fill, when the groups, levels and channels are final); a value, shared by the
- * copies of the compound.
+ * copies of the compound.  Plain data: built from the groups' sizes alone (inference/, docs/upgrade/inference.md).
  */
 class LevelParameterLayout {
  public:
@@ -58,5 +61,8 @@ class LevelParameterLayout {
   std::vector<Level> levels_;
   std::vector<int> first_;  ///< index in levels_ of the first level of J-group j at [j - 1]
 };
+
+}  // namespace inference
+}  // namespace azure2
 
 #endif

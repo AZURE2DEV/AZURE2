@@ -90,14 +90,18 @@ A parameter kind
 A nuisance that is not a number of an apparatus record (of a data set, of the
 level scheme, of a THM experiment):
 
-1. ``include/ParameterKind.h``: the value of ``ParamKind`` and its row of
+1. ``inference/include/azure2/inference/ParameterKind.h``: the value of ``ParamKind`` and its row of
    ``ParamKindTable()`` (key, unit, owner fields, prior and vary flags, doc);
    a ``ParameterRecord`` factory for new owner fields.
 2. Create it with ``AZUREParams::Add`` in ``CompoundSystem::FillMnParams`` or
    ``WorkingCopy::FillMnParams``; every later question asks the record, never
    the name (check 23).
-3. Its place in ``BuildParamIndexMap`` (``src/AZUREGrad.cpp``; a level's
-   number takes it from ``LevelParameterLayout``, above); the fields
+3. Its place in ``BuildParamIndexMap`` (``src/AZUREGrad.cpp``): one
+   ``Append...`` function of ``ParamIndexMap``
+   (``inference/include/azure2/inference/ParameterIndexMap.h``) with its
+   lookup, called at the kind's place in the vector, and its case in
+   ``inference/tests/parameter_index_map_test.cpp`` (a level's
+   number takes its place from ``LevelParameterLayout``, above); the fields
    that say what it belongs to are rows of ``ParameterFields()``
    (``api/src/pybind_records.cpp``), which ``pyazr.Parameter`` reads
    (``tests/pyazr/parameter_records_test.py`` fails for a kind no owner field
@@ -111,7 +115,9 @@ A level parameter
 A number per level (or per level and channel) that the fit varies beside the
 energy and the amplitudes:
 
-1. ``include/LevelParameterLayout.h`` / ``src/LevelParameterLayout.cpp``: a
+1. ``LevelParameterLayout.h`` / ``LevelParameterLayout.cpp`` of ``inference/``
+   (``inference/include/azure2/inference/``, ``inference/src/``; the test
+   ``inference/tests/level_parameter_layout_test.cpp``): a
    ``Slot::Kind`` and its slots in the constructor, which fixes where the
    number sits in the level block, and its name in ``Name``. Every walk of
    the level block reads the layout (``CompoundSystem::FillMnParams``, the fills from a
@@ -207,7 +213,15 @@ A term of the objective
 -----------------------
 
 1. One ``ObjectiveTerm`` subclass in ``src/Objective.cpp``, appended to the
-   term list in the ``Objective`` constructor (``Objective::Terms``); its
+   term list in the ``Objective`` constructor (``Objective::Terms``).
+   ``ObjectiveTerm`` is ``azure2::inference::Term<ObjectiveContext>``
+   (``inference/include/azure2/inference/TermList.h``): ``Add`` is the term,
+   ``ModelOnly``, ``AddForSampler`` and ``ExcludesForSampler`` have defaults
+   (not of the model alone; the sampler takes the whole term; no point is
+   excluded). A Gaussian prior on one parameter is ``GaussianPriorChi2`` of
+   ``GaussianPrior.h`` and a line of ``ForEachDiagonalPrior``
+   (``include/Objective.h``), which gives it its gradient, Minuit's
+   :math:`G_2` and its least-squares row. Its
    gradient beside the others in ``src/AZUREGrad.cpp``, and its residual rows
    in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. No term
    is added anywhere else (check 11).

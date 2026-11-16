@@ -174,6 +174,16 @@ all; `AZURE_NODE_CHECK` checks the groups too (`WorkingCopy::CheckSlotGroups`).
 - `Fitter`: Minuit2 (MIGRAD/HESSE) and Levenberg–Marquardt on the residual Jacobian. Sampling (MCMC) is done by users'
   scripts on the objective's value and gradient (pyazr does not own fitting).
 
+In the code (`inference.md`): the library `inference/` (`azure2_inference`, which uses nothing) holds the part
+defined without an engine object. For the vector: `ParameterKind.h` (kinds, the record of one parameter),
+`LevelParameterLayout.h` (the level block), `ParameterIndexMap.h` (every parameter's place, full ↔ packed),
+`PosteriorSupport.h` (the limits as the posterior's support). For the objective: `GaussianPrior.h`,
+`PriorCovariance.h` and `TermList.h` (the sums of an ordered list of terms over a context). There is no class
+`ParameterVector`: the values, limits and fixed flags are the engine's `AZUREParams` on Minuit2's parameters. The
+terms are the engine's `src/Objective.cpp`, which instantiates the list with its context; the physical ↔ fit
+transform is `physics/`'s `LevelParameters.h`; the fitters are `src/Fit*.cpp`. The planned links to `physics/` and
+`experiment/` are not needed by what moved.
+
 ### io/
 - `Project`: the single `.azr` reader/writer (today two exist: engine, pyazr; the Qt GUI's is gone, decision 3). Old files keep loading.
 - Library readers live in pyazr `sources/` (Python, run at project setup; the C++ core reads only the project):
@@ -300,7 +310,8 @@ samplers in two threads).
 
 **Extension.** Each row of the table above is an explicit table in one source file, whose rows hold the name, what
 the front ends need (units, fields, documentation) and the function that does the work: the quantity table of
-`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp`, the apparatus kernels (`Kernels()`,
+`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp` (appended to `inference/`'s `TermList`),
+the apparatus kernels (`Kernels()`,
 `experiment/src/Kernels.cpp`, a row per kernel file; a detector-resolution row also generates its format-3 form) and
 the stopping models of Phase 5. A new feature is one row and one test; `--schema`, the documentation tables and the GUI forms are
 generated from the same rows, and a consistency check fails when a row is bypassed. Not used, on purpose:

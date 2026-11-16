@@ -54,7 +54,7 @@ def function_body(source, signature):
 #     branches shorten files too, and the record is tightened at each merge.  It runs first, because --tighten-sizes
 #     runs it alone.
 SIZE_LIMIT = 1000
-SIZE_DIRS = ("src", "include", "physics", "io", "experiment", "api/src", "pyazr", "tools", "stopping")
+SIZE_DIRS = ("src", "include", "physics", "io", "experiment", "inference", "api/src", "pyazr", "tools", "stopping")
 SIZE_SUFFIXES = (".cpp", ".h", ".py", ".hpp", ".cc", ".c", ".H")
 SIZE_SKIP_DIRS = {"tests", "__pycache__"}  # test sources, bytecode
 SIZE_GENERATED = set()                     # generated files in SIZE_DIRS (none today), relative paths
@@ -216,6 +216,7 @@ check_registered("physics/tests", r".+_test\.cpp", "physics")
 check_registered("io/tests", r".+_test\.cpp", "io")
 check_registered("experiment/tests", r".+_test\.cpp", "experiment")
 check_registered("stopping/tests", r".+_test\.cpp", "stopping")
+check_registered("inference/tests", r".+_test\.cpp", "inference")
 
 
 # 3. Every regression directory is actually exercised by tests/run_tests.sh:
@@ -317,6 +318,38 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
             problems.append(f"{rel}: includes {inc}; physics/ may include only azure2/physics/ headers and the C++ standard library")
+
+
+# 8b. inference/ uses nothing (docs/upgrade/inference.md section 1): its own headers ("azure2/inference/...") and the
+#     C++ standard library only; a test may include the helper header of inference/tests/ by bare name.  The ctest
+#     inference_standalone builds the directory alone; a header on the system include path (Minuit2, GSL) compiles
+#     there, so it is caught here.  An engine header (Objective.h, WorkingCopy.h) would make the library a renamed
+#     directory of the engine.
+def inference_include_problems(rel, text):
+    found = []
+    for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', text, re.M):
+        if inc.startswith('"') and inc[1:-1].startswith("azure2/inference/"):
+            continue
+        if (rel.startswith("inference/tests/") and inc.startswith('"') and "/" not in inc
+                and os.path.isfile(os.path.join(ROOT, "inference", "tests", inc[1:-1]))):
+            continue
+        if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+            continue
+        found.append(f"{rel}: includes {inc}; inference/ may include only azure2/inference/ headers and the C++ "
+                     "standard library (check 8b)")
+    return found
+
+
+for dirpath, _, files in os.walk(os.path.join(ROOT, "inference")):
+    for name in sorted(files):
+        if name.endswith((".h", ".hpp", ".cpp")):
+            rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+            problems += inference_include_problems(rel, read(rel))
+if not inference_include_problems("inference/src/X.cpp", '#include "Objective.h"\n') or \
+        not inference_include_problems("inference/src/X.cpp", '#include "Minuit2/MnUserParameters.h"\n') or \
+        not inference_include_problems("inference/src/X.cpp", '#include "azure2/physics/Constants.h"\n') or \
+        inference_include_problems("inference/src/X.cpp", '#include "azure2/inference/ParameterKind.h"\n#include <vector>\n'):
+    problems.append("check 8b: a planted engine, Minuit2 or physics/ include in inference/ is not caught; update this check")
 
 
 # 9. io/ uses nothing either (docs/upgrade/project.md section 2): its own headers ("azure2/io/...") and the C++
@@ -607,7 +640,8 @@ for top in ("experiment/src", "io/src"):
 
 
 # 23. No code recognises a parameter's kind by its name (docs/upgrade/parameter_kinds.md; project_format3.md section
-#     7.4): what a parameter is comes from its record (include/ParameterKind.h), written where it is created; a name
+#     7.4): what a parameter is comes from its record (inference/include/azure2/inference/ParameterKind.h), written
+#     where it is created; a name
 #     is a label, and where a file names a parameter the name is looked up whole (AZUREParams::IndexOfName).  Caught:
 #     in src/, include/, api/ a find / rfind / compare / starts_with / ends_with / EndsWith / StartsWith whose string
 #     is a stem of a parameter name ("segment_", "_norm", "width", ...), and the deleted helpers by name; in pyazr/ a
@@ -625,7 +659,7 @@ PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["
                            r'(?:energy_|width_|segment_|abundance_|screening_|density_|doppler_|cbkg_)')
 ALLOWED_NAME_TESTS = set()  # (file, text of the line): none today
 name_test_hits = set()
-for top in ("src", "include", "api", "pyazr"):
+for top in ("src", "include", "api", "pyazr", "inference"):
     for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
         for fname in sorted(files):
             if not fname.endswith((".h", ".cpp", ".py")):
@@ -659,14 +693,15 @@ for top in ("src", "include", "api", "pyazr"):
 for rel, text in sorted(ALLOWED_NAME_TESTS - name_test_hits):
     problems.append(f"{rel}: '{text}' is gone; remove it from ALLOWED_NAME_TESTS in check 23")
 # The kinds: one enum, one table row per kind in the order of the codes, each documented for maintainers and users.
-kinds_h = read("include/ParameterKind.h")
+KINDS_H = "inference/include/azure2/inference/ParameterKind.h"
+kinds_h = read(KINDS_H)
 enum_body = kinds_h[kinds_h.index("enum class ParamKind"):]
 enum_body = enum_body[:enum_body.index("};")]
 enum_kinds = re.findall(r"^\s*(\w+) = (\d+),?", enum_body, re.M)
 row_kinds = re.findall(r'\{ParamKind::(\w+), "(\w+)"', kinds_h)
 if [k for k, _ in enum_kinds] != [k for k, _ in row_kinds] or \
         [int(c) for _, c in enum_kinds] != list(range(len(enum_kinds))):
-    problems.append("include/ParameterKind.h: ParamKindTable() must have one row per ParamKind, in the order of the "
+    problems.append(KINDS_H + ": ParamKindTable() must have one row per ParamKind, in the order of the "
                     "codes 0, 1, 2, ...")
 for rel in ("docs/upgrade/parameter_kinds.md", "docs/source/reference/output_files.rst"):
     text = read(rel)
@@ -842,7 +877,7 @@ OLD_DATA_NAME = re.compile(r"\b(?:EData|ESegment|EPoint)\b")
 OLD_DATA_NAME_OUTPUT = {("src/WorkingCopy.cpp", "see EData::ECSignature)"),
                         ("convert/src/BuildData.cpp", "(the same index, EData::MakePoints)")}
 for rel in tracked_files():
-    if not rel.startswith(("src/", "include/", "api/", "tests/", "experiment/", "convert/", "io/", "physics/")):
+    if not rel.startswith(("src/", "include/", "api/", "tests/", "experiment/", "convert/", "io/", "physics/", "inference/")):
         continue
     if re.match(r"(?:EData|ESegment|EPoint)", os.path.basename(rel)):
         problems.append(f"{rel}: a file named after an old data class; see check 31")
@@ -886,9 +921,10 @@ if not IN_PLACE.search("sed -i.bak 's/a/b/' t.azr") or not IN_PLACE.search("perl
 #     comments still name them; they leave this list when those branches are merged and the words are gone.
 OLD_WORDS = re.compile(r"segmentsData|targetInt\b|format[ -]2\b|old format", re.I)
 OLD_WORDS_ALLOWED = {"io/src/ProjectFormat.cpp"}
-OLD_WORDS_PENDING = {"include/Unit.h", "include/ParameterKind.h", "src/TargetSetup.cpp", "src/DataParameters.cpp",
+OLD_WORDS_PENDING = {"include/Unit.h", "inference/include/azure2/inference/ParameterKind.h", "src/TargetSetup.cpp",
+                     "src/DataParameters.cpp",
                      "experiment/src/Schema.cpp"}
-for top in ("src", "include", "api", "io", "experiment"):
+for top in ("src", "include", "api", "io", "experiment", "inference"):
     for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
         if "/tests" in dirpath[len(ROOT):]:
             continue

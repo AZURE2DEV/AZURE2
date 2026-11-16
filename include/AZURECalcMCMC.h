@@ -6,7 +6,7 @@
 #include "LevelInputs.h"
 #include "LevelState.h"
 #include "ObservedLevelTable.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "PosteriorSupport.h"
 #include "StatePool.h"
 #include "WorkingData.h"
@@ -22,7 +22,7 @@
 class Config;
 class WorkingCopy;
 class CompoundSystem;
-class PriorCovariance;
+#include "InferenceTypes.h"
 
 /// A function class to perform MCMC Bayesian calculation of parameters
 

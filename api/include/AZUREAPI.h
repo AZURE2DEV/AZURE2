@@ -23,7 +23,7 @@ class WorkingCopy;
 class CompoundSystem;
 class Unit;
 struct GradAccum;
-class ParamIndexMap;
+#include "InferenceTypes.h"
 
 /// A function class to perform the calculation of the chi-squared value
 
