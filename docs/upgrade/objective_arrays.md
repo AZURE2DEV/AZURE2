@@ -463,22 +463,22 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
 5. **The API's own data χ²** (read): `AZUREAPI::EvaluateFilledChi2` (`AZUREAPIChi2.cpp` 68-125) forms T1, T1a, T1b and
    T2 a second time, with the sum of `Pull()²` where `SegmentTerms` sums `Chi2()` ((d/e)² against d²/e²: different
    rounding). pyazr's `calculate_chi2` and its `objective()` (`Objective::Chi2`) can therefore differ in the last bits
-   of the data part. **Repaired** 2026-11-16 (commit "fix(api): the API's data chi-squared is the objective's data
-   term", the PI's word): `EvaluateFilledChi2` evaluates the model and then calls `Objective::DataChi2`; its rows
-   are read from `Results::objective`. `calculate_chi2_rwa` moved by at most 2.5e-16 relative on T1-T3 and 13N
-   (three bases, two points; 11 of 24 cases moved); `tests/pyazr/objective_test.py` section 6.
+   of the data part. **Repaired** 2026-11-16 (commit 1ac8cd41, the PI's word): `EvaluateFilledChi2` evaluates the model
+   and then calls `Objective::DataChi2`; its rows are read from `Results::objective`. `calculate_chi2_rwa` moved by at
+   most 2.5e-16 relative on T1-T3 and 13N (three bases, two points; 11 of 24 cases moved);
+   `tests/pyazr/objective_test.py` section 6.
 6. **Park and a NaN J** (read): the value and the rows skip a NaN J, the gradient did not (`AZUREGrad.cpp` 90 tested
-   `>= 0.0`). **Repaired** 2026-11-16 (commit "fix(grad): the Park wall's gradient skips a NaN J as its value and
-   rows do", the PI's word): the gradient tests `!(J < 0)`; ctest `park_chi2_fallback`, variant E.
+   `>= 0.0`). **Repaired** 2026-11-16 (commit 48dc8f89, the PI's word): the gradient tests `!(J < 0)`; ctest
+   `park_chi2_fallback`, variant E.
 7. **`shifts.out`'s function penalty** (read): `pen − penOwn` (`DataOutputFiles.cpp` 532-535) subtracts the constant
    shift's prior without asking whether the prior covariance replaced it, and does not subtract the √E coefficient's
    prior, although the comment says "minus those of its constant and sqrt(E) terms". For a segment that owns a shift
    function and has a varied √E shift with σ ≠ 0, or whose constant prior is replaced, the printed penalty is not the
-   function's. **Repaired** 2026-11-16 (commit "fix(output): shifts.out prints the shift function's own priors", the
-   PI's word): the line prints `PriorsChi2(list, kShiftFn, s)`, the function's own priors by the objective's rule;
-   `tests/shift_fn/check.sh` case 8 (a replaced offset prior: 5 before, 9 after, 9 by hand). No `shifts.out` of the
-   projects of `tests/` changed (24 with a function line, three bases); the √E case cannot occur (a function and a
-   √E term on one data set are refused).
+   function's. **Repaired** 2026-11-16 (commit 1e5a80a7, the PI's word): the line prints
+   `PriorsChi2(list, kShiftFn, s)`, the function's own priors by the objective's rule; `tests/shift_fn/check.sh` case 8
+   (a replaced offset prior: 5 before, 9 after, 9 by hand). No `shifts.out` of the projects of `tests/` changed (24
+   with a function line, three bases); the √E case cannot occur (a function and a √E term on one data set are
+   refused).
 8. **Stale totals through pyazr** (read): `objective.nuisance` is set only by an `Objective::Chi2` with a nuisance
    function; `objective.priorCovariance` by `CalculateChi2RWA` / `Physical` (`AZUREAPIChi2.cpp` 142, 202), not by
    `write_outputs`. Unchanged by the design.
