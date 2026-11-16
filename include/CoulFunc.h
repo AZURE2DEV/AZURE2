@@ -67,10 +67,9 @@ struct CoulRadialMemo {
     int z1, z2, l, two_j;
     double redmass, mtot, energy;
     std::optional<azure2::physics::HybridPotential> potential;
-    bool gsl;
     bool operator==(const Key &o) const {
       return z1 == o.z1 && z2 == o.z2 && l == o.l && two_j == o.two_j && redmass == o.redmass && mtot == o.mtot &&
-             energy == o.energy && potential == o.potential && gsl == o.gsl;
+             energy == o.energy && potential == o.potential;
     }
   };
   struct Hash {
@@ -78,8 +77,7 @@ struct CoulRadialMemo {
       std::size_t h = std::hash<double>()(k.energy);
       for (std::size_t v : {std::hash<int>()(k.z1), std::hash<int>()(k.z2), std::hash<int>()(k.l), std::hash<int>()(k.two_j),
                             std::hash<double>()(k.redmass), std::hash<double>()(k.mtot),
-                            std::hash<double>()(k.potential ? k.potential->central_depth_MeV : -1.0),
-                            std::hash<bool>()(k.gsl)})
+                            std::hash<double>()(k.potential ? k.potential->central_depth_MeV : -1.0)})
         h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
       return h;
     }
@@ -92,7 +90,7 @@ struct CoulRadialMemo {
 class CoulFunc {
  public:
   /// Build for a particle pair, with that pair's hybrid nuclear potential if it has one.
-  CoulFunc(const PPair *pPair, bool useGSLFunctions);
+  explicit CoulFunc(const PPair *pPair);
   /// Charge number of the first particle.
   int z1() const;
   /// Charge number of the second particle.
@@ -143,10 +141,9 @@ class CoulFunc {
   /// solution equal to H+ = G + iF beyond the matching radius, integrated inward to the radius (physics/
   /// IntegrateInward); the plain Coulomb functions at a radius beyond the matching radius.
   CoulWaves computeHybrid(int l, int two_j, double radius, double energy);
-  /// The point-Coulomb functions by the selected routine (physics/coulomb or GSL).
+  /// The point-Coulomb functions (physics/coulomb, CoulombWavesAt).
   CoulWaves PlainWaves(int l, double radius, double energy) const;
 
-  bool useGSLFunctions_;
   CoulRadialMemo *radialMemo_ = nullptr;
   int z1_;
   int z2_;

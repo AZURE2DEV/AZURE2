@@ -400,6 +400,9 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
   // The model data (T9): the <modelData> data (modelData.out).
   if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
+  // The gamma_decay records (T11): their priors and the wall on a negative remainder, whenever the project has a
+  // record.  Without this field the file's totals did not add up to the minimised chi-squared for such a project.
+  if (results.objective.hasGammaDecay) chiOut << " Total-Gamma-Decay-Chi-Squared: " << results.objective.gammaDecay;
   // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
   // Written with 15 significant digits (a new field: the older ones keep their 6).
   if (!configure.priorCovariance.empty()) {

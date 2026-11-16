@@ -324,8 +324,9 @@ the start of a fit, so it never describes an earlier one)::
     call_limit     none
 
 ``minimizer`` is the fitter that ran and ``fitter`` the one the switches chose
-(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when
-``lm`` or ``gsl-lm`` ran ``migrad`` for a model without an analytic Jacobian.
+(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when the
+fitter that ran is the row named in the ``fallback`` column of the one chosen
+(a least-squares fitter on a model without an analytic Jacobian).
 ``status`` is the outcome in the words every fitter shares: ``converged``,
 ``call_limit`` (stopped at the ``--max-calls`` limit), ``iteration_limit``
 (LM's or GSL's 200 iterations), ``stopped``, ``invalid`` (MIGRAD's minimum is
@@ -346,6 +347,9 @@ With a ``<scatteringLengths>`` block the totals line ends with
 ``<modelData>`` section (:doc:`data_formats`) it also carries
 ``Total-Model-Data-Chi-Squared``, the sum over its data.  The two are the
 parts of one term of the objective, "model data".
+With a ``gamma_decay`` record (:doc:`../user_guide/gamma_decay`) the line
+carries ``Total-Gamma-Decay-Chi-Squared``, the priors on the record's numbers
+and the wall on a negative remainder; it is 0 for a record without a prior.
 The same holds for ``Total-Park-Chi-Squared`` and
 ``Total-Abundance-Chi-Squared``; the file written through pyazr's
 ``write_outputs`` carries all three evaluated at the parameters it was
@@ -456,8 +460,7 @@ speed up subsequent calculations, as long as:
 - The integration grid has not changed: target thickness, energy straggling,
   convolution width and the adaptive-grid settings all move the sub-point
   energies the integrals are evaluated at.
-- The Coulomb-function routine (``--gsl-coul``) and the hybrid potential are
-  the same.
+- The hybrid potential is the same.
 - Relativistic kinematics (``relativistic=1`` in ``<config>``) are on or off as
   before: the switch changes every channel's eta, rho and flux factor (it was
   missing from the signature before October 2026; a file written with it off is

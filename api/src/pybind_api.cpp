@@ -78,20 +78,14 @@ py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_
 py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos, const std::vector<double> &x0,
                            unsigned int maxCalls, const py::object &progress, const py::object &stop);
 void BindFit(py::module_ &m);
+py::dict SampleWithEngineDict(AZUREAPI &api, const py::kwargs &options);  // pybind_sampler.cpp: the engine's sampler
+std::string ReadProjectText(const std::string &path);  // pybind_project.cpp: the bytes of a project file
 void BindDataRows(py::module_ &m);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: the view of a session's hybrid potentials
 pybind11::tuple SessionPotentialView(const Config &config, int pair);
 
 namespace {
-
-/// The bytes of a project file ("" when it cannot be read), for the refusal of one that is not format 3.
-std::string ReadProjectText(const std::string &path) {
-  std::ifstream in(path, std::ios::binary);
-  std::ostringstream s;
-  s << in.rdbuf();
-  return s.str();
-}
 
 // Convert a std::vector<double> to a new float64 numpy array (a copy, so the
 // array owns its memory and outlives the C++ object).
@@ -135,8 +129,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
   // A relative table file is the session's directory's, as it was when pyazr entered that directory per call.
   config.coulombTablePath = opt.coulomb_table.empty() ? opt.coulomb_table : config.OpenPath(opt.coulomb_table);
   for (const auto &given : opt.options)
-    if (!azure2::io::ConfigOptionNamed(given.first))
-      throw py::value_error("'" + given.first + "' is not an option of the calculation (pyazr.kinds()[\"options\"])");
+    if (!azure2::io::ConfigOptionNamed(given.first)) throw py::value_error(NotAnOptionText(given.first));
   // In the table's order (use_brune before use_park: use_park=True with use_brune=False gives both on, as before)
   for (const azure2::io::ConfigKey &k : azure2::io::ConfigKeys()) {
     const auto given = k.option ? opt.options.find(k.name) : opt.options.end();
@@ -494,6 +487,7 @@ class Session {
                            const py::object &progress, const py::object &stop) {
     return FitWithEngineDict(*api_, method, minos, x0, maxCalls, progress, stop);
   }
+  py::dict sample_with_engine(const py::kwargs &options) { return SampleWithEngineDict(*api_, options); }
   double log_prob_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p);
     expect_free(v, "log_prob_rwa");
@@ -979,6 +973,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("fit_with_engine", &Session::fit_with_engine, py::arg("method"), py::arg("minos"), py::arg("x0"),
            py::arg("max_calls"), py::arg("progress"), py::arg("stop"),
            "The program's fit on the session (pyazr/session_fit.py): a row of fitters(), without the GIL.")
+      .def("sample_with_engine", &Session::sample_with_engine,
+           "The program's ensemble sampler on the session (pybind_sampler.cpp: its keywords), without the GIL.")
       .def("objective_term_names", &Session::objective_term_names,
            "The names of the objective's terms (ObjectiveTerm::Name), in the engine's order.")
       .def("log_prob_rwa", &Session::log_prob_rwa, py::arg("params"),

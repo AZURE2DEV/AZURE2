@@ -232,7 +232,10 @@ class GammaDecayTerm : public ObjectiveTerm {
   std::string Name() const override { return "gamma decay priors"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (c.compound->GetGammaDecays().Empty()) return;
-    chi2 += c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
+    const double v = c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
+    chi2 += v;
+    c.results.objective.gammaDecay = v;
+    c.results.objective.hasGammaDecay = true;
   }
 };
 

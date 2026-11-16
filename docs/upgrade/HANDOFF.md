@@ -2,6 +2,330 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (director, 18:55) — merged: `--gsl-coul` retired, three pyazr jobs, the `gamma_decay` total, recipes
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 99: `feature/upgrade-8-pyazr-approved` and the rest of
+`feature/upgrade-1-coulomb-engine` (agents'; their entries follow), `feature/upgrade-0-recipes-2` (an agent's), and
+the director's two commits. The base build is `work/b-trial99`, **the reference tag is `tab-trial99-1`** (it has
+the new field below), the quick set is 330 tests. pyazr is 3.0.0.dev5.
+
+**`Total-Gamma-Decay-Chi-Squared`** (the PI's word of 2026-11-16): `chiSquared.out` of a project with a
+`gamma_decay` record carries the record's priors and the wall on a negative remainder (0 without a prior); the
+term stores it in `Results::objective.gammaDecay`. `tests/gamma_decay/check.sh` holds it against the prior's pull
+squared (1.00024 against 1.0002369); the check fails on the build before.
+
+**The Coulomb option** (the PI's three points of 15:05): `use_gsl_coul` / `--gsl-coul` / the pyazr keyword are
+refused with the reason; the GSL calls and the plumbing are out of the engine; the table tool's `validate` line
+compares beyond the turning point only (P 1.7e-9, S 7.9e-9 where it printed 4 and 6 %); `coulsm`'s F and F' at
+eta = 0, l >= 2, rho << 1 are wrong (4.2e-3 at l = 2, rho = 7.5e-4) and no test project is touched beyond 3e-12:
+measured, not repaired. Changed at the merge: `coulomb_gsl_crosscheck` prints GSL's deviation inside the turning
+point and requires only `coulsm`'s accuracy (the agent's version failed where a machine's GSL was right).
+
+**pyazr:** the Weisskopf estimate is a function of `physics/` (same numbers, bit for bit, as the Python table it
+replaces); `Session.wigner_widths` is 2 P_l(E_r) gamma_W^2 (values change where the old probe was wrong: T2 in the
+Brune basis by up to 20 %, the formal basis by large factors); `Session.sample_with_engine` runs the program's
+sampler on a session (chains byte for byte the program's in ten comparisons; `runMCMC`'s body is `RunSampler`,
+`src/SamplerRun.cpp`).
+
+**Recipes tried by the recipe alone** (stage E of the plan in `NEXT_AGENT.md`; reports
+`work/director/entries/recipes1_report.md`, `recipes2_report.md`; the toys on throwaway branches, not merged): a
+unit, a kernel, a term of the objective, a model-only datum, a quantity row, a fitter. All built; the unit,
+kernel, datum, quantity and fitter recipes are corrected (35 defects, each checked against the code); the fitter
+tests and the documents' fitter lists read `Fitters()` (check 46 extended; it found NLopt missing from two pages);
+`tests/model_data/check.sh` counts its data from the file. The term of the objective needed nine files and the
+gradient in two places: that is the next step of the objective work, not a recipe defect.
+
+**Verified** (`work/director/verify_l99.out`, before the recipes branch, which changes no C++): 0 warnings; 886,
+851 and 886 of 887, 851 and 887 files identical to `tab-trial94-1`, the two others `chiSquared.out` of
+`gamma_decay/models/record.azr` with the new field and nothing else; the eight fits identical to
+`work/b-trial98`; 330 of 330 quick tests; 172 of 172 regression scripts. After the recipes branch:
+`repo_consistency`, `check_skills`, `docs_build`, `pyazr_describe`, `pyazr_fit_engine_control`, `model_data`.
+Not run by me: the slow tests (the agent ran `pyazr_fit_with_engine` whole), sanitizers, other platforms.
+
+**The PI on 2026-11-16:** the plan of stages A to G ("Yes, go on!"); new agents on Opus or Sonnet by task; "The
+3 problems need solving" (the second data chi-squared of `AZUREAPI::EvaluateFilledChi2`, the Park gradient at a
+NaN norm, the shift-function penalty of `shifts.out`); no `ParameterVector` class; the Weisskopf table stays;
+`dimensionless_widths` to report the physical level energy and fixed open channels (not started).
+
+**The CI.** macOS of run 43828542125: 170 of 172 regression scripts (`upgrade`: T3 prints 1000 where the golden
+file has 1 and two lines differ by 3.7e-6; `transmission_yield` (j): 0 parameters listed), the unit tests cut off
+at the six-hour limit after 3 h 20 min. An agent looks for the causes (`wt-mac`).
+
+**Running:** the objective's priors on one list, then the three repairs (`wt-obj`,
+`docs/upgrade/objective_arrays.md` on that branch); the macOS causes. **Asked of the PI, not answered:** a repair of
+`coulsm`'s F at eta = 0; a converter note for an old project with the GSL box; proposals of the recipes agent.
+
+## 2026-11-16 (pyazr agent, afternoon) — the PI's three approvals: Weisskopf in physics/, wigner_widths, the sampler
+
+**Merged.** Branch `feature/upgrade-8-pyazr-approved` in `wt-py3`, cut from `feature/upgrade` at 84de49da.
+Commits: c15c8fed (the Weisskopf estimate), 84ae42a4 (design notes of the other two), 108dfabe (`wigner_widths`),
+791b561c (the skill `azure2-check`), 03f003a9 (the sampler's call), 0895c2a9 (roadmap, the full check). Build
+`work/b-py3`. pyazr 3.0.0.dev4 -> 3.0.0.dev5. The account is `docs/upgrade/pyazr3.md` sections 10.4, 11 and 12.
+
+**1. The Weisskopf estimate is a function of `physics/`.** `physics/Widths.h`: `weisskopf_width_eV(magnetic, L,
+E_gamma_MeV, mass_number)`, the total radiative width of an E1-E4 or M1-M4 transition in eV, with the two-digit
+textbook coefficients the Python table had (they belong to R = 1.2 A^(1/3) fm). Row `weisskopf_width(e_gamma,
+multipolarity, mass_number, radiation="E")` (25 rows); `pyazr.weisskopf_width` calls it. The numbers did not move:
+648 transitions bit for bit against the earlier Python formula. Against the closed forms of Blatt and Weisskopf
+(written out in `physics/tests/widths_test.cpp` and in mpmath in the row's test) the table is +0.79 % (E1), +2.28 %
+(E2), +3.05 % (E3), -3.11 % (E4), +1.34 % (M1), +1.94 % (M2), -0.80 % (M3), -7.23 % (M4). Not changed: the
+coefficients (a question for the PI below).
+
+**2. `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2.** gamma_W^2 the engine's 3 hbar^2 / (2 mu a^2)
+(unchanged), P of the session's channel functions, E_r at the level's physical energy (the level's row of
+`Session.transform`); the name, the return shape (`{free_index: eV}`) and "no entry for a closed, photon or fixed
+channel" are kept; `eps` is accepted and ignored. Old (the probe) against new, measured before the change:
+
+| Project | Brune | formal | Park |
+|---|---|---|---|
+| T1 | equal (5.1e-9) | old / new up to 1.51 (`width_3_1`: 1.82744e6 -> 1.21027e6 eV) | equal (1e-16) |
+| T2 | 0.798 to 0.987 (`width_1_3`: 3.2081e6 -> 4.0202e6 eV) | up to 8022 (`width_5_3`: 2.43e10 -> 3.03e6 eV) | equal |
+| T3 | 0.984 in one channel (`width_4_1`: 144412 -> 146732 eV) | as Brune | equal |
+| 13N | equal (5.1e-9) | equal (5.1e-9) | equal |
+
+Brune: old / new = 1 / (1 + sum gamma^2 dS/dE) of the level's fixed widths, reproduced to 8 digits. Formal, T2:
+the probe scales as 1/eps^2 (fixed amplitudes of the other levels mixed in). Formal, T1: 1.384 is 2 P at the
+formal pole energy in place of the observed one (computed); the remaining 1.091 is attributed to the mixing with
+the group's other level and was **not** computed. New test `tests/pyazr/wigner_widths_test.py`: against mpmath's
+Coulomb functions 2.5e-10 (with the Coulomb table; 3.6e-10 without), the neutral channel of T3 against the closed
+form to 1e-12, the three parametrizations equal to 1.0e-6. No existing test had the probe's number as its expected
+value (they use T1), so nothing was re-baselined. The skill `azure2-check`: `references/widths.md` and
+`older-results.md` rewritten for it; its self-test gained T2, where the script's level norm J was 0.998, 0.755,
+0.999 with the probe (from the ratios; not rerun on the old build) and is 0.797, 0.745, 0.972 now, equal to
+1 - sum Gamma S'/(2P) to 4.5e-11.
+
+**3. `Session.sample_with_engine`** runs the program's ensemble sampler on a session: `(walkers, steps,
+sampler_threads=1, basis="rwa", parameter_spread=5.0, energy_spread=1.0, overwrite_samples=False, x0=None,
+progress=None, stop=None)`, the command's options (it has no seed, burn-in or thinning). What `runMCMC` did after
+its set-up is one engine function, `RunSampler` (`src/SamplerRun.cpp`), moved statement for statement out of
+`src/AZURE2.cpp` and called by the program and by the session (`api/src/AZUREAPISampler.cpp`,
+`api/src/pybind_sampler.cpp`, `pyazr/session_sampler.py`); `src/RunRequest.cpp` moved from the program's sources
+into the engine library, and the session's keywords are read by `ReadRunCommand`. The chain is the command's:
+`samples.mcmc`, `walkers.mcmc`, `param.mcmc`, `parameters.out` and the `AZUREOut_*` files byte for byte and the
+returned arrays number for number in ten comparisons (T3 rwa at 1 and 2 sampler threads, T3 physical, T1 rwa, T3
+Park physical, a parameter file against `x0` in both bases, a parameter file with moved fixed values, a prior of
+`<mcmc>`, a continued chain); `tests/pyazr/sample_with_engine_test.py`, 105 checks, about 80 s.
+**Lines changed in `src/AZURECalcMCMC.cpp`, `src/AZURECalc.cpp`, `api/src/AZUREAPI.cpp`: none.** For the merge with
+the branch that splits them: this branch removes 313 lines of `runMCMC` from `src/AZURE2.cpp`, adds
+`SamplerRun.cpp` to the sampler's sources and moves `RunRequest.cpp` between two lists in `src/CMakeLists.txt`,
+adds `AZUREAPISampler.cpp` and `pybind_sampler.cpp` in `api/src/CMakeLists.txt`, and takes 3 lines net out of
+`api/src/pybind_api.cpp` (`ReadProjectText` to `pybind_project.cpp`; the size ratchet).
+
+**What was run** on 03f003a9 with the roadmap's edit in the tree (`work/director/verify_branch.sh wt-py3 py3
+tab-trial94-1 trial95 6`, output `work/director/verify_py3.out`, logs `work/director/vlpy3/`): 0 warnings; 887, 851
+and 887 files identical in the three bases, none differs, none new; eight fits identical to `work/b-trial95`; 327
+of 327 quick tests (325 and the two new ones; the ten skill self-tests, the page's tests, `docs_build` and
+`repo_consistency` are among them); 172 of 172 regression scripts. Besides: the slow tests the changes touch
+(`pyazr_examples_slow`, `pyazr_fit_recipes`, `pyazr_fit_with_engine`, `pyazr_wheel`: 4 of 4,
+`work/director/py3_slow.out`); the two new tests with `AZURE2_COULOMB_TABLE` unset (both pass); `tools/check_skills.py`
+(passes); `tools/check_doc_names.py` (7 names, none stale, as before); the new width test against the Python code
+before the change (26 checks fail).
+
+**Not run.** The other 13 slow pyazr tests; a sanitizer build; another platform; a build with `USE_MCMC=OFF` (the
+new binding file is guarded for it, untried); the skill self-test on the old build (its old numbers are derived).
+
+**What is not done, and what was seen.**
+
+- The sampler makes its own parameter vector from the levels' inputs (`AZURECalcMCMC::UpdateParameterVectors`); the
+  session's values are carried into a copy of the inputs and checked. Two cases are refused with the reason: a
+  `gamma_decay` project started away from the project's values, and a parameter file whose fixed normalization or
+  energy shift is not the project's.
+- The binding's `sampler_log_probability` (a test's tie, not public) builds the sampler from the session's inputs
+  without that step: for a session made with a parameter file whose fixed level values are not the project's it
+  would take the project's. Not changed (it is not a call of pyazr).
+- `ChannelWidth.level_energy`, `is_open` and a photon row's transition energy in `dimensionless_widths` use the
+  level energy of the fit vector, the formal pole energy in the formal basis; `wigner_widths` uses the physical one.
+- A fixed channel's `wigner_width` and `theta2` stay `None` in `dimensionless_widths` (the skill's script fills
+  them with `pyazr.physics.single_particle_width`).
+- `--steps` has a lower bound of 100, so no chain shorter than 100 steps can be asked for. T1 in the physical basis
+  needs 77 s for 100 steps of 30 walkers in the program (5 s in the rwa basis); not looked into.
+- No row in `pyazr.kinds()` or `python -m pyazr` for the sampler; the web page does not use it (emcee jobs).
+
+**For the PI.**
+
+1. The Weisskopf coefficients are not the closed form rounded to two digits (E2 would be 4.8e-8, E3 2.2e-14, E4
+   7.0e-21, M3 6.9e-15, M4 2.2e-21 for r0 = 1.2 fm). Keep the table, or take the closed form (every W.u. moves by
+   0.8 to 7 %)?
+2. In the formal basis, should `dimensionless_widths` report the physical level energy (and take the gamma
+   transition energy and "open" from it), as `wigner_widths` now does?
+3. Should `dimensionless_widths` give Gamma_W and theta^2 for fixed open channels too?
+4. `sample_with_engine` has `x0` beside the command's options (the session's `--parameter-file`). Keep?
+
+## 2026-11-16 (Coulomb agent) — GSL's Coulomb functions in the engine: found behind one option, measured, not replaced
+
+**Merged.** Branch `feature/upgrade-1-coulomb-engine` in `wt-coul`, cut from `feature/upgrade` at 3ac4a34a, two
+commits: 575f7cc5 (`coulomb.md` section 8, alone) and 670e6b0f (an include and a comment of the engine;
+`FOR_THE_OWNER.md` section 10 item 6 and section 8, `ROADMAP.md`). Build `work/b-coul`. The whole account is
+`docs/upgrade/coulomb.md` section 8.
+
+**What was found** (`FOR_THE_OWNER.md` section 10 item 6 said "two sets of Coulomb functions").
+
+- With the default options the engine evaluates no GSL Coulomb function. `gsl_sf_coulomb_wave_FG_e` is in
+  `src/CoulFunc.cpp` twice (`PlainWaves`, and the boundary values of `computeHybrid`), reached only with the option
+  `use_gsl_coul` (`--gsl-coul`, pyazr `use_gsl_coul=True`; the bit is handed over at 22 places), and in
+  `azure2-coulomb-table validate` for one printed line. `gsl_sf_hyperg_U` is not called by the engine since
+  2026-11-09; `src/ECIntegral.cpp` named it in a comment.
+- With a Coulomb table the option changes only what the table does not serve (capture integrals, neutral and
+  hybrid pairs, points outside the table); without one it changes every open charged channel. Its effect depends
+  on the machine's table file.
+- Arguments of every test project (208 files, `calculate`, Brune, one thread, a probe in a copy of the engine):
+  1,682,514 evaluations without the table, 1,298,285 with it; l <= 8, eta 0 to 1146, rho 7.5e-4 to 47520.
+  GSL against `coulsm` at the same arguments: P differs by up to 5.0e-2 and S by 6.6e-2 (0 < eta <= 10), 2.0e-2
+  (eta to 100), 1.8e-14 (eta = 0). Per call: `coulsm` 36-71 us, GSL 0.6-1.2 us for charged pairs; 0.14 against
+  0.44 us for neutral ones.
+- mpmath on 1500 sampled arguments: inside the outer turning point GSL (2.6) is wrong by up to 5.2e-2 in P and
+  6.2e-2 in S, `coulsm` good to 8.7e-10; beyond it GSL is good to 1.7e-15 and `coulsm` to 7.6e-10 (P), 7.9e-9 (S).
+- Default against `--gsl-coul` over all outputs (`work/b-trial95`, Brune): 711 of 887 files identical with the
+  table, 458 without; chi-squared of `13N` 336479.96 -> 335217.54, of `T2` without a table 10910.13 -> 10897.12.
+  Instructions at one thread, default -> option: `13N` calculation 74.58e9 -> 16.75e9 (-78 %), `13N` gradient fit
+  183.85e9 -> 125.86e9 (-32 %), `T2` gradient fit 169.58e9 -> 169.12e9 (-0.3 %; -8.7 % without a table).
+
+**What was changed.** `include/CoulFunc.h` no longer includes `gsl/gsl_sf_coulomb.h` (it declared nothing from it);
+the comment of `src/ECIntegral.cpp` says the Whittaker function is `physics/coulomb`'s. No statement of the engine
+changed. `FOR_THE_OWNER.md` section 10 item 6 states what is left, section 8 asks about the option; `ROADMAP.md`
+row "`channel_functions` replaces the old Coulomb code".
+
+**What was not done, and why.** The two calls were not replaced. Replacing them moves no output of a run with the
+default options and is less than a day of code, but it leaves `use_gsl_coul` without meaning: a `<config>` key, a
+flag and a pyazr keyword. Runs that set it would move by the amounts above and slow down 4.5 times in a capture
+calculation. That is the owner's and the PI's decision (`coulomb.md` section 8.4: keep, retire, or another routine;
+`coulfg` has GSL's weakness, `coulcc` is 3 times faster than `coulsm` and good to 6.5e-12 on the sample but fails at
+11 of 2387 sampled arguments, all with eta >= 48). The external-capture signature stays v7: no amplitude changed.
+
+**What was run.**
+
+- Phase 1 (no code): the probe runs, the mpmath comparison, default against `--gsl-coul` over all outputs and the
+  instruction counts above; scripts and results in the session's scratch directory, not kept in the repository.
+  Single runs; two runs of the `T2` gradient fit with the same engine differed by 0.5 % in instructions.
+- 670e6b0f, on its tree before the commit (`work/director/verify_branch.sh wt-coul coul tab-trial94-1 trial95 6`,
+  `work/director/verify_coul_slice1.out`, logs `work/director/vlcoul/`): 0 warnings; 887, 851 and 887 files
+  identical in the three bases, none differs, none new; eight fits identical to `work/b-trial95` file by file,
+  same iterations; 324 of 325 quick tests, the one `pyazr_evaluation`'s wall-time check (22.4 ms against 17.1 ms
+  with six tests at once), which passes run alone; 172 of 172 regression scripts.
+- Without a Coulomb table file: 26 of 26 tests matching `pyazr_evaluation|coulomb|config_options|gsl|whittaker|ec_`;
+  the scripts `config_options`, `ec_integrals_signature`, `ec_m1_exact` pass.
+- Instructions at one thread against `work/b-trial95` (`work/director/coul_speed_slice1.out`): `T2` calculation
+  1,242,599,361 -> 1,242,596,245; `13N` calculation 74,582,452,143 -> 74,582,763,900; `T2` gradient fit
+  168,662,689,201 -> 168,662,689,699; `13N` gradient fit 183,843,263,335 -> 183,832,751,227; no output differs.
+- `repo_consistency_test.py` and `docs_build` pass. After the check two sentences of `coulomb.md` were edited (the
+  0.5 % spread); the consistency test was run again, `docs_build` was not.
+
+**Not run.** `ctest -L slow`; the thread comparison; any CI; the full quick test set without a table file; the
+probe in the formal and Park bases and for fits (only `calculate`, Brune).
+
+**Found on the way.**
+
+- `coulsm`'s F alone at eta = 0, l >= 2 and small rho is inaccurate relative to itself (known from the comment of
+  `coulomb_gsl_crosscheck`): 4e-3 (l = 2), 3e5 (l = 3), 3e13 (l = 4) at rho = 7.5e-4 against mpmath; up to 1.5 at
+  the projects' arguments (`7Li_p_ay` and three more, l <= 4, rho >= 0.018). P, S and the phase do not see it
+  (below 2.5e-16 of the amplitude). F enters alone in the external-capture integrand; whether any project
+  integrates such an F was not traced (`ec_threshold`: 2.7e-12).
+- The line "references: Michel vs GSL Coulomb" of `azure2-coulomb-table validate` compares over the whole table
+  domain, where GSL is wrong below the barrier, so it prints percent-size numbers that say nothing about the
+  table. Not changed (the tool's output).
+- `pyazr_evaluation` has a wall-time check ("evaluate takes the time of one objective") that fails when six tests
+  run at once (below).
+
+## 2026-11-16 (Coulomb agent, second part) — `use_gsl_coul` retired; the tool's cross-check; F alone at eta = 0
+
+**Merged.** Same branch, `feature/upgrade-1-coulomb-engine` in `wt-coul`. The PI's decisions on the three
+points of the first part were relayed by the director. Commits after 670e6b0f: 27652262 (design, `coulomb.md`
+section 9.1-9.3), then one each for the retirement, the tool's line, and the measurement of F (hashes at the end).
+Builds `work/b-coul2`, `work/b-coul3`. Account: `docs/upgrade/coulomb.md` section 9.
+
+**1. The option is retired.**
+
+- One table, `io::RemovedConfigKeys()` (`io/src/ConfigSection.cpp`): `useAdaptiveGrid` (text unchanged) and
+  `use_gsl_coul` with its flag, and one text per front end (`RemovedConfigKeyText`). The reason in every message:
+  GSL's Coulomb functions are wrong by up to 5 % in the penetrability inside the outer turning point; AZURE2's own,
+  which every run without the option already used, are the only ones.
+- A format-3 file with `use_gsl_coul=` (either value): `E_CONFIG_KEY_REMOVED` at the line, "delete the line", from
+  the reader, so `--validate` exits 2, the run exits 1 and computes nothing, `Project.validate` and a session
+  refuse. This is the pattern of `useAdaptiveGrid`; a value of 0 is refused too.
+- `--gsl-coul`: "Unknown option --gsl-coul." and the sentence, exit 2. Not in `--help`; `command_line.rst` keeps
+  the entry as removed.
+- `pyazr.Session(use_gsl_coul=...)`: `TypeError` with the sentence (text from the binding,
+  `_azure2.removed_option_text`); `Project.set_config(use_gsl_coul=...)`: `ValueError` with it.
+- The converter is unchanged: old files never held the key (the old program's GSL box lived in `<lastRun>`, which
+  the converter drops; the PI, 2026-11-13). A converted project is computed with the program's own functions.
+- Gone: the two GSL calls and `useGSLFunctions_` in `CoulFunc`, the constructor argument of `CoulFunc` and
+  `ChannelFunc`, `Config::USE_GSL_COULOMB_FUNC` and its 22 hand-overs, the `gsl` members of three memo keys, the
+  argument of `EngineChannelFunctions`, `PhotonAmplitudes`, `FinalSqrtNF`, `ThmCoulombTerm`,
+  `ShiftAtLevelEnergy`, the level doors' `use_gsl_coulomb`, the rows of `io::ConfigKeys()` and `OptionStorages()`.
+  `src/CoulFunc.cpp` includes no GSL header.
+- `WorkingCopy::ECSignature` hashes the constant 0 where it hashed the option, so the signature of every run
+  without the option is what it was: v7 kept, no `intEC.dat.sig` changed.
+- GSL is still linked by the engine (quadratures, `FitGslTrustRegion`, Bessel and Gamma functions, the opt-in
+  numerical bound shift); GSL's Coulomb functions are called by `azure2-coulomb-table validate` and by the test
+  `coulomb_gsl_crosscheck` only.
+- Tests: the two values of the option became refusals in `experiment/tests/build_test.cpp`,
+  `tests/config_options/check.sh`, `tests/pyazr/config_options_test.py`, `io/tests/config_section_test.cpp`;
+  `tests/ec_integrals_signature` case 6 is now "the flag is refused, the saved file is untouched and reused";
+  `coulomb_gsl_crosscheck` holds the reason (7 points inside the turning point against stored mpmath values:
+  `coulsm` within 1.5e-10, GSL's P off by 4.9e-3 to 5.2e-2, required > 1e-3); `thm_coulomb_term` runs each case
+  once (its argument `useGSL`, which had no effect, is gone). Counts of options 11 -> 10 in five tests and two
+  pages; the two `--describe` stories under `tests/*/expected/` lose one line.
+- Documents: `command_line.rst`, `data_formats.rst`, `output_files.rst`, `pyazr.rst`, `coulomb_table.rst`,
+  `README.md`, two skill references, `project_format3.md`, `FOR_THE_OWNER.md` (section 3 row 19, sections 8, 9 and
+  10 item 6), the history page ("What users notice"), `ROADMAP.md`, `cnuc_split.md`, `endf.md`, `pyazr3.md`.
+
+**2. The tool's line.** `azure2-coulomb-table validate` compares Michel with GSL only beyond the outer turning
+point and says so. On `work/coulomb_table_v2.bin`: before "P 4.35e-02, S 5.70e-02" over 5000 points; after
+"1066 of 5000 random points ... P 1.71e-09, S 7.85e-09". PASS/FAIL unchanged. No test compares the line.
+
+**3. F alone at eta = 0** (`coulomb.md` section 9.6; scripts `work/director/coul_probe/f_all.sh`, `f_one.sh`).
+
+- Readers of F by itself: the external-capture integrand (`ECIntegral`), and the callers of
+  `Session.channel_functions` and `pyazr.physics.coulomb_functions`. `physics/transfer` takes j_l from another
+  routine (`coulcc`/`coulfg`: F within 2.3e-14 of mpmath), the engine's THM form factor from GSL's `bessel_jl`.
+- `coulsm` at eta = 0, largest relative error of F (and of F', which has the same defect) over rho = 7.5e-4 to 19:
+  l = 1: 1.6e-10; l = 2: 4.2e-3; l = 3: 2.6e5; l = 4: 2.9e13.
+- Over every test project: one reads such an F in a capture integrand (`ec_threshold` `ng`: 5535 reads, l <= 3,
+  rho >= 1.295); none off by more than 1e-8 (largest 2.7e-12). With GSL's F in its place 885 of 887 output files
+  are identical, the integrals move by at most 1.0e-15, one observable number changes in its last printed digit
+  (1.2e-11, the print's step). Nothing above 1e-10: no stop.
+- Exposed and not repaired: a neutral-channel capture with l >= 2 at rho << 1, and a Python caller who asks for F
+  or F' of a neutral pair at small rho.
+
+**Commits of the second part.** 27652262 (design), 5ade3f14 (the retirement), 545fb067 (the tool's line), 7b7524c4
+(the measurement of F). The three were checked together as one tree, then committed apart.
+
+**What was run.**
+
+- First full check of the retirement and the tool's line (`work/director/verify_coul_slice2.out`, build
+  `work/b-coul2`): 0 warnings; 887, 851, 887 identical, none differs, none new; eight fits identical; 324 of 325
+  quick tests (`check_skills`: a date in two skill lines outside the form of a version note); 171 of 172
+  regression scripts (`cli_help`: the flag's message did not start with "Unknown option", so the script counted
+  the flag as accepted). Both repaired.
+- Final full check of the finished tree (`work/director/verify_branch.sh wt-coul coul3 tab-trial94-1 trial95 6`,
+  `work/director/verify_coul_slice3.out`, logs `work/director/vlcoul3/`, build `work/b-coul3`): 0 warnings; 887,
+  851 and 887 files identical in the three bases, none differs, none new; eight fits identical to
+  `work/b-trial95`; 325 of 325 quick tests; 172 of 172 regression scripts. After it only `coulomb.md` was
+  edited (the paragraph that states these numbers); `repo_consistency_test.py`, `check_skills` and `docs_build`
+  were run again on the last commit.
+- Without a Coulomb table file (`work/b-coul2` rebuilt with the repairs, the code of the final tree;
+  `work/director/coul_probe/after_fix.out`): 42 of 42 tests matching
+  `pyazr_evaluation|coulomb|config_options|gsl|whittaker|ec_|project_options|io_config|experiment_|pyazr_describe`;
+  the scripts `config_options` and `ec_integrals_signature` pass.
+- Instructions at one thread against `work/b-trial95` (`work/director/coul_speed_slice2.out`), no output
+  differing: `T2` calculation 1,242,561,787 -> 1,242,372,132 (-0.02 %); `13N` calculation 74,582,449,469 ->
+  74,563,131,713 (-0.03 %); `13N` gradient fit 183,843,244,523 -> 183,817,809,638 (-0.01 %); `T2` gradient fit
+  168,750,567,860 -> 169,781,017,131 (+0.61 %), and twice more in another directory 168,731,722,915 ->
+  169,147,757,454 (+0.25 %, the same both times). Inside the 1 % of the brief; why a build with less code takes
+  0.25-0.6 % more instructions in that fit was not looked into.
+- The tool: `azure2-coulomb-table validate work/coulomb_table_v2.bin --n 200000` with both builds (numbers above),
+  PASS both.
+- The F probe: 208 project files twice (`f_all.log`, `fprobe_*.txt`, `cls-fexact.tsv` in
+  `work/director/coul_probe/`).
+
+**Not run.** `ctest -L slow`; the thread comparison; any CI (the test `coulomb_gsl_crosscheck` now requires GSL's
+defect, measured with GSL 2.6 only: another GSL on the CI's machines could fail it, and that would be news about
+GSL, not about the engine); the web page by hand (its form reads the table and loses the option with the row);
+the F probe in the formal and Park bases, in fits and in rate calculations.
+
+**Left.** A repair of `coulsm`'s F at eta = 0 (its own decision). The `<lastRun>` GSL box of an old project is
+dropped by the converter without a note, as before. `--help` does not list the removed flag.
+
 ## 2026-11-16 (director, 16:25) — merged: the three large files split; the Windows tests' repairs; Coulomb notes
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 98: `feature/upgrade-6-large-classes` (an agent's; its

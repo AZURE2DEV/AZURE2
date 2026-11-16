@@ -158,7 +158,8 @@ formats), `tabulate` (interpolation of engine values).
 
 **Command-line options** (35 in `AZURE2 --help`): 4 concern the program itself (`--help`, `--no-gui`, `--no-readline`,
 `--use-api`); 17 are session options (`transform`, `use_long_wavelength`, `use_brune`, `use_park`,
-`ignore_externals`, `use_rmc`, `use_gsl_coul`, `use_coulomb_table`, `coulomb_table`, `use_ec_table`,
+`ignore_externals`, `use_rmc`, `use_gsl_coul` (retired 2026-11-16), `use_coulomb_table`, `coulomb_table`,
+`use_ec_table`,
 `ec_convection_current`, `replace_grids`, with their negations); 6 are functions (`convert_azr`, `convert_params`,
 `validate`, `describe`, `predictions`, `schema`); `--refreeze-covariance` is reached in part (one
 `refreeze_covariance()`, the refits are the caller's); 7 are not reachable: `--build-coulomb-table`,
@@ -186,7 +187,7 @@ band, `reactionrates.out`, `cross_section_grid.dat`, the MCMC chain. Some of the
 `physics/` 10 of 78, Coulomb 1 of 7, transfer 1 of 78). Against the list of §8:
 
 - Coulomb F, G, F′, G′: through a session only (`azure2.coulomb_functions`, at a pair's radius, on energies, not
-  on ρ); the methods of pycoulomb side by side: no (only `use_gsl_coul` per session).
+  on ρ); the methods of pycoulomb side by side: no (`use_gsl_coul` per session until 2026-11-16).
 - P_l, S_l, φ_l: through a session (`coulomb_functions`: `P`, `S`, `delta_hs`); σ_l: no (the library has
   `coulomb_phase` in `Coulomb.h`, not bound; use case (c) used scipy).
 - Whittaker functions: yes (`whittaker_wave`, bound; and `transform.whittaker` in Python).
@@ -1239,3 +1240,235 @@ None was removed or renamed here: each is a public name, and removing one is the
 | `pyazr.angular_distribution` (`angular.py`, 115 lines) | Legendre coefficients at chosen energies through a temporary project with an extrapolation record and a second session | the example `angular_distribution.py` (run by `examples_test.py`), `convert_azr_test.py`, the skill `azure2-plot` (SKILL.md and `references/recipes.md`), the user guide | keep until the skill and the example are rewritten: an extrapolation record of `Project` and `Session(extrapolations=True).evaluate(x).data[i].extra["legendre"]` give the same numbers without a temporary project, and that rewrite is the first step of a deprecation |
 | `pyazr.modelavg` (583 lines: `Variant`, `ModelAverage`, `model_average`, ...) | model averaging over fitted variants (weights by AIC, BIC, chi^2; statistical and model variance kept apart); bookkeeping, no engine call | the skill `azure2-thm`, `model_average_test.py`, `thm_model_average_test.py`, four pages of the docs | keep as its own module. It is not a band of one model: merging it into `bands.py` (746 lines) would make a file above the 1,000-line limit |
 | `pyazr.priors` (844 lines) | the prior-covariance file: reader and writer on the engine's grammar, the builder of a prior from a fit, a chain or parts | the page's server (`ui/prior.py`, `ui/routes.py`), the example `prior_builder.py`, three tests and `tests/prior_covariance/check.sh`, four pages of the docs | keep as its own module, for the same reason; the plan of section 2.3 predates the builder (2026-11-14), which doubled the file |
+
+### 10.4 What the PI approved on 2026-11-16, as built (pyazr 3.0.0.dev5)
+
+The PI agreed to three items of this audit: the Weisskopf estimate as a function of `physics/`, `wigner_widths` as
+2 P gamma_W^2 (section 11) and a call for the engine's sampler (section 12).
+
+**The Weisskopf estimate.** `physics/Widths.h`: `weisskopf_width_eV(magnetic, L, E_gamma_MeV, mass_number)`, the
+total radiative width hbar lambda of an electric or magnetic 2^L-pole transition, in eV, for E_gamma in MeV:
+c_XL A^(2L/3) E^(2L+1) (electric) and c_XL A^((2L-2)/3) E^(2L+1) (magnetic) with the two-digit coefficients the
+Python formula had (E1-E4: 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21; M1-M4: 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21), which
+belong to R = 1.2 A^(1/3) fm; NaN outside L = 1..4, E > 0, A > 0. Its row is `weisskopf_width(e_gamma,
+multipolarity, mass_number, radiation="E")` (25 rows now); `pyazr.weisskopf_width(radiation_type, L, e_gamma,
+mass_number)` calls the row and keeps its `None` outside the domain. No formula is left in `pyazr/`.
+
+- The numbers did not move: 648 transitions (E1-M4, A = 4-238, 0.01-20 MeV) equal the earlier Python formula bit
+  for bit (`tests/pyazr/weisskopf_test.py` keeps that table and asks for 1e-15).
+- Independent value: the closed forms of Blatt and Weisskopf (Bohr and Mottelson vol. 1, eqs. 3C-38, 3C-39)
+  written out in `physics/tests/widths_test.cpp` and, in mpmath, in the row's test. The table over the closed
+  form, minus one: E1 +0.79 %, E2 +2.28 %, E3 +3.05 %, E4 -3.11 %, M1 +1.34 %, M2 +1.94 %, M3 -0.80 %, M4 -7.23 %
+  (each held to 0.1 %); the dependence on E and A is the closed form's to 1e-13.
+- Not changed, for the PI: the coefficients are not the closed form rounded to two digits (E2 would be 4.8e-8, E3
+  2.2e-14, E4 7.0e-21, M3 6.9e-15, M4 2.2e-21). Replacing them would move every W.u. by the percentages above.
+
+
+**`wigner_widths` as 2 P gamma_W^2.** Built as section 11 says (`pyazr/session_physics.py`). Measured:
+`tests/pyazr/wigner_widths_test.py` against mpmath's Coulomb functions, 2.5e-10 with the Coulomb table and 3.6e-10
+with the exact routine, on T1, T2, T3 and 13N in the three parametrizations (14 entries in each: 13 against
+mpmath, among them the neutral 7Be + n channel of T3, which also equals the closed form of P_0 to 1e-12); the
+three parametrizations agree to 1e-6. The alpha + 4He pair of T3 has a hybrid nuclear potential: its entry is
+2 P gamma_W^2 with the hybrid model's P (0.85 % from the Coulomb value), checked against `channel_functions`, not
+against mpmath.
+No test of the repository had the probe's number as its expected value (41 tests that use these calls pass
+unchanged: the examples and the skill's self-test use T1, whose levels have every particle width free); the
+skill `azure2-check` gained a self-test on T2, where the level norm J = theta^2 / theta^2_formal of its script was
+0.998, 0.755 and 0.999 with the probe and is 0.797, 0.745 and 0.972 = 1 - sum_c Gamma_c S'_c / (2 P_c) now.
+Left as it was: `ChannelWidth.level_energy`, `is_open` and the transition energy of a photon row are taken at the
+level's energy in the fit vector, which in the formal basis is the formal pole energy (section 11.1 takes Gamma_W at
+the physical one).
+
+**The engine's sampler on a session.** Built as section 12 says: `Session.sample_with_engine`
+(`pyazr/session_sampler.py`, `EngineSampleResult`), `api/src/pybind_sampler.cpp`, `api/src/AZUREAPISampler.cpp`
+(`SamplerRequest`, `SampleWithEngine`), `src/SamplerRun.cpp` (`RunSampler`). Differences from the design, found by
+the test:
+
+- The sampler makes its own parameter vector from the levels' inputs (`AZURECalcMCMC::UpdateParameterVectors`:
+  `FillMnParams`, then, in the program's run only, the user's parameter file again), and takes from it the fixed
+  values and the start levels it writes into `parameters.out`. A session's values that are not the project's (a
+  session made with `parameter_file=`, or `x0`) are therefore put into the copy of the inputs handed to the
+  sampler (`CarryValuesToInputs`), and the vector the sampler will make is checked against the session's. Without
+  it the chain of `x0` was the program's but `parameters.out` held the project's observed widths, and a parameter
+  file's fixed values would not have reached the sampler.
+- Two cases cannot be carried and are refused with the reason: a project with `gamma_decay` records whose level
+  values are not the project's (their numbers are not amplitudes of the inputs), and a fixed normalization or
+  energy shift of a parameter file that is not the project's (the sampler reads the fixed data parameters from the
+  data).
+- `--steps` has a lower bound of 100 in the option table, so the shortest chain of the test is 100 steps.
+- `api/src/pybind_api.cpp` may not grow (the size ratchet): the session's method takes its keywords as one
+  `py::kwargs`, and `ReadProjectText` moved to `pybind_project.cpp`; the file is 3 lines shorter.
+
+Measured (`tests/pyazr/sample_with_engine_test.py`, 105 checks, about 80 s): `samples.mcmc`, `walkers.mcmc`,
+`param.mcmc`, `parameters.out` and the `AZUREOut_*` files of the best walker equal the program's byte for byte, and
+the returned arrays equal the numbers of the program's `samples.mcmc` exactly, in ten comparisons: T3 rwa at 1 and
+2 sampler threads, T3 physical at 2, T1 rwa at 2, T3 under Park in the physical basis, T3 from a parameter file
+against `x0` in both bases, T3 from a parameter file with its fixed level values moved by 1 % against a session
+made with the file, T3 with a prior of `<mcmc>`, T3 continued from 100 to 200 steps. The chain at 2 sampler threads
+is the chain at 1. A stop request set at step 30 leaves 30 steps, equal to the first 30 of the uninterrupted chain.
+Lines changed in `src/AZURECalcMCMC.cpp`, `src/AZURECalc.cpp` and `api/src/AZUREAPI.cpp`: none.
+No row in `pyazr.kinds()` or in the command table of `python -m pyazr`: neither has a table of run commands (the
+fitters' table is the engine's `Fitters()`, which the sampler is not a row of).
+
+## 11. `Session.wigner_widths` as 2 P gamma_W^2 (design; approved by the PI on 2026-11-16)
+
+### 11.1 What it is
+
+`Session.wigner_widths(x)` is the Wigner-limit width of every free open particle channel, the denominator of
+theta^2 = Gamma_c / Gamma_W in `Session.dimensionless_widths`. Until now it was a probe of the engine's
+transformation (section 10.3). It becomes
+
+    Gamma_W = 2 P_l(E_r) gamma_W^2     (eV)
+
+- `gamma_W^2 = 3 hbar^2 / (2 mu a^2)` (MeV): the engine's Wigner limit of the channel, the row's `wigner_limit`
+  (`AChannel::SetWignerLimit`, `physics/Widths.h`). The convention does not change.
+- `P_l(E_r)`: the penetrability of the session's own channel functions (`Session.channel_functions(pair, E_r, l)`:
+  the Coulomb table when one is in use, GSL with `use_gsl_coul`, the hybrid model's solution for a pair with a
+  nuclear potential, with the level's J where the potential has a spin-orbit term) at the pair's channel radius.
+- `E_r`: the c.m. energy of the pair at the level's **physical** energy, E_x - (separation energy + excitation
+  energy of the pair), with E_x the level's row of `Session.transform(x)`: the observed energy the program writes
+  into `<levels>`, the energy at which the observed width Gamma_c is defined. In Brune's and Park's
+  parametrizations it is the level's energy in the fit vector; in the formal one the fit vector holds the formal
+  pole energy, which is not where Gamma_c is observed. With it the number is the same in the three
+  parametrizations of one level scheme, to the rounding of the transformation.
+
+The product of the two engine numbers is formed in Python (as `theta2 = |Gamma| / Gamma_W` is); no Coulomb
+function, constant or mass is.
+
+### 11.2 Signature, and what a caller sees
+
+`Session.wigner_widths(params=None, eps=None) -> {free_index: Gamma_W in eV}`: the name and the shape are kept.
+`eps` was the probe's amplitude; it is accepted and ignored, so that a call written for the probe still runs.
+
+- A **closed** channel (E_r <= 0) has no entry, as before: it has an ANC, not a width, and P = 0. Whether it is
+  closed is asked at the physical energy, the one P is taken at.
+- A **photon** channel has no entry, as before: its scale is the Weisskopf estimate.
+- A **fixed** channel has no entry, as before (the dict is keyed by the free index). `dimensionless_widths` leaves
+  `wigner_width` and `theta2` of a fixed channel `None` as it did; filling them is a separate change.
+- A channel without a Wigner limit in its record has no entry, as before.
+
+### 11.3 Old against new, before the change (pyazr 3.0.0.dev5 at c15c8fed, the session's default Coulomb table)
+
+Free open particle channels at `parameters.x0`; old is the probe (eps = 1e-4), new 2 P gamma_W^2 as above.
+
+| Project | Parametrization | Channels | old / new | Largest relative difference, where |
+|---|---|---|---|---|
+| T1 | Brune | 3 | 1 | 5.1e-9, `width_5_1` (1/2+, 2.365 MeV, l = 0): 117250.8399 against 117250.8405 eV |
+| T1 | formal | 3 | 1 to 1.51 | 0.51, `width_3_1` (3/2-, l = 1): 1.82744e6 against 1.21027e6 eV |
+| T1 | Park | 3 | 1 | 1.1e-16 |
+| T2 | Brune | 4 | 0.798 to 0.987 | 0.202, `width_1_3` (1-, 12.4258 MeV, l = 1, pair 2): 3.2081e6 against 4.0202e6 eV |
+| T2 | formal | 4 | 0.798 to 8022 | 8.0e3, `width_5_3` (3-, l = 3, pair 2): 2.43366e10 against 3.03363e6 eV |
+| T2 | Park | 4 | 1 | 2.2e-16 |
+| T3 | Brune | 4 | 0.984 to 1 | 0.0158, `width_4_1` (1+, 17.64 MeV, l = 1, pair 2): 144412 against 146732 eV |
+| T3 | formal | 4 | 0.984 to 1 | the same channel and numbers as Brune |
+| T3 | Park | 4 | 1 | 0 |
+| 13N | Brune | 3 | 1 | 5.1e-9, `width_3_1` (1/2+, 2.3682 MeV, l = 0): 121062.8963 against 121062.8969 eV |
+| 13N | formal | 3 | 1 | 5.1e-9, the same channel |
+| 13N | Park | 3 | 1 | 2.2e-16 |
+
+Why they differ, each checked:
+
+- **Park: none.** Park's amplitude is that of the observed width, Gamma = 2 P gamma^2, so the probe is 2 P gamma_W^2.
+- **Brune, a level whose particle widths are all free (T1, 13N): 5e-9**, the probe's own O(eps^2) term.
+- **Brune, a level with fixed widths (T2, T3).** The probe leaves the fixed amplitudes in the level's shift
+  denominator: old / new = 1 / (1 + sum_c gamma_c^2 dS_c/dE) over the level's particle channels (the fixed ones at
+  their values, the free ones at eps). Computed from the session's amplitudes and `pyazr.physics.shift_derivative`:
+  0.79798653, 0.98671951, 0.98671951, 0.97257053 for the four channels of T2 and 0.98419052 for `width_4_1` of T3,
+  equal to old / new to the eight digits printed. The probe was the observed width of a unit amplitude in a level
+  that keeps its other widths, not the single-channel limit.
+- **Formal, T1 `width_3_1`.** Two parts. With every free amplitude at eps the level is not shifted, so the probe's
+  width belongs to the formal pole energy 3.7364 MeV, not to the observed 3.5020 MeV: 2 P there is 1.384 times
+  larger (computed). The other factor, 1.091, does not depend on eps (1e-5 to 1e-3 give 1.82744e6): the mixing of
+  the level with the other level of its group through the boundary term. It is attributed to that, not computed.
+- **Formal, T2.** The probe's value grows as eps falls (`width_2_1`: 1.1e8, 8.7e9, 8.4e11 eV for eps = 1e-3, 1e-4,
+  1e-5; `width_5_3`: 2.0e8, 2.4e10, 2.5e12): the transformation mixes the fixed amplitudes of the group's other
+  levels into the probed level, and that part is divided by eps^2. The probe is not a property of the channel
+  there; the new number does not depend on eps and equals the Brune and Park ones (to 1e-6, the transformation).
+
+`dimensionless_widths` changes with it: `wigner_width` and `theta2` of the free open particle channels, by the
+inverse of the factors above; `theta2_formal`, `wigner_gamma2`, every photon field and every value are unchanged.
+In Brune's parametrization (the default) a theta^2 of a level with fixed widths falls by the level's factor (T2: by
+up to 20 %), which is the correction: the old number was Gamma / (Gamma_W J) with J the level's norm of its fixed
+part.
+
+### 11.4 Tests
+
+- New, `tests/pyazr/wigner_widths_test.py`: on T1, T2, T3 and 13N in the three parametrizations, every entry
+  against 2 P gamma_W^2 with P = rho / (F_l^2 + G_l^2) from mpmath's Coulomb functions (eta, rho from the pair's
+  masses, charges and radius and the constants written in the test) to 1e-8 (the Coulomb table); the neutral
+  channel of T3 against the closed forms P_0 = rho, P_1 = rho^3 / (1 + rho^2); the same numbers in the three
+  parametrizations; no entry for closed, photon and fixed channels; `eps` ignored; `theta2 = |Gamma| / Gamma_W`.
+- Tests and skill self-tests whose expected numbers were the probe's are re-baselined in a commit of their own
+  that states old and new values.
+
+## 12. The engine's ensemble sampler from a session (design; approved by the PI on 2026-11-16)
+
+### 12.1 What it is
+
+`AZURE2 mcmc` runs the engine's affine-invariant ensemble sampler (`src/AZURECalcMCMC.cpp`, the vendored
+`numcmc/`) and writes `samples.mcmc`. pyazr had `Objective.log_prob`, the sampler's rule for a Python sampler,
+and no call that runs the engine's own. `Session.sample_with_engine` runs it on the session, in the process, as
+`Session.fit_with_engine` runs the program's fitters (`fit.md`).
+
+One definition: what the command does after its set-up (the start vector in the sampling basis, the rows of
+`<mcmc>` `<parameters>`, the table it prints, `--overwrite-samples`, the sampler object, its priors, the run)
+moves from `runMCMC` in `src/AZURE2.cpp` into one engine function, `RunSampler` (`src/SamplerRun.cpp`,
+`include/SamplerRun.h`), which the command and the session both call. The session makes the parameter vector as
+`FitWithEngine` does (the program's `FillMnParams`, at the session's values) and hands a copy of its levels.
+`src/RunRequest.cpp` (the option table) moves from the program's sources into the engine library, so that the
+binding checks a keyword against the option's row and no range is typed twice. `src/AZURECalcMCMC.cpp`,
+`src/AZURECalc.cpp` and `api/src/AZUREAPI.cpp` are not edited (another branch is splitting them); the session's
+entry is a new file, `api/src/AZUREAPISampler.cpp`, and its binding `api/src/pybind_sampler.cpp`.
+
+### 12.2 Signature
+
+    Session.sample_with_engine(walkers, steps, *, sampler_threads=1, basis="rwa", parameter_spread=5.0,
+                               energy_spread=1.0, overwrite_samples=False, x0=None, progress=None, stop=None)
+        -> EngineSampleResult
+
+The keywords are the command's options, with its ranges and defaults (`command_line.rst`):
+
+| Keyword | Option | Range, default |
+|---|---|---|
+| `walkers` | `--walkers=N` | 2 to 1000, required |
+| `steps` | `--steps=N` | 100 to 10^7, required |
+| `sampler_threads` | `--sampler-threads=N` | >= 1; required by the command, 1 here |
+| `basis` | `--basis=rwa\|physical` | required by the command, `"rwa"` here |
+| `parameter_spread` | `--parameter-spread=P` | percent, (0, 50], 5 |
+| `energy_spread` | `--energy-spread=E` | keV, (0, 1], 1 |
+| `overwrite_samples` | `--overwrite-samples` | `False`: an existing `samples.mcmc` is continued, as the command does |
+
+The command has no seed, burn-in or thinning option, so the call has none: the sampler's seed is fixed in the
+engine (a run is reproducible; a resumed run draws a new stretch), every step of every walker is written.
+`--parameter-file` is the session's (`Session(file, parameter_file=)`); `x0` (a fit vector, default
+`parameters.x0`) is the same start given in the session, as in `fit_with_engine`. `--capture-amplitudes` has no
+session keyword (section 10.2).
+
+- `progress`: called once per step with a dict (`step`, `steps`, `log_prob`, `log_likelihood`, `log_prior`: the
+  best walker of the step, what the program's progress line shows), with the GIL taken. An exception in it stops
+  the run and is raised afterwards.
+- `stop`: a `pyazr.session_fit.StopRequest` or a `threading.Event`, looked at after every step; when set, the
+  sampler ends after the step (`AZURECalcMCMC::RequestStop`, the sampler object's own flag), the files are
+  complete to that step and `status` is `"stopped"`. No new static state: the flag is the sampler object's.
+
+`EngineSampleResult`: `chain` (steps, walkers, parameters), `log_prob`, `log_likelihood`, `log_prior` (steps,
+walkers), read back from `samples.mcmc` by the engine (17 digits: the doubles the sampler held; all the steps of
+the file, the earlier ones of a continued run included); `names` (the free parameters, the chain's last axis),
+`basis`, `status` (`"completed"`, `"stopped"`), `samples_file`, `walkers_file`, `output_dir`, `log` (the sampler's
+lines: the acceptance fraction, its warnings).
+
+What it writes, as the command does, into the session's output directory: `samples.mcmc`, `walkers.mcmc`, and
+every 10 steps the best walker's output files (`AZUREOut_*`, `parameters.out`, `param.mcmc`). Not written: the
+command's `param.par` and check files (the session's set-up is not the program's run). A run the sampler refuses
+(no walker of the start with a finite probability, a bad `<mcmc>` row, no free parameter) raises
+`pyazr.EngineError` with the sampler's words. The session's parameter values are not changed.
+
+### 12.3 Tests
+
+- `tests/pyazr/sample_with_engine_test.py`: the program (`AZURE2 mcmc --walkers --steps=100 --sampler-threads=N
+  --basis=...`) on a copy of a project and the call on another copy: `samples.mcmc`, `walkers.mcmc` and
+  `param.mcmc` equal byte for byte, the returned arrays equal the file's numbers exactly; on T1 and T3, at 1 and
+  at 2 sampler threads, in both bases; with a parameter file against `x0`; a continued run; a stop request after a
+  chosen step; a refusal of each keyword out of its range (the option's row); an exception in `progress`.
+- The program's own chains must not move: the regression scripts with MCMC (`tests/mcmc_physical_norm`,
+  `tests/prior_covariance`, `tests/gamma_decay`, `sampler_objective_test`) and the full check.

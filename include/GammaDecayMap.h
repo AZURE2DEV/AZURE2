@@ -152,7 +152,7 @@ class GammaDecaySet {
             const std::vector<double> &particle, const std::vector<std::pair<double, std::vector<double>>> &finals,
             bool slopes) const;
 
-  bool park_ = false, gslCoulomb_ = false, rmc_ = false;
+  bool park_ = false, rmc_ = false;
   const Config *configure_ = nullptr;  ///< the run's (external-capture integrals: its per-thread scratch)
   std::shared_ptr<const SystemOfCompound> structure_;  ///< the structure System (SystemOfCompoundContent::Structure)
   std::vector<GammaDecayLevel> levels_;

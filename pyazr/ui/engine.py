@@ -33,6 +33,8 @@ SESSION_NOT_SERVED = {
     "session edits: edits of the Project and a new session (pyazr3.md decision 11)":
         "configure recalculate_external_capture "
         "refreeze_covariance nuclear_potential nuclear_potentials",
+    "the engine's own ensemble sampler: the page's sampler job runs emcee on the objective (web_ui.md)":
+        "sample_with_engine",
     "the server owns sessions: lifecycle": "close is_alive",
     "later steps of web_ui.md section 11 (the Nucleus and Physics tabs)":
         "level_scheme nuclei mass_number basis ec_integrals prior_covariance_residuals prior_covariance_names "

@@ -133,6 +133,16 @@ void BindDescription(py::module_ &m) {
       "threads: OpenMP threads of the build; l_max and per_decade (nodes per decade of eta and rho): the table's "
       "extent and density (the defaults are the program's table).");
   m.def(
+      "removed_option_text",
+      [](const std::string &name) {
+        const azure2::io::RemovedConfigKey *removed = azure2::io::RemovedConfigKeyNamed(name);
+        return removed && *removed->flag ? azure2::io::RemovedConfigKeyText(*removed, azure2::io::OptionSpelling::kKeyword)
+                                         : std::string();
+      },
+      py::arg("name"),
+      "The refusal of a keyword of pyazr.Session that was an option of the calculation and is one no more (a row of "
+      "io::RemovedConfigKeys() that had a flag: use_gsl_coul), saying why and what to do; \"\" for any other name.");
+  m.def(
       "session_options",
       []() {
         py::list out;

@@ -66,7 +66,7 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
  *    by integrating the Coulomb equation inwards from that series value at R
  *    in Taylor segments (RadialTaylor); inwards all solutions grow like G_l
  *    through the barrier, so this is stable, and no library Coulomb function is
- *    needed (useGSL has no effect).  The real-axis quadrature may stop early
+ *    needed.  The real-axis quadrature may stop early
  *    when |O(r)/O(a)| has fallen so far that the rest is negligible (restBound).
  *    The conditionally convergent tail R -> inf is done exactly:
  *    j_l = (h1_l + h2_l)/2 and each half is integrated along a ray into the
@@ -393,8 +393,7 @@ complex coulombTermUncached(const PPair *pair, int l, double E, double p) {
     // through the barrier at the same rate as G_l, so the error stays at the
     // level of the starting value relative to |O_l| (the part that is lost is
     // the exponentially small F_l, which is irrelevant to O_l = G_l + i F_l).
-    // No library Coulomb function is called: the result does not depend on
-    // useGSL, and GSL's own G_l/F_l inaccuracies (~2% for l >= 2 at eta ~ 2,
+    // No library Coulomb function is called: GSL's own G_l/F_l inaccuracies (~2% for l >= 2 at eta ~ 2,
     // rho ~ 1-4) cannot leak in.
     std::vector<RadialTaylor> segs;
     {
@@ -504,7 +503,6 @@ complex coulombTermUncached(const PPair *pair, int l, double E, double p) {
 
 }  // namespace
 
-complex ThmCoulombTerm(const PPair *pair, int l, double E, double p, bool useGSL) {
-  (void)useGSL;  // O_l is built from its asymptotic expansion, see above
+complex ThmCoulombTerm(const PPair *pair, int l, double E, double p) {
   return coulombTermUncached(pair, l, E, p);
 }

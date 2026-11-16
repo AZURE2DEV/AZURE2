@@ -112,7 +112,6 @@ std::shared_ptr<const GammaDecaySet> GammaDecaySet::Read(const CompoundSystem &c
     return nullptr;
   };
   set->park_ = (configure.paramMask & Config::USE_PARK_FORMALISM);
-  set->gslCoulomb_ = (configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   set->rmc_ = (configure.paramMask & Config::USE_RMC_FORMALISM);
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   const bool transform = (configure.paramMask & Config::TRANSFORM_PARAMETERS);
@@ -354,7 +353,7 @@ namespace {
 /// The photon amplitudes (MeV^1/2, slot order) of record level L at energy E (MeV) with the record's values q and
 /// the full vector p's particle amplitudes: physics/ amplitudes_from_observed with the particle columns as amplitudes
 /// (Brune: n_lambda from them; Park: 0, the photon amplitude is (Gamma / 2P)^1/2), the photon columns as widths.
-std::vector<double> PhotonAmplitudes(const CompoundSystem &compound, const SystemOfCompound &structure, bool park, bool gsl, bool rmc,
+std::vector<double> PhotonAmplitudes(const CompoundSystem &compound, const SystemOfCompound &structure, bool park, bool rmc,
                                      const GammaDecayLevel &L, double E, const std::vector<double> &q,
                                      const std::vector<double> &particle) {
   const std::vector<double> widths = GammaDecaySet::PartialWidths(L, q);
@@ -376,7 +375,7 @@ std::vector<double> PhotonAmplitudes(const CompoundSystem &compound, const Syste
       in.value[k] = park ? 0.0 : particle[ch - 1];
     }
   }
-  const phys::ChannelFunctions cf = EngineChannelFunctions(compound, structure.map, gsl, rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(compound, structure.map, rmc);
   const phys::BasisAmplitudes out =
       phys::amplitudes_from_observed(structure.system, L.block, phys::internal_channels(structure.system, L.block), in,
                                      park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
@@ -389,7 +388,7 @@ std::vector<double> PhotonAmplitudes(const CompoundSystem &compound, const Syste
 /// N_f^(-1/2) of final state (j, la) at energy E (MeV) and amplitudes gamma (per channel of its group), with
 /// dN_f/dgamma_d per channel: n0 = 1 (Brune) or Park's J_f = 1 - sum_c gamma_c^2 S'_c(E) over its particle channels,
 /// as CompoundSystem::CalcShiftFunctions forms it (section 2.7).
-double FinalSqrtNF(const CompoundSystem &compound, bool park, bool gsl, int j, int la, double E, const std::vector<double> &gamma,
+double FinalSqrtNF(const CompoundSystem &compound, bool park, int j, int la, double E, const std::vector<double> &gamma,
                    std::vector<double> *dN) {
   const JGroup *group = compound.GetJGroup(j);
   const ALevel *level = group->GetLevel(la);
@@ -402,7 +401,7 @@ double FinalSqrtNF(const CompoundSystem &compound, bool park, bool gsl, int j, i
       (*dN)[ch - 1] += 2.0 * gamma[ch - 1] * phys::bound_state_coefficient(pair->GetChRad(), pair->GetRedMass()) *
                        level->GetNFIntegral(ch);
     if (!park || channel->GetRadType() != 'P' || pair->GetPType() != 0) continue;
-    ChannelFunc cf(pair, gsl);
+    ChannelFunc cf(pair);
     const double dS = cf.ShiftDerivative(channel->GetL(), pair->SpinOrbitTwoJ(group->GetJ()),
                                          E - pair->GetSepE() - pair->GetExE());
     n0 -= std::pow(gamma[ch - 1], 2.0) * dS;
@@ -425,7 +424,7 @@ GammaDecaySet::Point GammaDecaySet::Map(const CompoundSystem &compound, const Ga
                                         bool slopes) const {
   Point point;
   GammaDecayFill &fill = point.fill;
-  fill.total = PhotonAmplitudes(compound, *structure_, park_, gslCoulomb_, rmc_, L, E, q, particle);
+  fill.total = PhotonAmplitudes(compound, *structure_, park_, rmc_, L, E, q, particle);
   point.internal = fill.total;
   const std::size_t m = L.photonChannels.size();
   fill.external.assign(m, std::complex<double>(0.0, 0.0));
@@ -455,7 +454,7 @@ GammaDecaySet::Point GammaDecaySet::Map(const CompoundSystem &compound, const Ga
     in.finalEnergy = finals[s].first;
     in.finalGamma = finals[s].second;
     std::vector<double> dN;
-    in.finalSqrtNF = FinalSqrtNF(compound, park_, gslCoulomb_, e.group, e.level, in.finalEnergy, in.finalGamma,
+    in.finalSqrtNF = FinalSqrtNF(compound, park_, e.group, e.level, in.finalEnergy, in.finalGamma,
                                  slopes ? &dN : nullptr);
     ExternalCaptureSlopes d;
     const AChannel *channel = group->GetChannel(L.photonChannels[s]);
@@ -573,7 +572,7 @@ void GammaDecaySet::PullBack(const CompoundSystem &compound, const LevelState &s
         const double d = q[i], w = 1.0 + d * d;
         std::vector<double> unit = q;
         unit[i] = 1.0;
-        const double K = std::sqrt(2.0) * PhotonAmplitudes(compound, *structure_, park_, gslCoulomb_, rmc_, L,
+        const double K = std::sqrt(2.0) * PhotonAmplitudes(compound, *structure_, park_, rmc_, L,
                                                            state.E(j, la), unit, particle)[kL1];
         v = -gbar[kL] * R[kL] * amp[kL] * d / w + gbar[kL1] * R[kL1] * K / (w * std::sqrt(w));
       } else {
@@ -585,7 +584,7 @@ void GammaDecaySet::PullBack(const CompoundSystem &compound, const LevelState &s
     // The particle amplitudes (Brune): g_k^2 = |Gamma_k| n / (2 P_k), n = 1 + sum_c gamma_c^2 S'_c.
     const double E = state.E(j, la);
     if (!park_) {
-      const phys::ChannelFunctions cf = EngineChannelFunctions(compound, structure_->map, gslCoulomb_, rmc_);
+      const phys::ChannelFunctions cf = EngineChannelFunctions(compound, structure_->map, rmc_);
       double n = 1.0;
       std::vector<std::pair<int, double>> terms;  // (channel, gamma_c S'_c)
       for (std::size_t k = 0; k < L.channelOfBlockChannel.size(); k++) {

@@ -115,6 +115,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 | 16 | A MIGRAD fit stopped by its call limit ends at its lowest objective | see line | 2026-11-14 | owner |
 | 17 | Radiative widths are not in a level's total width (as on `dev`) | none | — | — |
 | 18 | Clebsch–Gordan and Racah coefficients computed here, not GSL's 3j and 6j | last digit | 2026-11-16 | PI |
+| 19 | `--gsl-coul` / `use_gsl_coul` (GSL's Coulomb functions) removed: refused | up to 5 % in P | 2026-11-16 | PI |
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
@@ -159,6 +160,14 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     same chi-squared and parameters with output numbers differing in the last printed digit (5e-11). An
     `intEC.dat` written before is recomputed once (signature v7). `cnuc_split.md` section 9;
     `physics_engine_coupling_gsl`.
+19. `dev` has the flag `--gsl-coul` (and the old setup program a box for it, kept in `<lastRun>`). GSL's Coulomb
+    functions are wrong by up to 5.2 % in the penetrability and 6.2 % in the shift function inside the outer
+    turning point (against mpmath on the arguments of the test projects; the program's own are good to 1e-9), so
+    a run with the flag differed from one without by percent: χ² of `tests/13N` 336479.96 → 335217.54. Here the
+    flag, the `<config>` key `use_gsl_coul` (either value) and the pyazr keyword are refused with that reason;
+    a converted old project is computed with the program's own functions, whatever its `<lastRun>` said. No
+    result of a run without the option changes. A capture calculation that used the flag for speed takes 4.5
+    times the instructions (`tests/13N`). `coulomb.md` sections 8 and 9; `coulomb_gsl_crosscheck`.
 
 Rows 9, 15 and the refusals that stop a project which ran on `dev` (two resolution kernels on one data set, a lab
 point at the kinematic limit, ...) are in the history page, "What users notice".
@@ -334,9 +343,8 @@ estimate from the 65 commits read, not a measurement).
 
 - **The Coulomb repair's home**: a listed local change in `physics/coulomb/coulsm` (as now) or pycoulomb.
 - **The coincidence gap**: 1e-6 MeV with the mean S′ (section 3, row 4); proposed for `dev` too.
-- **The option `use_gsl_coul` (`--gsl-coul`)**: keep it (fast, wrong by up to 5 % in P below the barrier, and its
-  effect depends on whether a Coulomb table file exists), retire it, or give it another routine (`coulomb.md`
-  section 8.4, with the numbers). Proposed: retire it, the key refused with a message that names the default.
+- **`--gsl-coul` on `dev`**: retired here by the PI (2026-11-16; section 3, row 19): GSL's Coulomb functions are
+  wrong by up to 5 % in P below the barrier. Proposed for `dev` too.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
@@ -385,6 +393,12 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
+- The Coulomb routine's F and F′ alone are inaccurate for a neutral pair with l ≥ 2 at ρ ≪ 1 (R, against mpmath:
+  relative error 4e-3 for l = 2, 3e5 for l = 3 at ρ = 7.5e-4); P, S and the phase are not (the error is below
+  2.5e-16 of the amplitude). Read alone only by the external-capture integrand and by the callers of
+  `pyazr.physics.coulomb_functions` and `Session.channel_functions`. No test project is affected (R: one project
+  reads such an F, at ρ ≥ 1.3, good to 2.7e-12); a d-wave neutron capture at eV energies would be.
+  `coulomb.md` section 9.6.
 - The web page was tested in a headless Chrome and used by the PI; Firefox and Safari were not run.
 
 ## 10. What is not finished
@@ -688,14 +702,14 @@ re-read against its design at the hand-over.
    objective's terms are still `src/Objective.cpp` (each reads the working copy, the segments, the level state or
    the caller's `Results`), the vector's values are still `AZUREParams` on Minuit2's parameters, and the fitters
    are still `src/Fit*.cpp`: making those a library means giving the data χ² arrays, a change of the evaluation.
-6. **GSL's Coulomb functions behind the option `use_gsl_coul`.** With the default options the engine calls
-   `physics/coulomb` only. GSL's `gsl_sf_coulomb_wave_FG_e` is left in `src/CoulFunc.cpp` (two places), reached
-   only with `use_gsl_coul` (`--gsl-coul`), and in one printed line of `azure2-coulomb-table validate`;
-   `gsl_sf_hyperg_U` is not called any more. Measured on the arguments of every test project (`coulomb.md`
-   section 8): below the Coulomb barrier GSL's P and S are wrong by up to 5 % (mpmath decides), so a run with
-   the option differs from the default by percent (χ² of `13N` 336479.96 → 335217.54) and takes 78 % fewer
-   instructions in a capture calculation. Calling `physics/coulomb` there moves no default output and is less
-   than a day of code, but it empties a user-visible option: not done, asked in section 8.
+6. **One set of Coulomb functions; what is left of it.** The engine calls `physics/coulomb` only: the option
+   `use_gsl_coul` (`--gsl-coul`) and its two calls of GSL's `gsl_sf_coulomb_wave_FG_e` are gone (the PI,
+   2026-11-16; section 3, row 19; `coulomb.md` sections 8 and 9). GSL's routine is called by the cross-check of
+   `azure2-coulomb-table validate` (beyond the outer turning point, where it is right) and by the test
+   `coulomb_gsl_crosscheck`; the engine links GSL for its quadratures, a fitter and special functions. Left:
+   `coulsm` is good to 1e-9 and takes 36–71 µs per call for a charged pair; `coulcc` is three times faster and
+   good to 6.5e-12 on the sampled arguments but fails at 11 of 2387 of them (η ≥ 48), so a faster default is
+   not a switch away. `coulsm`'s F alone at η = 0, l ≥ 2 and ρ ≪ 1 is inaccurate (`coulomb.md` section 9.3).
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
@@ -721,10 +735,30 @@ re-read against its design at the hand-over.
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
    FRESCO's reference files). Not in the binding: the other functions of `physics/transfer` (bound states in a
    well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
-   of its own design), and the Weisskopf width (the engine has no such function: `pyazr.widths.weisskopf_width`
-   is a Python formula, the one of pyazr; a door needs the function in `physics/` first, which is new engine
-   code and the owner's decision).
-   Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
+   of its own design). The Weisskopf width is a function of `physics/` since the PI's approval of 2026-11-16
+   (pyazr 3.0.0.dev5; `physics/Widths.h`, `weisskopf_width_eV`; the row `weisskopf_width` of `pyazr.physics`):
+   the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
+   A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
+   for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
+   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.).
+   `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2 since the same approval (it was a probe of the
+   transformation): P of the session's channel functions at the level's physical energy, gamma_W^2 the engine's
+   3 hbar^2 / (2 mu a^2); the name and the return shape are kept. theta^2 of `dimensionless_widths` changes
+   where the probe was not that number: for a Brune level with fixed widths it falls by the level's
+   1 / (1 + sum gamma^2 dS/dE) of them (T2: by up to 20 %; T3: 1.6 % in one channel), in the formal basis by up
+   to 8e3 on T2; unchanged under Park and for Brune levels with all widths free (T1, 13N). Against mpmath's
+   Coulomb functions: 2.5e-10 on T1, T2, T3 and 13N in the three parametrizations (`pyazr3.md`, section 11).
+   The engine's ensemble sampler runs on a session since the same approval: `Session.sample_with_engine(walkers,
+   steps, sampler_threads=, basis=, parameter_spread=, energy_spread=, overwrite_samples=, x0=, progress=, stop=)`,
+   the options of `AZURE2 mcmc` as keywords. What the command does after its set-up is one engine function now
+   (`RunSampler`, `src/SamplerRun.cpp`, moved out of `runMCMC` in `src/AZURE2.cpp`), called by the program and by
+   the session; `src/RunRequest.cpp` (the option table) moved into the engine library so that the session's
+   keywords are read by the command line's reader. The chain is the command's: `samples.mcmc`, `walkers.mcmc`,
+   `param.mcmc` and the best walker's output files byte for byte, the returned arrays number for number, on T1
+   and T3 at 1 and 2 sampler threads, in both bases, under Park, from a parameter file and from `x0`, with a
+   prior of `<mcmc>` and for a continued chain (`pyazr3.md`, section 12). The command has no seed, burn-in or
+   thinning option, so the call has none.
+   Not renamed or removed as `pyazr3.md` planned:
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
    `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the
    page plots the rows of the physics table (one number per element); `collision_matrix` and
