@@ -47,6 +47,12 @@ not found, but the reuse test does not see a changed entry. THM stays refused ra
 `pyazr_schema`, `convert_constructs`, `convert_fixtures`, `physics_system_of_compound`, `physics_pathway_table`;
 `tests/channel_radii/check.sh`. The full gate: see the end of this entry. **Not run:** CI.
 
+**The full gate** (queue jobs, 8 slots; the merge of `feature/upgrade` f252ba30 alone, then this commit on it):
+consistency, configure, build and the docs clean on both; ctest 312 of 314 on both, the same two failing
+(`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 170 pass and 2 fail on the merge, 171 pass and
+2 fail here (the new `tests/channel_radii`), the same two failing (`capture_ay_coupling`, "a warning for ancai06
+inside its range"); every chi2 line of the suites equal between the two.
+
 ## 2026-11-16 (director, 06:05) — merged: Linux is green; the Windows and macOS results of the eleventh push answered
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 92 (one commit of mine: one rule of the engine and its
