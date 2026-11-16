@@ -200,7 +200,8 @@ Engine gathers (in `src/Objective.cpp` beside the terms, or a file `src/Diagonal
 - *Today* (read): three walks of the R-matrix levels with three forms of the arithmetic.
   - Value: `ParkTerm::Wall`, `Objective.cpp` 127-140: Σ over levels in the R matrix with J < 0 of
     `pow(J/s, 2.0)`, s = `kParkNormScale` = 10⁻³, J = `state.ParkNorm(j, la)`.
-  - Gradient: `AddParkPenaltyGradient`, `AZUREGrad.cpp` 82-103: for J < 0 (skipped when J ≥ 0, so a NaN J passes),
+  - Gradient: `AddParkPenaltyGradient`, `AZUREGrad.cpp` 82-103: for J < 0 (skipped when J ≥ 0 or NaN since the
+    repair of 2026-11-16, section 6 item 6; before it a NaN J passed),
     factor = 2J/s², dχ²/dγ_c = factor · (−2 γ_c S'_c), dχ²/dE = factor · (−Σ_c γ_c² S''_c), over the channels with
     radiation type 'P' of a pair of type 0.
   - Rows: `AppendModelRows`, `Objective.cpp` 424-451: one row per level, J/s for J < 0 (else 0, also for a NaN J),
@@ -221,7 +222,7 @@ Engine gathers (in `src/Objective.cpp` beside the terms, or a file `src/Diagonal
   `AZURECalc.cpp` 71) and maps (j, la, c) to `GradAccum::AddGamma`/`AddE`.
 - *Curvature*: none outside the rows (J: J ᵀJ of the rows).
 - **Verdict: moves.** Three forms side by side in one header, tested against central differences of J(γ, E) with a
-  linear S'(E) given in the test; three walks become one. The NaN asymmetry is kept (section 6, item 6).
+  linear S'(E) given in the test; three walks become one. The three skip a NaN J alike (section 6, item 6).
 
 ### T7, the abundances
 
@@ -463,8 +464,9 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
    T2 a second time, with the sum of `Pull()²` where `SegmentTerms` sums `Chi2()` ((d/e)² against d²/e²: different
    rounding). pyazr's `calculate_chi2` and its `objective()` (`Objective::Chi2`) can therefore differ in the last bits
    of the data part. Not changed by any slice; unifying it changes pyazr numbers.
-6. **Park and a NaN J** (read): the value and the rows skip a NaN J, the gradient does not (`AZUREGrad.cpp` 90 tests
-   `>= 0.0`). Kept as it is in slice 5; a correction is its own commit.
+6. **Park and a NaN J** (read): the value and the rows skip a NaN J, the gradient did not (`AZUREGrad.cpp` 90 tested
+   `>= 0.0`). **Repaired** 2026-11-16 (commit "fix(grad): the Park wall's gradient skips a NaN J as its value and
+   rows do", the PI's word): the gradient tests `!(J < 0)`; ctest `park_chi2_fallback`, variant E.
 7. **`shifts.out`'s function penalty** (read): `pen − penOwn` (`DataOutputFiles.cpp` 532-535) subtracts the constant
    shift's prior without asking whether the prior covariance replaced it, and does not subtract the √E coefficient's
    prior, although the comment says "minus those of its constant and sqrt(E) terms". For a segment that owns a shift
