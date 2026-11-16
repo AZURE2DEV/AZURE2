@@ -114,7 +114,8 @@ all; `AZURE_NODE_CHECK` checks the groups too (`WorkingCopy::CheckSlotGroups`).
 - `collision_matrix(block, tables at E_n)` → A-matrix and U. One solve per Jπ block per grid energy.
   In the code: `CollisionMatrix.h` (`fill_level_matrix`, `collision_matrix`, the elements of one pathway),
   `LevelMatrixSolver.h` (the factorization) and `ChannelSolve.h` (the channel-space route), functions of arrays; the
-  engine's `AMatrixFunc` collects the arrays of a site and calls them per pathway (`physics_functions.md`).
+  engine's `AMatrixFunc` collects the arrays of a site and calls them per pathway (`physics_functions.md`); from
+  Python, `pyazr.physics.collision_matrix`.
 - `external_capture`: radial integrals per grid energy, tabulated once per fit stage as unit amplitudes and scaled by
   the ANC or γ (they depend on the fit parameters only through that scale).
 - `observables(U, geometry)` → O_n: integrated σ; Legendre coefficients B_L for angular distributions (coupling

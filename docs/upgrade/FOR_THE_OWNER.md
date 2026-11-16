@@ -557,8 +557,9 @@ re-read against its design at the hand-over.
    `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and
    `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
    adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
-   particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`), and the level matrix is not
-   yet a row of the pyazr binding. There is no `inference/` library: the objective is `src/Objective.cpp`.
+   particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
+   `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal levels,
+   particle channels). There is no `inference/` library: the objective is `src/Objective.cpp`.
 6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
    `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
 7. **Packaging.** `.github/workflows/wheels.yml` was never run; no Windows wheel; the Coulomb table's address is

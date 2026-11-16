@@ -46,6 +46,10 @@ public names are a contract.
 - `pyazr.physics.<name>`: the engine's physics functions on arrays (`help()` gives arguments, units, domains);
   `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
   `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`.
+- `pyazr.physics.collision_matrix(level_energies, reduced_widths, energy, penetrability=, shift=, boundary=,
+  hard_sphere_phase=, coulomb_phase=)`: the level matrix A and the collision and T-matrices of one J^pi block of
+  formal levels at one energy, from arrays, without a session (`physics/CollisionMatrix.h`).  Not a row: its
+  arguments are matrices (`api/src/pybind_collision_matrix.cpp`, `tests/pyazr/collision_matrix_test.py`).
 
 ## Recipe: add a physics function
 

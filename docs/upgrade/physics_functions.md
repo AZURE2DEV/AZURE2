@@ -216,3 +216,31 @@ Not done in stage 3:
 - There is no single `observables(U, geometry)` call that returns every observable of a reaction: a caller
   outside the engine walks its own pathways (`Pathways.h` lists them for a `System`) and calls the functions
   above, as `observables_test.cpp` does for one block.
+
+Checked for stages 2 and 3 alike (each on its own commit): every output file of every project in the three bases
+identical to the reference tables (887, 851 and 887 files; none differs), eight fits identical to the base build
+in chi-squared and output, the quick test set and the 172 regression scripts. Instructions at one thread against
+the base build, after stage 3: a calculation -0.8 %, two gradient fits -1.9 % and -0.6 %, a sampler run -1.3 %.
+
+### Stage 4: the collision matrix in pyazr (2026-11-16); the gradient not moved
+
+Done: `pyazr.physics.collision_matrix(level_energies, reduced_widths, energy, penetrability=, shift=, boundary=,
+hard_sphere_phase=, coulomb_phase=)` returns A, U and T of one block of formal levels and particle channels at one
+energy as complex arrays, without a session or a project. The door is `api/src/pybind_collision_matrix.cpp` (it
+checks the shapes, forms L_c - B_c and the two phase factors and calls `collision_matrix`; no physics); the Python
+function is in `pyazr/physics.py`, outside the table of rows because its arguments are matrices. Test:
+`tests/pyazr/collision_matrix_test.py` (ctest `pyazr_collision_matrix`), against the level matrix written in numpy,
+unitarity and symmetry of U, the one-level phase shift, the Breit-Wigner form, hard-sphere scattering without a
+level, a closed channel, and the six errors. The channel functions are the caller's (for a pair: the rows
+`penetrability`, `shift`, `hard_sphere_phase`, `coulomb_phase`).
+
+Not offered by the door yet, though `fill_level_matrix` takes them: Brune's and Park's parameters (they need the
+shift function and its derivatives at each level energy), photon channels and R-matrix capture. The observables'
+sums of `Observables.h` are not bound: a Python caller forms a cross section from T with numpy.
+
+Not done: **the analytic gradient.** The adjoints of the functions of stages 2 and 3 are `AMatrixFunc::PointTBar`
+(cross section to T), `TBarAdjoint`, `LevelMatrixAdjoint`, `BilinearAdjoint`, `FormalBilinearAdjoint`,
+`ResolveFormalCotangents` and `LevelAdjoint` (T to the level parameters), about 1,500 of the 2,380 lines of
+`src/AMatrixFunc.cpp`. They read the engine's free-parameter mask, the memo of the channel route and the pathway
+table in one pass; to move them, each needs the same split as its forward function (the arithmetic of one pathway
+as a function, the walk in the engine), with every gradient output identical. That is a stage of its own size.

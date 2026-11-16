@@ -68,7 +68,9 @@ What it contains
        the collision matrix: ``pathway_amplitude``, ``collision_element``,
        ``t_matrix_element`` per channel pair, the capture elements, and
        ``collision_matrix`` for a whole block (:math:`A`, :math:`U`,
-       :math:`T`). :doc:`level_matrix`.
+       :math:`T`), which Python calls as
+       ``pyazr.physics.collision_matrix``
+       (``api/src/pybind_collision_matrix.cpp``). :doc:`level_matrix`.
    * - ``ChannelSolve.h``
      - The channel route at one energy on the formal levels of a block
        (``channel_space::FormalBlock``, ``ChannelSolve``):
