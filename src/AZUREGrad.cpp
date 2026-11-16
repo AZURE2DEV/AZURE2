@@ -75,30 +75,15 @@ vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const Level
   return tab;
 }
 
-/*!
- * d/dx of sum_lambda (J_lambda/s)^2 over J < 0, with J = 1 - sum_d g_d^2 S'_d:
- *   d/d g_d  = 2 J/s^2 (-2 g_d S'_d),    d/d E = 2 J/s^2 (-sum_d g_d^2 S''_d).
- */
+/// d/dx of sum_lambda (J_lambda/s)^2 over the levels on the wall (ParkWallGradient on the gather ParkLevelsOf).
 void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, GradAccum &accum) {
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
-  const double s2 = kParkNormScale * kParkNormScale;
-  for (int j = 1; j <= compound->NumJGroups(); j++) {
-    const JGroup *jg = compound->GetJGroup(j);
-    if (!jg->IsInRMatrix()) continue;
-    for (int la = 1; la <= jg->NumLevels(); la++) {
-      const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || !(state.ParkNorm(j, la) < 0.0)) continue;  // J >= 0 or NaN: off the wall (ParkTerm)
-      const double factor = 2.0 * state.ParkNorm(j, la) / s2;
-      double dE = 0.0;
-      for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-        const AChannel *channel = jg->GetChannel(ch);
-        if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-        double g = state.Gamma(j, la, ch);
-        accum.AddGamma(j, la, ch, factor * (-2.0 * g * state.ShiftDerivative(j, la, ch)));
-        dE -= g * g * state.ShiftSecondDerivative(j, la, ch);
-      }
-      accum.AddE(j, la, factor * dE);
-    }
+  std::vector<double> dGamma;
+  double dE;
+  for (const ParkLevel &l : ParkLevelsOf(compound, state, true)) {
+    if (!ParkWallGradient(l, kParkNormScale, dGamma, dE)) continue;
+    for (size_t c = 0; c < l.channels.size(); c++) accum.AddGamma(l.group, l.level, l.channels[c], dGamma[c]);
+    accum.AddE(l.group, l.level, dE);
   }
 }
 

@@ -45,10 +45,12 @@ endif()
 #   abundance_priors         two samples of two nuclei by hand (a replaced prior, a sample without a sum term): the
 #                            value bit for bit the objective's loop, the gradient and the sum rows against central
 #                            differences, the rows' squares = the sums' part
+#   park_wall                one level of two particle channels with a linear S'(E): J by hand, the value, the
+#                            gradient's and the row's forms against central differences, J >= 0 and NaN off the wall
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src parameter_kinds_test.cpp level_parameter_layout_test.cpp parameter_index_map_test.cpp
              posterior_support_test.cpp gaussian_prior_test.cpp prior_covariance_test.cpp term_list_test.cpp
-             diagonal_priors_test.cpp abundance_priors_test.cpp)
+             diagonal_priors_test.cpp abundance_priors_test.cpp park_wall_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(inference_${_t}_test tests/${_src})
   target_link_libraries(inference_${_t}_test PRIVATE azure2_inference)

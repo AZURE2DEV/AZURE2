@@ -108,6 +108,8 @@ class NuisanceTerm : public ObjectiveTerm {
 // levels of (J/kParkNormScale)^2 for J < 0 (zero for every valid parameter set).  A level with J <= 0 has no standard
 // R-matrix counterpart (its Brune reduced widths would be imaginary), and nothing in the level matrix itself keeps a
 // minimizer out of that region, so this is the wall.  The shift functions must be current (CompoundSystem::CalcShiftFunctions).
+// The gather is ParkLevelsOf, the arithmetic inference/'s ParkWall.h, which the gradient (AddParkPenaltyGradient)
+// and the rows (AppendModelRows) call.
 class ParkTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
@@ -115,29 +117,13 @@ class ParkTerm : public ObjectiveTerm {
   // The sampler: a support, J < 0 has no R-matrix meaning (decision D2); inside it the wall is 0.
   void AddForSampler(const ObjectiveContext &, double &) const override {}
   bool ExcludesForSampler(const ObjectiveContext &c) const override {
-    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && Wall(*c.compound, c.state) > 0.0;
+    return (c.config.paramMask & Config::USE_PARK_FORMALISM) && ParkWallChi2(ParkLevelsOf(c.compound, c.state, false), kParkNormScale) > 0.0;
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
-    const double parkPenalty = Wall(*c.compound, c.state);
+    const double parkPenalty = ParkWallChi2(ParkLevelsOf(c.compound, c.state, false), kParkNormScale);
     chi2 += parkPenalty;
     c.results.objective.park = parkPenalty;
-  }
-
- private:
-  static double Wall(const CompoundSystem &compound, const LevelState &state) {
-    double penalty = 0.0;
-    for (int j = 1; j <= compound.NumJGroups(); j++) {
-      const JGroup *group = compound.GetJGroup(j);
-      if (!group->IsInRMatrix()) continue;
-      for (int la = 1; la <= group->NumLevels(); la++) {
-        const ALevel *level = group->GetLevel(la);
-        if (!level->IsInRMatrix()) continue;
-        const double parkNorm = state.ParkNorm(j, la);
-        if (parkNorm < 0.0) penalty += pow(parkNorm / kParkNormScale, 2.0);
-      }
-    }
-    return penalty;
   }
 };
 
@@ -393,6 +379,31 @@ std::vector<std::string> ReplaceDiagonalPriors(const CompoundSystem *compound, W
   return replaced;
 }
 
+std::vector<ParkLevel> ParkLevelsOf(const CompoundSystem *compound, const LevelState &state, bool channels) {
+  std::vector<ParkLevel> levels;
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    const JGroup *jg = compound->GetJGroup(j);
+    if (!jg->IsInRMatrix()) continue;
+    for (int la = 1; la <= jg->NumLevels(); la++) {
+      if (!jg->GetLevel(la)->IsInRMatrix()) continue;
+      ParkLevel l;
+      l.group = j;
+      l.level = la;
+      l.J = state.ParkNorm(j, la);
+      for (int ch = 1; channels && azure2::inference::OnParkWall(l.J) && ch <= jg->NumChannels(); ch++) {
+        const AChannel *channel = jg->GetChannel(ch);
+        if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
+        l.channels.push_back(ch);
+        l.gamma.push_back(state.Gamma(j, la, ch));
+        l.dS.push_back(state.ShiftDerivative(j, la, ch));
+        l.d2S.push_back(state.ShiftSecondDerivative(j, la, ch));
+      }
+      levels.push_back(std::move(l));
+    }
+  }
+  return levels;
+}
+
 void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
                      vector_r &residuals, vector_r *jac) {
   auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
@@ -410,33 +421,20 @@ void AppendModelRows(const CompoundSystem *compound, const LevelState &state, co
       if (a >= 0 && a < nCols) (*jac)[base + (size_t)a] = rowFull[f];
     }
   };
-  // Park: r = J/s for J < 0; dJ/dgamma_c = -2 gamma_c S'_c, dJ/dE = -sum_c gamma_c^2 S''_c (AddParkPenaltyGradient).
+  // Park: one row per R-matrix level, r = J/s on the wall, else 0 with no Jacobian (ParkWallRow).
   if (config.paramMask & Config::USE_PARK_FORMALISM) {
-    const double s = kParkNormScale;
-    for (int j = 1; j <= compound->NumJGroups(); j++) {
-      const JGroup *jg = compound->GetJGroup(j);
-      if (!jg->IsInRMatrix()) continue;
-      for (int la = 1; la <= jg->NumLevels(); la++) {
-        const ALevel *level = jg->GetLevel(la);
-        if (!level->IsInRMatrix()) continue;
-        const double J = state.ParkNorm(j, la);
-        if (!(J < 0.0)) {
-          appendRow(0.0, nullptr, nullptr);
-          continue;
-        }
-        GradAccum acc;
-        acc.Init(compound, state);
-        double dE = 0.0;
-        for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-          const AChannel *channel = jg->GetChannel(ch);
-          if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-          const double g = state.Gamma(j, la, ch);
-          acc.AddGamma(j, la, ch, -2.0 * g * state.ShiftDerivative(j, la, ch) / s);
-          dE -= g * g * state.ShiftSecondDerivative(j, la, ch);
-        }
-        acc.AddE(j, la, dE / s);
-        appendRow(J / s, &acc, nullptr);
+    std::vector<double> dGamma;
+    double r, dE;
+    for (const ParkLevel &l : ParkLevelsOf(compound, state, true)) {
+      if (!ParkWallRow(l, kParkNormScale, r, dGamma, dE)) {
+        appendRow(0.0, nullptr, nullptr);
+        continue;
       }
+      GradAccum acc;
+      acc.Init(compound, state);
+      for (size_t c = 0; c < l.channels.size(); c++) acc.AddGamma(l.group, l.level, l.channels[c], dGamma[c]);
+      acc.AddE(l.group, l.level, dE);
+      appendRow(r, &acc, nullptr);
     }
   }
   // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
