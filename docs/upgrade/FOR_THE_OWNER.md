@@ -686,9 +686,12 @@ re-read against its design at the hand-over.
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
    FRESCO's reference files). Not in the binding: the other functions of `physics/transfer` (bound states in a
    well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
-   of its own design), and the Weisskopf width (the engine has no such function: `pyazr.widths.weisskopf_width`
-   is a Python formula, the one of pyazr; a door needs the function in `physics/` first, which is new engine
-   code and the owner's decision).
+   of its own design). The Weisskopf width is a function of `physics/` since the PI's approval of 2026-11-16
+   (pyazr 3.0.0.dev5; `physics/Widths.h`, `weisskopf_width_eV`; the row `weisskopf_width` of `pyazr.physics`):
+   the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
+   A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
+   for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
+   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.).
    Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
    `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the

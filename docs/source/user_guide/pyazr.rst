@@ -1006,8 +1006,9 @@ Dimensionless widths
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf units are the corresponding sanity
 check for capture. AZURE2's Wigner limit (``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
 Teichmann-Wigner sum-rule unit 3ħ²/(2μa²) (``pyazr.physics.wigner_limit``); a θ² quoted against the other common
-unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``) is pyazr's one physics
-formula of its own (the engine has none); every other number of the table is the engine's.
+unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``, in eV) is the engine's
+too, the row ``weisskopf_width`` of :doc:`physics_functions` (two-digit textbook coefficients for
+:math:`R = 1.2\,A^{1/3}` fm): every number of the table is the engine's.
 
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, the denominator of θ²) is the
 engine's transformation of a probe vector: ``x`` with every free particle amplitude set to a small ``eps`` and every

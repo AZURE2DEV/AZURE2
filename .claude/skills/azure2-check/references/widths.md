@@ -45,7 +45,8 @@ Strengths in Weisskopf units (W.u.) against the Weisskopf estimates, with E_γ i
 | M1 | 2.1 × 10⁻² E_γ³ |
 
 `Session.dimensionless_widths(x)` gives E1 to E4 and M1 to M4 (`ChannelWidth.weisskopf`, `.wu`; A is the compound
-nucleus's mass number). A γ width is not proportional to γ² for a capture channel: the external-capture term is
+nucleus's mass number); one estimate is `pyazr.physics.weisskopf_width(e_gamma, multipolarity, mass_number,
+radiation)`, in eV (two-digit coefficients for R = 1.2 A^{1/3} fm, within 3 % of the closed form, M4 7 %). A γ width is not proportional to γ² for a capture channel: the external-capture term is
 linear in the amplitude. Convert with `Session.transform(x)`, never by squaring.
 
 ## The level norm J: saturated levels

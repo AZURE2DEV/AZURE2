@@ -1239,3 +1239,26 @@ None was removed or renamed here: each is a public name, and removing one is the
 | `pyazr.angular_distribution` (`angular.py`, 115 lines) | Legendre coefficients at chosen energies through a temporary project with an extrapolation record and a second session | the example `angular_distribution.py` (run by `examples_test.py`), `convert_azr_test.py`, the skill `azure2-plot` (SKILL.md and `references/recipes.md`), the user guide | keep until the skill and the example are rewritten: an extrapolation record of `Project` and `Session(extrapolations=True).evaluate(x).data[i].extra["legendre"]` give the same numbers without a temporary project, and that rewrite is the first step of a deprecation |
 | `pyazr.modelavg` (583 lines: `Variant`, `ModelAverage`, `model_average`, ...) | model averaging over fitted variants (weights by AIC, BIC, chi^2; statistical and model variance kept apart); bookkeeping, no engine call | the skill `azure2-thm`, `model_average_test.py`, `thm_model_average_test.py`, four pages of the docs | keep as its own module. It is not a band of one model: merging it into `bands.py` (746 lines) would make a file above the 1,000-line limit |
 | `pyazr.priors` (844 lines) | the prior-covariance file: reader and writer on the engine's grammar, the builder of a prior from a fit, a chain or parts | the page's server (`ui/prior.py`, `ui/routes.py`), the example `prior_builder.py`, three tests and `tests/prior_covariance/check.sh`, four pages of the docs | keep as its own module, for the same reason; the plan of section 2.3 predates the builder (2026-11-14), which doubled the file |
+
+### 10.4 What the PI approved on 2026-11-16, as built (pyazr 3.0.0.dev5)
+
+The PI agreed to three items of this audit: the Weisskopf estimate as a function of `physics/`, `wigner_widths` as
+2 P gamma_W^2 (section 11) and a call for the engine's sampler (section 12).
+
+**The Weisskopf estimate.** `physics/Widths.h`: `weisskopf_width_eV(magnetic, L, E_gamma_MeV, mass_number)`, the
+total radiative width hbar lambda of an electric or magnetic 2^L-pole transition, in eV, for E_gamma in MeV:
+c_XL A^(2L/3) E^(2L+1) (electric) and c_XL A^((2L-2)/3) E^(2L+1) (magnetic) with the two-digit coefficients the
+Python formula had (E1-E4: 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21; M1-M4: 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21), which
+belong to R = 1.2 A^(1/3) fm; NaN outside L = 1..4, E > 0, A > 0. Its row is `weisskopf_width(e_gamma,
+multipolarity, mass_number, radiation="E")` (25 rows now); `pyazr.weisskopf_width(radiation_type, L, e_gamma,
+mass_number)` calls the row and keeps its `None` outside the domain. No formula is left in `pyazr/`.
+
+- The numbers did not move: 648 transitions (E1-M4, A = 4-238, 0.01-20 MeV) equal the earlier Python formula bit
+  for bit (`tests/pyazr/weisskopf_test.py` keeps that table and asks for 1e-15).
+- Independent value: the closed forms of Blatt and Weisskopf (Bohr and Mottelson vol. 1, eqs. 3C-38, 3C-39)
+  written out in `physics/tests/widths_test.cpp` and, in mpmath, in the row's test. The table over the closed
+  form, minus one: E1 +0.79 %, E2 +2.28 %, E3 +3.05 %, E4 -3.11 %, M1 +1.34 %, M2 +1.94 %, M3 -0.80 %, M4 -7.23 %
+  (each held to 0.1 %); the dependence on E and A is the closed form's to 1e-13.
+- Not changed, for the PI: the coefficients are not the closed form rounded to two digits (E2 would be 4.8e-8, E3
+  2.2e-14, E4 7.0e-21, M3 6.9e-15, M4 2.2e-21). Replacing them would move every W.u. by the percentages above.
+

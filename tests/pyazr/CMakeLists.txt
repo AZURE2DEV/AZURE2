@@ -77,7 +77,8 @@ add_test(NAME pyazr_wigner_convention
                  ${CMAKE_CURRENT_SOURCE_DIR}/wigner_convention_test.py)
 set_tests_properties(pyazr_wigner_convention PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# The Weisskopf estimate, pyazr's one physics formula without an engine counterpart, against its closed form.
+# The Weisskopf estimate (physics/Widths.h through pyazr.weisskopf_width) against its closed form and against the
+# numbers of the Python formula it replaced.
 add_test(NAME pyazr_weisskopf
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/weisskopf_test.py)

@@ -148,9 +148,10 @@ path of the row, or a path of the row never appears.
   `AZURE2 --convert OLD NEW`); `convert.py` is the converter's binding
   (`convert_azr`, `convert_params`).
 - No physics formula in Python: physical values are `Session.transform(x)` (the engine's `TransformOut`), the
-  functions the rows of `pyazr.physics` or `Session.channel_functions`.  The one formula of pyazr's own is the
-  Weisskopf estimate (`widths.weisskopf_width`, tested against its closed form by `tests/pyazr/weisskopf_test.py`:
-  the engine has none).  Never add another: a missing function is a row of the physics table.
+  functions the rows of `pyazr.physics` or `Session.channel_functions`.  pyazr has no formula of its own: the
+  Weisskopf estimate, once the exception, is the row `weisskopf_width` (`physics/Widths.h`; `widths.weisskopf_width`
+  calls it, `tests/pyazr/weisskopf_test.py` holds the numbers of the earlier formula).  Never add one: a missing
+  function is a row of the physics table.
 - `sources/nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
