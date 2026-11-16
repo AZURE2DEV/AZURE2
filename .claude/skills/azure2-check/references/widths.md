@@ -34,7 +34,9 @@ solution for a pair with a nuclear potential) and E_r the pair's c.m. energy at 
 level's row of `Session.transform(x)`). The number is the same in Brune's, the formal and Park's parametrization.
 A closed, a photon or a fixed channel has no entry there; `dimensionless_widths` gives `wigner_width` and `theta2`
 of fixed open channels too, by the same definition, and its `level_energy`, `is_open` and `e_gamma` are taken at the
-physical energy in every basis (`widths_check.py` prints them). Example (T2 of `tests/upgrade`, α + ¹²C, l = 1, the
+physical energy in every basis (`widths_check.py` prints them). Every row's `value` (the Γ of θ²), fixed rows
+included, is the row of `Session.transform(x)` at the vector asked for: a fixed amplitude's observed width moves
+with the level's other parameters. Example (T2 of `tests/upgrade`, α + ¹²C, l = 1, the
 1⁻ level at E_x = 12.4258 MeV): Γ_W = 4.020 × 10⁶ eV.
 
 A θ² of a level with fixed widths, or of a formal-basis session, computed with an older build is not this number:

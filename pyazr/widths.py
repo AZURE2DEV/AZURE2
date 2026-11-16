@@ -98,8 +98,9 @@ class ChannelWidth:
 
     # values
     gamma: Optional[float]          # formal reduced-width amplitude (MeV^1/2)
-    value: Optional[float]          # AZURE2's physical value: Gamma in eV for an
-                                    # open channel, ANC in fm^-1/2 for a closed one
+    value: Optional[float]          # AZURE2's physical value at the vector asked for
+                                    # (Session.transform), fixed rows too: Gamma in eV
+                                    # for an open channel, ANC in fm^-1/2 for a closed one
 
     # particle channels
     is_photon: bool = False
