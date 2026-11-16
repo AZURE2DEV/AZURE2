@@ -64,7 +64,7 @@ def line(J, pi, E, lid, pair, s, l, width, p, e1=None):
 
 
 def write(path, cfg, levels, data="", test=""):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(cfg)
         f.write("<levels>\n" + "\n".join(levels) + "\n\n</levels>\n")
         f.write("<data>\n" + data + "</data>\n")
@@ -168,12 +168,12 @@ def dataset(name, kind, quantity, upos=False):
 def ac_data(out):
     d = os.path.join(out, "data")
     os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "inel_lab.dat"), "w") as f:
+    with open(os.path.join(d, "inel_lab.dat"), "w", newline="\n") as f:
         f.write("# E_lab(MeV) theta_lab(deg) dsigma/dOmega_lab(b/sr) error -- synthetic\n")
         for e in (8.8, 9.3, 9.9, 10.3):
             for a in (30, 60, 90, 120, 150):
                 f.write(f"{e} {a} 0.01 0.001\n")
-    with open(os.path.join(d, "inel_int.dat"), "w") as f:
+    with open(os.path.join(d, "inel_int.dat"), "w", newline="\n") as f:
         f.write("# E_lab(MeV) dummy sigma(b) error -- synthetic\n")
         for i in range(30):
             f.write(f"{6.6 + 0.12 * i:.2f} 0 0.05 0.005\n")
