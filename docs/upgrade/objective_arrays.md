@@ -388,7 +388,7 @@ manager stay stored by their terms, as today.
 
 The stale nuisance total through pyazr's `write_outputs` (`inference.md` §6) is kept: correcting it changes a printed
 number and needs the PI's word. The function penalty of `shifts.out` (`DataOutputFiles.cpp` 530-540) is not a field of
-`chiSquared.out` and is not changed (section 6, item 7).
+`chiSquared.out`; it was repaired on its own, with the PI's word (section 6, item 7).
 
 ## 5. Slices
 
@@ -471,8 +471,11 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
    shift's prior without asking whether the prior covariance replaced it, and does not subtract the √E coefficient's
    prior, although the comment says "minus those of its constant and sqrt(E) terms". For a segment that owns a shift
    function and has a varied √E shift with σ ≠ 0, or whose constant prior is replaced, the printed penalty is not the
-   function's. `PriorsChi2(list, s, function part)` would print the function's own; that changes `shifts.out` and is
-   left for the PI.
+   function's. **Repaired** 2026-11-16 (commit "fix(output): shifts.out prints the shift function's own priors", the
+   PI's word): the line prints `PriorsChi2(list, kShiftFn, s)`, the function's own priors by the objective's rule;
+   `tests/shift_fn/check.sh` case 8 (a replaced offset prior: 5 before, 9 after, 9 by hand). No `shifts.out` of the
+   projects of `tests/` changed (24 with a function line, three bases); the √E case cannot occur (a function and a
+   √E term on one data set are refused).
 8. **Stale totals through pyazr** (read): `objective.nuisance` is set only by an `Objective::Chi2` with a nuisance
    function; `objective.priorCovariance` by `CalculateChi2RWA` / `Physical` (`AZUREAPIChi2.cpp` 142, 202), not by
    `write_outputs`. Unchanged by the design.
