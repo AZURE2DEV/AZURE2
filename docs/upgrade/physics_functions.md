@@ -251,3 +251,102 @@ Not done: **the analytic gradient.** The adjoints of the functions of stages 2 a
 `src/AMatrixFunc.cpp`. They read the engine's free-parameter mask, the memo of the channel route and the pathway
 table in one pass; to move them, each needs the same split as its forward function (the arithmetic of one pathway
 as a function, the walk in the engine), with every gradient output identical. That is a stage of its own size.
+
+### Stage 5: the gradient split (design, 2026-11-16; branch `feature/upgrade-1-gradient-functions`)
+
+This part is the plan; "Done in stage 5" below it says what of it exists.
+
+**Rule of the move.** Each adjoint gets the split its forward function got: the arithmetic of one block, one
+pathway or one term is a function of `physics/` on arrays and plain structs; the walk (the pathway table, the
+per-energy memo of the solves, the free-parameter mask, the choice of the route, the profile timers) stays in
+`AMatrixFunc`. Every gradient output stays identical to the last bit, so an expression moves with its order of
+operations, and so does the order in which contributions reach one cell of the gradient: a function does not
+return an array that the engine then adds (that would change `x + a + b` into `x + (a + b)`); it adds through a
+*sink* the caller hands it, `sink.energy(level, value)` and `sink.width(level, channel, value)` (levels and
+channels of the block from 0). The engine's sink adds into `GradAccum`; a test's sink (`LevelCotangents`, two
+arrays) is in the header. The functions are header-inline templates on the sink, so the engine's loops compile
+as before. Scratch is a plain struct the caller holds (no state in `physics/`).
+
+Cotangent convention, everywhere: for a complex z and the real scalar L, zbar = dL/dRe z + i dL/dIm z, so
+dL = Re(conj(zbar) dz).
+
+**The functions** (namespace `azure2::physics`; "of" names the engine routine whose arithmetic it is):
+
+`azure2/physics/CollisionMatrixAdjoint.h` (header only):
+
+```
+struct BilinearTerm { int ch, chp; std::complex<double> beta; };   // beta: cotangent of g_ch^T A g_chp (1-based)
+struct LevelCotangents { n, nc; std::vector<double> e, gamma; energy(l, v); width(l, c, v); };   // a plain sink
+struct LevelMatrixAdjointTables {     // one block; n levels, nc channels; pointers borrowed
+  int n, nc;
+  const double *E, *gamma, *shift, *shift_gamma, *inv_gap;  // E_l, gamma_lc, S_c(E_l), S gamma, 1/(E_r - E_c)
+  const double *shift_d1, *shift_d2, *park_norm;            // S', S'' at E_l (the levels' own), J_ll
+  const std::vector<std::vector<double>> *brune_shift_d1;   // S'_c(E_l) of a Brune pass ([l][c]); null: no dE part
+  const std::complex<double> *kernel;                       // L_c(E) - B_c, or the caller's Lambda_c
+  const double *boundary;                                   // B_c of the shift channels; null: kernel has it
+  const char *shift_channel;                                // the channels with the shift terms (Brune 'P'; Park)
+  bool brune, park;
+};
+struct LevelMatrixAdjointScratch { re_sym, im_sym, dE, acc, brune_p, kernel };
+level_matrix_adjoint(tables, Mbar, E, scratch, sink)        // of LevelMatrixAdjoint: Mbar -> E_l, gamma_lc
+inverse_adjoint(A, Abar, Mbar)                              // Mbar = -A^H Abar A^H (TBarAdjoint, ...ABarAdjoint)
+bilinear_cotangent(in, out, sqrt_pen_in, sqrt_pen_out, tbar)     // of CollectBilinearTerms: T(k,m) -> beta
+amplitude_cotangent(in, out, tbar)                               // conj(-Omega Omega') tbar (the dense path)
+dense_bilinear_adjoint(pen2, g_in, g_out, A, ubar, Abar, sink)   // of TBarAdjoint's loop over level pairs
+add_explicit_widths(term, u_in, u_out, n, sink)             // of BilinearAdjoint: d b / d g = A g'
+add_rank_one_cotangent(beta, u_in, u_out, n, Mbar)          // Mbar -= beta conj(u_in) conj(u_out)^T
+deferred_bilinear_adjoint(term, u_in, u_out, G, kernel, E, n, nc, K, N, scratch, sink)   // the scalar pass
+struct LevelParameterDerivative { int level, ch; bool zero; std::vector<double> k, q; };  // dK, dN of one parameter
+level_parameter_adjoint(entries, terms, slot, u, G, kernel, E, n, nc, scratch, add)     // of LevelAdjoint
+external_capture_width_cotangent, bound_norm_width_derivative  // of TBarAdjoint's external-capture part
+```
+
+`azure2/physics/ChannelSolveAdjoint.h` (header only; namespace `channel_space`):
+
+```
+formal_channel_solve(f, st, ch0, u)                 // of FormalSolve: u_c = A_f Gamma_c (the memo is the caller's)
+level_solve_from_formal(f, uf, solve)               // of GetRawChannelSolve: A g_c = V u_c
+pencil_channel_solve(f, st, b, solve)               // the same on the pencil route: Z X (e_c + z)
+kernel_column(f, st, c0, Fb, y)                     // Y_dc = delta_dc + Lambda_d F_dc
+formal_bilinear_adjoint(term, ua, ub, ya, yb, n, nc, row_of, e_out, g_out)   // of FormalBilinearAdjoint
+struct FormalResolve { H, Phi, Psi, T, Kbar, Nbar };                         // scratch and result
+resolve_formal_cotangents(f, e, ebar, gbar, out)    // of ResolveFormalCotangents: (ebar, Gammabar) -> Kbar, Nbar
+add_level_widths_from_formal(f, gbar, sink)         // Gbar = V Gammabar
+```
+
+`azure2/physics/ObservablesAdjoint.h` (header only; the adjoints of `Observables.h`, of `PointTBar`):
+
+```
+partial_wave_cotangent(bar, geom, J, i1i2, symmetry, T_sum)     // angle-integrated: 2/100 w T_sum
+optical_theorem_cotangent(bar, geom, i1i2, J)                   // total cross section (real)
+beta_delayed_cotangent(bar, T)
+struct CaptureAy { num, den };  add_capture_ay_sums(...);  capture_ay_cotangents(...)   // A_y = N / D of capture
+phase_shift_cotangent(bar, U);  phase_shift_element_cotangent(inv_exp2, Ubar)
+legendre_cross_section_factor(geom, i1i2, symmetry)             // cR
+add_interference_cotangents(z, T1, T2, q1, q2)                  // of TBarProducts: q_L of each pathway
+legendre_contraction(q, P, n);  interference_pair_cotangent(bar, W, T_other)   // of addQuad
+upos_weight(cR, z_upos, order, R_L, P_L)
+coulomb_interference_cotangent(geom, factor, stat_spin, f_C, P_l)             // elastic Coulomb-nuclear term
+```
+
+**What stays in the engine, and why.** `PointTBar`'s gates and its walk over the exit's spin groups, pathways,
+interferences and A_y terms; the reads of `Site`, `PPair`, `JGroup`; `Polarization::AmplitudeMatrix` (the
+particle A_y, an engine class) and `GetRk` (GSL's 3j and 6j). `TBarAdjoint`'s walk and its reads of the
+external-capture amplitudes. `GetRawChannelSolve`'s and `FormalSolve`'s memo. `CollectBilinearTerms`' merge by
+channel pair. `ChannelSpace::CurrentLevelArrays` / `CurrentLevelDerivatives` (the per-parameter-set memo that
+builds E, G, S, 1/(E_r - E_c) and the k, q vectors) and `ChannelSpace::Update`.
+
+**Slices** (each: the build without a warning, the unit test of the slice, then the whole gate):
+
+1. *The level-matrix adjoint.* `CollisionMatrixAdjoint.h`: `level_matrix_adjoint`, `inverse_adjoint`, the
+   rank-one and deferred forms of `BilinearAdjoint`, `level_parameter_adjoint`. Test
+   `physics/tests/collision_matrix_adjoint_test.cpp`: for a block of four levels and three channels with an
+   analytic shift function, the cotangents against central differences of `fill_level_matrix` (standard, Brune,
+   Park; a random complex Mbar), of `LevelMatrixSolver`'s inverse, and of the bilinear form g^T A g'.
+2. *The channel route.* `ChannelSolveAdjoint.h`. Test `physics/tests/channel_solve_adjoint_test.cpp`: the
+   formal bilinear adjoint against central differences of `solve_channel_space` + `f_column` in the formal
+   energies and widths; the resolve against central differences of a generalized symmetric eigenproblem
+   (`SymmetricEigen.h`) in K, N and G; the channel solves against the level route.
+3. *The observables and the T-matrix step.* `ObservablesAdjoint.h` and the T -> beta functions. Test
+   `physics/tests/observables_adjoint_test.cpp`: each cotangent against central differences of its forward
+   function of `Observables.h` / `CollisionMatrix.h` in Re T and Im T.
