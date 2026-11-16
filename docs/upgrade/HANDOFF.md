@@ -32,7 +32,14 @@ used both and the old menu; the unit test replaces it.
 same fit started from its own `param.sav`: no restart, the HESSE notice, converged. **Not yet run:**
 `./scripts/check.sh` in full (queued), `ctest -L slow`, any CI. A pinned chi-squared of a call-limited gradient fit
 can move, because the path of the first steps changes (on dev one did: `tests/shared_point_tables`, 109.134 to
-106.338 at 5 calls); none was re-pinned here.
+106.338 at 5 calls); none was re-pinned in the feature's commit.
+
+**Full gate, CRC job 1756130 (2026-11-15 18:23), against the base's own run (job 1755945):** consistency passes;
+the build passes; ctest 309 of 311 (the base's two failures, `pyazr_park_dsde` and `pyazr_units_scales`, and no
+other); `tests/run_tests.sh` 169 passed, 3 failed: the base's two (`capture_ay_coupling`, "a warning for ancai06
+inside its range") and `shared_point_tables` (b), the 5-call gradient fit: 106.432604829 at 1 and at 4 threads
+against the recorded 109.263831704. Re-pinned in the commit after the feature's (`expected/chi2_fit`, the test's
+README); the docs build passes (60 pages).
 
 **Open.** (1) The base of this branch fails two unit tests on this machine before any change
 (`pyazr_park_dsde`, `pyazr_units_scales`): not looked at yet. (2) The restart inside a real fit has no test (no
