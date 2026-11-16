@@ -1,10 +1,23 @@
 name: wheels
 
 # Builds and tests the pyazr wheels (pyproject.toml: scikit-build-core, [tool.cibuildwheel]) and keeps them as the
-# run's artifacts.  It publishes nothing: no upload to PyPI, no release, no secret.  Started by hand, and on pull
-# requests that change the packaging.
+# run's artifacts.  It publishes nothing: no upload to PyPI, no release, no secret.  Started by hand, on pull
+# requests that change the packaging, and on a push to feature/upgrade that changes it.  The push trigger is there
+# because GitHub offers "Run workflow" only for a workflow file of the default branch (main), which has none, so on
+# this branch the workflow could not be started at all until 2026-11-16.  Remove it once the file is on main.
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/upgrade]
+    paths:
+      - pyproject.toml
+      - CMakeLists.txt
+      - api/src/CMakeLists.txt
+      - src/CMakeLists.txt
+      - pyazr/datafiles.py
+      - pyazr/coulomb_table.py
+      - tests/pyazr/wheel_smoke.py
+      - .github/workflows/wheels.yml
   pull_request:
     paths:
       - pyproject.toml
