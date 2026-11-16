@@ -55,7 +55,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) {
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
 
-  // The diagonal priors from the fit's own enumeration (Objective.h ForEachDiagonalPrior; docs/upgrade/objective.md
+  // The diagonal priors from the fit's own enumeration (ForEachDiagonalPrior, DiagonalPriors.h; docs/upgrade/objective.md
   // step 5: the MCMC shares the fit's configuration), by index, not by name.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   std::map<int, std::pair<double, double>> diagonal;  // full index -> (mean, sigma)

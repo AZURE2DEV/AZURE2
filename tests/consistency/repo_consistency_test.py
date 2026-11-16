@@ -511,29 +511,22 @@ if not ELEMENT_RUN.search(read("physics/src/Elements.cpp")):
 PENALTIES = ("ScatteringLength::Chi2",
              "ScatteringLength::Residuals", "ScatteringLength::Chi2Gradient", "ModelData::Chi2", "ModelData::Residuals",
              "ModelData::Gradient", "ModelData::AppendRows",
-             "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
+             "AppendTargetPriors", "CovarianceChi2Correction")
 DEFINERS = {"src/Objective.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
-            "src/Segment.cpp", "src/TargetEffect.cpp"}
+            "src/Segment.cpp", "src/TargetEffect.cpp", "src/DiagonalPriors.cpp"}
 ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
     ("api/src/AZUREAPIChi2.cpp", "CovarianceChi2Correction"),
     ("api/src/AZUREAPIGradient.cpp", "CovarianceChi2Correction"),
-    # The output writer, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
-    # target-effect prior totals, which Results::objective does not hold yet (decision D2 of the note).
-    ("src/DataOutputFiles.cpp", "ScreeningPenalty"),
-    ("src/DataOutputFiles.cpp", "DensityPenalty"),
-    ("src/DataOutputFiles.cpp", "DopplerPenalty"),
-    ("src/DataOutputFiles.cpp", "ThicknessPenalty"),
+    # The output writer (docs/upgrade/objective_arrays.md section 4): chiSquared.out prints the target-effect and
+    # apparatus prior totals from the term's own gather at the working copy's present values (a stored total could be
+    # stale after pyazr's write_outputs).
+    ("src/DataOutputFiles.cpp", "AppendTargetPriors"),
+    ("src/ApparatusParameters.cpp", "AppendTargetPriors"),
     # The data covariance, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md W2): the file defines the
     # covariance term, and PrepareCovarianceSeeds evaluates it for the seeds the gradient reads.
     ("src/DataCovarianceGroups.cpp", "CovarianceChi2Correction"),
-    # The hand-over of a parameter vector, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md M2): the file
-    # defines the target-effect prior totals (WorkingCopy::ScreeningPenalty ...), each the sum of its effects' terms.
-    ("src/HandOver.cpp", "ScreeningPenalty"),
-    ("src/HandOver.cpp", "DensityPenalty"),
-    ("src/HandOver.cpp", "DopplerPenalty"),
-    ("src/HandOver.cpp", "ThicknessPenalty"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):

@@ -129,33 +129,3 @@ void Segment::InstallShiftFn(SegmentState &state, const Segment &owner, int owne
   state.lastShiftFnValues.assign(n, std::numeric_limits<double>::quiet_NaN());
 }
 
-// Every energy-shift term is penalised from the centre of its prior, ((dE - c)/sigma)^2, ((b - c_b)/sigma)^2,
-// ((a_j - c_j)/sigma)^2, with the centre as written and 0 where none is written (an old line; DeBoer: "It should
-// measure the penalty from 0").  The value on the line is only the start (docs/upgrade/parameter_kinds.md section 4).
-// An old line's "segment_N_energy_shift prior_centre c" row of <parameterSettings> moves the constant term's centre
-// to c (GetNominalEnergyShift).
-void Segment::AddShiftPenalty(const SegmentState &state, double &chi) const {
-  // A prior the prior covariance replaces is not added (objective.md D3).
-  if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
-    chi += azure2::inference::GaussianPriorChi2(state.energyShift, energyShiftNominal_, energyShiftError_);  // nominal: 0 or the prior_centre row
-  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
-    chi += azure2::inference::GaussianPriorChi2(state.energyShiftSqrt, energyShiftSqrtCentre_, energyShiftSqrtError_);
-  // The shift function's parameters are penalised once, on the segment that owns them.
-  if (OwnsShiftFn() && hasShiftFn_)
-    for (int j = 0; j < (int)state.shiftFnValues.size(); j++)
-      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
-        chi += azure2::inference::GaussianPriorChi2(state.shiftFnValues[j], shiftFnCentre_[j], shiftFnError_[j]);
-}
-
-void Segment::ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const {
-  constant = sqrtTerm = function = 0.0;
-  if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
-    constant = azure2::inference::GaussianPriorChi2(state.energyShift, energyShiftNominal_, energyShiftError_);
-  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
-    sqrtTerm = azure2::inference::GaussianPriorChi2(state.energyShiftSqrt, energyShiftSqrtCentre_, energyShiftSqrtError_);
-  if (OwnsShiftFn() && hasShiftFn_)
-    for (int j = 0; j < (int)state.shiftFnValues.size(); j++)
-      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
-        function += azure2::inference::GaussianPriorChi2(state.shiftFnValues[j], shiftFnCentre_[j], shiftFnError_[j]);
-}
-
