@@ -76,7 +76,7 @@ void WriteApparatusChiSquared(const WorkingCopy &data, std::ostream &out);
 /// The covariance files' label of apparatus parameter k (ParameterLabel.cpp).
 std::string ApparatusLabel(const DataSet &data, int k);
 /// The apparatus block of the index map, appended to it (the vector's last block); no analytic derivative: the
-/// parameters are differenced on the whole chi^2, as a density (AZURECalc.cpp).
+/// parameters are differenced on the whole chi^2, as a density (AZURECalcGradient.cpp).
 void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data);
 
 #endif

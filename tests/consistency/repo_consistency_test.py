@@ -517,7 +517,8 @@ DEFINERS = {"src/Objective.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp"
 ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
-    ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
+    ("api/src/AZUREAPIChi2.cpp", "CovarianceChi2Correction"),
+    ("api/src/AZUREAPIGradient.cpp", "CovarianceChi2Correction"),
     # The output writer, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
     # target-effect prior totals, which Results::objective does not hold yet (decision D2 of the note).
     ("src/DataOutputFiles.cpp", "ScreeningPenalty"),
