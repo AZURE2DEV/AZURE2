@@ -34,13 +34,15 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
             P = m.parameters
             f = m.objective()
             x0 = np.asarray(P.x0, float)
-            ev0 = m.evaluate(x0)
+            # Nothing is evaluated here: the engine freezes the model of a ``relvector`` covariance term at the
+            # first evaluation of the session, which must be the caller's first vector, not the start vector.
+            npts = [int(len(e)) for e in m.energies]
             #: the objective's data rows: [0, ndata); the engine's priors and constraints follow and are dropped
-            ndata = int(ev0.data[-1].rows.stop) if ev0.data else 0
+            ndata = int(sum(npts))
             info = dict(
                 keys=keys,
                 x0=x0,
-                npts=[int(d.n) for d in ev0.data],
+                npts=npts,
                 seg_keys=[int(seg_map[d.key]) if seg_map else int(d.key) for d in active],
                 n_rmatrix=len(P.free.of_kind("energy", "width")),
                 wigner=[(p.free_index, float(p.wigner_limit))
@@ -115,12 +117,12 @@ def worker_main(conn, azr, cwd, flags, seg_map, omp_threads=1):
                         conn.send(("ok", [np.asarray(d.model, float) for d in m.evaluate(x).data]))
                     elif cmd == "data":
                         conn.send(("ok", dict(
-                            energies=[np.asarray(d.energies, float) for d in ev0.data],
-                            excitation=[np.asarray(d.excitation_energies, float) for d in ev0.data],
-                            cross=[np.asarray(d.values, float) for d in ev0.data],
-                            cross_err=[np.asarray(d.errors, float) for d in ev0.data],
+                            energies=[np.asarray(e, float) for e in m.energies],
+                            excitation=[np.asarray(e, float) for e in m.excitation_energies],
+                            cross=[np.asarray(c, float) for c in m.cross],
+                            cross_err=[np.asarray(c, float) for c in m.cross_err],
                             # 2026-09-28: per-point data angles (plots split multi-angle segments by detector)
-                            angles=[np.asarray(d.angles, float) for d in ev0.data])))
+                            angles=[np.asarray(a, float) for a in m.angles])))
                     elif cmd == "write_output":
                         m.write_outputs(np.asarray(payload, float))
                         conn.send(("ok", None))

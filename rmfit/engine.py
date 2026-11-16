@@ -1541,19 +1541,32 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
         rmask = np.array([k.kind in ("energy", "width") for k in ev.keys])
         want_levels = ev.score(np.where(rmask, xs, ev.x0))   # norms/shifts at nominal
         src_keys = list(ev.keys)
-    # The snapshot is Session.save_fit, in a process of its own on the source variant as written (its covariance
-    # fields included; the evaluator above ran its .nocov copy): every level's physical values into the rows they
+    # The snapshot is Session.save_fit, in a process of its own on the base model as written (its covariance
+    # fields included; the evaluator above ran a .nocov copy): every level's physical values into the rows they
     # come from, fixed parameters included (a fixed parameter is fixed in the fit's basis, so its observed value
     # moves with the other amplitudes of its level), the nuisances left at the file's values (norms="nominal": the
     # prior centres stay where they are), and the companion parameter file with every parameter and its basis tag.
     # pyazr's own re-read check is off: the check below does it in fresh processes with rmfit's objective.
     path = os.path.abspath(path)
-    w = _Worker(src, workdir, flags, None, name=f"{name}_save").start()
+    # save_fit rewrites a snapshot's relative paths for its directory but cannot rewrite those inside a data
+    # covariance file, and refuses such a project in another directory: so the session that writes the snapshot
+    # opens a copy of the base model in the snapshot's own directory (its output in the work directory)
+    from .azr3 import write_variant
+    from .model import link_data_dirs
+    dest = os.path.dirname(path)
+    os.makedirs(dest, exist_ok=True)
+    link_data_dirs(base_azr, dest)
+    save_out = os.path.join(workdir, f"output_{name}_save")
+    os.makedirs(save_out, exist_ok=True)
+    save_src, _ = write_variant(base_azr, os.path.join(dest, f".{name}_save_src.azr"), save_out)
+    w = _Worker(save_src, dest, flags, None, name=f"{name}_save").start()
     try:
         xw = take(xs, src_keys, w.info["keys"], np.asarray(w.info["x0"], float))
         azr_written, sav_written = w.call("save_fit", (path, xw, dict(param_sav=True, verify=False, norms="nominal")))
     finally:
         w.stop()
+        if os.path.exists(save_src):
+            os.remove(save_src)
     sav = os.path.splitext(path)[0] + ".sav"
     if sav_written and os.path.abspath(sav_written) != sav:
         os.replace(sav_written, sav)
