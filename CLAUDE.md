@@ -251,8 +251,11 @@ section (check 34).
 **An observable of a reaction at a mesh energy** (what a site's record holds; `include/SiteObservable.h`).
 1. A kind in `SiteObservable` and its row in `kSiteObservables` (`src/SiteObservables.cpp`: the record's slots and the
    contraction with a reader's row, `Site::ValueFor`); `ObservableOf` names the terms of that kind.
-2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection`; its adjoint in
-   `AMatrixFunc::PointTBar` (checked with `AZURE_GRAD_CHECK`).  A kind whose formula reads the level matrix's elements
+2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection` (the sum itself a function of
+   `physics/` `Observables.h`); its adjoint a function of `ObservablesAdjoint.h` (T-matrix cotangents from the
+   observable's; its test against finite differences of the forward function in
+   `physics/tests/observables_adjoint_test.cpp`), called from the branch of `AMatrixFunc::PointTBar` that walks the
+   same pathways (checked with `AZURE_GRAD_CHECK`).  A kind whose formula reads the level matrix's elements
    instead of a T-matrix (kHoes, THM's σ_HOES: `HoesCrossSection`) is a branch of `SolveAtOneEnergy` and of the
    gradient's task (`GradEnergyTasks.cpp`, `HoesTask`), asked by the kind.
 3. Anything a reader needs per slot (angular row, Coulomb amplitude, A_y factors) in its row set (`include/RowSet.h`,

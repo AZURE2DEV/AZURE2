@@ -51,9 +51,12 @@ An observable of a reaction at a mesh energy
    its closed-form check in ``physics/tests/observables_test.cpp`` (no
    project file needed).
 3. One branch of ``GenMatrixFunc::CalculateBareCrossSection`` that walks the
-   pathways, calls the function and writes the record; its adjoint in
-   ``AMatrixFunc::PointTBar`` (the derivative is still written there, not in
-   ``physics/``).
+   pathways, calls the function and writes the record.  Its adjoint (the
+   cotangents of the T-matrix elements from the cotangent of the observable)
+   is a function of ``physics/include/azure2/physics/ObservablesAdjoint.h``,
+   checked against finite differences of the forward function in
+   ``physics/tests/observables_adjoint_test.cpp``; the branch of
+   ``AMatrixFunc::PointTBar`` that walks the same pathways calls it.
 4. What a reader needs per slot (angular row, Coulomb amplitude) in its row
    set (``include/RowSet.h``, built by ``WorkingCopy::BuildRowSets``).
 5. Tests: the analytic gradient against finite differences
