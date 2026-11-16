@@ -1,0 +1,32 @@
+{
+ "name": "13N_tier0",
+ "tier": 0,
+ "reaction": "12C+p (13N, AZURE2 tests/13N fixture)",
+ "base_dir": "../work/13N_tier0",
+ "reference": {
+  "campaign": "ref",
+  "azr": "ref/13N.azr",
+  "nshards": 3,
+  "flags": "flags.json",
+  "policy": "policy.json",
+  "note": "the AZURE2 tests/13N fixture (16 segments, 593 points; a plain-calculation regression file whose chiSquared.out 336,522 is NOT a fit) with meyer_84's norm free at 5 %, POLISHED to convergence by the bench job (6 x 200 tightening rounds) as the reference",
+  "polish_rounds": 6,
+  "polish_nfev": 200
+ },
+ "runs": {
+  "pert4f": {
+   "dir": "pert4f",
+   "label": "4 flips, seed 0, polished 150; drive: polish 150 x 4, sign rounds, population 3 restarts x 1 pass, <= 3 cycles / 2 h on 3 slots",
+   "spec": "spec_recovery.json",
+   "slots": 3,
+   "start": {
+    "flips": 4,
+    "seed": 0,
+    "jitter": 0.0,
+    "ekick": 0.0,
+    "polish_nfev": 150
+   },
+   "note": "first run (a queue job, before the reference polish) reached 26,678 from 29,709: REFERENCE-SUSPECT, row removed"
+  }
+ }
+}

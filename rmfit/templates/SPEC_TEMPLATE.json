@@ -1,0 +1,164 @@
+{
+ "_status": "TEMPLATE -- copy to <campaign>/spec.json, fill in, delete this line.  Schema: rmfit/spec.py docstring.",
+ "reaction": "<A><El>+<proj>",
+ "compound_nucleus": "17O",
+ "campaign": "<M-D-YY>_<name>",
+ "owners": [
+  "the evaluator (evaluator)",
+  "Claude (driver)"
+ ],
+ "engine": {
+  "azure2_root": "/path/to/frozen/engines/AZURE2_frozen_<hash>",
+  "so_md5": "",
+  "rmfit": "",
+  "flags": {
+   "use_long_wavelength": false,
+   "ignore_externals": true,
+   "use_brune": true
+  }
+ },
+ "parametrization": "brune",
+ "model": {
+  "fit_window": {
+   "E_lab_MeV": [
+    0.0,
+    0.0
+   ]
+  },
+  "frozen_block": "",
+  "pairs_required": [
+   {
+    "key": 1,
+    "label": "a0"
+   }
+  ],
+  "radius_fm": {},
+  "bg_poles": {
+   "energy_MeV": 20.0,
+   "cap": 3.0
+  },
+  "candidates_file": "candidates.json"
+ },
+ "data_sets": [
+  {
+   "file": "<substring of the data file name>",
+   "role": "anchor",
+   "norm": {
+    "nominal": 1.0,
+    "fixed": true
+   },
+   "systematic_source": "",
+   "window": [
+    0.0,
+    0.0
+   ],
+   "covariance_file": "",
+   "target_int": {
+    "active": false,
+    "energy_kind": "beam"
+   },
+   "note": ""
+  },
+  {
+   "file": "",
+   "role": "free",
+   "norm": {
+    "nominal": 1.0,
+    "fixed": false,
+    "prior_sigma": 0.1
+   },
+   "excluded_rows": "",
+   "note": ""
+  },
+  {
+   "file": "",
+   "role": "excluded",
+   "note": "why"
+  }
+ ],
+ "bounds": {
+  "theta2_cap": 1.0,
+  "bg_theta2_cap": 3.0,
+  "bg_energy": 20.0,
+  "e_window": 0.3,
+  "norm_range": [
+   0.2,
+   5.0
+  ],
+  "photon_width_max_ev": 10000.0,
+  "bg_photon_width_max_ev": 100000.0
+ },
+ "objective": {},
+ "search": {},
+ "nshards": 24,
+ "budget": {
+  "polish_nfev": 150,
+  "polish_rounds_max": 4,
+  "sign_rounds_max": 4,
+  "level_tests_max": 10,
+  "dataset_off_max": 2,
+  "cycles_max": 3,
+  "node_hours_max": 0,
+  "grid_check": true,
+  "figures": 6,
+  "restarts_per_cycle": 4,
+  "restart_nfev": 0,
+  "crossover_passes": 2,
+  "population_rounds_max": 3
+ },
+ "pre_authorized": {
+  "flip_adopt": true,
+  "adopt_level": false,
+  "dataset_off_adopt": false,
+  "drop_rows": false,
+  "change_norm_prior": false,
+  "extend_window": false,
+  "add_pairs_on_window_extension": true,
+  "shifts_free": true,
+  "skip_subagent_audits": false
+ },
+ "stop_rules": {
+  "polish_gain_rel_min": 0.0005,
+  "sign_rounds_without_accept": 2,
+  "level_adds_marginal_in_a_row": 2,
+  "cycle_gain_rel_min": 0.001,
+  "sign_after_converged_polish": 1,
+  "population_gain_rel_min": 0.001
+ },
+ "structure": {
+  "broad_first_kev": 10.0,
+  "narrow_phase": true,
+  "levelscan_per_cycle": 1,
+  "levelscan_top": 3,
+  "levelscan_gamma_kev": null,
+  "local_release_mev": 0.5,
+  "local_nfev": 80,
+  "recall_levels": 2,
+  "recall_min_pass": 0.5
+ },
+ "standing_decisions": [
+  {
+   "date": "",
+   "who": "the evaluator",
+   "text": ""
+  }
+ ],
+ "open_decisions": [],
+ "uq": {
+  "enabled": false,
+  "chains": 4,
+  "warmup": 1000,
+  "draws": 2000,
+  "target_accept": 0.9,
+  "j_saturated": 0.01,
+  "sample_norms": true,
+  "priors": {},
+  "bands": [],
+  "rhat_max": 1.01,
+  "ess_min": 400,
+  "divergent_max_frac": 0.01,
+  "bfmi_min": 0.3,
+  "max_attempts": 2,
+  "_doc": "rmfit.uq: NUTS posterior of the incumbent after the drive's last cycle; bands [] = the model's own <segmentsTest> energy scans; a band entry: {entrance, exit, e_min, e_max, e_step (lab MeV), observable, quantity sfactor|cross, label}"
+ }
+}
