@@ -62,7 +62,7 @@ interface (complex l, η, ρ; Bessel functions) is not exposed: AZURE2 has no us
 
 GSL's `gsl_sf_coulomb_wave_FG_e` is not a method of `physics/coulomb/` (physics/ links nothing). It stays as an
 independent cross-check in a test outside physics/ (section 5), and the engine's `--gsl-coul` path stays in the
-engine (section 4, open question).
+engine (section 4, open question; section 8 has what reaches it and what it gives).
 
 ### 1.4 Whittaker functions (bound channels)
 
@@ -557,8 +557,9 @@ User-space instructions at one thread (`perf stat -e instructions:u`), default �
 | `T2` gradient fit, no table | 334.45 × 10⁹ | 305.38 × 10⁹ | −8.7 % | 297.8603 → 298.0371 |
 | `13N` gradient fit | 183.85 × 10⁹ | 125.86 × 10⁹ | −32 % | 28100.17 → 28121.46 |
 
-(Wall times: `13N` calculation 7.6 → 3.2 s, `13N` fit 22.4 → 13.9 s.) What the option saves is the default
-routine's time in the capture integrals and, without a table, in the channel functions; with a table and no
+(Each a single run; two runs of the `T2` gradient fit with the same engine and options differed by 0.5 %, so its −0.3
+% is no change. Wall times: `13N` calculation 7.6 → 3.2 s, `13N` fit 22.4 → 13.9 s.) What the option saves is the
+default routine's time in the capture integrals and, without a table, in the channel functions; with a table and no
 capture it saves nothing.
 
 ### 8.4 What calling `physics/coulomb` at the two places would change
@@ -594,3 +595,11 @@ it). The choices, with what was measured for each:
 The cross-check line of `azure2-coulomb-table validate` compares over the whole table domain, where GSL is wrong
 below the barrier, so it prints percent-size numbers that say nothing about the table; restricting it to
 ρ ≥ ρ_tp (as `coulomb_gsl_crosscheck` does) would make it a check. Not changed here: it is the tool's output.
+
+### 8.5 What was changed with this section
+
+Two places of the engine, an include and a comment, no statement: `include/CoulFunc.h` no longer includes
+`gsl/gsl_sf_coulomb.h` (the header declared nothing from it; `src/CoulFunc.cpp` includes it for the two calls), so
+GSL's Coulomb functions are named in `src/CoulFunc.cpp` and `src/coulomb_table_main.cpp` only; and the comment of
+`src/ECIntegral.cpp` that named `gsl_sf_hyperg_U` as the present cost says what it is now. The option, the two
+calls and the tool's line are as they were.
