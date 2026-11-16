@@ -43,7 +43,7 @@ Update this file at the end of every work session: what changed, what is next, w
 
 **Run here** (CRC, GCC 11.5): build; `wigner_limit_reference` (two new checks), `channel_threshold`,
 `channel_table_unit`, `physics_system_of_compound`, `pyazr_wigner_convention`, `upgrade_predictions`;
-`repo_consistency_test.py`. The full gate: see the end of this entry once the queue job is back. **Not run:** CI.
+`repo_consistency_test.py`. The full gate (queue job, 8 slots): consistency, configure, build and the docs clean; ctest 308 of 310, the two the base fails (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 170 pass, 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), every chi2 line equal to the base's. **Not run:** CI.
 
 ## 2026-11-16 (director, 01:05) — merged: why four sanitizer steps failed (the script's own two faults)
 
