@@ -25,7 +25,13 @@ three test repairs, none run on macOS. Sanitizers (tenth push): no report under 
 three entries for the OpenMP runtime's own libraries; four steps (T2's calculation and fit, two target checks)
 failed there without a report because the sanitizer script did not copy T2's prior covariance file and listed
 two deleted checks. With that repaired (the twelfth push) both jobs pass with no failed step and no report, T2
-included. The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
+included, and so does the thirteenth push's run, on the collision matrix as functions of `physics/`. **Since the
+eleventh push (2026-11-16) the Linux job passes**: every regression check and every unit test. Windows in that
+push: 165 of 172 regression checks, 27 unit tests failing; a path with a drive letter was taken as relative to the
+project, and pyazr read text in the local code page (answered in the fourteenth push, not run on Windows). macOS
+in that push, the first with the GNU tools: 164 of 172 regression checks and 5 unit tests failing; four scripts
+were not written for bash 3.2, three compared a path through the temporary directory's link, and two failures are
+not understood. The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
 one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
