@@ -327,6 +327,10 @@ jobs:
           # unit test on Linux takes minutes); the step's own limit ends ctest 20 minutes before the job's, so the
           # annotations below are still written and name the tests that had started and not ended.
           TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
+          # GNU's only (Windows has a timeout.exe that waits for a key)
+          if [ -n "$TIMEOUT_CMD" ]; then
+            case "$("$TIMEOUT_CMD" --version 2>/dev/null || true)" in *GNU*) ;; *) TIMEOUT_CMD="" ;; esac
+          fi
           LEFT=$(( ${JOB_START:-$(date +%s)} + 340 * 60 - $(date +%s) ))
           [ "$LEFT" -ge 600 ] || LEFT=600
           echo "unit tests: at most $((LEFT / 60)) min for the step, 40 min for a test without its own TIMEOUT"
