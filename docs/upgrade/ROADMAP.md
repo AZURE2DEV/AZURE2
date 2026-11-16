@@ -24,8 +24,9 @@ machine. macOS: read after its first full run and answered in rehearsal 88 with 
 three test repairs, none run on macOS. Sanitizers (tenth push): no report under either, both jobs pass, after
 three entries for the OpenMP runtime's own libraries; four steps (T2's calculation and fit, two target checks)
 failed there without a report because the sanitizer script did not copy T2's prior covariance file and listed
-two deleted checks (repaired in the twelfth push; T2 under a sanitizer is not yet seen). The gates' other parts (reference
-outputs, the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
+two deleted checks. With that repaired (the twelfth push) both jobs pass with no failed step and no report, T2
+included. The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
+one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
 

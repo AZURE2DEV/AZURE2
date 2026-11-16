@@ -234,6 +234,13 @@ unitarity and symmetry of U, the one-level phase shift, the Breit-Wigner form, h
 level, a closed channel, and the six errors. The channel functions are the caller's (for a pair: the rows
 `penetrability`, `shift`, `hard_sphere_phase`, `coulomb_phase`).
 
+Checked on the commit of this stage and again on the tree it was merged into (with the grouping of a site's
+values, `evaluation.md` section 7.8): the build without a warning, every output file of every project in the three
+bases identical (887, 851, 887), the eight fits identical to the base build, 314 quick tests, the 172 regression
+scripts. Besides the test, by hand on the merged build: a one-level, one-channel case against its closed form and
+a block of five levels and three channels against a direct numpy inverse (off a level, 1e-7 MeV beside one, and
+with a closed channel) agree to rounding (below 1e-15), U unitary and symmetric.
+
 Not offered by the door yet, though `fill_level_matrix` takes them: Brune's and Park's parameters (they need the
 shift function and its derivatives at each level energy), photon channels and R-matrix capture. The observables'
 sums of `Observables.h` are not bound: a Python caller forms a cross section from T with numpy.

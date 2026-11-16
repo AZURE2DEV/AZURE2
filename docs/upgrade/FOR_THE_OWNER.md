@@ -513,6 +513,28 @@ re-read against its design at the hand-over.
      - Six unit tests failed for the reasons already repaired on Linux (packages, the interpreter, 1e-8).
      Run here on Linux: the three changed tests with and without a Coulomb table file. **Nothing of this was
      run on macOS**, and the GNU tools' effect there is expected, not seen.
+   - *macOS again* (the ninth push, the last run without the GNU tools; five hours). Six unit tests failed
+     that the fifth push's list did not have:
+     - `upgrade_mesh_planner`: 2 of 666,692 checks. **The test's tolerance, not the planner.** The test draws
+       random level sets from a fixed seed, and the standard's distributions give other numbers under libc++,
+       so macOS checks other cases than Linux. The check asks today's step a little inside each mesh interval,
+       and "a little" was 1e-9 of the interval: below one rounding step of the energy where the widths are
+       1e-7 MeV. On Linux 374 of 400 other seeds fail the same way, always at an interval that ends on a core's
+       edge; in the two cases looked at the mesh there is today's grid node for node, or finer. The inset is now
+       no less than four rounding steps of the node (0 of 1000 seeds fail here).
+     - `pyazr_fit_engine_control`, `pyazr_ui_engine_jobs`: two progress records after a stop request where
+       the tests allow one. **A fault of pyazr, and repaired:** a `threading.Event` given as `stop` reached the
+       engine through a helper thread that looked every 20 ms, so a project whose evaluation is shorter went
+       on for several (here on T3, 1 ms per record: up to 13 records after the request). `fit_with_engine` now
+       also looks after every progress record, in the record's thread (at most 1 on the same case). The first
+       test also read its count before it set the request; it now sets first.
+     - `tools_runall`: all five cases, with the BSD tools; expected gone with the GNU tools, not seen. The same
+       test inherited `REPLACE_TAG` and the standard input of its caller (it failed here in a run that exported
+       the variable); it no longer does.
+     - `pyazr_ui_sampler_bands` (the linear band of T3 came back without numbers) and `pyazr_examples`
+       (`fit_iminuit` on T3; the lines shown do not hold the cause): **not understood, not changed.** Both are
+       on T3 (the band follows the engine's MIGRAD, the example runs iminuit) under Python 3.14; no more is
+       known.
    - *The sanitizers* (the seventh push): the address job passes. The thread job failed in every step, after 112
      minutes, with the same report of libomp as before: the entry written for it matched nothing. The ninth push
      replaces it with two entries (`sanitizer_findings.md` section 4.4), again not tried anywhere but on the CI.
@@ -531,8 +553,10 @@ re-read against its design at the hand-over.
      project names since it is written in format 3 (the program refused it at set-up), and it still listed two
      checks whose directories were deleted with the fold windows (decision D3). Repaired in the twelfth push:
      the file is copied and the two names are gone (23 checks). The T2 steps were run here with the script's
-     file list before and after (GCC, no sanitizer). **What T2 gives under the thread sanitizer is not known
-     until that run ends**; it is the first of T2 there since the project was converted.
+     file list before and after (GCC, no sanitizer). **The twelfth push's run (2026-11-16; thread 73 minutes,
+     address 69) is the first with T2 since the project was converted: both jobs pass, no step fails and
+     neither sanitizer writes a report.** So everything the script runs is clean under clang 18's address,
+     undefined-behaviour and thread sanitizers, with the three entries for the OpenMP runtime's own libraries.
 
    **The CI is not green.** Linux in the ninth push: every unit test passes (`docs_build` is skipped, no Sphinx
    there) and 171 of the 172 regression checks. The one is `tests/shared_point_tables` (d), a bound on the peak
@@ -585,7 +609,9 @@ re-read against its design at the hand-over.
    empty (`pyazr/coulomb_table.py`); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
    environment switches (section 8).
-9. **pyazr.** Not in the binding: transfer functions on optical potentials, the level matrix, the Weisskopf width.
+9. **pyazr.** Not in the binding: transfer functions on optical potentials, the Weisskopf width, and the level
+   matrix with Brune's or Park's parameters or photon channels (`pyazr.physics.collision_matrix` gives A, U and T
+   for formal levels and particle channels; item 5).
    Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
    `pyazr/bands.py`). The Physics tab of the page plots what the binding has: the level matrix and the transfer
