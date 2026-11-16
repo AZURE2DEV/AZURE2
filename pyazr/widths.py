@@ -36,19 +36,13 @@ twice: it is already a squared quantity (:func:`pyazr.physics.wigner_limit` give
 The Weisskopf estimate (:func:`weisskopf_width`) is the engine's too: the row ``weisskopf_width`` of
 :mod:`pyazr.physics` (``physics/Widths.h``).  No number of the table is computed in Python.
 
-Getting the penetrability without a Coulomb-function implementation
--------------------------------------------------------------------
-``Gamma_W`` needs ``P_l(E_r)``, which ``Session.channel_functions`` and ``pyazr.physics.penetrability`` also
-give (:meth:`pyazr.Session.wigner_widths` documents where the probe below differs from it).  Rather than
-re-implement Coulomb wave functions, this module asks AZURE2 itself: it
-transforms a *probe* vector in which every reduced-width amplitude is set to a
-tiny ``eps`` (so the level-shift denominator is 1 to O(eps^2), and the levels of
-a J-group no longer mix), and reads
-
-    2 P_c = Gamma_c(eps) / eps^2
-
-off the result.  One extra ``TRANSFORM_RWA`` call per model, at AZURE2's own
-channel radii, boundary conditions and Coulomb functions.
+Where the penetrability comes from
+----------------------------------
+``Gamma_W`` needs ``P_l(E_r)``: :meth:`pyazr.Session.wigner_widths` takes it from the session's own channel
+functions (``Session.channel_functions``: AZURE2's Coulomb functions, radii and options) at the level's physical
+energy and multiplies it by the row's ``wigner_limit``.  (Before pyazr 3.0.0.dev5 it was read off the engine's
+transformation of a probe vector, which is that number only under Park and for a Brune level whose widths are all
+free.)
 
 Closed channels
 ---------------

@@ -1010,15 +1010,25 @@ unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weissk
 too, the row ``weisskopf_width`` of :doc:`physics_functions` (two-digit textbook coefficients for
 :math:`R = 1.2\,A^{1/3}` fm): every number of the table is the engine's.
 
-The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, the denominator of θ²) is the
-engine's transformation of a probe vector: ``x`` with every free particle amplitude set to a small ``eps`` and every
-free photon amplitude to 0, transformed by ``azr.transform``, each channel's :math:`|\Gamma_c|/\epsilon^2` times
-:math:`\gamma_W^2`.  It is the single-channel :math:`2P_l(E_\lambda)\gamma_W^2` (P from ``channel_functions`` at the
-level energy) when the probe makes the level's shift denominator 1 and leaves the levels of a J-group unmixed: in the
-Brune basis, for a level whose particle widths are all free (T1, 13N: equal to :math:`5\cdot10^{-9}`).  It is not where a
-level has fixed nonzero widths (their shift terms stay: T2, 0.80--0.99 of :math:`2P\gamma_W^2`) or where the levels
-of a J-group mix through the probe (the formal basis, closed channels: T2 formal up to :math:`8\cdot10^3`, 17O from
-0.05 to :math:`10^4`).
+The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
+denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the
+channel's Wigner limit, :math:`P_l` the penetrability of the session's own channel functions (``channel_functions``:
+its Coulomb table, or the hybrid model's solution for a pair with a nuclear potential) at the channel radius, and
+:math:`E_r` the pair's c.m. energy at the level's physical energy (the level's row of ``azr.transform(x)``, the
+observed energy written into ``<levels>``).  It is the same number in Brune's, the formal and Park's parametrization
+of one level scheme.  Free particle channels that are open at :math:`E_r` have an entry; a closed channel (an ANC,
+not a width), a photon channel and a fixed channel have none, and ``dimensionless_widths`` leaves their
+``wigner_width`` and ``theta2`` ``None``.
+
+.. note::
+
+   Before pyazr 3.0.0.dev5 ``wigner_widths`` was a probe of the engine's transformation (every free amplitude set to
+   a small ``eps``).  It was :math:`2P\gamma_W^2` under Park and for a Brune level whose particle widths are all
+   free; for a Brune level with fixed widths it was smaller by :math:`1/(1+\sum_c\gamma_c^2\,dS_c/dE)` of them
+   (0.80--0.99 on the test project T2), so θ² came out larger by that factor; in the formal basis it was not a
+   property of the channel (up to :math:`8\cdot10^3` times :math:`2P\gamma_W^2` on T2).  A θ² of a level with fixed
+   widths, or of a formal-basis session, from an older build should be recomputed.  ``eps`` is still accepted and
+   is ignored.
 
 The external region, and the caches
 -----------------------------------

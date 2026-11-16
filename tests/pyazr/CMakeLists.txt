@@ -77,6 +77,13 @@ add_test(NAME pyazr_wigner_convention
                  ${CMAKE_CURRENT_SOURCE_DIR}/wigner_convention_test.py)
 set_tests_properties(pyazr_wigner_convention PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Session.wigner_widths = 2 P_l(E_r) gamma_W^2 against mpmath's Coulomb functions and the closed form of a neutral
+# channel, T1, T2, T3 and 13N in the three parametrizations (docs/upgrade/pyazr3.md section 11); about 15 s.
+add_test(NAME pyazr_wigner_widths
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/wigner_widths_test.py)
+set_tests_properties(pyazr_wigner_widths PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # The Weisskopf estimate (physics/Widths.h through pyazr.weisskopf_width) against its closed form and against the
 # numbers of the Python formula it replaced.
 add_test(NAME pyazr_weisskopf

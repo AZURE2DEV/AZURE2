@@ -1263,6 +1263,20 @@ mass_number)` calls the row and keeps its `None` outside the domain. No formula 
   2.2e-14, E4 7.0e-21, M3 6.9e-15, M4 2.2e-21). Replacing them would move every W.u. by the percentages above.
 
 
+**`wigner_widths` as 2 P gamma_W^2.** Built as section 11 says (`pyazr/session_physics.py`). Measured:
+`tests/pyazr/wigner_widths_test.py` against mpmath's Coulomb functions, 2.5e-10 with the Coulomb table and 3.6e-10
+with the exact routine, on T1, T2, T3 and 13N in the three parametrizations (14 entries in each: 13 against
+mpmath, among them the neutral 7Be + n channel of T3, which also equals the closed form of P_0 to 1e-12); the
+three parametrizations agree to 1e-6. The alpha + 4He pair of T3 has a hybrid nuclear potential: its entry is 2 P gamma_W^2
+with the hybrid model's P (0.85 % from the Coulomb value), checked against `channel_functions`, not against mpmath.
+No test of the repository had the probe's number as its expected value (41 tests that use these calls pass
+unchanged: the examples and the skill's self-test use T1, whose levels have every particle width free); the
+skill `azure2-check` gained a self-test on T2, where the level norm J = theta^2 / theta^2_formal of its script was
+0.998, 0.755 and 0.999 with the probe and is 0.797, 0.745 and 0.972 = 1 - sum_c Gamma_c S'_c / (2 P_c) now.
+Left as it was: `ChannelWidth.level_energy`, `is_open` and the transition energy of a photon row are taken at the
+level's energy in the fit vector, which in the formal basis is the formal pole energy (section 11.1 takes Gamma_W at
+the physical one).
+
 ## 11. `Session.wigner_widths` as 2 P gamma_W^2 (design; approved by the PI on 2026-11-16)
 
 ### 11.1 What it is
@@ -1313,7 +1327,7 @@ Free open particle channels at `parameters.x0`; old is the probe (eps = 1e-4), n
 | T2 | formal | 4 | 0.798 to 8022 | 8.0e3, `width_5_3` (3-, l = 3, pair 2): 2.43366e10 against 3.03363e6 eV |
 | T2 | Park | 4 | 1 | 2.2e-16 |
 | T3 | Brune | 4 | 0.984 to 1 | 0.0158, `width_4_1` (1+, 17.64 MeV, l = 1, pair 2): 144412 against 146732 eV |
-| T3 | formal | 4 | 0.984 to 1 | the same channel and numbers as Brune (every level alone in its group) |
+| T3 | formal | 4 | 0.984 to 1 | the same channel and numbers as Brune |
 | T3 | Park | 4 | 1 | 0 |
 | 13N | Brune | 3 | 1 | 5.1e-9, `width_3_1` (1/2+, 2.3682 MeV, l = 0): 121062.8963 against 121062.8969 eV |
 | 13N | formal | 3 | 1 | 5.1e-9, the same channel |
@@ -1336,7 +1350,7 @@ Why they differ, each checked:
 - **Formal, T2.** The probe's value grows as eps falls (`width_2_1`: 1.1e8, 8.7e9, 8.4e11 eV for eps = 1e-3, 1e-4,
   1e-5; `width_5_3`: 2.0e8, 2.4e10, 2.5e12): the transformation mixes the fixed amplitudes of the group's other
   levels into the probed level, and that part is divided by eps^2. The probe is not a property of the channel
-  there; the new number does not depend on eps and equals the Brune and Park ones (to 6e-7, the transformation).
+  there; the new number does not depend on eps and equals the Brune and Park ones (to 1e-6, the transformation).
 
 `dimensionless_widths` changes with it: `wigner_width` and `theta2` of the free open particle channels, by the
 inverse of the factors above; `theta2_formal`, `wigner_gamma2`, every photon field and every value are unchanged.
