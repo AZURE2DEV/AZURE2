@@ -649,8 +649,9 @@ re-read against its design at the hand-over.
      172 of 172 regression checks for the first time, and 331 of 332 unit tests; the one is
      `pyazr_ui_sampler_bands`, a band of T3 whose bound at the extrapolation `x8` is not a number there. `x8` asks
      4He(a,a)4He at a lab angle above 90 degrees, which equal masses cannot reach; the engine maps it to 180 degrees
-     c.m. without a word and Linux holds 3.69e+62 at that point (the golden file too). Whether to refuse such a
-     point at validation is the PI's open question; nothing was changed. Windows, run of `88e84675` (the first
+     c.m. without a word and Linux held 3.69e+62 at that point (the golden file too). Since the next push such an
+     angle is refused at set-up (the PI's decision), `x8` asks 10 to 80 degrees and the golden file lost its nine
+     rows from 90 degrees; whether macOS then passes is for its next run to show. Windows, run of `88e84675` (the first
      with the x87 precision scope at every binding call and parallel region): 172 of 172 regression checks for
      the first time, and one unit test failing of 337 (25 skipped: the page's tests and others that need packages
      the job does not install), `pyazr_units_scales`, a fault of the test (mpmath's numbers are gmpy2's there);
