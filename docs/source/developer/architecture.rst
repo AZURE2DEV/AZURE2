@@ -200,7 +200,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    * The caller's data set-up (a ``DataSetUpStep``), which reads that
      structure through a ``const CompoundSystem &``:
      ``WorkingCopy::Fill`` (data sets) or ``WorkingCopy::MakePoints``
-     (extrapolations), ``src/WorkingCopy.cpp``: first the samples of the
+     (extrapolations), ``src/WorkingCopyFill.cpp``: first the samples of the
      ``<abundances>`` block (``AbundanceSamples``, held by the ``DataSet``;
      ``WorkingCopy::SetAbundanceSamples``, ``src/ProjectSetup.cpp``), then the
      segments and their points from the specs, the target effects
