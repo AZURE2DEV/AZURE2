@@ -24,14 +24,21 @@ class ChannelTable {
     int pair;       ///< the engine's pair number alpha (1-based)
     int l;          ///< orbital angular momentum
     int two_j;      ///< 2J of the channel (PPair::SpinOrbitTwoJ): kNoSpinOrbit unless the pair has a spin-orbit term
+    double radius;  ///< the channel's radius a_c in fm (AChannel::GetRadius), compared exactly
     double energy;  ///< E_c = (E_x - S_alpha) - e_alpha, MeV c.m.
+    /// Every member, in order: a key written with one member short does not compile (it would otherwise take the
+    /// energy for the radius).
+    Key(int pair, int l, int two_j, double radius, double energy) : pair(pair), l(l), two_j(two_j), radius(radius), energy(energy) {}
     bool operator<(const Key &o) const {
       if (pair != o.pair) return pair < o.pair;
       if (l != o.l) return l < o.l;
       if (two_j != o.two_j) return two_j < o.two_j;
+      if (radius != o.radius) return radius < o.radius;
       return energy < o.energy;
     }
-    bool operator==(const Key &o) const { return pair == o.pair && l == o.l && two_j == o.two_j && energy == o.energy; }
+    bool operator==(const Key &o) const {
+      return pair == o.pair && l == o.l && two_j == o.two_j && radius == o.radius && energy == o.energy;
+    }
   };
   struct Row {
     double P;                        ///< penetrability (0 for a closed channel)
@@ -42,7 +49,7 @@ class ChannelTable {
 
   /// The one formula of a row: an open channel from CoulFunc, a closed one (ChannelFunc::IsClosed) from
   /// ChannelFunc::Shift with P = 0.  Not for |E_c| <= ScatteringLength::kThresholdTolerance (Unit's own case).
-  static Row Compute(const PPair *pair, int l, int two_j, double energy, const Config &configure);
+  static Row Compute(const PPair *pair, int l, int two_j, double radius, double energy, const Config &configure);
 
   /// The table of the given keys (any order, duplicates allowed).  Rows of keys held by `previous` are copied from
   /// it when it was built for the same pairs (charges, masses, radii, thresholds, Coulomb route); the others are

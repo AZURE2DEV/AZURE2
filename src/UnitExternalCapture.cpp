@@ -27,7 +27,7 @@
 
 static complex ECPathwayAmplitude(const CompoundSystem *, const Config &, int entrancePair, const azure2::EntrancePathways &,
                                   const azure2::SpinGroupRow &, const azure2::ExternalRow &, double levelEnergy,
-                                  double cmEnergy, const ChannelTable *table = nullptr);
+                                  double cmEnergy, const ChannelTable *table = nullptr, complex *parts = nullptr);
 
 /// Returns the external capture amplitude of external pathway m (1-based) of spin group k (1-based) of the point's
 /// exit, as stored at set-up.
@@ -107,18 +107,31 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const Comp
  * the photon-energy factor and the radial integral (from ECTable, or directly
  * with --no-ec-table).  CalculateECAmplitudes calls it at the point's energy;
  * GetECAmplitudeWithShift at a shifted one.
+ * With `parts` (two entries), also the amplitude split by the final-state exterior function of an unbound final
+ * state, F_f and G_f unnormalized (ECIntegral::StandingParts, the line-shape integration of a broad final state):
+ * they are integrated directly, never from ECTable.
  */
 static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &configure, int entrance,
                                   const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
                                   const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
-                                  const ChannelTable *table) {
+                                  const ChannelTable *table, complex *parts) {
+  if (parts) parts[0] = parts[1] = complex(0.0, 0.0);
   const PPair *entrancePair = compound->GetPair(entrance);
   const int j = pathway.final_group;
+  const AChannel *theFinalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
+  // Two radii.  The radial integral runs from the final channel's a_c; the wave it folds is in the exit channel of
+  // the internal pathway the capture goes through, of the final channel's partition, and the set-up refuses a model in
+  // which that channel's radius is another (RefuseCaptureAcrossRadii).  The entrance wave's closed test and
+  // hard-sphere phase are taken at the entrance channel's a_c, which for channel capture may be of another partition
+  // (12C+alpha in, capture in 15N+p).
+  const double radius = theFinalChannel->GetRadius();
+  const azure2::InternalRow &throughRow = P.internal[pathway.through_row];
+  const double entranceRadius = compound->GetJGroup(throughRow.group)->GetChannel(throughRow.ch)->GetRadius();
   // A closed entrance channel -- at or below threshold, or so close above it
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
   // amplitude carries the entrance Coulomb wave, whose routines return NaN or
   // garbage there (e.g. a Gaussian-folding sub-point at E_cm <= 0).
-  if (ChannelFunc(entrancePair).IsClosed(cmEnergy))
+  if (ChannelFunc(entrancePair, entranceRadius).IsClosed(cmEnergy))
     return complex(0.0, 0.0);
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
@@ -135,15 +148,16 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   // exp(-i phi) at a_c from the point's channel table where it holds the open channel, at E_c = (E - S) - e
   // (the table's expression; within one ulp of cmEnergy); otherwise computed.
   const int entranceTwoJ = entrancePair->SpinOrbitTwoJ(pathway.J);
-  const ChannelTable::Row *row = table ? table->Find({entrance, pathway.l, entranceTwoJ,
+  const ChannelTable::Row *row = table ? table->Find({entrance, pathway.l, entranceTwoJ, entranceRadius,
                                                       (inEnergy - entrancePair->GetSepE()) - entrancePair->GetExE()})
                                        : nullptr;
   complex expHSP = (row && row->P > 0.0) ? row->expHSP
-                                         : theCoulombFunction.HardSpherePhase(pathway.l, entranceTwoJ, entrancePair->GetChRad(), cmEnergy);
+                                         : theCoulombFunction.HardSpherePhase(pathway.l, entranceTwoJ, entranceRadius, cmEnergy);
 
+  // No photon below the final level (an unbound final state above the entrance energy): the pathway is closed.
+  if (!(inEnergy - levelEnergy > 0.0)) return complex(0.0, 0.0);
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, pathway.mult + 0.5);
 
-  const AChannel *theFinalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
   const PPair *theFinalPair = compound->GetPair(theFinalChannel->GetPairNum());
   int theInitialLValue;
   double theInitialSValue;
@@ -158,18 +172,25 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   }
 
   complex integrals;
-  if (configure.useECTable) {
-    integrals = ECTable::Integral(theFinalPair, configure, theInitialLValue, theFinalChannel->GetL(),
+  if (configure.useECTable && !parts) {
+    integrals = ECTable::Integral(theFinalPair, radius, configure, theInitialLValue, theFinalChannel->GetL(),
                                   theInitialSValue, theFinalChannel->GetS(),
                                   pathway.J, compound->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
                                   inEnergy, levelEnergy, pathway.channel_capture, table,
                                   theFinalChannel->GetPairNum());
   } else {
-    ECIntegral theECIntegral(theFinalPair, configure);
+    ECIntegral theECIntegral(theFinalPair, configure, radius);
     integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
                               theInitialSValue, theFinalChannel->GetS(),
                               pathway.J, compound->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
                               inEnergy, levelEnergy, pathway.channel_capture);
+    if (parts) {
+      complex withF, withG;
+      if (theECIntegral.StandingParts(withF, withG)) {
+        parts[0] = expCP * expHSP * sqrtGammaPene * withF;
+        parts[1] = expCP * expHSP * sqrtGammaPene * withG;
+      }
+    }
   }
 
   // calculate the total radial integral
@@ -264,4 +285,11 @@ void Site::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
   values_.ec_shifted.clear();
+}
+
+complex ExternalCapturePathwayParts(const CompoundSystem *compound, const Config &configure, int entrance,
+                                    const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
+                                    const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
+                                    complex parts[2]) {
+  return ECPathwayAmplitude(compound, configure, entrance, P, group, pathway, levelEnergy, cmEnergy, nullptr, parts);
 }

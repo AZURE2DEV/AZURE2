@@ -542,6 +542,26 @@ appears with the following fields:
    channel-spin pairing computed these interference terms incorrectly (see
    ``tests/secondary_gamma``).
 
+   **Capture cascades.** With a *capture* pair as the exit pair, a UPOS data
+   set is the secondary gamma ray of the capture final state :math:`B` after
+   an **unobserved primary capture photon**: :math:`A(a,\gamma_1)B`,
+   :math:`B \to C + \gamma_2`, with :math:`\gamma_2` detected. This is the
+   extension named in the conclusions of the paper: a photon summed over its
+   direction and both helicities leaves no interference between multipoles
+   (:math:`L`, electric or magnetic), and it orients :math:`B` exactly as a
+   spin-0 particle of orbital angular momentum :math:`L` would, so Eq. (22)
+   applies with :math:`l' = L` and :math:`s' = J_B`. Internal (resonant) and
+   external capture amplitudes of one multipole interfere as they do in the
+   capture cross section. The three fields describe :math:`\gamma_2` as above;
+   the calculated quantity is :math:`d\sigma/d\Omega_{\gamma_2}` for **direct
+   feeding** of :math:`B` only, with 100 % branching to :math:`C`: feeding of
+   :math:`B` through higher states (a multi-step cascade) is not included, and
+   an angle-integrated cascade data set is the capture cross section into
+   :math:`B`. A secondary gamma ray from a state of spin 0 or 1/2 is isotropic
+   whatever feeds it. Laboratory angles are converted as for any capture gamma
+   ray (the recoil from the primary photon is neglected). Not available with
+   the ``--use-rmc`` formalism (``tests/capture_cascade``).
+
    Give UPOS data in the centre-of-mass frame (data type differential c.m.):
    the gamma-ray angle in the rest frame of :math:`B` differs from the
    laboratory angle only by the aberration of order :math:`v_B/c`, while a

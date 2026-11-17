@@ -319,10 +319,17 @@ std::vector<FieldDef> QuantityFields() {
   return {ByQ("J", "J", Spec(ValueType::Spin), "total spin of the phase shift"),
           ByQ("l", "l", IntAtLeast(0), "orbital angular momentum of the phase shift"),
           ByQ("s", "s", Spec(ValueType::Spin), "channel spin of the phase shift"),
+          ByQ("operator", "Spin operator", Spec(ValueType::SpinOperator),
+              "the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the "
+              "target analysing power, b:y*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, "
+              "b:y>e1:y a polarization transfer"),
           ByQ("expansion", "Legendre expansion", Words({"a_over_a0", "absolute", "rsl", "2l2", "4pi"}),
               "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"),
           Rare(ByQ("multipole", "Multipole", Words({"E1", "E2"}),
                    "the photon multipole the cross section is filtered to (M8)")),
+          Rare(ByQ("line_window", "Final-state line window", PositiveWithUnit("energy"),
+                   "capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the "
+                   "cross section is integrated over the final state's line shape for E_f within E_R +- W")),
           Rare(ByQ("shape", "Shape constant g", WithUnit("inverse_energy"),
                    "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C")),
           Rare(ByQ("secondary_gamma", "Secondary gamma", Structured(f.secondaryGamma), "UPOS: L, Ic, delta")),
@@ -565,6 +572,126 @@ RecordKind PotentialKind() {
   return k;
 }
 
+RecordKind ChannelRadiusKind() {
+  RecordKind k;
+  k.kind = "channel_radius";
+  k.sections = {"channelRadii"};
+  k.title = "Channel radius";
+  k.doc = "A radius of their own for some channels of one particle pair, in place of the pair's radius of <levels>: "
+          "every channel of the pair with this l, or only those with the channel spin s or the total J given.  The most "
+          "specific record that names a channel gives its radius (l, s and J; then l and one of them; then l alone).  "
+          "Everything taken at the channel radius follows: penetrability, shift, hard-sphere phase, boundary condition "
+          "and Wigner limit.  A channel no record names keeps its pair's radius.";
+  k.fields = {Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair of <levels> by its label (section 3.5)"),
+              Rare(Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs")),
+              Req("l", "Orbital angular momentum", IntAtLeast(0), "the l of the channels"),
+              Req("radius", "Radius", PositiveWithUnit("length"), "the channel radius a_c of these channels"),
+              Opt("s", "Channel spin", Spec(ValueType::Spin), "only the channels with this channel spin; absent: every s"),
+              Opt("J", "Total J", Spec(ValueType::Spin), "only the channels of this total angular momentum; absent: every J")};
+  return k;
+}
+
+// The six record kinds of <isospin> (Isospin.h; docs/upgrade/dev_features.md section 5).
+const char *const kIsospinDoc =
+    "  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines "
+    "span several compound nuclei under one level ID is one isospin level.";
+
+FieldDef IsospinPairKey() {
+  return Rare(Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs"));
+}
+
+RecordKind IsospinReferenceKind() {
+  RecordKind k;
+  k.kind = "isospin_reference";
+  k.sections = {"isospin"};
+  k.title = "Isospin reference nucleus";
+  k.doc = std::string("The compound nucleus whose members of the isospin levels carry the free parameters: their energies "
+                      "and amplitudes are fitted, those of the other nuclei follow from them.  Exactly one.") + kIsospinDoc;
+  k.fields = {Req("nucleus", "Nucleus", Spec(ValueType::Nucleus), "the compound nucleus, e.g. 4Li"),
+              Req("threshold", "Threshold pair", Spec(ValueType::Pair),
+                  "a particle pair of the nucleus by its label (section 3.5): level energies are measured from its threshold"),
+              IsospinPairKey()};
+  return k;
+}
+
+RecordKind IsospinShiftKind() {
+  RecordKind k;
+  k.kind = "isospin_shift";
+  k.sections = {"isospin"};
+  k.title = "Isospin Coulomb shift of a nucleus";
+  k.doc = std::string("Another compound nucleus of the isospin levels and the internal Coulomb shift of its members: the "
+                      "energy of a member above its threshold pair is the reference member's above the reference's "
+                      "threshold pair, plus this shift minus the reference's.") + kIsospinDoc;
+  k.fields = {Req("nucleus", "Nucleus", Spec(ValueType::Nucleus), "the compound nucleus, e.g. 4H"),
+              Req("threshold", "Threshold pair", Spec(ValueType::Pair),
+                  "a particle pair of the nucleus by its label (section 3.5): level energies are measured from its threshold"),
+              IsospinPairKey(),
+              Req("shift", "Shift", Nuis("energy"), "the internal Coulomb energy shift of the nucleus's isospin levels")};
+  return k;
+}
+
+RecordKind IsospinLevelKind() {
+  RecordKind k;
+  k.kind = "isospin_level";
+  k.sections = {"isospin"};
+  k.title = "Isospin level";
+  k.doc = std::string("The isospin T of the level with this ID.  Its lines of <levels> may span compound nuclei; in each, "
+                      "its particle amplitudes are the Clebsch-Gordan projections of one amplitude per isospin channel, "
+                      "and an isospin-forbidden channel is zero.  With the two soft widths the derived energies and "
+                      "amplitudes are free parameters instead, each with a penalty ((value - tie)/width)^2.") + kIsospinDoc;
+  k.fields = {Req("level", "Level", IntAtLeast(0), "the level ID of <levels> (column 9)"),
+              Req("T", "Isospin", Spec(ValueType::Spin), "the isospin T of the level"),
+              Rare(Opt("soft_energy", "Soft-tie width of the energies", PositiveWithUnit("energy"),
+                       "the width of the penalty on the derived level energies (with soft_amplitude)")),
+              Rare(Opt("soft_amplitude", "Soft-tie width of the amplitudes", PositiveNum(),
+                       "the width of the penalty on the derived reduced-width amplitudes, MeV^1/2 (with soft_energy)"))};
+  return k;
+}
+
+RecordKind IsospinMixKind() {
+  RecordKind k;
+  k.kind = "isospin_mix";
+  k.sections = {"isospin"};
+  k.title = "Isospin-forbidden amplitude";
+  k.doc = std::string("An amplitude of its own for an isospin-forbidden channel (pair, l, s) of an isospin level, in "
+                      "place of zero: isospin mixing as a parameter.") + kIsospinDoc;
+  k.fields = {Req("level", "Level", IntAtLeast(0), "the level ID of <levels> (column 9)"),
+              Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair of the channel by its label (section 3.5)"),
+              IsospinPairKey(),
+              Req("l", "Orbital angular momentum", IntAtLeast(0), "the l of the channel"),
+              Req("s", "Channel spin", Spec(ValueType::Spin), "the channel spin of the channel"),
+              Req("amplitude", "Amplitude", Nuis(""), "the reduced-width amplitude of the channel, MeV^1/2")};
+  return k;
+}
+
+RecordKind IsospinFactorKind() {
+  RecordKind k;
+  k.kind = "isospin_factor";
+  k.sections = {"isospin"};
+  k.title = "Isospin factor";
+  k.doc = std::string("The factor of the channels of one pair in an isospin level, in place of the Clebsch-Gordan "
+                      "coefficient computed from the particles' isospins.") + kIsospinDoc;
+  k.fields = {Req("level", "Level", IntAtLeast(0), "the level ID of <levels> (column 9)"),
+              Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair by its label (section 3.5)"),
+              IsospinPairKey(),
+              Req("factor", "Factor", Num(), "the factor; 0 makes the pair's channels isospin-forbidden")};
+  return k;
+}
+
+RecordKind IsospinPairKind() {
+  RecordKind k;
+  k.kind = "isospin_pair";
+  k.sections = {"isospin"};
+  k.title = "Isospins of a pair's particles";
+  k.doc = std::string("The isospins of the two particles of a pair where they are not |N - Z|/2 (an excited state of "
+                      "another isospin).") + kIsospinDoc;
+  k.fields = {Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair by its label (section 3.5)"),
+              IsospinPairKey(),
+              Req("t_light", "Isospin of the light particle", Spec(ValueType::Spin), "the isospin t of the light particle"),
+              Req("t_heavy", "Isospin of the heavy particle", Spec(ValueType::Spin), "the isospin t of the heavy particle")};
+  return k;
+}
+
 }  // namespace
 
 std::string Grammar(const ValueSpec &spec) {
@@ -599,6 +726,7 @@ std::string Grammar(const ValueSpec &spec) {
     case ValueType::NumberList: return "<number> ...";
     case ValueType::Spin: return "<J>";
     case ValueType::SpinParity: return "<J><parity>";
+    case ValueType::SpinOperator: return "<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]";
     case ValueType::Nucleus: return "<A><Symbol>";
     case ValueType::Pair: return "<particle>+<nucleus>[<E_x>]";
     case ValueType::Composition: return "<Symbol> <atoms> ...";
@@ -674,6 +802,8 @@ const std::vector<std::pair<std::string, std::vector<std::string>>> &Schema::Sec
       {"modelData", {"datum"}},
       {"potentials", {"potential"}},
       {"gammaDecays", {"gamma_decay"}},
+      {"channelRadii", {"channel_radius"}},
+      {"isospin", {"isospin_reference", "isospin_shift", "isospin_level", "isospin_mix", "isospin_factor", "isospin_pair"}},
   };
   return sections;
 }
@@ -690,10 +820,7 @@ const std::vector<GrammarSection> &Schema::GrammarSections() {
 }
 
 const std::vector<std::pair<std::string, std::string>> &Schema::NewerSections() {
-  static const std::vector<std::pair<std::string, std::string>> sections = {
-      {"channelRadii", "radii of single channels, in place of their pair's radius"},
-      {"isospin", "isospin ties of levels across compound nuclei"},
-  };
+  static const std::vector<std::pair<std::string, std::string>> sections = {};
   return sections;
 }
 
@@ -713,7 +840,9 @@ const std::vector<RecordKind> &Schema::Kinds() {
   static const std::vector<RecordKind> kinds = {DatasetKind(),       NormalizationKind(), EnergyScaleKind(),
                                                 ExtrapolationKind(), TargetKind(),        BeamKind(),
                                                 DetectorKind(),      DatumKind(),         PotentialKind(),
-                                                GammaDecayKind()};
+                                                GammaDecayKind(),    ChannelRadiusKind(), IsospinReferenceKind(),
+                                                IsospinShiftKind(),  IsospinLevelKind(),  IsospinMixKind(),
+                                                IsospinFactorKind(), IsospinPairKind()};
   return kinds;
 }
 

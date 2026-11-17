@@ -104,7 +104,8 @@ class ECIntegral {
    * The PPair object is used to create new instances of the CoulFunc and
    * WhitFunc objects.
    */
-  ECIntegral(const PPair *pPair, const Config &configure);
+  /// \p radius: the radius a_c (fm) of the final-state channel, the lower limit of the integral.
+  ECIntegral(const PPair *pPair, const Config &configure, double radius);
   /*!
    * The CoulFunc and WhitFunc objects are automatically destroyed with the object.
    */
@@ -117,12 +118,26 @@ class ECIntegral {
   /// Nonzero if a quadrature of the last call reported an error (GSL status),
   /// which happens only with the GSL error handler off.
   int Status() const { return status_; }
+  /// For an unbound final state, the last call's amplitude split by the final-state exterior function: with
+  /// F_lf(k_f r) and with G_lf(k_f r) in place of O_lf(k_f r)/O_lf(k_f a), unnormalized (the line-shape integration
+  /// of a broad final state: the real scattering wave at E_f is cos d F + sin d G).  False if the last call was not
+  /// unbound.
+  bool StandingParts(complex &withF, complex &withG) const {
+    withF = partF_;
+    withG = partG_;
+    return hasParts_;
+  }
 
  private:
   /// Clear the cached FW, GW and WW integrals.
   void ResetIntegrals() {
     FW_ = 0.;
     GW_ = 0.;
+    FWc_ = complex(0.0, 0.0);
+    GWc_ = complex(0.0, 0.0);
+    partF_ = complex(0.0, 0.0);
+    partG_ = complex(0.0, 0.0);
+    hasParts_ = false;
   };
   /// Evaluate the three radial integrals at one energy.
   void Integrate(double);
@@ -140,13 +155,38 @@ class ECIntegral {
   const PPair *pair() const { return pair_; };
   double FW() const { return FW_; };
   double GW() const { return GW_; };
+  /*!
+   * External-capture radial integrals into an UNBOUND final state (E_f > 0 above the pair's threshold), treated as a
+   * narrow resonance: the final state's exterior is its outgoing wave, normalized at the channel radius,
+   * u_f(r) = O_lf(k_f r) / O_lf(k_f a) with O = G + iF (the resonance ANC is the amplitude of that wave;
+   * Mukhamedzhanov et al., PRC 96, 024623 (2017), eq. 16).  Sets FWc_ = int F_li u_f w dr and GWc_ = int G_li u_f w dr
+   * from a to infinity, w = r^L (times the charge function).  The products of two continuum functions do not decay;
+   * the integral from a to R is done by Gauss-Legendre panels and the one beyond R by Abel-regularized integration by
+   * parts (three terms of the asymptotic series), which is what a convergence factor exp(-eps r), eps -> 0, gives.
+   * Returns false if R would have to exceed 50000 fm.
+   */
+  bool IntegrateUnbound(double chanrad, double finalEnergy);
   Params params_;
   /// The run's scratch of this thread (ECScratch).
   ECScratch &scratch_;
+  double radius_;  ///< the final-state channel's radius a_c (fm)
   const PPair *pair_;
   const Config *configure_;
   double FW_;
   double GW_;
+  /// The FW/GW integrals of an unbound final state (complex: its exterior is an outgoing wave).
+  complex FWc_ = complex(0.0, 0.0);
+  complex GWc_ = complex(0.0, 0.0);
+  /// The four real products behind FWc_ and GWc_ (a to infinity, before the division by O_f(a)):
+  /// int F_i F_f w, int F_i G_f w, int G_i F_f w, int G_i G_f w.
+  double rawFF_ = 0.0, rawFG_ = 0.0, rawGF_ = 0.0, rawGG_ = 0.0;
+  /// StandingParts.
+  complex partF_ = complex(0.0, 0.0);
+  complex partG_ = complex(0.0, 0.0);
+  bool hasParts_ = false;
+  /// Coulomb functions for the unbound-final-state integrals, without a radial memo: their many radial nodes at each
+  /// energy would only grow it.
+  std::unique_ptr<CoulFunc> unboundCoul_;
   double epsrel_ = 1e-4;
   /// Above this Sommerfeld parameter an open channel is treated through its threshold limit (CalculateDirect).
   static constexpr double kMaxOpenChannelEta = 100.0;

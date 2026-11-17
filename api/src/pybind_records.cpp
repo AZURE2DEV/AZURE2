@@ -95,6 +95,14 @@ std::pair<double, double> PriorOf(const ParameterView &v) {
       const ApparatusDeclaration &d = v.apparatus->declaration;
       return {d.centre, d.vary ? d.sigma : 0.0};
     }
+    case ParamKind::IsospinShift:
+    case ParamKind::IsospinMix: {
+      std::pair<double, double> prior{0.0, 0.0};
+      v.nuc->GetIsospin().ForEachPrior([&](int index, double centre, double width) {
+        if (index == v.index) prior = {centre, width};
+      });
+      return prior;
+    }
     default: return {0.0, 0.0};
   }
 }
@@ -125,7 +133,10 @@ const KindSet kSegment = Kinds({ParamKind::Norm, ParamKind::EnergyShift, ParamKi
                                 ParamKind::EnergyShiftFn, ParamKind::Thickness});
 const KindSet kPrior = Kinds({ParamKind::Norm, ParamKind::EnergyShift, ParamKind::EnergyShiftSqrt,
                               ParamKind::EnergyShiftFn, ParamKind::Abundance, ParamKind::Screening, ParamKind::Density,
-                              ParamKind::Doppler, ParamKind::Thickness, ParamKind::Apparatus});
+                              ParamKind::Doppler, ParamKind::Thickness, ParamKind::Apparatus, ParamKind::IsospinShift,
+                              ParamKind::IsospinMix});
+const KindSet kIsospin = Kinds({ParamKind::IsospinShift, ParamKind::IsospinMix});
+const KindSet kMix = Kinds({ParamKind::IsospinMix});
 
 const std::vector<ParameterField> &ParameterFields() {
   static const std::vector<ParameterField> fields = {
@@ -160,7 +171,7 @@ const std::vector<ParameterField> &ParameterFields() {
          return py::make_tuple(b.first, b.second);
        }},
       // -- a level's parameters
-      {"jgroup", "", kLevel | Kinds({ParamKind::ThmCoherent}), false, "the J group, from 1",
+      {"jgroup", "", kLevel | kMix | Kinds({ParamKind::ThmCoherent}), false, "the J group, from 1",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->jGroup); }},
       {"J", "", kLevel | Kinds({ParamKind::ThmCoherent}), false, "the J group's total spin",
        [](const ParameterView &v) -> py::object { return py::float_(v.group->GetJ()); }},
@@ -171,7 +182,7 @@ const std::vector<ParameterField> &ParameterFields() {
        [](const ParameterView &v) -> py::object {
          return py::str(azure2::experiment::JpiText((int)std::lround(2.0 * v.group->GetJ()), v.group->GetPi()));
        }},
-      {"level", "", kLevel, false, "the level within its J group, from 1",
+      {"level", "", kLevel | kMix, false, "the level within its J group, from 1",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->level); }},
       {"level_number", "", kLevel, false, "the level counted over all J groups, from 1 (param files, energy_<n>)",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->levelNumber); }},
@@ -186,20 +197,20 @@ const std::vector<ParameterField> &ParameterFields() {
          return it == v.levelLabels->end() ? py::object(py::none()) : py::object(py::str(it->second));
        }},
       // -- a channel's amplitude (and the THM background's entrance channel)
-      {"channel", "", kChannel | Kinds({ParamKind::ThmCoherent}), false,
+      {"channel", "", kChannel | kMix | Kinds({ParamKind::ThmCoherent}), false,
        "the channel within the J group, from 1 (cbkg: the entrance channel)",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->channel); }},
-      {"L", "", kChannel | Kinds({ParamKind::ThmCoherent}), true,
+      {"L", "", kChannel | kMix | Kinds({ParamKind::ThmCoherent}), true,
        "the channel's orbital angular momentum l (a photon channel: its multipolarity)",
        [](const ParameterView &v) -> py::object { return py::int_(v.channel->GetL()); }},
-      {"S", "", kChannel | Kinds({ParamKind::ThmCoherent}), true, "the channel spin s",
+      {"S", "", kChannel | kMix | Kinds({ParamKind::ThmCoherent}), true, "the channel spin s",
        [](const ParameterView &v) -> py::object { return py::float_(v.channel->GetS()); }},
       {"pair", "", kChannel | Kinds({ParamKind::ThmCoherent}), false,
        "the channel's pair number (Pair.number; cbkg: the exit channel's)",
        [](const ParameterView &v) -> py::object {
          return py::int_((v.exitChannel ? v.exitChannel : v.channel)->GetPairNum());
        }},
-      {"pair_key", "", kChannel, true, "the channel's pair key in <levels> (Pair.key)",
+      {"pair_key", "", kChannel | kMix, true, "the channel's pair key in <levels> (Pair.key)",
        [](const ParameterView &v) -> py::object {
          return py::int_(v.nuc->GetPair(v.channel->GetPairNum())->GetPairKey());
        }},
@@ -221,6 +232,9 @@ const std::vector<ParameterField> &ParameterFields() {
        [](const ParameterView &v) -> py::object {
          return v.record->finalState.empty() ? py::object(py::none()) : py::object(py::str(v.record->finalState));
        }},
+      // -- a number of an isospin_shift or isospin_mix record
+      {"isospin_record", "", kIsospin, true, "the isospin_shift or isospin_mix record of <isospin>",
+       [](const ParameterView &v) -> py::object { return py::str(v.record->isospinRecord); }},
       // -- a data segment's parameters
       {"segment", "", kSegment, false, "the data segment, from 1 (the engine's order)",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->segment); }},
@@ -250,11 +264,11 @@ const std::vector<ParameterField> &ParameterFields() {
        [](const ParameterView &v) -> py::object { return py::int_(v.record->sample); }},
       {"sample_name", "", Kinds({ParamKind::Abundance}), true, "the sample's name, '' for the unnamed sample",
        [](const ParameterView &v) -> py::object { return py::str(v.record->sampleName); }},
-      {"nucleus_index", "", Kinds({ParamKind::Abundance}), false, "the compound nucleus of the block, from 1",
+      {"nucleus_index", "", Kinds({ParamKind::Abundance, ParamKind::IsospinShift}), false, "the compound nucleus of the block, from 1",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->nucleus); }},
-      {"nucleus_Z", "", Kinds({ParamKind::Abundance}), true, "the compound nucleus's charge number",
+      {"nucleus_Z", "", Kinds({ParamKind::Abundance, ParamKind::IsospinShift}), true, "the compound nucleus's charge number",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->nucleusZ); }},
-      {"nucleus_A", "", Kinds({ParamKind::Abundance}), true, "the compound nucleus's mass number",
+      {"nucleus_A", "", Kinds({ParamKind::Abundance, ParamKind::IsospinShift}), true, "the compound nucleus's mass number",
        [](const ParameterView &v) -> py::object { return py::int_(v.record->nucleusA); }},
       // -- a THM coherent background
       {"thm_experiment", "", Kinds({ParamKind::ThmCoherent}), true, "the THM experiment",
@@ -389,7 +403,7 @@ const std::vector<PairField> &PairFields() {
          return py::float_(q.GetLightExE());
        }},
       {"channel_radius", "fm", "the channel radius",
-       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetChRad()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetPairRadius()); }},
       {"i1i2factor", "", "1 / ((2 J1 + 1)(2 J2 + 1)), the statistical factor's denominator of an entrance pair",
        [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetI1I2Factor());

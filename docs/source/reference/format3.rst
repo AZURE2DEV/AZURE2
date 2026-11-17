@@ -29,6 +29,10 @@ Sections
      - ``potential``
    * - ``<gammaDecays>``
      - ``gamma_decay``
+   * - ``<channelRadii>``
+     - ``channel_radius``
+   * - ``<isospin>``
+     - ``isospin_reference``, ``isospin_shift``, ``isospin_level``, ``isospin_mix``, ``isospin_factor``, ``isospin_pair``
 
 Value types
 -----------
@@ -85,6 +89,9 @@ Value types
    * - ``spin_parity``
      - ``<J><parity>``
      - a spin and parity: 0+, 3-, 1/2+, ...
+   * - ``spin_operator``
+     - ``<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]``
+     - the operator of a spin observable: terms <who>:<op> joined by '\*', entrance '>' exit for a transfer; who b\|t\|e1\|e2 (beam, target, light and heavy exit particle); op x\|y\|z (vector), xx\|yy\|zz\|xy\|xz\|yz (Cartesian tensor, spin 1), T<k><q>\|iT<k><q> (spherical, Madison)
    * - ``nucleus``
      - ``<A><Symbol>``
      - a nuclide <A><Symbol>
@@ -136,7 +143,7 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|spin_observable|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what the numbers are (section 7.2)
    * - ``unit``
@@ -203,6 +210,10 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``<J>``
      - by quantity
      - channel spin of the phase shift
+   * - ``operator``
+     - ``<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]``
+     - by quantity
+     - the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the target analysing power, b:y\*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, b:y>e1:y a polarization transfer
    * - ``expansion``
      - ``a_over_a0|absolute|rsl|2l2|4pi``
      - by quantity
@@ -211,6 +222,10 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``E1|E2``
      - by quantity
      - the photon multipole the cross section is filtered to (M8)
+   * - ``line_window``
+     - ``<number> <energy unit>``
+     - by quantity
+     - capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the cross section is integrated over the final state's line shape for E_f within E_R +- W
    * - ``shape``
      - ``<number> <inverse_energy unit>``
      - by quantity
@@ -330,7 +345,7 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - optional
      - the <levels> pair key of the exit pair, only where the reaction label names two pairs; on a sum or ratio, of every term whose label names two
    * - ``quantity``
-     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|spin_observable|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what is computed (section 7.2)
    * - ``unit``
@@ -381,6 +396,10 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``<J>``
      - by quantity
      - channel spin of the phase shift
+   * - ``operator``
+     - ``<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]``
+     - by quantity
+     - the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the target analysing power, b:y\*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, b:y>e1:y a polarization transfer
    * - ``expansion``
      - ``a_over_a0|absolute|rsl|2l2|4pi``
      - by quantity
@@ -389,6 +408,10 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``E1|E2``
      - by quantity
      - the photon multipole the cross section is filtered to (M8)
+   * - ``line_window``
+     - ``<number> <energy unit>``
+     - by quantity
+     - capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the cross section is integrated over the final state's line shape for E_f within E_R +- W
    * - ``shape``
      - ``<number> <inverse_energy unit>``
      - by quantity
@@ -718,6 +741,228 @@ Radiative decay of a level, in ``<gammaDecays>``.  A level's radiative partial w
      - optional
      - the DOI of the publication
 
+channel_radius
+~~~~~~~~~~~~~~
+
+Channel radius, in ``<channelRadii>``.  A radius of their own for some channels of one particle pair, in place of the pair's radius of <levels>: every channel of the pair with this l, or only those with the channel spin s or the total J given.  The most specific record that names a channel gives its radius (l, s and J; then l and one of them; then l alone).  Everything taken at the channel radius follows: penetrability, shift, hard-sphere phase, boundary condition and Wigner limit.  A channel no record names keeps its pair's radius.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair of <levels> by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``l``
+     - ``<integer >= 0>``
+     - required
+     - the l of the channels
+   * - ``radius``
+     - ``<number> <length unit>``
+     - required
+     - the channel radius a_c of these channels
+   * - ``s``
+     - ``<J>``
+     - optional
+     - only the channels with this channel spin; absent: every s
+   * - ``J``
+     - ``<J>``
+     - optional
+     - only the channels of this total angular momentum; absent: every J
+
+isospin_reference
+~~~~~~~~~~~~~~~~~
+
+Isospin reference nucleus, in ``<isospin>``.  The compound nucleus whose members of the isospin levels carry the free parameters: their energies and amplitudes are fitted, those of the other nuclei follow from them.  Exactly one.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``nucleus``
+     - ``<A><Symbol>``
+     - required
+     - the compound nucleus, e.g. 4Li
+   * - ``threshold``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - a particle pair of the nucleus by its label (section 3.5): level energies are measured from its threshold
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+
+isospin_shift
+~~~~~~~~~~~~~
+
+Isospin Coulomb shift of a nucleus, in ``<isospin>``.  Another compound nucleus of the isospin levels and the internal Coulomb shift of its members: the energy of a member above its threshold pair is the reference member's above the reference's threshold pair, plus this shift minus the reference's.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``nucleus``
+     - ``<A><Symbol>``
+     - required
+     - the compound nucleus, e.g. 4H
+   * - ``threshold``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - a particle pair of the nucleus by its label (section 3.5): level energies are measured from its threshold
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``shift``
+     - ``<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - required
+     - the internal Coulomb energy shift of the nucleus's isospin levels
+
+isospin_level
+~~~~~~~~~~~~~
+
+Isospin level, in ``<isospin>``.  The isospin T of the level with this ID.  Its lines of <levels> may span compound nuclei; in each, its particle amplitudes are the Clebsch-Gordan projections of one amplitude per isospin channel, and an isospin-forbidden channel is zero.  With the two soft widths the derived energies and amplitudes are free parameters instead, each with a penalty ((value - tie)/width)^2.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``T``
+     - ``<J>``
+     - required
+     - the isospin T of the level
+   * - ``soft_energy``
+     - ``<number> <energy unit>``
+     - optional
+     - the width of the penalty on the derived level energies (with soft_amplitude)
+   * - ``soft_amplitude``
+     - ``<number > 0>``
+     - optional
+     - the width of the penalty on the derived reduced-width amplitudes, MeV^1/2 (with soft_energy)
+
+isospin_mix
+~~~~~~~~~~~
+
+Isospin-forbidden amplitude, in ``<isospin>``.  An amplitude of its own for an isospin-forbidden channel (pair, l, s) of an isospin level, in place of zero: isospin mixing as a parameter.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair of the channel by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``l``
+     - ``<integer >= 0>``
+     - required
+     - the l of the channel
+   * - ``s``
+     - ``<J>``
+     - required
+     - the channel spin of the channel
+   * - ``amplitude``
+     - ``<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]``
+     - required
+     - the reduced-width amplitude of the channel, MeV^1/2
+
+isospin_factor
+~~~~~~~~~~~~~~
+
+Isospin factor, in ``<isospin>``.  The factor of the channels of one pair in an isospin level, in place of the Clebsch-Gordan coefficient computed from the particles' isospins.  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``level``
+     - ``<integer >= 0>``
+     - required
+     - the level ID of <levels> (column 9)
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``factor``
+     - ``<number>``
+     - required
+     - the factor; 0 makes the pair's channels isospin-forbidden
+
+isospin_pair
+~~~~~~~~~~~~
+
+Isospins of a pair's particles, in ``<isospin>``.  The isospins of the two particles of a pair where they are not \|N - Z\|/2 (an excited state of another isospin).  Isospin-labelled levels across compound nuclei (Hale's charge-independent R-matrix): a level whose <levels> lines span several compound nuclei under one level ID is one isospin level.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``t_light``
+     - ``<J>``
+     - required
+     - the isospin t of the light particle
+   * - ``t_heavy``
+     - ``<J>``
+     - required
+     - the isospin t of the heavy particle
+
 Quantities
 ----------
 
@@ -753,6 +998,8 @@ Cross section (``dataset``, ``extrapolation``).  Angle-integrated cross section 
    * - ``detector``
      - allowed
    * - ``multipole``
+     - allowed when the reaction has a photon exit
+   * - ``line_window``
      - allowed when the reaction has a photon exit
    * - ``secondary_gamma``
      - allowed
@@ -876,6 +1123,8 @@ Differential cross section (``dataset``, ``extrapolation``).  dsigma/dOmega at t
      - allowed
    * - ``thm``
      - allowed
+   * - ``line_window``
+     - allowed when the reaction has a photon exit
    * - target kinds
      - ``layer``, ``none``
    * - tree
@@ -908,6 +1157,8 @@ Astrophysical S factor (``dataset``, ``extrapolation``).  S(E) = E sigma(E) exp(
      - charged entrance
    * - ``multipole``
      - allowed when the reaction has a photon exit
+   * - ``line_window``
+     - allowed when the reaction has a photon exit
    * - tree
      - ``Scale_SF(E) o Sigma(r)``
    * - EXFOR
@@ -937,6 +1188,8 @@ Modified S factor of heavy-ion fusion (``dataset``, ``extrapolation``).  S\*(E) 
    * - ``shape``
      - required
    * - ``multipole``
+     - allowed when the reaction has a photon exit
+   * - ``line_window``
      - allowed when the reaction has a photon exit
    * - tree
      - ``Scale_SF*(E; g) o Sigma(r)``
@@ -1142,6 +1395,40 @@ Analyzing power (``dataset``, ``extrapolation``).  A_y of a spin-1/2 projectile;
      - ``,POL/DA,,ANA``
    * - refused (validate)
      - spin: A_y is the vector analysing power of a spin-1/2 projectile (n, p, t, h); tensor analysing powers are not supported (``E_REACTION_NOT_ALLOWED``)
+
+spin_observable
+~~~~~~~~~~~~~~~
+
+Spin observable (``dataset``, ``extrapolation``).  A polarization observable named by its operator (tensor analysing powers, spin correlations, outgoing polarizations, polarization transfers) of a reaction between particle pairs; folded as O sigma over sigma.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - property
+     - value
+   * - engine unit
+     - ``1``
+   * - units
+     - ``1`` (1)
+   * - energy column
+     - ``E_lab``, ``E_cm``
+   * - angle column
+     - required: ``theta_lab``, ``theta_cm``
+   * - ``operator``
+     - required
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
+   * - tree
+     - ``O(r, theta) = Re(c Tr(F A F^dagger B))/Tr(F F^dagger), folded as O sigma over sigma``
+   * - refused (build)
+     - a photon or beta pair, or a particle without the spin of its operator: the operator acts on the spins of the four particles of a reaction between particle pairs: a vector operator needs spin >= 1/2, a Cartesian tensor spin 1, T_kq rank k <= 2j; for capture only A_y (analyzing_power) is computed (``E_REACTION_NOT_ALLOWED``)
 
 phase_shift
 ~~~~~~~~~~~
@@ -1914,6 +2201,9 @@ Diagnostic codes
    * - ``E_SPIN_SYNTAX``
      - error
      - a spin that is not 0, 1, 3/2, ... (with + or - where a parity is needed)
+   * - ``E_SPIN_OPERATOR``
+     - error
+     - the operator of a spin observable that does not follow its grammar (b:y, b:y\*t:y, b:T20, b:y>e1:y)
    * - ``E_NUCLEUS_SYNTAX``
      - error
      - a nuclide that is not <A><Symbol>, or with A < Z
@@ -2018,7 +2308,7 @@ Diagnostic codes
      - two photon pairs with external capture whose final states are the same level
    * - ``E_FINAL_STATE_UNBOUND``
      - error
-     - a capture final state above a particle threshold: with external capture, at or above the threshold of a pair with a channel in its J^pi group; or above the entrance threshold of a capture asked into it (not computed by this version)
+     - an external-capture final state at the threshold of a pair with a channel in its J^pi group, or too close above the threshold of a charged one (eta > 100) for its outgoing wave
    * - ``E_NOT_BUILT``
      - error
      - a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)
@@ -2070,6 +2360,21 @@ Diagnostic codes
    * - ``E_POTENTIAL_PAIR_KIND``
      - error
      - a potential record on a photon or beta pair (a potential belongs to a particle pair)
+   * - ``E_CHANNEL_RADIUS_TWICE``
+     - error
+     - two channel_radius records for one selection of channels (pair, l, s, J)
+   * - ``E_CHANNEL_RADIUS_PAIR_KIND``
+     - error
+     - a channel_radius record on a photon or beta pair (a radius belongs to a particle channel)
+   * - ``E_CHANNEL_RADIUS_THM``
+     - error
+     - a channel_radius record on the entrance pair of a THM data set (the vertex is built at the pair's radius)
+   * - ``E_ISOSPIN_RECORD``
+     - error
+     - a record of <isospin> that another record or <levels> contradicts: a nucleus or a level named twice, no or a second reference, a level ID no level has, a mix or a factor on a level without an isospin_level record, a soft tie with one width, a profiled number
+   * - ``E_ISOSPIN_PAIR``
+     - error
+     - a pair of an <isospin> record that is not a particle pair, or a threshold pair that does not form the record's nucleus
    * - ``E_POTENTIAL_RELATIVISTIC``
      - error
      - a potential record in a project with relativistic kinematics
@@ -2084,7 +2389,7 @@ Diagnostic codes
      - a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh; use_gsl_coul: GSL's Coulomb functions are gone)
    * - ``E_UNKNOWN_SECTION``
      - error
-     - a section format 3 does not have (a newer AZURE2's <channelRadii> or <isospin>, a misspelt name), or a section inside one that does not hold it: nothing would read it
+     - a section format 3 does not have (a newer AZURE2's section, a misspelt name), or a section inside one that does not hold it: nothing would read it
    * - ``E_UNREAD_LINE``
      - error
      - a <config> key format 3 does not have, a <config> line after the eleven entries that is not key=value, or a line of <mcmc> outside <parameters>: nothing would read it

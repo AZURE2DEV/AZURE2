@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "Site.h"
 #include "LevelState.h"
+#include "LineWindow.h"
 #include "azure2/physics/Observables.h"
 
 #include <cstring>
@@ -54,6 +55,17 @@ class GenMatrixFunc {
     ResetTMatrix();
     CalculateTMatrix(point);
   }
+  /// A node of the line-shape integration of a broad capture final state (LineWindow.h), read by CalculateTMatrix
+  /// while LineWindowCrossSection runs; null otherwise.
+  const azure2::LineNode *ActiveLineNode() const { return lineNode_; }
+  void SetActiveLineNode(const azure2::LineNode *node) { lineNode_ = node; }
+  /// The exit channel's sqrt(P) for CalculateTMatrix: the point's own; at a node of the line-shape integration, for a
+  /// photon channel, that of the photon at E - E_x(E_f) times the final-state amplitude A(E_f), zero below E_x
+  /// (LineWindow.cpp).
+  double ExitSqrtPenetrability(Site *point, int jNum, int chNum) const;
+  /// The external-capture T element (k, m) for CalculateTMatrix: `element`; at a node the node's own, that of the
+  /// scattering state at E_f (LineWindow.cpp).
+  complex ExternalElementAt(int k, int m, const complex &element) const;
   /// True when `other` holds the same T-matrix bit for bit, internal and external elements (the shared-solve check
   /// of AZURE_PLAN_CHECK, CalculationPlan.h).
   bool SameTMatrix(const GenMatrixFunc &other) const {
@@ -75,6 +87,9 @@ class GenMatrixFunc {
   complex GetECTMatrixElement(int, int) const;
   /// Racah coefficient \f$R_k\f$ of the angular-distribution algebra.
   double GetRk(double, double, double, double, int);
+  /// The secondary gamma ray's R_k of a UPOS point for the orders below `numOrders` (mixing ratio included; 0 for
+  /// odd k), for a decaying state of spin j2f.
+  std::vector<double> SecondaryRk(const Site *point, double j2f, int numOrders);
   /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
   std::string NoPathwayMessage(int entrancePair, int exitPair) const;
   /// The refusal of a capture-A_y point whose terms were not requested at set-up (CompoundSetUpRequests::AddCaptureAy).
@@ -147,6 +162,8 @@ class GenMatrixFunc {
   azure2::physics::PartialWaveSums partial_sums_;
   azure2::physics::PartialWaveSums partial_sums_E1_;
   azure2::physics::PartialWaveSums partial_sums_E2_;
+  /// ActiveLineNode.
+  const azure2::LineNode *lineNode_ = nullptr;
 };
 
 #endif

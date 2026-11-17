@@ -5,6 +5,7 @@
 // unit because all of them are the derivative of one function and share the fixed-parameter mask and the
 // finite-difference step.  What they keep between calls is in the caller's FitterStates (states_.gradient).
 #include "AZURECalc.h"
+#include "MigradSeed.h"
 #include "RunDiagnostics.h"
 #include "azure2/support/Environment.h"
 #include "ModelPass.h"
@@ -68,6 +69,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const { re
 
 std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const GradientRoute &route) const {
   if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 0.0);  // a stopped fit: see operator()
+  if (seed_) seed_->GradientCalled();
   AZUREProfile::ScopedReport profileReport(configure().profile, "gradient");
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradient);
   {
@@ -257,7 +259,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       for (int col = 0; col < nCols; col++) {
         const int f = tmap.PackedToFull(col);
         const ParamKind kind = tmap.Desc(f).kind;
-        if (!IsLevelSlot(kind) && kind != ParamKind::ThmCoherent) continue;
+        if (!IsRMatrixParameter(kind) && kind != ParamKind::ThmCoherent) continue;
         double g = 0.0;
         for (size_t i = 0; i < tr.r.size(); i++) g += tr.r[i] * tr.J[i * nCols + col];
         if (f < (int)grad.size()) grad[f] += 2.0 * g;
@@ -286,7 +288,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     // segment carries none).
     if (eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
       continue;  // analytic (dev: Doppler weights, the transmission / yield transform)
-    if (eg && (IsLevelSlot(kind) || kind == ParamKind::Norm || kind == ParamKind::ThmCoherent)) {
+    if (eg && (IsRMatrixParameter(kind) || kind == ParamKind::Norm || kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
       if (thmAnalytic && kind != ParamKind::Norm) continue;  // THM part added above
       if (kind == ParamKind::Norm) {
@@ -392,7 +394,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fixedMask[idx]) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && !haveTHM && (IsLevelSlot(kind) || kind == ParamKind::Norm)) &&
+        if (!(eg && !haveTHM && (IsRMatrixParameter(kind) || kind == ParamKind::Norm)) &&
             !(eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
@@ -408,7 +410,8 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     const std::string &gc = environment.Text(azure2::support::Switch::kGradCheck);
     if (!configure().diagnostics->gradientChecked.exchange(true)) {
       static const char *const kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"};
+                                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative",
+                                       "isospin_shift", "isospin_mix"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -547,6 +550,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     g2[idx] += GaussianPriorCurvature(e);
   });
   // Park's wall and the abundance sum-to-one term are residual rows (AppendModelRows): in J^T r above.
+  if (seed_) seed_->Bound(p, grad, g2);  // a bounded first MIGRAD step
   states_.gradient.g2At = p;
   states_.gradient.g2 = g2;
   return true;
@@ -556,6 +560,10 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   if (!states_.gradient.g2.empty() && states_.gradient.g2At == p) return states_.gradient.g2;
   // A stopped fit: a unit curvature, so that MIGRAD's step from the zero gradient is finite and zero.
   if (data()->IsFit() && StopRequested()) return std::vector<double>(p.size(), 1.0);
+  if (seed_) {  // the seed's bound needs the gradient of the same Jacobian
+    std::vector<double> grad;
+    if (GradientFromJacobian(p, grad)) return states_.gradient.g2;
+  }
   const auto t0 = std::chrono::steady_clock::now();
   std::vector<double> g2(p.size(), 0.0);
   vector_r r, jac;

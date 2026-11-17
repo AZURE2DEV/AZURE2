@@ -154,6 +154,43 @@ exit 1
 == tests/capture_ay_coupling/models/twolevel.azr
 extrapolation x1: ay(1->2)
 extrapolation x2: dsdo_cm(1->2)
+== tests/capture_cascade/models/ec_p.azr
+data ec_p_upos: dsdo_cm(1->2; upos L=2; Ic=0; delta=0)
+data ec_p_int: sigma(1->2)
+data ec_p_prim: dsdo_cm(1->2)
+data ec_p_iupos: sigma(1->2; upos L=2; Ic=0; delta=0)
+== tests/capture_cascade/models/ec_s.azr
+data ec_s_upos: dsdo_cm(1->2; upos L=1; Ic=0; delta=0)
+data ec_s_int: sigma(1->2)
+data ec_s_prim: dsdo_cm(1->2)
+data ec_s_iupos: sigma(1->2; upos L=1; Ic=0; delta=0)
+== tests/capture_cascade/models/ecres_both.azr
+data ecres_both_upos: dsdo_cm(1->2; upos L=2; Ic=0; delta=0)
+data ecres_both_int: sigma(1->2)
+data ecres_both_prim: dsdo_cm(1->2)
+data ecres_both_iupos: sigma(1->2; upos L=2; Ic=0; delta=0)
+== tests/capture_cascade/models/grad.azr
+data grad_upos: dsdo_cm(1->2; upos L=2; Ic=0; delta=0)
+== tests/capture_cascade/models/multipoles.azr
+data multipoles_upos: dsdo_cm(2->5; upos L=1; Ic=0.5; delta=0.35)
+data multipoles_int: sigma(2->5)
+data multipoles_prim: dsdo_cm(2->5)
+data multipoles_iupos: sigma(2->5; upos L=1; Ic=0.5; delta=0.35)
+== tests/capture_cascade/models/single_e1.azr
+data single_e1_upos: dsdo_cm(2->5; upos L=2; Ic=0.5; delta=0)
+data single_e1_int: sigma(2->5)
+data single_e1_prim: dsdo_cm(2->5)
+data single_e1_iupos: sigma(2->5; upos L=2; Ic=0.5; delta=0)
+== tests/capture_cascade/models/twoj_minus.azr
+data twoj_minus_upos: dsdo_cm(2->5; upos L=2; Ic=0.5; delta=0)
+data twoj_minus_int: sigma(2->5)
+data twoj_minus_prim: dsdo_cm(2->5)
+data twoj_minus_iupos: sigma(2->5; upos L=2; Ic=0.5; delta=0)
+== tests/capture_cascade/models/twoj_plus.azr
+data twoj_plus_upos: dsdo_cm(2->5; upos L=2; Ic=0.5; delta=0)
+data twoj_plus_int: sigma(2->5)
+data twoj_plus_prim: dsdo_cm(2->5)
+data twoj_plus_iupos: sigma(2->5; upos L=2; Ic=0.5; delta=0)
 == tests/channel_space/channel_space.azr
 data elastic_90: dsdo_cm(1->1)
 data elastic_150: dsdo_cm(1->1)
@@ -270,6 +307,86 @@ data ecm_p14n: sigma(1->3)
 data ecm_p14n: sigma(1->3)
 == tests/ec_threshold/models/ng.azr
 data ng: sigma(1->3)
+== tests/ec_unbound_broad/models/a_none.azr
+extrapolation x1: dsdo_cm(1->3)
+extrapolation x2: dsdo_cm(1->3)
+extrapolation x3: dsdo_cm(1->3)
+extrapolation x4: dsdo_cm(1->3)
+== tests/ec_unbound_broad/models/a_w1.azr
+extrapolation x1: dsdo_cm(1->3)
+extrapolation x2: dsdo_cm(1->3)
+extrapolation x3: dsdo_cm(1->3)
+extrapolation x4: dsdo_cm(1->3)
+== tests/ec_unbound_broad/models/a_w3.azr
+extrapolation x1: dsdo_cm(1->3)
+extrapolation x2: dsdo_cm(1->3)
+extrapolation x3: dsdo_cm(1->3)
+extrapolation x4: dsdo_cm(1->3)
+== tests/ec_unbound_broad/models/b_none.azr
+extrapolation x1: dsdo_cm(1->3)
+extrapolation x2: dsdo_cm(1->3)
+== tests/ec_unbound_broad/models/b_w20.azr
+extrapolation x1: dsdo_cm(1->3)
+extrapolation x2: dsdo_cm(1->3)
+== tests/ec_unbound_broad/models/d_ecnone.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/d_ecw1.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/d_none.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/d_w1.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/g_none.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/g_off.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/g_w1.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_broad/models/h_file.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+== tests/ec_unbound_final/models/c10b.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c10u.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c20b.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c20u.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c40b.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/c40u.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/full.azr
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/grad.azr
+data pseudo: sigma(1->3)
+extrapolation x1: sigma(1->3)
+== tests/ec_unbound_final/models/pure_b.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+extrapolation x4: sigma(1->3)
+== tests/ec_unbound_final/models/pure_u.azr
+extrapolation x1: sigma(1->3)
+extrapolation x2: sigma(1->3)
+extrapolation x3: sigma(1->3)
+extrapolation x4: sigma(1->3)
 == tests/electron_screening/bare.azr
 data: set-up failed
 exit 1
@@ -288,6 +405,18 @@ data xs_40_preshifted: dsdo_cm(1->1)
 data ay_60: ay(1->1)
 data ay_60_preshifted: ay(1->1)
 data xs_90: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/A_orig.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/A_swap.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/B_mid.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/B_orig.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
 == tests/gamma_decay/models/partial.azr
 data g0: sigma(1->2)
 data g6793: sigma(1->3)
@@ -352,6 +481,72 @@ data xs_90: dsdo_cm(1->1)
 data xs_140: dsdo_cm(1->1)
 data ay_60: ay(1->1)
 data ay_120: ay(1->1)
+== tests/isospin_levels/models/bad_T.azr
+project: <levels> cannot be set up
+exit 1
+== tests/isospin_levels/models/bad_mix.azr
+project: <levels> cannot be set up
+exit 1
+== tests/isospin_levels/models/bad_radius.azr
+project: <levels> cannot be set up
+exit 1
+== tests/isospin_levels/models/bad_undeclared.azr
+project: <levels> cannot be set up
+exit 1
+== tests/isospin_levels/models/ecA.azr
+extrapolation x1: sigma(1->2)
+== tests/isospin_levels/models/ecA_iso.azr
+extrapolation x1: sigma(1->2)
+== tests/isospin_levels/models/ecM.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(3->4)
+== tests/isospin_levels/models/ecM_exc1.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(3->4)
+== tests/isospin_levels/models/ecM_exc2.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(3->4)
+== tests/isospin_levels/models/ecM_tied.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(3->4)
+== tests/isospin_levels/models/iso.azr
+extrapolation x1: dsdo_cm(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sigma(3->4)
+extrapolation x4: sigma(5->3)
+extrapolation x5: sigma(5->4)
+== tests/isospin_levels/models/iso_fit.azr
+data: set-up failed
+extrapolation x1: dsdo_cm(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sigma(3->4)
+extrapolation x4: sigma(5->3)
+extrapolation x5: sigma(5->4)
+exit 1
+== tests/isospin_levels/models/iso_free.azr
+data: set-up failed
+extrapolation x1: dsdo_cm(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sigma(3->4)
+extrapolation x4: sigma(5->3)
+extrapolation x5: sigma(5->4)
+exit 1
+== tests/isospin_levels/models/iso_mix.azr
+extrapolation x1: dsdo_cm(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sigma(3->4)
+extrapolation x4: sigma(5->3)
+extrapolation x5: sigma(5->4)
+== tests/isospin_levels/models/iso_soft.azr
+data: set-up failed
+extrapolation x1: dsdo_cm(1->1)
+extrapolation x2: sigma(2->2)
+extrapolation x3: sigma(3->4)
+extrapolation x4: sigma(5->3)
+extrapolation x5: sigma(5->4)
+exit 1
+== tests/isospin_levels/models/standalone_4H.azr
+extrapolation x1: sigma(2->2)
 == tests/lab_frame_fold/models/lab_fold.azr
 data folded: dsdo_cm(1->2)
 data fine: dsdo_cm(1->2)
@@ -878,6 +1073,63 @@ data thick_table_none_none_function_twin: sigma(1->2)
 data thick_table_none_spread_offset_twin: sigma(1->2)
 data thick_table_bohr_none_sqrt_twin: sigma(1->2)
 data thick_table_bohr_spread_function_twin: sigma(1->2)
+== tests/spin_observables_dd/spin_observables_dd.azr
+data by: spin(1->1; op=b:y)
+data ty: spin(1->1; op=t:y)
+data biT11: spin(1->1; op=b:iT11)
+data bT20: spin(1->1; op=b:T20)
+data bT21: spin(1->1; op=b:T21)
+data bT22: spin(1->1; op=b:T22)
+data tT20: spin(1->1; op=t:T20)
+data tT21: spin(1->1; op=t:T21)
+data tT22: spin(1->1; op=t:T22)
+data byy: spin(1->1; op=b:yy)
+data bxx: spin(1->1; op=b:xx)
+data bzz: spin(1->1; op=b:zz)
+data bxz: spin(1->1; op=b:xz)
+data by_x_ty: spin(1->1; op=b:y*t:y)
+data bx_x_tx: spin(1->1; op=b:x*t:x)
+data bz_x_tz: spin(1->1; op=b:z*t:z)
+data byy_x_tyy: spin(1->1; op=b:yy*t:yy)
+data e1y: spin(1->1; op=e1:y)
+data by_to_e1y: spin(1->1; op=b:y>e1:y)
+== tests/spin_observables_p3He/spin_observables_p3He.azr
+data by: spin(1->1; op=b:y)
+data ty: spin(1->1; op=t:y)
+data by_x_ty: spin(1->1; op=b:y*t:y)
+data bx_x_tx: spin(1->1; op=b:x*t:x)
+data bz_x_tz: spin(1->1; op=b:z*t:z)
+data bx_x_tz: spin(1->1; op=b:x*t:z)
+data bz_x_tx: spin(1->1; op=b:z*t:x)
+data bx_x_ty: spin(1->1; op=b:x*t:y)
+data e1y: spin(1->1; op=e1:y)
+data e2y: spin(1->1; op=e2:y)
+data by_to_e1y: spin(1->1; op=b:y>e1:y)
+data ty_to_e2y: spin(1->1; op=t:y>e2:y)
+data by_to_e2y: spin(1->1; op=b:y>e2:y)
+data biT11: spin(1->1; op=b:iT11)
+data tiT11: spin(1->1; op=t:iT11)
+== tests/spin_observables_reaction/spin_observables_reaction.azr
+data grid1: dsdo_cm(1->2)
+data grid1_2: spin(1->2; op=b:y)
+data grid1_3: spin(1->2; op=t:y)
+data grid1_4: spin(1->2; op=e1:y)
+data grid1_5: spin(1->2; op=e2:y)
+data grid1_6: spin(1->2; op=b:y>e1:y)
+data grid1_7: spin(1->2; op=b:y>e2:y)
+data grid1_8: spin(1->2; op=t:y>e1:y)
+data grid1_9: spin(1->2; op=t:y>e2:y)
+data grid1_10: spin(1->2; op=b:y*t:y)
+data grid2: dsdo_cm(2->1)
+data grid2_2: spin(2->1; op=b:y)
+data grid2_3: spin(2->1; op=t:y)
+data grid2_4: spin(2->1; op=e1:y)
+data grid2_5: spin(2->1; op=e2:y)
+data grid2_6: spin(2->1; op=b:y>e1:y)
+data grid2_7: spin(2->1; op=b:y>e2:y)
+data grid2_8: spin(2->1; op=t:y>e1:y)
+data grid2_9: spin(2->1; op=t:y>e2:y)
+data grid2_10: spin(2->1; op=b:y*t:y)
 == tests/spin_orbit_potential/models/capture.azr
 data skowronski_luna_hpge: sigma(1->2)
 == tests/spin_orbit_potential/models/phase.azr
@@ -940,6 +1192,15 @@ extrapolation x1: sum(sigma(1->2))
 data: set-up failed
 extrapolation x1: sum(sigma(1->2))
 exit 1
+== tests/two_nuclei_ec/models/A.azr
+extrapolation x1: sigma(1->2)
+== tests/two_nuclei_ec/models/B.azr
+extrapolation x1: sigma(1->2)
+== tests/two_nuclei_ec/models/M.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(3->4)
+== tests/udr_low_energy/model.azr
+data koehler1991: sigma(1->2)
 == tests/units_scales/models/yield_story.azr
 data Y_curve: 113595465155.1859*sigma(1->2)
 extrapolation Y_thick: sigma(1->2)

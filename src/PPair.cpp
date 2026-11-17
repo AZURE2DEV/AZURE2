@@ -188,7 +188,7 @@ double PPair::GetSepE() const {
  * Returns the channel radius of the particle pair.
  */
 
-double PPair::GetChRad() const {
+double PPair::GetPairRadius() const {
   return pair_ch_rad_;
 }
 

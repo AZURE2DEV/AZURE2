@@ -234,3 +234,50 @@ For every non-empty set of switch rows, in every order, each switch given once a
 earliest of the set in `Fitters()`. The test computes that answer itself from the table's order, not through
 `ChooseFitter`. Also: the THM choice under an earlier switch and alone, `Reset`, and an unknown switch, which returns
 false and leaves the choice alone. The program's eight fits of `verify_branch.sh` (five fitters) end where they ended.
+
+## 6. The seed of MIGRAD (`include/MigradSeed.h`, `src/MigradSeed.cpp`)
+
+Ported from `dev` (its `AZURECalc::BoundSeedCurvature` and the watch in `AZURECalc::operator()`), written here as
+one class owned by the fitter.
+
+**What was wrong.** MIGRAD starts from the inverse Hessian diag(1/G2) in Minuit2's internal coordinates and takes
+the step -g/G2. With the Gauss-Newton G2 of the residual Jacobian that step has no bound in two cases: a parameter
+the data hardly constrain (G2 near zero), and a limited parameter near its limit, where Minuit2 forms the internal
+G2 as (dx/du)² G2 and leaves out g d²x/du². A ¹²C+α fit with 552 free parameters went from χ² 1.2e5 to 4.4e6 at
+the unit step (on `dev`, 2026-11-15). When the line search that follows (at most about 15 evaluations) finds no
+improvement, Minuit2 starts a numerical HESSE of n(n-1)/2 evaluations with no gradient call; the log then shows a
+constant χ² for hours.
+
+**The bound.** `MigradSeed::BoundCurvature` raises G2, never lowers it. With a = (dx/du)² and d2 = d²x/du² of
+Minuit2's transformation, the internal curvature of a free parameter with gradient g and initial step e is
+
+    max( a G2 + max(0, g d2),  a |g| / (10 e),  |g| sqrt(a) / 0.5  [two limits only] )
+
+and the value handed to Minuit2 is that over a. So the term of the limit transformation is included where it is
+positive, no parameter moves by more than 10 of its initial steps in the unit step, and a parameter with two
+limits moves by at most 0.5 in its internal angle. Every correction is proportional to g: at a minimum nothing
+changes, and the line search can lengthen a step that was cut. The objective calls it where it stores the G2 of a
+residual Jacobian (`AZURECalc::GradientFromJacobian`), through the pointer `AZURECalc::SeedWith` sets.
+
+**The watch.** The same object is the fitter's observer in front of `FitEvaluations`' own, until the second
+gradient call. An evaluation inside a parallel region of the caller, or the 40th evaluation in a row without a
+gradient call, is Minuit2's HESSE. If no evaluation of the line search was below the value at the seed point, and
+the seed's estimated distance to the minimum is above 1e-3 of the error definition (a start that is not already a
+minimum), the seed sets its own stop request (`EvaluationObserver::stop`): every further evaluation returns at
+once, MIGRAD returns, and `MigradPass` runs MIGRAD once more with Minuit2's numerical seed (`AZURECalc::DisableG2`).
+An exception cannot be used: Minuit2's numerical gradient runs in an OpenMP region. The caller's stop request is
+forwarded and is not a stall. A HESSE that is recognised is announced in the log with its number of evaluations.
+
+**No switch.** `dev` has `AZURE_SEED_BOUND=0` to compare with the unbounded seed. It is not ported: a switch that
+moves a number needs an option of the program, and the comparison is a developer's, made once (below).
+
+**Numbers** (on `dev`, the same engine code): ¹²C+α, 552 free parameters, 372 function calls against 480, the same
+minimum, no evaluation above 1.3e5 (unbounded: 1.1e7, 4.1e10, 2.5e6 on the way). `tests/13N`, 14 free parameters:
+89 calls against 70 here, total χ² 28100.17227 against 28100.17230; 4 of 14 first steps bounded.
+
+**Tests.** `tests/reference/migrad_seed_test.cpp`: the bound against hand-computed values (no curvature, a
+well-conditioned parameter, two limits with the transformation term, one limit, a fixed parameter, a zero gradient)
+and the watch as a state machine (a failed line search seen through a parallel evaluation and through the run
+length, an improvement, a start at a minimum, the caller's stop). The restart inside a real fit is not tested: no
+project of `tests/` fails its first line search, and `dev`'s test did it with an environment switch.
+

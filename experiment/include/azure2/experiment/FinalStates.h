@@ -41,34 +41,38 @@ struct CaptureRequest {
 };
 
 /*!
- * A capture into a final state that is not bound where the engine takes it as bound (E_FINAL_STATE_UNBOUND):
+ * An external-capture final state the engine cannot compute as unbound (E_FINAL_STATE_UNBOUND).
  *
- *  - Bound: the photon pair has external capture and its final state (a level of <levels>) lies at or above the
- *    threshold of a particle pair with a channel in the final state's J^pi group.  The N_f integral, the
- *    ANC-to-amplitude factor and the radial integral take |E_f - S| of that pair as a binding energy
- *    (src/NFIntegral.cpp, src/ExternalCaptureFinalStates.cpp, src/ECIntegral.cpp).
- *  - Entrance: the final state lies above the threshold of the entrance pair of a capture asked into it, internal or
- *    external.  Between the two energies the photon energy E_gamma = E_x - E_f is negative and E_gamma^(L+1/2) is NaN
- *    (the photon channel's penetrability, src/ChannelTables.cpp; the external amplitude, src/UnitExternalCapture.cpp).
+ * A final state above the threshold of a particle pair with a channel in its J^pi group is unbound in that channel:
+ * the engine treats it as a narrow resonance, its exterior the outgoing wave O_l(k_f r)/O_l(k_f a) at
+ * E_f - threshold (src/ECIntegral.cpp, IntegrateUnbound; the N_f integral continued as (hbar^2/2 mu a) dS/dE,
+ * src/ExternalCaptureFinalStates.cpp).  That wave cannot be evaluated at the threshold itself, nor just above the
+ * threshold of a charged pair, where its Sommerfeld parameter eta exceeds kMaxOutgoingWaveEta (within about a keV for
+ * light nuclei): such a final state is refused.  Everything else is computed: an unbound final state farther above
+ * the threshold; a capture whose entrance pair opens below the final state (no photon below E_f: the pathway is
+ * closed and its cross section 0 there); internal capture into any final state.
  *
  * Energies are E_x of the compound nucleus (MeV): a pair's threshold is S + e1 + e2 (PairInfo::threshold); the final
- * state's energy is the larger of the photon pair's threshold and its level's energy (they agree within 1 keV).
+ * state's energy is the larger of the photon pair's threshold and its level's energy (they agree within 1 keV).  eta
+ * is the non-relativistic one (the engine's check at set-up, with the run's kinematics, is the same to 1e-3).
  */
 struct UnboundFinalState {
-  enum class Kind { Bound, Entrance };
-  Kind kind = Kind::Bound;
   int photonPairKey = 0;
-  int particlePairKey = 0;   ///< the pair whose threshold lies at or below the final state (the lowest one)
+  int particlePairKey = 0;   ///< the pair too close above whose threshold the final state lies (the largest eta)
   double finalEnergy = 0.0;  ///< MeV, E_x of the final state
   double threshold = 0.0;    ///< MeV, E_x at which the particle pair opens
-  int level = -1;            ///< Bound: the final state's index into LevelTables::levels
-  /// CaptureRequest::request of the capture asked (Bound: the first one into the photon pair; -1 when none is)
+  double eta = 0.0;          ///< the Sommerfeld parameter of the pair at finalEnergy - threshold (0 at the threshold)
+  int level = -1;            ///< the final state's index into LevelTables::levels
+  /// CaptureRequest::request of the first capture asked into the photon pair; -1 when none is
   int request = -1;
 };
 
-/// The captures of `tables` into final states above a particle threshold that the engine would compute as bound or
-/// at a negative photon energy: one Bound finding per photon pair with external capture (the lowest threshold), then
-/// one Entrance finding per request and photon pair that has no Bound finding.  Empty: none.
+/// Above this Sommerfeld parameter the outgoing wave of an unbound final state is not evaluated (the engine's
+/// open-channel limit, ECIntegral::kMaxOpenChannelEta).
+constexpr double kMaxOutgoingWaveEta = 100.0;
+
+/// The final states of `tables` with external capture that lie at a particle threshold, or too close above the
+/// threshold of a charged pair, with a channel in their J^pi group: one finding per photon pair.  Empty: none.
 std::vector<UnboundFinalState> UnboundFinalStates(const LevelTables &tables, const std::vector<CaptureRequest> &requests);
 
 }  // namespace experiment

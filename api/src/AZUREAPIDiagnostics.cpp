@@ -83,7 +83,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
           block.push_back(static_cast<double>(g.mult));
           block.push_back(g.rad_type == 'E' ? 1.0 : 0.0);
 
-          ECIntegral theECIntegral(finalPair, configure());
+          ECIntegral theECIntegral(finalPair, configure(), finalChannel->GetRadius());
           // The final state's capture energy, as the engine's integrals use it (ALevel::GetECEnergy, set by
           // CompoundSystem::SetUpECFinalBlocks): in the formal basis GetE() is the formal energy, not that one.
           double levelEnergy = ecLevel->GetECEnergy();

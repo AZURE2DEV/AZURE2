@@ -702,7 +702,7 @@ one keeps it), the model data against its levels, and the data files are
 opened **relative to the working directory** (as for an old project).  Any
 error refuses the project with the same diagnostics ``AZURE2 --validate``
 prints.  A section the engine does not read is refused too
-(``E_UNKNOWN_SECTION``: a newer AZURE2's ``<channelRadii>`` or ``<isospin>``,
+(``E_UNKNOWN_SECTION``: a newer AZURE2's section,
 a misspelt name, a section inside one that does not hold it), as are a
 ``<config>`` key it does not have and a line no reader reads (``E_UNREAD_LINE``):
 the run would otherwise go on as if they were absent.  ``AZURE2 --describe FILE``

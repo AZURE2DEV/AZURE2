@@ -28,7 +28,7 @@ struct ObservedLevel {
   /// static moment's factor; 0 for a beta channel.
   vector_r P;
   vector_r mu_u;  ///< reduced mass of a particle channel's pair, u (PPair::GetRedMass); 0 for photon and beta channels
-  vector_r a_fm;  ///< channel radius of a particle channel's pair, fm (PPair::GetChRad); 0 for photon and beta channels
+  vector_r a_fm;  ///< radius of a particle channel, fm (AChannel::GetRadius: the pair's unless a channel_radius record sets it); 0 for photon and beta channels
 };
 
 class ObservedLevelTable {

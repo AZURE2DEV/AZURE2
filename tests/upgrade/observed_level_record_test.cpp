@@ -4,7 +4,7 @@
 // CompoundSystem::ObservedOfFitValues at the project's values, every particle channel of every level:
 //  (a) P equals the second route a reader had before, ParticleChannelValues(pair, l, SpinOrbitTwoJ(J), E - S - e) at
 //      the record's E (the same function on the same arguments: identical, the largest difference is printed);
-//  (b) mu_u and a_fm are the pair's GetRedMass() and GetChRad();
+//  (b) mu_u and a_fm are the pair's GetRedMass() and the channel's GetRadius();
 //  (c) P is the factor W was formed with: W = s 2 gamma^2 P / N, N = 1 + sum_c gamma_c^2 dS_c/dE over the level's
 //      particle channels (Brune's and the formal basis, whose record holds Brune's values), 1 under Park; a record
 //      whose P was not the one W used fails here;
@@ -81,7 +81,7 @@ void CheckProject(const std::string &name, const std::string &azr, Basis basis, 
         if (c->GetRadType() != 'P') continue;
         const PPair *pair = cn.GetPair(c->GetPairNum());
         const double g = level.gamma[ch - 1];
-        N += ParticleChannelValues(*pair, c->GetL(), pair->SpinOrbitTwoJ(group->GetJ()), level.E - pair->GetSepE() - pair->GetExE()).dS_dE * (g * g);
+        N += ParticleChannelValues(*pair, c->GetL(), pair->SpinOrbitTwoJ(group->GetJ()), c->GetRadius(), level.E - pair->GetSepE() - pair->GetExE()).dS_dE * (g * g);
       }
       if (park) N = 1.0;
       for (int ch = 1; ch <= group->NumChannels(); ch++) {
@@ -93,12 +93,12 @@ void CheckProject(const std::string &name, const std::string &azr, Basis basis, 
         }
         const PPair *pair = cn.GetPair(c->GetPairNum());
         const double Ec = level.E - pair->GetSepE() - pair->GetExE();
-        const double P = ParticleChannelValues(*pair, c->GetL(), pair->SpinOrbitTwoJ(group->GetJ()), Ec).P;
+        const double P = ParticleChannelValues(*pair, c->GetL(), pair->SpinOrbitTwoJ(group->GetJ()), c->GetRadius(), Ec).P;
         n++;
         (Ec > 0.0 ? open : closed)++;
         if (level.P[ch - 1] == P) identical++;
         worstP = std::fmax(worstP, RelDiff(level.P[ch - 1], P));
-        pairOk = pairOk && level.mu_u[ch - 1] == pair->GetRedMass() && level.a_fm[ch - 1] == pair->GetChRad();
+        pairOk = pairOk && level.mu_u[ch - 1] == pair->GetRedMass() && level.a_fm[ch - 1] == c->GetRadius();
         const double g = level.gamma[ch - 1];
         const double W = (g < 0.0 ? -1.0 : 1.0) * 2.0 * g * g * level.P[ch - 1] / N;
         worstW = std::fmax(worstW, RelDiff(level.W[ch - 1], W));
@@ -110,7 +110,7 @@ void CheckProject(const std::string &name, const std::string &azr, Basis basis, 
                 "ParticleChannelValues at the record's E: %ld identical, largest relative difference %.2g",
                 name.c_str(), basisName, n, open, closed, identical, worstP);
   check(line, n > 0 && worstP <= 1e-15);
-  check(name + ", " + basisName + ": (b) mu_u and a_fm are the pair's GetRedMass() and GetChRad()", n > 0 && pairOk);
+  check(name + ", " + basisName + ": (b) mu_u and a_fm are the pair's GetRedMass() and the channel's GetRadius()", n > 0 && pairOk);
   std::snprintf(line, sizeof(line), "%s, %s: (c) W = s 2 gamma^2 P / N with the record's P, largest relative "
                 "difference %.2g (<= 1e-13)", name.c_str(), basisName, worstW);
   check(line, worstW <= 1e-13);

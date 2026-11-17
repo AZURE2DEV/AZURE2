@@ -28,6 +28,13 @@ struct ParamDesc {
   int apparatus = -1;  ///< 1-based apparatus parameter, Apparatus only, else -1
 };
 
+/// A derived entry of the full vector as a linear function of free entries: d(slot)/d(source) = coefficient (the
+/// members of an isospin level, IsospinTies.h of the engine, which names it IsospinTie).
+struct ParameterTie {
+  int slot = -1;
+  std::vector<std::pair<int, double>> sources;
+};
+
 /*!
  * \brief Bidirectional map between what a parameter belongs to and its place in the flat parameter vector.
  *
@@ -101,6 +108,12 @@ class ParamIndexMap {
   /// The amplitude of channel ch of level la of J-group j; `radiative`: the slot holds a number of a gamma_decay
   /// record (kind RadiativeDecay) instead of the amplitude itself.
   int AppendAmplitude(int jGroup, int level, int channel, bool radiative);
+  /// An isospin shift (of compound nucleus `nucleus`) or mix amplitude (of channel ch of level la of J-group j):
+  /// `kind` is IsospinShift or IsospinMix; after the level block, before the abundances.
+  int AppendIsospin(ParamKind kind, int jGroup, int level, int channel, int nucleus);
+  /// The derived entries of isospin levels as linear functions of free entries (empty without isospin records).
+  void SetIsospinTies(std::vector<ParameterTie> ties) { isospinTies_ = std::move(ties); }
+  const std::vector<ParameterTie> &IsospinTies() const { return isospinTies_; }
   /// The abundance with this 1-based ordinal, of nucleus `nucleus` in sample `sample`.
   int AppendAbundance(int ordinal, int sample, int nucleus);
   int AppendNorm(int segment);
@@ -132,6 +145,7 @@ class ParamIndexMap {
   std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
   std::vector<std::vector<std::vector<int>>> gammaFlat_; ///< [j-1][la-1][ch-1] -> full idx
   std::vector<ParamDesc> desc_;                          ///< per full index
+  std::vector<ParameterTie> isospinTies_;                ///< SetIsospinTies
   std::map<int, int> normIndex_;                         ///< segment -> full idx
   std::map<int, int> shiftIndex_;                        ///< segment -> full idx
   std::map<int, int> sqrtShiftIndex_;                    ///< segment -> full idx

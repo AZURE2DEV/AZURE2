@@ -499,7 +499,7 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
         const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
                                                   point->GetExpHardSpherePhase(jNum, chpNum)};
         const complex umatrix = azure2::physics::pathway_amplitude(point->GetSqrtPenetrability(jNum, chNum),
-                                                                   point->GetSqrtPenetrability(jNum, chpNum),
+                                                                   this->ExitSqrtPenetrability(point, jNum, chpNum),
                                                                    this->GetUBilinear(jNum, chNum, chpNum));
         if (isRMC)
           this->AddTMatrixElement(k, m, azure2::physics::rmc_t_matrix_element(umatrix), ir);
@@ -520,10 +520,10 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
           // Use cached amplitude for backward compatibility
           ecAmplitude = point->GetECAmplitude(k, m);
         }
-        complex tmatrix = azure2::physics::external_capture_element(
+        complex tmatrix = this->ExternalElementAt(k, m, azure2::physics::external_capture_element(
             state.ECGamma(theECMGroup.final_group, theECMGroup.final_level, theECMGroup.final_channel),
             state.SqrtNF(theECMGroup.final_group, theECMGroup.final_level),
-            finalLevel->GetECConversionFactor(theECMGroup.final_channel), ecAmplitude);
+            finalLevel->GetECConversionFactor(theECMGroup.final_channel), ecAmplitude));
         if (theECMGroup.channel_capture) {
           int internalChannel = theECMGroup.photon_channel;
           const azure2::InternalRow &chanMGroup = P.internal[theECMGroup.cc_row];

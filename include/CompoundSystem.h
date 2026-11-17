@@ -13,6 +13,7 @@
 #include "PathwayTable.h"
 #include "ModelData.h"
 #include "GammaDecayMap.h"
+#include "IsospinTies.h"
 #include "ObservedLevelTable.h"
 #include "LevelInputs.h"
 #include "LevelState.h"
@@ -74,6 +75,11 @@ class CompoundSystem {
   const ModelDataSet &GetModelData() const { return *modelData_; }
   /// The gamma_decay records (GammaDecayMap.h), read by Fill; empty without <gammaDecays>.
   const GammaDecaySet &GetGammaDecays() const { return *gammaDecays_; }
+  /// The isospin levels across compound nuclei (IsospinTies.h), read by Fill; inactive without <isospin> records.
+  const IsospinSet &GetIsospin() const { return *isospin_; }
+  /// The number of parameters the compound system writes into the vector (FillMnParams): the level block
+  /// (ParameterLayout), then the isospin parameters.  The data's parameters follow.
+  int NumParameters() const { return parameterLayout_->Size() + isospin_->NumParams(); }
   /// Does a pair with this key exist? Keys are what the input files write; the
   /// PPair vector position may differ, so use GetPairNumFromKey to convert.
   bool IsPairKey(int) const;
@@ -205,6 +211,8 @@ class CompoundSystem {
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);
+  /// The `channel_radius` records onto the channels they name (CompoundSystemBuild.cpp); -1 after an error.
+  int ApplyChannelRadii(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
   int ParseExternalCapture(const Config &, std::map<int, int> &, const std::vector<azure2::io::LevelRow> &rows);
@@ -266,6 +274,7 @@ class CompoundSystem {
   /// Set-up state.
   std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   std::shared_ptr<const GammaDecaySet> gammaDecays_ = std::make_shared<GammaDecaySet>();
+  std::shared_ptr<const IsospinSet> isospin_ = std::make_shared<IsospinSet>();
   /// The level block of the parameter vector (ParameterLayout); built by Fill.
   std::shared_ptr<const LevelParameterLayout> parameterLayout_ = std::make_shared<LevelParameterLayout>();
 };

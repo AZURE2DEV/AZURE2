@@ -203,7 +203,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
         for (int c = 0; c < nCols; c++) {
           const int f = pmap.PackedToFull(c);
           const ParamDesc &desc = pmap.Desc(f);
-          if (IsLevelSlot(desc.kind))
+          if (IsRMatrixParameter(desc.kind))
             row[c] = fullRow[f];
           else if (desc.kind == ParamKind::ThmCoherent && desc.channel >= 1 && desc.channel <= nCoherent)
             row[c] = coherentBar[desc.channel - 1];
@@ -239,7 +239,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
           rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);
       continue;
     }
-    if (!IsLevelSlot(kind)) continue;
+    if (!IsRMatrixParameter(kind)) continue;
     const double x0 = full[f];
     const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
     vector_r pp = full;

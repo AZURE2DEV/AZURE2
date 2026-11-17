@@ -129,6 +129,7 @@ struct Construct {
   static constexpr const char *kDataCode = "data isDiff";
   static constexpr const char *kTestCode = "test isDiff";
   static constexpr const char *kThm = "isDiff + 10 (THM)";
+  static constexpr const char *kSpinObservable = "isDiff 10 with an operator token (spin observable)";
   static constexpr const char *kSpin = "spin s";
   static constexpr const char *kNorm = "norm, varyNorm, normError";
   static constexpr const char *kShift = "shift, shiftError, vary";
@@ -166,6 +167,8 @@ struct Construct {
   static constexpr const char *kMcmc = "<mcmc> priors";
   static constexpr const char *kPriorCovariance = "priorCovariance";
   static constexpr const char *kPotential = "<potential>";
+  static constexpr const char *kChannelRadii = "<channelRadii>";
+  static constexpr const char *kIsospin = "<isospin>";
   static constexpr const char *kAdaptiveGrid = "useAdaptiveGrid";
 };
 
@@ -327,6 +330,8 @@ class Builder {
   void RewriteSettings();
   void RewriteConfigAndPriors();
   void BuildPotentials();
+  void BuildChannelRadii();
+  void BuildIsospin();
 
   /// The reaction field of a line (base pair keys, components, operation, frame of fixed angles).
   /// `pairKeys` receives the entrance_pair and exit_pair fields the record needs: of the single reaction whose label

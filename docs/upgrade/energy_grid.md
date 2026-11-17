@@ -1354,3 +1354,48 @@ Corrections for the briefs:
   active nucleus the plateau is (λ_r²/2) ωγ (m_a + m_A)/(m_A ε_r); the test derives its closed form from the
   Breit–Wigner integral itself rather than quoting it.
 - Branches 1, 4 and 3 are running (2026-11-11). The order of the others as in §8.
+
+## 13. Time-of-flight windows at low energy (dev's `a68474f0`, written here 2026-11-15)
+
+**The defect.** A UDR kernel (SAMMY's user-defined resolution: a distribution of time-of-flight delays) has a window
+that is a fixed fraction of the point's energy. Five absolute numbers written for charged particles broke it for a
+neutron point below a few keV (dev's `tests/udr_low_energy`, Koehler & Graff 17O(n,α), 25 meV to 1 MeV: zeros at 17,
+7 and 3 of 67 points for the three kernels of the test, and a bias of half the channel's relative width on 1/v):
+
+| where | was | is |
+|---|---|---|
+| `experiment/src/KernelUdr.cpp`, `UdrSupport` | low edge ≥ 0.001 MeV | ≥ 1e-6 of the point's energy |
+| `experiment/src/KernelDoppler.cpp`, `DopplerSupport` | the same floor | under a UDR kernel (`SupportPoint::udr`) 1e-6 of the point's energy; 0.001 MeV otherwise, as on dev |
+| `src/TargetEffect.cpp`, `BuildUdrKernel` | the support ended at the last significant node of the table | includes the zero-valued node on each side (the kernel is piecewise linear; a one-node spike had `tauMin == tauMax`) |
+| `UdrKinematics` (`UdrKernel.h`) | `1 - 1/γ²` and `γ - 1` by subtraction (six digits lost at thermal energies: 1.5 ns of a 3 ms flight time) | `β = sqrt(x (2 + x)) / (1 + x)`, `γ - 1 = β² / (s (1 + s))` |
+| `KernelUdr.cpp`, `FoldUdr` | a one-node window returned 0 | returns the node's value |
+| the mesh, `MeshZeroWidth()` = 1e-6 MeV | every window narrower than 1 eV was one node at its high edge | below |
+
+**The mesh.** `MeshZeroWidth()` is shared by every kernel and is the thin limit of a target layer
+(`KernelTarget.cpp`); it is **not changed**. A support carries its own threshold instead, `MeshSupport::zeroWidth`,
+which is `MeshZeroWidth()` unless the point is folded with a time-of-flight kernel (`Unit::SubGridSpec::timeOfFlight`,
+set in `TargetSetup.cpp`); then it is `MeshTimeOfFlightZeroWidth(high)`, 4096 spacings of the doubles at the
+window's high edge in E_x. So no support of any other kernel moves, by construction, and the table of all projects
+before and after that `dev_features.md` section 4 asked for is the gate's: only projects with a `udr` detector can
+differ.
+
+Why spacings of E_x and not a fraction of the point's energy: the mesh's nodes are doubles in E_x. At a thermal
+point of 17O + n, E_x = 8.044 MeV and one spacing is 1.8e-15 MeV, 7e-8 of 25 meV. A 0.2 ns kernel there is three
+spacings wide and cannot carry a ladder; it stays one node, within 3e-4 of the point's energy at most (4096
+spacings), and `FoldUdr` returns that node's value. A ±7.6 % channel at 0.1 eV is 1.7e7 spacings and gets its
+ladder. `MeshLadderStep` floors the step at one spacing (a power of two, so the ladder's nodes n·L stay exact and
+distinct); a support of `MeshZeroWidth()` or more is at least nine decades above that floor, so it is untouched
+(unit test `mesh_planner`, case "time of flight").
+
+**Not done, said so:** the one node of a window below 4096 spacings is its high edge, not the point's energy
+(`ShiftedFold.cpp` and the planner treat the exact node that way for every kernel); the error is at most the
+window's relative width. A project with a `udr` detector and a fitted energy shift at such a point is not tested.
+
+**Measured** (CRC, GCC 11.5; `tests/udr_low_energy`, the ratio folded / bare):
+
+| kernel | region | worst \|ratio − 1\| here | on dev (its commit message) | bound of the test |
+|---|---|---|---|---|
+| 0.2 ns delta | all 67 points | 8.6e-6 | 1e-5 | 1e-4 |
+| 7.55 bins per decade | E ≤ 10 eV (1/v) | 6.5e-5 | 6e-5 | 3e-3 |
+| 64 ns channel, 125 ns burst | E ≤ 10 keV | 5.0e-5 | 5e-5 | 1e-3 |
+

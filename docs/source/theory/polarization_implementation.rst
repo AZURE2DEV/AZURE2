@@ -559,12 +559,14 @@ central differences to about :math:`10^{-6}` of the column scale.
 What is not done
 ----------------
 
-* **Tensor observables** need a spin-1 projectile and rank-2 operators. For
-  particle channels the amplitude matrix carries all channel spins and
-  projections already, so the missing part is the observable side; for capture,
-  Seyler and Weller's Eqs. (22)–(25) give the :math:`c_k`, :math:`d_k` and
-  :math:`e_k` coefficients in the same notation as the :math:`b_k` already
-  coded.
+* **Tensor observables in capture.** For particle channels they are done
+  (the quantity ``spin_observable``, below). For capture, Seyler and Weller's
+  Eqs. (22)–(25) give the :math:`c_k`, :math:`d_k` and :math:`e_k`
+  coefficients in the same notation as the :math:`b_k` already coded.
+* **In-plane outgoing components** (:math:`P_{x'}`, :math:`K_x^{x'}`,
+  :math:`K_z^{z'}` ...). They need the exit frame (:math:`z'` along
+  :math:`\mathbf k_\text{out}`) pinned; only normal (*y*) exit operators are
+  meaningful in a ``spin_observable`` today.
 * **Attenuation coefficients for the capture** :math:`A_y`. When a segment
   carries target effects, ``Unit::CalcLegendreP`` folds the geometric
   attenuation :math:`Q_k` into :math:`P_k`, but there is no :math:`Q_k^1` for
@@ -578,3 +580,96 @@ What is not done
   but never wrong.
 * **Photon polarization** (linear or circular) for capture exits. The capture
   analyzing power is the only capture polarization observable implemented.
+
+
+General spin observables (the quantity ``spin_observable``)
+-----------------------------------------------------------
+
+A data set or extrapolation of quantity ``spin_observable`` names its
+observable with the field ``operator``, one token:
+
+.. code-block:: text
+
+   token := side [ '>' side ]
+   side  := term { '*' term }
+   term  := who ':' op
+   who   := b | t | e1 | e2          beam, target, exit particle 1 (light) or 2 (heavy)
+   op    := x | y | z                vector: S_i / j (Pauli matrices for spin 1/2, Ohlsen's S_i for spin 1)
+          | xx | yy | zz | xy | xz | yz    Cartesian tensor, spin 1 only: (3/2)(S_i S_j + S_j S_i) - 2 delta_ij
+          | T<k><q> | iT<k><q>       spherical tensor tau_kq (Madison normalization), q >= 0; "i" multiplies by i
+
+Entrance terms (``b``, ``t``) form the operator on the incident spins, exit
+terms (``e1``, ``e2``) the operator on the outgoing ones; with ``>`` the left
+side is the entrance and the right side the exit (a polarization transfer).
+``b:y`` is :math:`A_y`, ``t:y`` the target analysing power, ``b:y*t:y``
+:math:`C_{yy}`, ``b:yy`` and ``b:T20`` tensor analysing powers of a spin-1
+beam, ``e1:y`` an outgoing polarization, ``b:y>e1:y`` a transfer coefficient.
+Literature names are ambiguous between the spin correlations of spin-1/2
+particles and the tensor analysing powers of spin 1 (:math:`A_{yy}` is
+either), so a project carries only this grammar. The frame is the Madison
+one (:math:`z` along :math:`\mathbf k_\text{in}`, :math:`y` along
+:math:`\mathbf k_\text{in}\times\mathbf k_\text{out}`); the exit operators
+use the same :math:`y`.
+
+The amplitude matrix of the previous sections holds :math:`M(s'\nu';s\nu)` in
+the channel-spin basis. Decomposing both indices with the Lane–Thomas
+coefficients the :math:`A_y` code already uses (``ParticleCG``, particle 1
+first),
+
+.. math::
+
+   F(m_3 m_4; m_1 m_2) = \sum_{s s'} \langle j_1 m_1 j_2 m_2|s\nu\rangle
+                        \langle j_3 m_3 j_4 m_4|s'\nu'\rangle M(s'\nu';s\nu),
+
+gives the amplitude in the product basis of the particles' projections, and
+every observable is one trace ([Ohlsen1972]_):
+
+.. math::
+
+   O = \frac{\mathrm{Re}\,\big(c\,\mathrm{Tr}(F A F^\dagger B)\big)}{\mathrm{Tr}(F F^\dagger)},
+
+with :math:`A` a product of beam and target operators, :math:`B` of exit
+operators (unity for analysing powers and correlations) and :math:`c = i` for
+:math:`iT_{kq}`. The token, its matrices and the trace are angular-momentum
+algebra and live in ``physics/`` (``azure2/physics/SpinObservable.h``, checked
+without a project by ``physics_spin_observable``);
+``Polarization::AmplitudeMatrix::SpinObservableValue`` builds :math:`F` from
+the amplitudes. A site's record of an analysing power holds the amplitudes'
+coefficients and no operator (``SiteObservable.h``), so the operator is the
+reader's: its angular row carries it, and ``analyzing_power`` keeps its own
+code path with every result as it was.
+
+**Adjoint.** With :math:`N=\mathrm{Tr}(FAF^\dagger B)` and
+:math:`D=\mathrm{Tr}(FF^\dagger)`, :math:`\partial N/\partial F^* = BFA`,
+:math:`\partial N^*/\partial F^* = B^\dagger F A^\dagger` and
+:math:`\partial D/\partial F^* = F`, so
+
+.. math::
+
+   \frac{\partial O}{\partial F^*} = \frac{\tfrac12\,(c\,BFA + c^*B^\dagger F A^\dagger) - O\,F}{D}.
+
+:math:`F` is linear in :math:`M` with real coefficients and :math:`M` linear in
+:math:`T`, so ``SpinObservableBar`` maps this back to the amplitude slots and
+``PathwayAdjoint`` finishes the contraction. ``AZURE_GRAD_CHECK`` agrees with
+central differences to :math:`10^{-7}` of the largest component on the test
+projects.
+
+**What is refused.** A photon or beta pair on either side (for capture only
+:math:`A_y`, ``analyzing_power``, is computed); an operator on a particle of
+spin 0; a Cartesian tensor on a spin other than 1; a rank :math:`k > 2j`; a
+lab angle.
+
+**Validation** (``tests/spin_observables_p3He``, ``_dd``, ``_reaction``):
+
+* an independent code (mpmath Coulomb functions, sympy Clebsch–Gordan, its own
+  S-matrix and operators) on p+\ :sup:`3`\ He with :math:`l`- and
+  :math:`s`-mixing (15 observables) and identical-boson d+d (19, symmetrized,
+  with tensor powers): agreement to :math:`10^{-6}`–:math:`10^{-7}`;
+* time reversal in a reaction (:sup:`3`\ H(p,n)\ :sup:`3`\ He against
+  :sup:`3`\ He(n,p)\ :sup:`3`\ H at the same excitation energy): beam
+  analysing power = outgoing polarization of the inverse, target analysing
+  power = the other outgoing polarization, and the transfer coefficients, to
+  :math:`10^{-9}`;
+* the operators against the Madison closed forms in :math:`S_x, S_y, S_z`,
+  :math:`A_{xx}+A_{yy}+A_{zz}=0`, and the value for spin 1/2 on spin 0
+  (:math:`M = g + h\sigma_y`) in ``physics/tests/spin_observable_test.cpp``.

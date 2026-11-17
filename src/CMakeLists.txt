@@ -5,8 +5,8 @@ AMatrixFunc.cpp AMatrixFuncTBar.cpp AMatrixFuncAdjoint.cpp  DoubleFactorial.cpp 
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp AZURECalcGradient.cpp AZURECalcJacobian.cpp AZURECalcNuisance.cpp AZURECalcPool.cpp AZURECalcOutput.cpp AZURECalcDiagnostics.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
-Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
-WorkingCopy.cpp WorkingCopyFill.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
+Fitters.cpp FitEvaluations.cpp FitMigrad.cpp MigradSeed.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
+WorkingCopy.cpp WorkingCopyFill.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp IsospinTies.cpp GradFreeMask.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CompoundSystemBuild.cpp AbundanceSamples.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
@@ -37,9 +37,9 @@ UnitExternalCapture.cpp
 SegmentParameters.cpp
 ShiftFrames.cpp
 ShiftedFold.cpp
-THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
+THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp SpinObservableChecks.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
-SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LevelReport.cpp CompoundSystemChecks.cpp
+SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LineWindow.cpp UposChecks.cpp LevelReport.cpp CompoundSystemChecks.cpp
 LevelInputMessages.cpp ProjectSetup.cpp
 RunRequest.cpp)
 

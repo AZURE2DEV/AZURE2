@@ -66,8 +66,8 @@ void CheckFinalStates(Context &c, const LevelTables &levels) {
 }
 
 
-// A capture into a final state above a particle threshold (FinalStates.h, UnboundFinalStates): refused in every
-// reading (the run, --validate, pyazr), since the engine computes it as bound or at a negative photon energy.
+// An external-capture final state at a particle threshold or too close above a charged one (FinalStates.h,
+// UnboundFinalStates): refused in every reading (the run, --validate, pyazr), since its outgoing wave is not evaluated.
 void CheckUnboundFinalStates(Context &c, const LevelTables &levels) {
   std::vector<CaptureRequest> requests;
   std::vector<const ValidatedRecord *> recordOf;
@@ -96,32 +96,29 @@ void CheckUnboundFinalStates(Context &c, const LevelTables &levels) {
     const std::string pairs = "photon pair " + std::to_string(photon.key) + " (" + PairLabel(photon) + ")";
     const std::string threshold = "the threshold of pair " + std::to_string(particle.key) + " (" + PairLabel(particle) +
                                   "), E_x = " + energy(u.threshold);
-    const std::string notComputed = "Capture into an unbound final state is not computed by this version";
-    if (u.kind == UnboundFinalState::Kind::Bound) {
-      const LevelInfo &level = levels.levels[u.level];
-      std::string ids;
-      for (int id : level.ids) ids += (ids.empty() ? "" : ", ") + std::to_string(id);
-      const std::string message =
-          "the final state of " + pairs + ", " + state + " at E_x = " + energy(u.finalEnergy) + " (the level of <levels> with " +
-          "level ID " + ids + "), lies at or above " + threshold + ", which has a channel in its J^pi group; the external " +
-          "capture into it takes the state as bound in that channel (binding energy S - E_x). " + notComputed +
-          ": lower the final state below " + energy(u.threshold) + ", or switch external capture into pair " +
-          std::to_string(photon.key) + " off (column 31 = 0)";
-      if (u.request >= 0) {  // on the first data set or extrapolation that captures into the pair
-        c.Error(codes::kFinalStateUnbound, *recordOf[u.request], "reaction", message);
-      } else {  // nothing asks it (a rate can): in <levels>
-        Diagnostic d;
-        d.code = codes::kFinalStateUnbound;
-        d.section = "levels";
-        d.message = message;
-        c.out_.diagnostics.push_back(d);
-      }
-    } else {
-      c.Error(codes::kFinalStateUnbound, *recordOf[u.request], "reaction",
-              "it captures from pair " + std::to_string(particle.key) + " (" + PairLabel(particle) + ") into " + pairs +
-                  ", whose final state, " + state + " at E_x = " + energy(u.finalEnergy) + ", lies above " + threshold +
-                  ": between the two the photon energy is negative. " + notComputed +
-                  ": lower the final state below " + energy(u.threshold) + ", or leave this capture out");
+    const LevelInfo &level = levels.levels[u.level];
+    std::string ids;
+    for (int id : level.ids) ids += (ids.empty() ? "" : ", ") + std::to_string(id);
+    std::ostringstream how;
+    if (u.finalEnergy > u.threshold)
+      how << "lies only " << (u.finalEnergy - u.threshold) * 1e3 << " keV above " << threshold << " (eta = " << u.eta << " > "
+          << kMaxOutgoingWaveEta << ")";
+    else
+      how << "lies at " << threshold;
+    const std::string message =
+        "the final state of " + pairs + ", " + state + " at E_x = " + energy(u.finalEnergy) + " (the level of <levels> with " +
+        "level ID " + ids + "), " + how.str() + ", which has a channel in its J^pi group: an unbound final state is a narrow " +
+        "resonance with an outgoing wave in that channel, which cannot be evaluated this close to the threshold. Lower the " +
+        "final state below " + energy(u.threshold) + " (it is then bound), move it higher, or switch external capture into pair " +
+        std::to_string(photon.key) + " off (column 31 = 0)";
+    if (u.request >= 0) {  // on the first data set or extrapolation that captures into the pair
+      c.Error(codes::kFinalStateUnbound, *recordOf[u.request], "reaction", message);
+    } else {  // nothing asks it (a rate can): in <levels>
+      Diagnostic d;
+      d.code = codes::kFinalStateUnbound;
+      d.section = "levels";
+      d.message = message;
+      c.out_.diagnostics.push_back(d);
     }
   }
 }

@@ -25,6 +25,18 @@ class ExtrapLine {
       stream >> phaseJ_ >> phaseL_;
     else if (isDiff_ == 3)
       stream >> maxAngDistOrder_;
+    // isDiff 10 has two readings in old files: dev's spin observable, named by one token with a ':' (b:y, b:y*t:y),
+    // and this branch's THM offset of an angle-integrated line (0 + 10), where a number follows.  The token decides.
+    if (isDiff_ == 10) {
+      const std::streampos at = stream.tellg();
+      std::string token;
+      if (stream >> token && token.find(':') != std::string::npos) {
+        spinObservable_ = token;
+      } else {
+        stream.clear();
+        stream.seekg(at);
+      }
+    }
 
     // Initialize advanced segment parameters to defaults
     isAdvanced_ = 0;
@@ -77,6 +89,12 @@ class ExtrapLine {
           }
         } else if (keyword == "spin") {
           if (!(advancedStream >> phaseS_) || phaseS_ < 0.0) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
+        } else if (keyword == "linewindow") {
+          // dev: capture into a broad unbound final state, the half-width W (keV) of the gamma-line window
+          if (!(advancedStream >> lineWindow_) || !(lineWindow_ > 0.0)) {
             stream.setstate(std::ios::failbit);
             break;
           }
@@ -207,6 +225,8 @@ class ExtrapLine {
    * angular distribution.
    */
   int maxAngDistOrder() const { return maxAngDistOrder_; };
+  /// dev's isDiff 10: the operator token of a spin observable ("": the line is not one).
+  const std::string &spinObservable() const { return spinObservable_; };
   /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
@@ -221,6 +241,8 @@ class ExtrapLine {
   const std::string &natural() const { return natural_; };
   /// 1 for "total 1" (SegLine::total).
   int total() const { return total_; };
+  /// dev's "linewindow W": the half-width (keV) of the final-state line window; 0 if absent.
+  double lineWindow() const { return lineWindow_; };
   /// "transmission <n>" / "yield <n>" (SegLine.h): 0 when absent.
   double transmission() const { return transmission_; };
   double yieldThickness() const { return yield_; };
@@ -275,10 +297,12 @@ class ExtrapLine {
   int phaseL_;
   double phaseS_;
   int maxAngDistOrder_;
+  std::string spinObservable_;
   int isAdvanced_;
   int operationType_;
   std::string natural_;
   int total_;
+  double lineWindow_ = 0.0;
   double transmission_;
   double yield_;
   bool thicknessFitIgnored_ = false;

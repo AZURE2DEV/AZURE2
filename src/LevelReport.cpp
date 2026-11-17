@@ -71,7 +71,7 @@ void WriteCompoundNucleusCheck(const CompoundSystem &compound, const LevelInputs
           << std::setw(30) << "Excitation Energy [MeV]: " << pair->GetHeavyExE() << std::endl;
       // the light particle's excitation (32nd column) only when it is set, so older outputs are unchanged
       if (pair->GetLightExE() != 0.) out << std::setw(30) << "Light Excitation [MeV]: " << pair->GetLightExE() << std::endl;
-      out << std::setw(30) << "Channel Radius: " << pair->GetChRad() << std::endl;
+      out << std::setw(30) << "Channel Radius: " << pair->GetPairRadius() << std::endl;
       if (pair->GetPType() == 0)
         out << std::setw(30) << "Pair Type: " << "Particle,Particle" << std::endl;
       else if (pair->GetPType() == 10)
@@ -318,6 +318,10 @@ void WriteParametersOut(const CompoundSystem &compound, const LevelState &state,
         out << "  E_level = " << std::setw(8) << theLevel.E << " MeV"
             << "  ITERATIONS = " << std::setw(5) << theLevel.iterations;
         if (compound.NumNuclei() > 1) out << "  NUCLEUS " << compound.NucleusLabel(theJGroup->GetNucleus());
+        if (compound.GetIsospin().Active()) {
+          const std::string iso = compound.GetIsospin().MemberLabel(j, la);
+          if (!iso.empty()) out << "  " << iso;
+        }
         out << std::endl;
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
           const AChannel *theChannel = theJGroup->GetChannel(ch);
@@ -373,6 +377,8 @@ void WriteParametersOut(const CompoundSystem &compound, const LevelState &state,
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
   if (configure.relativistic) WriteRelativisticOut(compound, table, configure);
+  // isospin.out: the isospin levels at the same parameters (IsospinTies.h).
+  compound.GetIsospin().Write(configure, compound, state);
 }
 
 /*!

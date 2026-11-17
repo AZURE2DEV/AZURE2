@@ -43,6 +43,20 @@ add_test(NAME pyazr_radius_override
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
 set_tests_properties(pyazr_radius_override PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A channel's own radius is a channel_radius record added by Project.add and a new session: every l of a pair at one
+# radius is the pair's radius edit; channel_functions with no radius is at the channel's own radius.
+add_test(NAME pyazr_channel_radius_record
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/channel_radius_record_test.py)
+set_tests_properties(pyazr_channel_radius_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Isospin levels across compound nuclei in a session: the shift and mix parameters and their priors, the objective and
+# its rows, the gradient and the Jacobian through the ties.
+add_test(NAME pyazr_isospin_levels
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/isospin_levels_test.py)
+set_tests_properties(pyazr_isospin_levels PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A session parses its .azr once: evaluate().data[i].model / objective do not re-read the file per segment per
 # call (before 2026-11-03: 83 ms per call from NFS on the 3H+d model instead of 8 ms).
 add_test(NAME pyazr_azr_parse_cache
@@ -571,6 +585,12 @@ set_tests_properties(pyazr_thm_adjoint PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2
 add_test(NAME pyazr_nds_local_exfor
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_local_exfor_test.py)
+
+# EXFOR Web-API requests send the user-agent the IAEA Nuclear Data Section gave AZURE2 (Exfor-Azure2/1.0);
+# LiveChart, the NNDC ENSDF API and Crossref keep pyazr's own.  Offline: urlopen is replaced by a recorder.
+add_test(NAME pyazr_nds_exfor_user_agent
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_exfor_user_agent_test.py)
 
 # Ratio-to-Rutherford EXFOR data with a lab angle column: to_azr converts the lab angle to the c.m.
 # frame and divides by the Jacobian, so the engine sees ratio x sigma_R,cm(theta_cm) (audit item 8);

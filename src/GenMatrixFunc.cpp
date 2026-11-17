@@ -305,6 +305,31 @@ void GenMatrixFunc::BuildOrderProducts(const azure2::EntrancePathways &P, const 
 }
 
 /*!
+ * The R_k coefficients of a UPOS point's secondary gamma ray for the orders below `numOrders`: Eq. (7) of Brune and
+ * deBoer (2020), with the multipole mixing ratio of the data set.  Zero for odd k (a gamma-ray distribution after an
+ * unobserved radiation has even orders only).  j2f is the spin of the decaying state; the point gives the
+ * multipolarity, the spin of the state fed and the mixing ratio.
+ */
+std::vector<double> GenMatrixFunc::SecondaryRk(const Site *point, double j2f, int numOrders) {
+  const double finalL = (double)point->GetSecondaryDecayL();
+  const double Ic = point->GetIc();
+  const double delta = point->GetDelta();
+  std::vector<double> rL((std::size_t)std::max(numOrders, 0), 0.0);
+  for (int lOrder = 0; lOrder < numOrders; lOrder += 2) {
+    double R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
+    if (delta != 0.) {
+      // Eq. (7) unconditionally: every R_k is 0 where its coupling is not allowed (checklist t3-24).
+      const double finalLp = finalL + 1.;
+      const double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
+      const double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
+      R_L = azure2::physics::upos_mixed_rk(R_L, R_LLp, R_LpLp, delta);
+    }
+    rL[lOrder] = R_L;
+  }
+  return rL;
+}
+
+/*!
  * dsigma/dOmega_c.m. = sum_L B_L P_L(cos theta) of a reaction (Blatt and Biedenharn, Rev. Mod. Phys. 24 (1952) 258,
  * in the coupling of the pathway table; for elastic scattering the nuclear amplitude's part): B_L = (geom I1I2 s /
  * (100 pi)) sum Re(Z T1 T2*) over the interferences of order L (b/sr; geom = pi/k^2 in fm^2, 1/100 to b; s the
@@ -316,26 +341,25 @@ void GenMatrixFunc::BuildOrderProducts(const azure2::EntrancePathways &P, const 
 std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, const azure2::EntrancePathways &P,
                                                           const azure2::ExitRow &theDecay, int aa, int exitPairNum) {
   const bool particleExit = aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0;
+  // A capture cascade: the secondary gamma ray of the capture final state, the primary photon unobserved.
+  const bool captureCascade = compound()->GetPair(exitPairNum)->GetPType() == 10 && point->IsUPOS();
   std::vector<double> c;
-  if (particleExit && point->IsUPOS()) {
+  if (captureCascade) {
+    // The coefficient (the pathway table's z_upos) is zero unless the two pathways share the multipole; internal and
+    // external capture interfere.
     c.assign(theDecay.num_orders, 0.0);
-    const double finalL = (double)point->GetSecondaryDecayL();
-    const double Ic = point->GetIc();
-    // the residual nucleus of the exit pair (tests/upos_pair_index)
-    const double j2f = compound()->GetPair(exitPairNum)->GetJ(2);
-    const double delta = point->GetDelta();
-    std::vector<double> rL(theDecay.num_orders, 0.0);
-    for (int lOrder = 0; lOrder < theDecay.num_orders; lOrder += 2) {
-      double R_L = this->GetRk(j2f, finalL, finalL, Ic, lOrder);
-      if (delta != 0.) {
-        // Eq. (7) unconditionally: every R_k is 0 where its coupling is not allowed (checklist t3-24).
-        const double finalLp = finalL + 1.;
-        const double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
-        const double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-        R_L = azure2::physics::upos_mixed_rk(R_L, R_LLp, R_LpLp, delta);
-      }
-      rL[lOrder] = R_L;
+    const std::vector<double> rL = this->SecondaryRk(point, compound()->GetPair(exitPairNum)->GetJ(2), theDecay.num_orders);
+    for (int inter = 0; inter < theDecay.num_interferences; inter++) {
+      const azure2::FlatInterference &f = P.interferences[theDecay.first_interference + inter];
+      if (f.z_upos == 0.) continue;
+      const complex T1 = (f.r1 == 'E') ? this->GetECTMatrixElement(f.k, f.m1) : this->GetTMatrixElement(f.k, f.m1);
+      const complex T2 = (f.r2 == 'E') ? this->GetECTMatrixElement(f.k, f.m2) : this->GetTMatrixElement(f.k, f.m2);
+      c[f.l] += azure2::physics::upos_term(f.z_upos, T1, T2, f.l, rL[f.l]);
     }
+  } else if (particleExit && point->IsUPOS()) {
+    c.assign(theDecay.num_orders, 0.0);
+    // the residual nucleus of the exit pair (tests/upos_pair_index)
+    const std::vector<double> rL = this->SecondaryRk(point, compound()->GetPair(exitPairNum)->GetJ(2), theDecay.num_orders);
     for (int inter = 0; inter < theDecay.num_interferences; inter++) {
       const azure2::FlatInterference &f = P.interferences[theDecay.first_interference + inter];
       if (f.r1 != 'R' || f.r2 != 'R') continue;  // only internal pathways interfere here

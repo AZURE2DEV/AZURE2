@@ -185,7 +185,8 @@ void Site::ChannelKeys(WorkingCopy *data, const CompoundSystem *compound, std::v
       if (thePair->GetPType() != 0) continue;
       double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
       if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) continue;
-      keys.push_back({theChannel->GetPairNum(), theChannel->GetL(), thePair->SpinOrbitTwoJ(theJGroup->GetJ()), localEnergy});
+      keys.push_back({theChannel->GetPairNum(), theChannel->GetL(), thePair->SpinOrbitTwoJ(theJGroup->GetJ()),
+                      theChannel->GetRadius(), localEnergy});
     }
   }
 }
@@ -281,12 +282,12 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
   const int nucleus = entrancePair->GetNucleus();
   std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;
   // ownRows: the distinct rows this point used, from the tables or computed; rows->used receives them once.
-  auto channelRow = [&](int pairNum, const PPair *pair, int l, int two_j, double e) -> ChannelTable::Row {
-    const ChannelTable::Key key{pairNum, l, two_j, e};
+  auto channelRow = [&](int pairNum, const PPair *pair, int l, int two_j, double radius, double e) -> ChannelTable::Row {
+    const ChannelTable::Key key{pairNum, l, two_j, radius, e};
     for (const auto &kr : ownRows)
       if (kr.first == key) return kr.second;
     const ChannelTable::Row *r = rows ? rows->Find(key) : nullptr;
-    ownRows.emplace_back(key, r ? *r : ChannelTable::Compute(pair, l, two_j, e, configure));
+    ownRows.emplace_back(key, r ? *r : ChannelTable::Compute(pair, l, two_j, radius, e, configure));
     return ownRows.back().second;
   };
   for (int j = 1; j <= compound->NumJGroups(); j++) {
@@ -305,7 +306,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
             // Exactly at the channel's threshold (the entrance channel of a scattering length):
             // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
             // place of the Whittaker log-derivative at zero binding, which is ill-conditioned.
-            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue) - theChannel->GetBoundaryCondition(), 0.0);
+            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue, theChannel->GetRadius()) - theChannel->GetBoundaryCondition(), 0.0);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, 0.0);
             this->AddExpCoulombPhase(j, ch, 1.0);
@@ -313,7 +314,8 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
           } else {
             // P, S, exp(-i phi), exp(i(sigma_l - sigma_0)) of (pair, l, E_c): from the stage's channel table, or
             // computed once per (pair, l, E_c) of this point (docs/upgrade/channel_table.md).
-            const ChannelTable::Row row = channelRow(theChannel->GetPairNum(), thePair, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), localEnergy);
+            const ChannelTable::Row row = channelRow(theChannel->GetPairNum(), thePair, lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()),
+                                                     theChannel->GetRadius(), localEnergy);
             complex loElement(row.S - theChannel->GetBoundaryCondition(), row.P);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, sqrt(row.P));
@@ -323,7 +325,9 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
         } else if (thePair->GetPType() == 10) {
           complex loElement = complex(0.0, 0.0);
           this->AddLoElement(j, ch, loElement);
-          double sqrtPene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1. : pow(localEnergy / hbarc, (double)lValue + 0.5);
+          // A photon channel into a final level above this energy (an unbound final state, E < E_x) is closed.
+          double sqrtPene = !(localEnergy > 0.0) ? 0.
+                            : (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1. : pow(localEnergy / hbarc, (double)lValue + 0.5);
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
@@ -332,7 +336,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
           this->AddLoElement(j, ch, loElement);
           IntegratedFermiFunc fermiFunc(thePair->GetZ(1));
           double endPointE = thePair->GetSepE() - inEnergy;
-          double sqrtPene = (1. + endPointE / electronMassOfFermiFunction <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / electronMassOfFermiFunction, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetChRad()));
+          double sqrtPene = (1. + endPointE / electronMassOfFermiFunction <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / electronMassOfFermiFunction, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetPairRadius()));
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
@@ -372,7 +376,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
               if (!(localEnergy + bindingE > 0.0)) {
                 WarnThmBelowB(configure, localEnergy, bindingE);
               } else {
-                ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(), jl, rhoDjl);
+                ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetPairRadius(), jl, rhoDjl);
                 if (coulOfL) {
                   if (newL)
                     (*coulOfL)[k] = ThmCoulombTerm(thePair, lValue, localEnergy,
@@ -395,7 +399,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
           double bindingE = thePair->GetBindingEnergy() +
                             configure.thm.SpectatorEnergy(this->GetEntranceKey());
           if (localEnergy + bindingE > 0.0) {
-            ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(),
+            ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetPairRadius(),
                            thmJl, thmRhoDjl);
             if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
               thmCoul = ThmCoulombTerm(thePair, lValue, localEnergy,

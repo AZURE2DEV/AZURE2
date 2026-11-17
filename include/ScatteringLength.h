@@ -29,19 +29,19 @@ namespace ScatteringLength {
 /// Channels within this energy (MeV) of their threshold take the exact zero-energy limit.
 const double kThresholdTolerance = 1.0e-10;
 
-/// \f$x = (8Z_1Z_2e^2\mu a/\hbar^2)^{1/2}\f$ at the pair's channel radius (0 for a neutral pair).
-double CoulombX(const PPair *pair);
+/// \f$x = (8Z_1Z_2e^2\mu a/\hbar^2)^{1/2}\f$ at the channel radius \p radius (fm) (0 for a neutral pair).
+double CoulombX(const PPair *pair, double radius);
 
 /// Shift function \f$S_l\f$ of the pair at zero channel energy: \f$-l - (x/2)K_{2l}(x)/K_{2l+1}(x)\f$,
 /// \f$-l\f$ for a neutral pair.
-double ZeroEnergyShift(const PPair *pair, int l);
+double ZeroEnergyShift(const PPair *pair, int l, double radius);
 
 /// a0 = c1 M + c0 (fm), the coefficients of the closed formula for the pair.
 struct Coefficients {
   double c1;
   double c0;
 };
-Coefficients FormulaCoefficients(const PPair *pair);
+Coefficients FormulaCoefficients(const PPair *pair, double radius);
 
 /// One s-wave channel spin of a particle pair.
 struct Channel {
@@ -51,6 +51,7 @@ struct Channel {
   int parity = 1;      ///< pi1 pi2
   int jGroup = 0;      ///< J-group holding the channel, 0 if none
   int channel = 0;     ///< channel index in that J-group, 0 if none
+  double radius = 0.0; ///< the channel's radius a_c (fm); the pair's where the J-group has no such channel
   bool hasLevels = false;  ///< false: no level has a width in this channel, M = 0 (hard sphere)
 };
 

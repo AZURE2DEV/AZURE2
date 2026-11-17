@@ -243,6 +243,9 @@ void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double, doubl
 }
 
 bool AZUREParams::ReconcileBasis(const CompoundSystem *compound, const Config &configure) {
+  // A parameter file may hold values (or a free flag) for the derived slots of isospin levels: they follow the file's
+  // free parameters, fixed (IsospinTies.h).  Park's basis, the only conversion below, is refused with isospin levels.
+  compound->GetIsospin().Sync(params_);
   const int mode = BasisForConfig(configure);
   int tag = basisTag_;
   if (tag == kBasisUnknown) {

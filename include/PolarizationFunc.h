@@ -1,12 +1,18 @@
 #ifndef POLARIZATIONFUNC_H
 #define POLARIZATIONFUNC_H
 
+#include <utility>
 #include <vector>
 
 #include "Constants.h"
 
 class CompoundSystem;
 class Site;
+namespace azure2 {
+namespace physics {
+struct SpinObservable;
+}
+}  // namespace azure2
 
 /*!
  * Polarization observables from the channel-spin amplitude matrix.
@@ -137,6 +143,19 @@ class AmplitudeMatrix {
    * M is linear in T, that contraction is the whole derivative.
    */
   std::vector<complex> AnalyzingPowerBar() const;
+
+  /*!
+   * A general spin observable (azure2/physics/SpinObservable.h):  Re(c Tr(F A F^dagger B)) / Tr(F F^dagger),  with F
+   * the amplitude in the product basis of the particles' spin projections (both channel spins decomposed with the
+   * Lane-Thomas coefficients A_y uses), A the entrance and B the exit operator of \p obs.  \c SpinObservableBar is
+   * its reverse mode, 2 dO/dM* per amplitude slot, for \c PathwayAdjoint.
+   */
+  double SpinObservableValue(const azure2::physics::SpinObservable &obs) const;
+  std::vector<complex> SpinObservableBar(const azure2::physics::SpinObservable &obs) const;
+  /// The reverse mode of the point's polarization observable: that of \p obs, or of A_y when the point has none.
+  std::vector<complex> PolarizationBar(const azure2::physics::SpinObservable *obs) const {
+    return obs ? SpinObservableBar(*obs) : AnalyzingPowerBar();
+  }
   complex PathwayAdjoint(int jNum, int chNum, int chpNum,
                          const std::vector<complex> &bar) const;
 
@@ -163,6 +182,10 @@ class AmplitudeMatrix {
   int aa_ = 0, ir_ = 0;
   double theta_ = 0.0;
   double j1_ = 0.0, j2_ = 0.0;  //!< the entrance pair's spins (projectile, target)
+  double jp1_ = 0.0, jp2_ = 0.0;  //!< the exit pair's spins (light, heavy)
+  //! F in the product basis (exit index, entrance index; row-major) and, per amplitude slot, the (element of F,
+  //! coefficient) pairs it maps to.
+  std::vector<complex> ProductBasis(std::vector<std::vector<std::pair<int, double>>> *slots) const;
   int muMax_ = 0;
   vector_c harmonics_;  //!< HarmonicTable at theta_
   std::vector<double> entranceSpins_, exitSpins_;

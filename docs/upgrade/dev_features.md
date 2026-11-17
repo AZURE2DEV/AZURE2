@@ -23,15 +23,17 @@ commits were not read. The hours are estimates of an agent that did not do the w
   section 3, row 4; the gap is a question to the owner).
 - **The scattering length**: `src/ScatteringLength.cpp`, `tests/scattering_length`.
 - **Capture in a project with two compound nuclei** (dev's decay-index repair): right here (run: dev's three models
-  converted, the merged project's two capture curves equal the standalone ones). dev's test `tests/two_nuclei_ec`
-  is not ported: convert it with `AZURE2 --convert` and add it.
+  converted, the merged project's two capture curves equal the standalone ones). dev's test is here since
+  2026-11-15: `tests/two_nuclei_ec` (six checks, also in the formal parametrization).
 - **A final state of external capture in the formal parametrization**: this branch has its own version (the boundary
   condition at the lowest level of a group; the final states' amplitudes carried by `CompoundSystem`). Run: dev's
   four models agree across level orders and between the two bases. **Not run:** a final state that is not the
-  lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. Port dev's
-  `tests/formal_ec_final_state` (51 checks) and repair what it finds.
-- **dev's new blocks in an old project file** (`<channelRadii>`, `<isospin>`, spin-operator data types): refused by
-  the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands.
+  lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. dev's
+  `tests/formal_ec_final_state` is here since 2026-11-15 (50 checks pass; its README lists the two differences from
+  dev that remain open: no analytic derivative of the final state's amplitude, and a refusal where dev warns).
+- **dev's new blocks in an old project file** (spin-operator data types): refused by
+  the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands
+  (`<channelRadii>`: lifted, section 2; `<isospin>`: lifted, section 5).
 - **The flight path of a UDR record** is in metres (it was mis-scaled here; repaired).
 
 ## 2. Per-channel radii
@@ -56,6 +58,23 @@ radius; the cache of external-capture integrals knows the entries.
 
 Estimate 10–20 h (the refactor 4–6). An unfinished attempt exists (section 8).
 
+*Step 1 is written* on `feature/upgrade-5-dev-channel-radii` (2026-11-15, the owner's session): `AChannel::GetRadius`,
+`PPair::GetChRad` renamed `GetPairRadius`, the radius in the channel table's key. HANDOFF has the entry and what it
+leaves open (THM, the system's merged channels, the two signatures).
+
+*Steps 2, 4 and 5 are written* there too (2026-11-16): the record kind `channel_radius` of `<channelRadii>` (names by
+the PI's decision of 2026-11-16: this branch's), its build and its application at set-up, the converter of dev's
+block, the refusal of an external-capture transition across two radii, the radii in the signature of the capture
+integrals' file, and `tests/channel_radii`. A `channel_radius` on the entrance pair of a THM data set is refused
+(`E_CHANNEL_RADIUS_THM`).
+
+*Step 3 is written* as this branch does a pair's radius (2026-11-16): a session has no method that changes a radius,
+so a channel's own radius is `Project.add("channel_radius", ...)` and a new session, and `AZUREAPI::SetRadius`
+(bound to nothing in pyazr) gains no channel form. What the session gained: `Session.channel_functions` with no
+radius is evaluated at the radius of the pair's channels of that l (refused when records with s or J give them more
+than one). `tests/pyazr/channel_radius_record_test.py`. *Not written:* the radii in the compound-nucleus check's
+report and in `describe` (`Project.describe` of a `channel_radius` says it is not a record that computes).
+
 ## 3. General spin observables
 
 *On dev:* Re(c Tr(F A F† B))/Tr(F F†) for an operator token, on the plumbing of A_y, with its adjoint.
@@ -76,6 +95,18 @@ Estimate 10–20 h (the refactor 4–6). An unfinished attempt exists (section 8
 Test: dev's three projects converted, with their independent data; the gradient against finite differences.
 Estimate 12–24 h. An unfinished attempt exists (section 8).
 
+*Written* on `feature/upgrade-5-dev-spin-observables` (2026-11-16, the owner's session; not from the attempt of
+section 8): the quantity `spin_observable` with its required field `operator` (a value type of its own,
+`E_SPIN_OPERATOR`), built into the analysing-power observable with the token (`ReactionSpec::spinObservable`); the
+token, the operator matrices and the trace with its gradient in `physics/` (`SpinObservable.h`,
+`physics_spin_observable`); no new `SiteObservable` kind, because the analysing-power record holds the amplitudes'
+coefficients and no operator: the operator is the reader's and travels in its angular row (`AngularRow::spin`,
+`RowSet::spin`), and two terms with different operators do not share sites (`SameObservable`); the adjoint in
+`AMatrixFunc::PointTBar` through `AmplitudeMatrix::SpinObservableBar`; the converter (dev's type 10 followed by its
+operator; the bare type 10 stays THM's offset). dev's three test projects converted, with the independent data, time
+reversal and the gradient. *Not written:* the table of literature names (dev's `pyazr/spin.py`, `resolve`); capture;
+in-plane exit components. HANDOFF has the entry.
+
 ## 4. Time-of-flight resolution at low energy
 
 *On dev:* four absolute floors written for charged particles broke the UDR kernel at thermal energies.
@@ -92,6 +123,10 @@ Estimate 12–24 h. An unfinished attempt exists (section 8).
 
 Test: dev's `tests/udr_low_energy` converted (`AZURE2 --convert` writes it with no notes, run). Estimate 5 h. An
 unfinished attempt exists (section 8).
+
+**Written 2026-11-15** on `feature/upgrade-5-dev-udr-low-energy` (not the attempt of section 8, which was not seen):
+`energy_grid.md` section 13. The mesh's zero width is not made relative for every kernel; a time-of-flight support
+carries its own, so nothing else can move.
 
 ## 5. Isospin-labelled levels across compound nuclei
 
@@ -117,7 +152,25 @@ a fit vector, from an observed vector, the transforms in and out, the parameter 
 Brune basis the ties act on observed energies and amplitudes, which here are transformed per group
 (`src/LevelTransforms.cpp`), so the tie must sit on the right side of that transform in each basis; one
 `CompoundSystem` serves one project. Estimate 30–60 h, after the channel radii (the partner-radius check reads
-them). Nothing was started.
+them).
+
+*Written* on `feature/upgrade-5-dev-isospin` (2026-11-16, the owner's session; cut from the channel-radii port), along
+the recipes above:
+
+- six record kinds of `<isospin>`: `isospin_reference`, `isospin_shift`, `isospin_level` (the soft tie is its two
+  fields `soft_energy`, `soft_amplitude`), `isospin_mix`, `isospin_factor`, `isospin_pair`; the converter reads dev's
+  block and maps the names of its parameter files;
+- the tie table is `IsospinSet` (`include/IsospinTies.h`), a set-up fact read by `CompoundSystem::Fill`; a tied group
+  has B_c = -l_c in the formal basis (`CalcBoundaryConditions`);
+- two parameter kinds, `isospin_shift` and `isospin_mix`, right after the level block (`CompoundSystem::NumParameters`),
+  named by their records (`<record>.shift`, `<record>.amplitude`);
+- the derived slots: `IsospinSet::Apply` at the head of `CompoundSystem::FillCompoundFromParams` (the one fill from a
+  fit vector), the values of the shifts and mixes kept in `LevelState`, the chain rule at the end of
+  `GradAccum::Scatter`, the free mask of the formal basis, the slots written synced (`IsospinSet::Sync`);
+- the priors and the soft ties are one term of the objective (T12), with rows for the least-squares fitters;
+- `isospin.out`, the member labels of `parameters.out`, `Total-Isospin-Chi-Squared`.
+
+`tests/isospin_levels` is dev's test (58 checks). HANDOFF has the entry, with what differs from dev and what is open.
 
 ## 6. Smaller items
 
@@ -134,17 +187,31 @@ them). Nothing was started.
 rmfit, capture into an unbound final state and fitted secondary γ transitions are traced through this structure in
 `FOR_THE_OWNER.md` section 6 (the second table). Two things were kept open for them:
 
-- **Capture into an unbound final state** is **refused** today with one diagnostic, `E_FINAL_STATE_UNBOUND` (the rule
-  is one function, `UnboundFinalStates` in `experiment/src/FinalStates.cpp`; its tests are
-  `tests/ec_final_state_unbound` and the cases of `experiment/tests/build_test.cpp`). The feature replaces that rule;
-  nothing else guards it. Where the engine takes a final state as bound is tabulated in the entry of 2026-11-15 of
-  `HANDOFF.md` ("a capture final state above a threshold is refused"): `src/ExternalCaptureFinalStates.cpp`,
-  `src/NFIntegral.cpp`, `src/ECIntegral.cpp`, `src/UnitExternalCapture.cpp`, `src/ChannelTables.cpp`.
+- **Capture into an unbound final state**: *stage 1 (dev 2026-11-13, the narrow resonance) is written* on
+  `feature/upgrade-5-dev-ec-unbound` (2026-11-16, the owner's session). The rule `UnboundFinalStates`
+  (`experiment/src/FinalStates.cpp`) no longer refuses a final state above a threshold: it refuses one at a
+  threshold, or too close above a charged pair's for its outgoing wave (eta > 100), with the same diagnostic
+  `E_FINAL_STATE_UNBOUND`. The places that took a final state as bound (the table of the 2026-11-15 entry of
+  `HANDOFF.md`) are changed as on dev: `src/ExternalCaptureFinalStates.cpp` (N_f and the ANC conversion),
+  `src/ECIntegral.cpp` (`IntegrateUnbound`), `src/ECTable.cpp` (direct integration), `src/UnitExternalCapture.cpp` and
+  `src/ChannelTables.cpp` (no photon below the final state: closed). `tests/ec_unbound_final` is dev's test.
+  *Stages 2 to 4 are written too* (2026-11-16): the field `line_window` of a capture data set or extrapolation (dev's
+  `linewindow W`; the converter reads the old keyword), the line-shape integration of a broad final state
+  (`src/LineWindow.cpp`, one routine called by the energy pass; the T-matrix builders read its node through
+  `GenMatrixFunc::ActiveLineNode`), its form for internal capture alone, and the line centre that follows the final
+  level's current energy. `tests/ec_unbound_broad` is dev's test. *Not written yet:* the capture cascade (UPOS after
+  a capture).
 - **rmfit** is a top-level package beside `pyazr/`, on pyazr 3.0's names only (branch
   `feature/upgrade-5-dev-rmfit`, `HANDOFF.md` entry of 2026-11-16 "rmfit beside pyazr"): `rmfit/azr3.py` is its one
   contact with a project, its rows are the engine's objective rows, its tests are ctests `rmfit_*`. Left to the
   owner: which copy of the `rmfit-campaign` skill stays (`FOR_THE_OWNER.md` section 8), `tools/check_skills.py`
   for a second package's skills, a CI job.
+
+- **The capture cascade** (dev 2026-11-15: UPOS on a capture pair, the secondary gamma ray of the capture final state
+  after an unobserved primary capture photon) *is written* on `feature/upgrade-5-dev-capture-cascade` (2026-11-16, the
+  owner's session): the pathway table's `z_upos` for a photon exit (pathways of one multipole; `upos_interference`
+  with l' = L, I_b = 0, s' = I_B = J_f), a branch of `GenMatrixFunc::LegendreCoefficientsOf` and of
+  `AMatrixFunc::PointTBar`, the set-up's allowance. `tests/capture_cascade` is dev's test.
 
 ## 8. Three unfinished attempts (not in this branch)
 

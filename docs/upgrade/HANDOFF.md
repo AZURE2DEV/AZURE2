@@ -584,6 +584,540 @@ rmfit tests, `W_PARAMETER_SETTING_UNKNOWN` per shard). New: the pyazr 2 halves a
 runs (the design note's last section); a worker started with `AZURE2_ROOT` at an upgrade checkout imports that
 checkout's `rmfit/` first, so another rmfit is tested against an upgrade build only through a view without it.
 
+## 2026-11-17 (owner's session, dev ports) — `feature/upgrade-5-dev-all`: the eleven dev ports on one branch
+
+**Branch** `feature/upgrade-5-dev-all`, cut from `feature/upgrade` `b8ee2219`, for review as one piece. It is the
+merge of the eleven port branches, each of which was first merged with `b8ee2219` and gated alone: `-ec-tests`,
+`-udr-low-energy`, `-exfor-agent`, `-test-races`, `-rmfit`, `-seed`, `-channel-radii`, `-isospin`,
+`-spin-observables`, `-ec-unbound`, `-capture-cascade` (merged in that order). Nothing was pushed to
+`feature/upgrade`. The entries below describe each port; this one describes only what the combination added.
+
+**Where two ports met (hand work).**
+- `-ec-unbound` x `-channel-radii`: the unbound-final-state capture code took the pair's radius; here it takes the
+  channel's. `ECFinalStateFactors(pair, radius, ...)` with `NFIntegral(pair, radius)`; the `ECTable` key and
+  `Reduction` carry the radius; `src/LineWindow.cpp` uses the final channel's `GetRadius()` (4 places); both
+  signature marks are kept in `src/ExternalCaptureSetup.cpp`. Test: `tests/channel_radii` (f), three unbound-state
+  models with every l of p+12C moved by records against the pair radius moved outright (identical; a line-shape
+  routine set back to the pair's radius fails it). Not tested: a radius for one l alone (capture across two radii is
+  refused, so it needs a model whose capture stays inside one radius).
+- `-ec-unbound` x `-capture-cascade`: a data set with `secondary_gamma` on a capture exit and a `line_window` is
+  refused (`src/UposChecks.cpp`, dev's rule: the line-shape integration has no secondary-gamma form);
+  `tests/ec_unbound_broad` (h). `secondary_gamma` on an `extrapolation` is not read on this base, so the refusal is
+  reached by a data set only.
+- `-spin-observables` x `-ec-unbound`: both fields kept (`operator`, `line_window`) in the builder, the converter,
+  `SetupSpecs.h`, `Segment`, `Site` and the two experiment tests.
+- `src/CMakeLists.txt`, `docs/upgrade/dev_features.md`, `tests/upgrade/predictions.txt` (three-way by project block)
+  and this file: the union.
+- Sizes: `src/AMatrixFunc.cpp` 1960 lines and `src/WorkingCopy.cpp` 1246, both under their records.
+
+**Open.**
+- dev moved after the `-rmfit` port was cut: `50fc6cd5` (2026-11-17, `rmfit/campaign.py`, `rmfit/enginepin.py`, its
+  test: `rmfit init` rewrites the md5 guard of a campaign's job scripts on an allowed engine change) is not here.
+- The open points of the port entries below stand.
+
+**The full gate** (queue job, 8 slots, on the merge commit `818a0bea`, before the cascade refusal, the unbound-state radius test and this entry):
+consistency, configure, build and the docs clean; ctest 376 of 377, the base's one failing (`pyazr_park_dsde`); the
+regression suites 182 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its
+range"). The base `b8ee2219` in the same queue: ctest all but `pyazr_park_dsde` (and a load-dependent
+`physics_standalone` time-out), suites 170 pass and the same 2 fail. **Not run:** CI.
+
+## 2026-11-16 (owner's session, dev port) — the capture cascade: `secondary_gamma` on a capture reaction
+
+**Branch** `feature/upgrade-5-dev-capture-cascade`, cut from `feature/upgrade` `84de49da`. dev's change of
+2026-11-15: a data set with `secondary_gamma` whose exit is a capture pair is the secondary gamma ray of the capture
+final state B after an unobserved primary capture photon, A(a, gamma_1)B, B -> C + gamma_2. Before, the fields were
+ignored for a photon exit and the primary photon's distribution was returned without a message.
+
+**The physics.** A photon summed over its direction and both helicities leaves no interference between multipoles
+(L, electric or magnetic) and orients B as a spin-0 particle of orbital angular momentum L would: Eq. (22) of Brune and
+deBoer, PRC 102, 024628 (2020), with l' = L, I_b = 0, s' = s2' = I_B = J_f (the extension its conclusions name).
+Internal and external capture amplitudes of one multipole interfere. Direct feeding of B only; an angle-integrated
+cascade data set is the capture cross section into B.
+
+**Changed.**
+- `src/PathwayTable.cpp` (`AddInterferences`): `z_upos` of two pathways into a photon exit with the same multipole
+  and radiation type, `phys::upos_interference(l1, L, J1, l2, J2, s, J_f, J_f, 0, J_f, k)` (no new function of
+  `physics/`: the cascade is Eq. (22) at those arguments). A row is kept when `z` or `z_upos` is non-zero, as before,
+  so a capture exit can gain rows whose `z` is 0; they add nothing to a capture distribution.
+- `src/GenMatrixFunc.cpp`: `SecondaryRk` (the R_k of the secondary transition, taken out of the particle branch, which
+  now calls it) and the cascade branch of `LegendreCoefficientsOf` (internal and external elements).
+- `src/AMatrixFunc.cpp` (`PointTBar`): the cascade's cotangents; the order-products shortcut is not taken for it.
+- `src/UposChecks.cpp`, `include/UposChecks.h` (new: the two UPOS set-up checks, moved out of `src/WorkingCopy.cpp`,
+  which was at its recorded size): `UPOSAllowed` lets a photon exit through (refused with the RMC formalism and for
+  an analysing power); `UPOSLabNote` is silent for it (a lab angle is converted as for any capture gamma ray).
+- `src/AMatrixFunc.cpp` was at its recorded size too: the particle branch of `PointTBar` now takes R_L from
+  `SecondaryRk` in place of its own copy of the formula.
+- `tests/upgrade/pathway_table_test.cpp`: its statement "every interference has its capture-A_y term" holds for the
+  rows with a coefficient Z1Z2; a row kept for `z_upos` alone has none.
+
+**Tests.** `tests/capture_cascade` (dev's models, converted with 0 notes; dev's `expected/` and `verify.py`): seven
+models against magnetic-substate sums for the secondary and the primary distribution (8e-11), the integrated
+identity, and the gradient against finite differences (9e-9). This engine's values equal dev's on every model
+(1e-10). `tests/upgrade/predictions.txt` regenerated.
+
+**Open.** Feeding of B through higher states (a multi-step cascade) is not modelled (the PI, 2026-11-15: direct
+feeding only for now). No analysing power of the secondary gamma ray. On dev a cascade data set with a line window is
+refused; the line window is on another port branch (`feature/upgrade-5-dev-ec-unbound`), so the refusal of the
+combination has to be added where the two meet.
+
+**Run here** (CRC, GCC 11.5): build; `tests/capture_cascade`, `tests/secondary_gamma`. The full gate: see the end of
+this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots, on the commit before this paragraph): consistency, configure, build and the
+docs clean; ctest 323 of 325, the base's two failing (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites
+171 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"),
+`tests/capture_cascade` passing.
+
+## 2026-11-16 (owner's session, dev port) — capture into a broad unbound final state: `line_window`
+
+**Branch** `feature/upgrade-5-dev-ec-unbound`, on the entry below (stage 1). dev's stages 2 to 4 (2026-11-15): the
+line-shape integration of a broad final state, its form for internal capture alone, and the line centre that follows
+a fitted final-level energy. Ported from dev's final code, not commit by commit.
+
+**The field.** `line_window <W> <energy unit>` on a `dataset` or `extrapolation` of quantity `sigma`, `sfactor`,
+`modified_sfactor` or `dsigma_domega`, allowed for a photon exit only (the table's condition, so the validator
+refuses it elsewhere with `E_FIELD_NOT_APPLICABLE`); `ReactionSpec::lineWindow_keV`; `TermSettings::lineWindow`,
+compared in `SameObservable` (two windows do not share sites). The converter reads dev's `linewindow W` (keV) on a
+data or extrapolation line.
+
+**The engine.** `src/LineWindow.cpp`, `include/LineWindow.h`. The energy pass (`src/EnergyPass.cpp`, both the
+evaluation and `AZURE_PLAN_CHECK`'s own solve) calls `azure2::LineWindowCrossSection` for a unit with a window in
+place of one T-matrix and one cross section: per node of the final-energy quadrature (48 Gauss-Legendre nodes in
+theta, E_f = E_R + (Gamma/2) tan theta, clipped to E_f > 1 keV and E_gamma > 1 keV) it sets the node on the matrix
+function (`GenMatrixFunc::SetActiveLineNode`), rebuilds the T-matrix from the solved level matrix and computes the
+unit's record; the unit's record is the weighted sum of the nodes' records (every value of a record is linear in the
+cross section; the count of an angular part is kept). `AMatrixFunc::CalculateTMatrix` and
+`RMatrixFunc::CalculateTMatrix` read the node: the photon channel's sqrt(P) becomes A(E_f) (E_gamma/hbar c)^(l+1/2)
+and an external element the node's (the final state's real scattering wave, cos d F + sin d G, from
+`ECIntegral::StandingParts` through `ExternalCapturePathwayParts`, `src/UnitExternalCapture.cpp`: direct integrals,
+never the table). The unit after a windowed one rebuilds its T-matrix.
+
+The nodes of a site (final-state functions and external integrals at each E_f) depend on the site's energy, the
+window and the line centre only: they are made once and kept in the run's scratch
+(`RunScratch::lineNodes`, a `LineNodeStore` behind its lock, as the external-capture terms are), the newest two
+centres of a site, so that a fit that moves the centre does not grow the table. dev keeps them in the point.
+
+The line centre is the final level's working energy (`LevelState::E`) in the Brune parametrizations, the energy of
+the set-up in the formal one. A final level with the external-capture link takes its observed amplitude from the
+state (`ECGamma` x `SqrtNF`) while the centre is the set-up's; once it has moved, and for a level without the link
+(internal capture alone: found by J^pi and its energy in `<levels>` within 1 keV of the pair's), N_f is formed from
+the level's channels at the centre. In the formal parametrization a level without the link is served only when it
+is the lowest level of its group (where this branch takes the boundary conditions, so that its formal parameters
+are its observed ones; dev's rule names the first level, where dev takes them).
+
+**Checked at set-up** (`CheckLineWindows`, `src/CompoundSystemBuild.cpp`, after the pathways are built; a refusal of
+the last part): the RMC formalism, `--use-gradient`, another observable than a cross section, a THM data set, a sum
+or ratio, an exit that is not a capture pair, a final state that is bound, above two thresholds, not a level, or
+with external capture through a closed channel. A NOTE per windowed data set in the run's log.
+
+**Tests.** `tests/ec_unbound_broad` (dev's 13 checks on dev's models, converted: the independent references of the
+windowed direct capture and of the internal line shape, the narrow limit, formal = Brune, external capture off, the
+moved centre through a parameter file); this engine's values equal dev's on all 18 models (0 to 7e-11).
+`experiment_build` and `experiment_quantities` cases of the field. `tests/upgrade/predictions.txt`,
+`tests/schema/schema_v3.json`, `docs/source/reference/format3.rst` regenerated.
+
+**Open.** No analytic gradient over the line shape (refused with `--use-gradient`, as on dev). One open particle
+channel of the final level only. The capture cascade (UPOS on a capture pair, dev 2026-11-15) is not ported. The
+web page shows `line_window` from the schema; nothing else of pyazr names it.
+
+**Run here** (CRC, GCC 11.5): build; the unit tests; `tests/ec_unbound_broad`, `tests/ec_unbound_final`,
+`tests/ec_final_state_unbound`. The full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; ctest all but the base's
+two (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 172 pass and 2 fail, the base's two
+(`capture_ay_coupling`, "a warning for ancai06 inside its range"), `tests/ec_unbound_broad` and
+`tests/ec_unbound_final` passing and every chi2 line equal to the base's.
+
+## 2026-11-16 (owner's session, dev port) — external capture into an unbound final state, stage 1 (a narrow resonance)
+
+**Branch** `feature/upgrade-5-dev-ec-unbound`, cut from `feature/upgrade` `0c6167c1`. dev's change of 2026-11-13
+(PR #8), on this branch's files. It replaces what the entry of 2026-11-15 ("a capture final state above a threshold
+is refused") refused: the table of that entry is the list of the places changed.
+
+**The physics.** A final state above the threshold of a particle pair with a channel in its J^pi group is unbound in
+that channel. It is treated as a narrow resonance: its exterior is the outgoing wave O_l(k_f r)/O_l(k_f a),
+O = G + iF (Mukhamedzhanov et al., PRC 96, 024623 (2017), eq. 16), its strength the level's observed width in the
+channel, and N_f = (hbar^2/2 mu a) dS/dE at E_f, which for a bound state is the integral of W^2/W(a)^2 and is smooth
+through the threshold. Valid while the width is small next to the photon energy and next to E_f - threshold; a broad
+final state needs dev's line-shape integration (stage 2, not written here).
+
+**Changed.**
+- `src/ECIntegral.cpp`, `include/ECIntegral.h`: `IntegrateUnbound` (Gauss-Legendre panels from a to R, the tail by
+  Abel-regularized integration by parts), the unbound branch of `CalculateDirect`, 0 where E <= E_f. The
+  Gauss-Legendre table is made and freed per call (dev holds it in a `static thread_local`, which check 38 refuses).
+- `src/ExternalCaptureFinalStates.cpp`: `ECFinalStateFactors` (N_f and the amplitude conversion, bound or unbound) and
+  `NoteUnboundFinalState` (a NOTE once per capture pair and particle pair; an ERROR and a refused set-up for
+  eta > 100, the engine's copy of the build's refusal for a set-up without the build).
+- `src/ECTable.cpp`: an unbound final state is integrated directly at every energy, also where the point's channel
+  table holds the entrance channel (the table's stencil cannot follow (k_i - k_f)^-2 towards E = E_f; with the table
+  the pure direct capture was 1.5e-3 off dev).
+- `src/UnitExternalCapture.cpp` (`ECPathwayAmplitude`) and `src/ChannelTables.cpp` (the photon channel's
+  penetrability): no photon below the final state, the pathway and the channel are closed (they were NaN).
+- `src/ExternalCaptureSetup.cpp`: the signature of the capture-integral file gains "unbound final state v1" for an
+  unbound final channel only; every other file keeps its signature.
+- `experiment/src/FinalStates.cpp`, `FinalStates.h`, `BuildFinalStates.cpp`, `Diagnostics.cpp`: `UnboundFinalStates`
+  now finds a final state with external capture at the threshold of a pair with a channel in its group, or above it
+  with eta > `kMaxOutgoingWaveEta` (100; non-relativistic eta from the `<levels>` masses), one finding per photon
+  pair; the kind `Entrance` is gone (a capture whose entrance opens below the final state is computed). The
+  diagnostic keeps its code, `E_FINAL_STATE_UNBOUND`, with a new message.
+
+**Tests.** `tests/ec_unbound_final` (dev's: the NOTE and no NaN; pure direct capture against an independent integral,
+0.18 %; continuity through the threshold; formal = Brune; the gradient), its ten models dev's, converted with 0
+notes; this engine's curves equal dev's on all of them (1e-10; compared in a scratch directory, not a test).
+`tests/ec_final_state_unbound` and `tests/pyazr/ec_final_state_unbound_test.py` rewritten for the new rule (0.05 keV
+above S_p refused; 2.5 MeV computed with and without external capture; 3.5 keV below: the start commit's chi^2).
+`experiment/tests/build_test.cpp`: the cases of the rule.
+
+**Open.** dev's stage 2 (`linewindow W`: the line shape of a broad final state), its internal-only form, the line
+centre that follows a fitted final level, and the capture cascade (UPOS on a capture pair) are not ported. The build's
+eta is non-relativistic and the engine's check uses the run's kinematics: they can disagree within 1e-3 of the limit.
+A THM data set exiting into an unbound photon pair is not covered (read only, as before).
+
+**Run here** (CRC, GCC 11.5): build; `experiment_build`; the two test directories; the pyazr test. The full gate: see
+the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots, on the commit of the entry above, which holds this one): consistency,
+configure, build and the docs clean; ctest all but the base's two (`pyazr_park_dsde`, `pyazr_units_scales`); the
+regression suites 172 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its
+range"), every chi2 line equal to the base's. A gate of this entry's commit alone had shown the same suites (171
+pass) and, in ctest, `upgrade_predictions` (the table had not been regenerated for the ten new models; done in the
+next commit) and `physics_standalone` at its 300 s limit while other jobs of the account built (it passes alone).
+
+## 2026-11-16 (owner's session, dev port) — general spin observables: the quantity `spin_observable`
+
+**Branch** `feature/upgrade-5-dev-spin-observables`, cut from `feature/upgrade` `0c6167c1`. The port of
+`dev_features.md` section 3, written anew on this branch's structures (the unfinished attempt of section 8 was not
+used). Record and quantity names by the PI's decision of 2026-11-16: this branch's.
+
+**The quantity.** `spin_observable` (`experiment/src/Quantities.cpp`), data sets and extrapolations, unit `1`, a
+required angle, apparatus as `analyzing_power`, and a required field `operator`: one token of the grammar of
+`azure2/physics/SpinObservable.h` (`b:y`, `t:y`, `b:y*t:y`, `b:yy`, `b:iT11`, `b:T20`, `e1:y`, `b:y>e1:y`). The
+field has a value type of its own, `ValueType::SpinOperator` (`spin_operator` in the schema), whose parser is the
+physics library's, so `--validate`, `Project.add` and the web page refuse a bad token with `E_SPIN_OPERATOR`.
+`Schema::Build` (`ReadObservable`) makes the analysing-power observable with the token in
+`ReactionSpec::spinObservable` ("" is A_y) and refuses with `E_REACTION_NOT_ALLOWED` a composite, a photon or beta
+pair on either side, and an operator the four particles' spins cannot carry (spin 0; a Cartesian tensor off spin 1;
+rank k > 2j), with `E_NOT_BUILT` a lab angle. `--describe` names the operator; the prediction tree's leaf is
+`spin(a->b; op=<token>)`.
+
+**The engine.** No new `SiteObservable` kind: a `kAnalyzingPower` record holds the coefficients of the channel-spin
+amplitudes and no operator, so the operator belongs to the reader. `TermSettings::spinObservable` (the segment's,
+parsed once in `Segment::SetReaction`), compared in `SameObservable` by its token (two operators do not share
+sites or row sets); `AngularRow::spin` and `RowSet::spin` carry it to `ParticleAnalyzingPower`
+(`src/SiteObservables.cpp`), which calls `AmplitudeMatrix::SpinObservableValue` in place of `AnalyzingPowerAy`.
+`AmplitudeMatrix` (`src/PolarizationFunc.cpp`) gained the exit spins, `ProductBasis` (F in the product basis of the
+four particles' projections, with `ParticleCG`, so `AZURE2_SWAP_COUPLING_ORDER` acts on it as on A_y) and
+`SpinObservableBar`; `AMatrixFunc::PointTBar` takes that bar for a point with an operator. The token, the operator
+matrices, the trace and its Wirtinger gradient are `physics/src/SpinObservable.cpp`. The set-up check
+(`AnalyzingPowerAllowed`, `src/WorkingCopy.cpp`) repeats the build's refusals for a spec made without the build.
+`analyzing_power` runs the code it ran: its value function and its bar are untouched.
+
+**The converter.** dev's `isDiff 10` followed by the operator becomes a `spin_observable` record at c.m. angles
+(`convert/include/azure2/convert/SegLine.h`, `ExtrapLine.h`: the token after the type decides, because the bare
+type 10 is this branch's THM offset of an angle-integrated line; `BuildData.cpp`, `SpecsFromOldLines.cpp`,
+`Construct::kSpinObservable`). The refusal `NewerLineType` (`OldProject.cpp`) stays for a type other than 10 followed
+by an operator (dev wrote type 9 before 2026-11-11): it says to write 10.
+
+**Tests.** `physics/tests/spin_observable_test.cpp` (grammar, the Madison closed forms of tau_kq for spin 1, the
+value for spin 1/2 on spin 0, the gradient against central differences). `experiment_quantities`, `_build`,
+`_diagnostics`, `_parsers`, `convert_constructs` cases. dev's three projects, converted by `AZURE2 --convert` with
+0 notes: `tests/spin_observables_p3He` (15 observables) and `tests/spin_observables_dd` (19, identical spin-1
+bosons, tensor powers), whose data are an independent calculation with an alternating offset of one error, so that
+chi2/N = 1.0000 per data set is the agreement (315 of 315, 399 of 399, as dev); `tests/spin_observables_reaction`
+(`check.sh`: time reversal between t(p,n)3He and 3He(n,p)t to 1e-9, five refusals, and the analytic gradient
+against finite differences on the three projects, worst 6e-8 of the largest component). The chi2 of every data set
+of the three equals dev's `expected/` (1e-5 of a six-digit number). `tests/upgrade/predictions.txt`,
+`tests/schema/schema_v3.json` and `docs/source/reference/format3.rst` regenerated.
+
+**Docs.** `theory/polarization_implementation.rst` (a section with the grammar, the trace, the adjoint, the
+refusals, the validation; "What is not done" updated), `theory/polarization_theory.rst`,
+`getting_started/capabilities.rst`, `docs/upgrade/data_model.md` (the leaf kind `spin`), `dev_features.md`.
+
+**Open.** The table of literature names beside the quantity (dev's `pyazr/spin.py`, `resolve`: A_yy is a spin
+correlation or a tensor power according to the spins) is not written. Capture has A_y only. In-plane exit
+components need the exit frame. A folded spin observable (target, beam) is folded as A_y is, O sigma over sigma,
+and, as A_y, has no analytic derivative through a target integration. The site record is shared by the readers of
+one operator only; sharing it across operators (the record is the same) would need the operator in the row-set
+identity instead of the term's sharing key.
+
+**Run here** (CRC, GCC 11.5): build; the unit tests named above; the three projects; `repo_consistency_test.py`. The
+full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; the regression suites 174
+pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), the three new
+directories passing and every other chi2 line equal to the base's; ctest 312 of 315: the base's two
+(`pyazr_park_dsde`, `pyazr_units_scales`) and `physics_standalone`, which reached its 300 s limit while two other
+jobs of the same account built on the cluster. Run again alone on a compute node it passes in 271 s (the base's own
+runs of it took 196 to 271 s here; this branch adds one source file and one test to what it builds): the limit of
+`physics/CMakeLists.txt` is tight on a loaded machine with or without this branch.
+
+## 2026-11-16 (owner's session, dev port) — isospin-labelled levels across compound nuclei
+
+**Branch** `feature/upgrade-5-dev-isospin`, cut from `feature/upgrade-5-dev-channel-radii` (`d4c260da`; the
+partner-radius check reads the channels' radii). dev's `IsospinLevels` of 2026-10-17 with its later repairs (Brune
+ties, photon channels outside the ties, the state rank of an excited particle), re-written along the six recipes of
+`dev_features.md` section 5. Record names by the PI's decision of 2026-11-16: this branch's, `isospin_*`.
+
+**What is new.**
+- Six record kinds of section `<isospin>` (`experiment/src/Schema.cpp`): `isospin_reference` (nucleus, threshold
+  pair), `isospin_shift` (nucleus, threshold pair, `shift` as a nuisance), `isospin_level` (level ID, `T`; the soft
+  tie is its two fields `soft_energy` and `soft_amplitude`), `isospin_mix` (level, pair, l, s, `amplitude` as a
+  nuisance), `isospin_factor`, `isospin_pair`. `<isospin>` left `Schema::NewerSections()`, which is empty now. Build:
+  `experiment/src/Isospin.cpp` into `BuiltProject::isospin` (`Isospin.h`); codes `E_ISOSPIN_RECORD` (records that
+  contradict one another or `<levels>`) and `E_ISOSPIN_PAIR`. Schema version unchanged.
+- The tie table `IsospinSet` (`include/IsospinTies.h`, `src/IsospinTies.cpp`): a set-up fact of the compound system,
+  read by `CompoundSystem::Fill` after the parameter layout (`GetIsospin()`). Members, Clebsch-Gordan factors, owners,
+  derived slots and ties as dev; what needs the channels is refused there with a message (radii of one arrangement,
+  a mix on an allowed channel, T below a nucleus's T3, Park's basis, the RMC formalism). A level ID that an
+  `isospin_level` record declares may have lines in several nuclei (`CompoundSystem::Fill`).
+- Formal basis: B_c = -l_c on the particle channels of a group that holds a member
+  (`CompoundSystem::CalcBoundaryConditions`); such a group has no level "at the boundary energy", which
+  `SetUpECFinalBlocks` now knows (capture into a final state of a tied group, `--no-brune`).
+- Two parameter kinds, `isospin_shift` and `isospin_mix` (`ParameterKind.h`, the fields in
+  `api/src/pybind_records.cpp`), written by `CompoundSystem::FillMnParams` right after the level block:
+  `CompoundSystem::NumParameters()` is where the data's parameters start (`ParameterLabel.cpp`, `ThmNorm.cpp`, the
+  observed vector of `GetTransformParams`). Names by the format's rule, `<record>.shift` and `<record>.amplitude`
+  (`ParameterNamesOf` lists them); `--convert-params` maps dev's `isospin_shift_<Z>_<A>` and `isospin_mix_<k>`.
+- The derived slots: `IsospinSet::Apply` at the head of `CompoundSystem::FillCompoundFromParams`, before the
+  `gamma_decay` map; the values of the shifts and mixes are the level state's (`LevelState::IsospinValues`, set by a
+  fill from a vector that holds them, the records' values before). The derived slots are fixed parameters, written
+  synced after a parameter file is read (`AZUREParams::ReconcileBasis`) and before `param.sav`.
+- Gradient: the chain rule of the ties at the end of `GradAccum::Scatter`; a derived slot counts as free in the
+  formal basis's mask when a source is (`BuildFreeMask`, moved to `src/GradFreeMask.cpp`: `AZUREGrad.cpp` was at its
+  size); `IsRMatrixParameter` (a level slot, a shift or a mix) where the code asked
+  `IsLevelSlot` for "the adjoint covers it" (the fit's gradient, the Jacobian rows, the band's columns).
+- Objective: term T12, the priors of the fitted shifts and mixes and the soft ties (`IsospinSet::PenaltyRows`), with
+  its gradient (`GradAccum::direct`) and its rows in `AppendModelRows`; `Total-Isospin-Chi-Squared` in
+  `chiSquared.out`. The sampler has the whole term in its likelihood and refuses a chain on observed parameters; a
+  session refuses the observed-parameter calls (`UpdateSegments`, `CalculateChi2Physical`), as dev.
+- Reports: the start-up report of the factors, `isospin.out` (written with `parameters.out`), the member labels of
+  `parameters.out`.
+- Converter: dev's `<isospin>` lines into records (`Builder::BuildIsospin`), a `soft` line into its level's two
+  fields.
+- Docs: `user_guide/levels_channels.rst` ("Isospin Levels Across Compound Nuclei"), `reference/output_files.rst`,
+  `objective.md` (T12), the regenerated `format3.rst`.
+
+**Test.** `tests/isospin_levels` (dev's models converted, dev's checks; README there): 58 checks, 56 without the
+sampler. Against dev's build on dev's own files: the factors and every relation of `isospin.out`; the tied cross
+sections to 1e-8 away from the n+t interference minimum (the formal parameters of the two builds differ by 3e-10
+after the input transformation, and the minimum, 1e-6 of the peak, shows it as 7e-7); the soft fit's penalty
+(6.24993); the capture models to 1e-9. A derived member equals the stand-alone level with its parameters exactly, in
+both bases and with `relativistic=1`. `experiment/tests/isospin_test.cpp` (the kinds and the two codes; its own file, `build_test.cpp` being at the size
+the ratchet allows),
+`convert/tests/constructs_test.cpp`, `tests/pyazr/parameter_kinds_test.py` (the two kinds, `iso_free.azr`),
+`tests/pyazr/isospin_levels_test.py` (ctest `pyazr_isospin_levels`: the parameters and their priors, the objective
+and its rows, the gradient and the Jacobian through the ties against finite differences, two `Project` edits).
+
+**Differences from dev.**
+- Parameter names are the records' (`shift_4H.shift`, `mix_1.amplitude`).
+- The isospin parameters follow the level block; on dev they follow the abundances.
+- dev refused a soft tie with the least-squares fitters; here the soft ties are rows, and the fitters take them.
+- dev required the lines of an isospin level to be consecutive in `<levels>`; the level grouping here is by ID
+  (`io::LevelGrouper`), so the order is free.
+- A prior of a mix has the centre its record writes (dev: 0).
+- A cross section out of the d+d pair of the test's model is twice dev's: this branch's 1 + delta_12 of an identical
+  entrance pair (FOR_THE_OWNER, section 3, row 1), not the ties.
+
+**Open.**
+- `pyazr`: no Python was written. The records are edited through `Project` (generic), the parameters read through
+  `parameter_records`, and a session's objective, rows, gradient and Jacobian carry the ties and the term
+  (`tests/pyazr/isospin_levels_test.py`). dev's `AzrModel.join_levels` and `set_isospin_*` have no counterpart: a
+  level ID across nuclei is written in `<levels>` by hand.
+- `describe` and the compound-nucleus check do not show the ties.
+- A THM vertex with `vertex=constant` in a tied group of the formal basis takes B at the group's lowest level, not
+  -l (not tested; a THM data set on an isospin project was never run).
+- The web page's forms come from the schema; the Qt GUI has no editor (as dev).
+
+**Run here** (CRC, GCC 11.5): build; `tests/isospin_levels`; the unit tests named above. The full gate: see the end
+of this entry. **Not run:** CI.
+
+**A real project, outside the tree:** the A = 4 fit of the PI's archive (43 isospin levels in 4Li, 4H and 4He, 14
+mixes, formal basis; 87 data sets, 5,005 points, its spin-observable sets left out). From one formal parameter file
+(dev's `param.par`, its names converted by `--convert-params`) the model values of dev and of this branch agree to
+1e-9 (1.7e-7 at worst), and the d+d reaction data sets are exactly twice dev's (`FOR_THE_OWNER.md` section 3, row 1).
+From the project's own level values the formal parameters of the two builds differ by 4e-7, with 14 whole-level
+signs reversed: the input transformation, not the ties.
+
+**Decided by the owner (2026-11-16):** the identical-entrance-pair factor stays as this branch has it ("Go with
+Jakub's convention for the identical particles"): `FOR_THE_OWNER.md` section 3 row 1 is answered, keep 1 + δ₁₂. The
+A = 4 project's d + d reaction data were halved for `dev`'s convention (`*_azconv`) and go in un-halved here.
+
+**The full gate** (queue job, 8 slots, on the commit before this paragraph): consistency, configure, build and the
+docs clean; ctest 315 of 317, the base's two failing (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites
+172 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"),
+`tests/isospin_levels` passing (58 checks).
+
+## 2026-11-16 (owner's session, dev port) — per-channel radii, step 3: the session side
+
+**Branch** `feature/upgrade-5-dev-channel-radii`, on the entry below. dev's step 3 was a session method
+(`set_channel_radius(pair, radius, L, S, J)` over `AZUREAPI::SetChannelRadius`). This branch took the session's
+radius method away (`tests/pyazr/radius_override_test.py`, check 4: a radius is a Project edit and a new session),
+and `AZUREAPI::SetRadius` is bound to nothing in pyazr, so no channel form was added to it: a channel's own radius
+is `Project.add("channel_radius", name, pair=, l=, radius=[, s=, J=])`, `Project.set` and `Project.remove`, which
+needed no code.
+
+**Changed.** `AZUREAPI::GetCoulombFunctions` (`api/src/AZUREAPIChannelFunctions.cpp`): with no radius in the request
+it took the pair's radius; it now takes the radius of the model's channels of that pair and l, which a
+`channel_radius` record may have given them, and the pair's when the model has no such channel. When records with s
+or J give those channels more than one radius there is no default: `std::invalid_argument` ("... have more than one
+radius ...: give the radius"), a `ValueError` in `Session.channel_functions`. The closed-channel shift is given at
+that default radius as it was at the pair's. A project without `channel_radius` records: the same numbers.
+
+**Test.** `tests/pyazr/channel_radius_record_test.py` (ctest `pyazr_channel_radius_record`), on
+`tests/channel_space`: records for every l of pair 1 at 4.2 fm give the reduced widths (rel 1e-12) and chi2
+(rel 1e-10) of `Project.set_pair(1, radius=4.2)`; l = 1 alone is neither model; `channel_functions` at the
+channel's own radius; the refusal on pair 2 (l = 1, s = 3/2 and 5/2 at two radii); `Project.set` and
+`Project.remove`, the removal giving the file's model back; a second record of one selection refused by the edit
+(`E_CHANNEL_RADIUS_TWICE`).
+
+**Open.** The compound-nucleus check and `describe` do not list the entries (`Project.describe` of a
+`channel_radius` answers that it is not a record that computes). A session reports a pair's radius
+(`Pair.channel_radius`) and no channel's.
+
+**Run here** (CRC, GCC 11.5): build; the test above, `radius_override_test.py`. The full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; `tests/channel_radii`
+passes; ctest 313 of 315, the two the base fails (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 171
+pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), every chi2 line
+equal to the gate of the entry below.
+
+## 2026-11-16 (owner's session, dev port) — per-channel radii, steps 2, 4, 5: the `channel_radius` record
+
+**Branch** `feature/upgrade-5-dev-channel-radii`, on `feature/upgrade` `f252ba30` merged into it (the handoff log
+kept both sides' entries; no other conflict). The PI decided on 2026-11-16 that this branch's choices hold for the
+three open points of the dev ports: column 32 of a level line stays the THM binding energy (dev's light-particle
+excitation needs a named key here), the formal boundary condition is at the lowest level of a group, and the record
+names are this branch's (`channel_radius`, `isospin_*`, `spin_observable`).
+
+**What is new.**
+- Record kind `channel_radius` of section `<channelRadii>` (`experiment/src/Schema.cpp`): `pair`, `pair_key`, `l`,
+  `radius`, optional `s` and `J`. `<channelRadii>` left `Schema::NewerSections()`. Schema version unchanged (no
+  existing project changes meaning); `tests/schema/schema_v3.json` and `format3.rst` regenerated.
+- Build (`experiment/src/ChannelRadii.cpp`, `ChannelRadii.h`): one `ChannelRadiusEntry` a record into
+  `BuiltProject::channelRadii`; `ChannelRadiusFor` picks the most specific entry for a channel (l+s+J, then one of s
+  and J, then l) and reports the s-only/J-only tie. Codes `E_CHANNEL_RADIUS_TWICE`, `E_CHANNEL_RADIUS_PAIR_KIND`,
+  `E_CHANNEL_RADIUS_THM` (a THM data set whose entrance pair has an entry: the vertex is at the pair's radius).
+- Set-up (`CompoundSystem::ApplyChannelRadii`, `CompoundSystemBuild.cpp`): after every channel exists (hard-sphere
+  groups included) and after a session's pair override; the tie is an ERROR, an entry that names no channel a
+  WARNING.
+- External capture: `ExternalRow::through_row`, the internal pathway a capture goes through, for direct capture
+  too. The entrance wave's closed test and hard-sphere phase are at that pathway's entrance channel's radius, the
+  integral at the final channel's; `RefuseCaptureAcrossRadii` refuses a model in which the folded wave's channel and
+  the final channel have different radii (dev's rule; DeBoer, 2026-11-10). `WorkingCopy::ECSignature` adds the two
+  radii of a pathway only where one is not its pair's, so an existing integrals file keeps its signature.
+- `physics::System` is unchanged, and this is **open for its owner**: a system channel is (partition, kind, l, s),
+  one for every J^pi block that has it, and `System` refuses two that differ in anything else. A record with `J`
+  gives the blocks different radii, so `Channel::radius_fm` (the first block's) is then not the radius of the others.
+  Nothing in `physics/` or `src/` reads that member today (the engine reads `AChannel::GetRadius`); whoever first
+  reads it needs the radius per block and channel instead. Tried and taken back: making the radius part of the
+  channel's identity in `SystemOfCompound.cpp` (the constructor refuses it: "same (partition, kind, l, s)").
+- Converter: dev's lines `<pair key> <l> <radius> [s=<s>] [J=<J>]` become records in the same section
+  (`OldProject.cpp`, `Builder::BuildChannelRadii`); a block that starts with a `channel_radius` record is left alone.
+- `tests/channel_radii` (dev's test, re-written for records): phase shifts wave by wave on both routes and both
+  bases against the model with the pair's radius changed, every l against the plain models, 13N with external
+  capture, the refusals and the warning.
+
+**Not written.** Step 3: `AZUREAPI::SetRadius` has no channel form, and a pyazr session cannot set a channel's
+radius except through the project's records. The compound-nucleus check and `describe` do not list the entries.
+`ChannelTable`'s pair signatures hold the pair's radius only; its rows are keyed by the radius, so a stale row is
+not found, but the reuse test does not see a changed entry. THM stays refused rather than carried.
+
+**Run here** (CRC, GCC 11.5): build; `experiment_build`, `experiment_diagnostics`, `experiment_schema`,
+`pyazr_schema`, `convert_constructs`, `convert_fixtures`, `physics_system_of_compound`, `physics_pathway_table`;
+`tests/channel_radii/check.sh`. The full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue jobs, 8 slots; the merge of `feature/upgrade` f252ba30 alone, then this commit on it):
+consistency, configure, build and the docs clean on both; ctest 312 of 314 on both, the same two failing
+(`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 170 pass and 2 fail on the merge, 171 pass and
+2 fail here (the new `tests/channel_radii`), the same two failing (`capture_ay_coupling`, "a warning for ancai06
+inside its range"); every chi2 line of the suites equal between the two.
+
+## 2026-11-15 (owner's session, dev port) — per-channel radii, step 1: the channel holds its radius
+
+**Branch `feature/upgrade-5-dev-channel-radii`** (from `feature/upgrade` `7a1d96d0`), not merged. Step 1 of
+`dev_features.md` section 2 only: a refactor, no new input, every output meant to be identical.
+
+**What changed.**
+- `AChannel::SetRadius(radius, reducedMass)` (was `SetWignerLimit`) stores the radius and the Wigner limit;
+  `AChannel::GetRadius()` gives it and throws `std::logic_error` on a channel never set up. The three places that
+  make or re-radius a channel (`CompoundSystemBuild.cpp`) fill it from the pair, as before.
+- `PPair::GetChRad` is renamed `GetPairRadius`, so that no channel quantity reads it by habit. It stays for what
+  belongs to the pair: the beta Fermi function, the THM vertex's form factor (`ThmBesselParts`, `ThmCoulombTerm`,
+  `ThmDwVertex`, the THM reports), the signatures of the tables, the report line, the API's default radius.
+- The helpers take the radius instead of reading the pair's: `ChannelFunc(pair, gsl, radius)`,
+  `ShftFunc(pair, radius)`, `NFIntegral(pair, radius)`, `ECIntegral(pair, configure, radius)`,
+  `ECTable::Integral(pair, radius, ...)` (the radius was already in its term key), `ScatteringLength::CoulombX /
+  ZeroEnergyShift / FormulaCoefficients`, `ParticleChannelValues`, `ThmVertexBoundary::ShiftAtLevelEnergy`. Every
+  caller with a channel in hand passes `channel->GetRadius()`.
+- `ChannelTable::Key` gains `radius` (compared exactly, between 2J and the energy) and a constructor of all five
+  members: a key written one member short does not compile (as an aggregate it took the energy for the radius --
+  the unit test found that). `docs/upgrade/channel_table.md` section 2 says so.
+- The shared shift derivative of `LevelStateFill.cpp` (channels that differ only in channel spin) is shared at
+  one radius; the system's channel (`SystemOfCompound.cpp`) takes `radius_fm` from the channel.
+- External capture (`UnitExternalCapture.cpp`): two radii. The radial integral runs from the final channel's
+  radius. The entrance wave's closed test and hard-sphere phase are at the entrance channel's radius: for channel
+  capture that is the entrance channel of the internal pathway the capture passes through, which can be of another
+  partition (`tests/beam_profile_kernel`: 12C+alpha at 5.43 fm in, capture in 15N+p at 5.03 fm). The first form of
+  this step took both at the final channel's radius, and that project moved by 3.1e-3 in chi2 -- the only one of
+  the gate that did; with the two radii its outputs are byte-identical to the base's. For direct capture the
+  entrance and final channels are of one partition; dev refuses a transition whose two channels have different
+  radii, and that refusal belongs to step 4 here.
+
+**Open for the next steps.**
+- THM with radii per channel: the vertex pieces are kept per l of the entrance pair (`psCoulByL`), at the pair's
+  radius. Either refuse a `channel_radius` on a THM entrance pair or carry the radius there. Not decided.
+- `SystemOfCompound.cpp` merges channels of equal (partition, kind, l, 2s) across J^pi blocks; a radius qualified
+  by J needs the radius in that comparison.
+- `ChannelTable`'s pair signatures and `WorkingCopy::ECSignature` still hold the pair's radius only (step 4).
+- Steps 2-5 (the record, the API's channel form, the signatures, dev's test) wait for the record's name.
+
+**Run here** (CRC, GCC 11.5): build; `wigner_limit_reference` (two new checks), `channel_threshold`,
+`channel_table_unit`, `physics_system_of_compound`, `pyazr_wigner_convention`, `upgrade_predictions`;
+`repo_consistency_test.py`. The full gate (queue job, 8 slots): consistency, configure, build and the docs clean; ctest 308 of 310, the two the base fails (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 170 pass, 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), every chi2 line equal to the base's. **Not run:** CI.
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-seed`: dev's bounded MIGRAD seed, re-written here
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. The first of
+dev's features written after `dev_features.md` (dev read there to `3e502625`; this is from dev's
+`feature/migrad-seed-robust`, on dev's line since 2026-11-15).
+
+**What it is.** The first MIGRAD step from the Gauss-Newton seed had no bound for a parameter the data hardly
+constrain and for a limited parameter near its limit; a failed first line search sends Minuit2 into a numerical
+HESSE of n(n-1)/2 evaluations. Design, formula and numbers: `fit.md` section 5.
+
+**Where it is.**
+- `include/MigradSeed.h`, `src/MigradSeed.cpp` (new): the bound (a static function) and the watch of the first
+  step; one object per MIGRAD, owned by `MigradPass`. No static, no `mutable`, no environment switch.
+- `src/AZURECalc.cpp` (+7 lines, 1403 of its 1437): `SeedWith` pointer, the bound where the Jacobian's G2 is
+  stored, the gradient call told to the seed, `DisableG2`.
+- `src/FitMigrad.cpp`: `MigradPass` is the watched pass and, after a stall, one pass with Minuit2's numerical seed;
+  the old body is `MigradOnce`.
+- `tests/reference/migrad_seed_test.cpp` (ctest `migrad_seed`); `docs/source/reference/command_line.rst`
+  (`--use-gradient`); `fit.md` section 5.
+
+**Not ported, on purpose:** dev's `AZURE_SEED_BOUND=0` and its test hook `AZURE_SEED_STALL_TEST` (a switch that
+moves a number needs an option; the unit test drives the watch directly). dev's `tests/migrad_seed/check.sh`
+used both and the old menu; the unit test replaces it.
+
+**Run here** (CRC, GCC 11.5, 8 threads unless said): `migrad_seed` passes; `repo_consistency_test.py` passes; the
+32 ctest entries matching `fit|migrad|grad` (not `slow`) pass; `tests/13N` with `--use-gradient`: 89 function calls
+(this branch's base: 70), total chi-squared 28100.17227 (base 28100.17230), "4 of 14 free parameters" bounded; the
+same fit started from its own `param.sav`: no restart, the HESSE notice, converged. **Not yet run:**
+`./scripts/check.sh` in full (queued), `ctest -L slow`, any CI. A pinned chi-squared of a call-limited gradient fit
+can move, because the path of the first steps changes (on dev one did: `tests/shared_point_tables`, 109.134 to
+106.338 at 5 calls); none was re-pinned in the feature's commit.
+
+**Full gate, CRC job 1756130 (2026-11-15 18:23), against the base's own run (job 1755945):** consistency passes;
+the build passes; ctest 309 of 311 (the base's two failures, `pyazr_park_dsde` and `pyazr_units_scales`, and no
+other); `tests/run_tests.sh` 169 passed, 3 failed: the base's two (`capture_ay_coupling`, "a warning for ancai06
+inside its range") and `shared_point_tables` (b), the 5-call gradient fit: 106.432604829 at 1 and at 4 threads
+against the recorded 109.263831704. Re-pinned in the commit after the feature's (`expected/chi2_fit`, the test's
+README); the docs build passes (60 pages).
+
+**Open.** (1) The base of this branch fails two unit tests on this machine before any change
+(`pyazr_park_dsde`, `pyazr_units_scales`): not looked at yet. (2) The restart inside a real fit has no test (no
+project fails its first line search).
+
 ## 2026-11-16 (owner's session, dev port) — rmfit beside pyazr, on pyazr 3.0
 
 **Branch** `feature/upgrade-5-dev-rmfit`, cut from `feature/upgrade` (`e8b1fe94`). `rmfit/` is the package of `dev`
@@ -674,6 +1208,79 @@ passing, and `pyazr_evaluation` on its one timing check ("evaluate takes the tim
 branch changes no file under `pyazr/`, `src/`, `include/` or `tests/pyazr/`: the check is sensitive to load, which
 the 37 added tests raise under `-j4`. **For the director:** either that check wants a wider margin or the rmfit
 tests a `RUN_SERIAL`/resource lock; neither is done here.
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-test-races`: two pyazr tests on private copies (dev's `1fe959ff`)
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below.
+`tests/pyazr/apply_fit_test.py` and `beta_sign_test.py` wrote their snapshots (`_snapshot_test.azr`,
+`_beta_sign_*.azr`, each with a `.sav`) into `tests/hybrid_potential` and `tests/beta_delayed_alpha` and removed them
+at the end. On dev two other tests read those directories at the same time under `ctest -j` (one copies the
+directory, one globs `tests/*/*.azr`) and failed now and then on a file just removed. Both tests are the same here
+and `apply_fit_test.py` itself globs `tests/*/*.azr`, so the same race is open here; it was not seen to fail here.
+Now each test copies its fixture to a temporary directory and works there. Both pass (base engine, CRC); nothing is
+left in `tests/` or in the temporary directory. No engine file changed.
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-exfor-agent`: the EXFOR user-agent IAEA gave AZURE2
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. dev's `9b6ecb17`:
+requests to the EXFOR Web-API (`x4list`, `x4get`) send `Exfor-Azure2/1.0`, the string the IAEA Nuclear Data Section
+asked AZURE2 to send (2026-11-09; the API otherwise answers many clients with a Cloudflare 403); LiveChart, the NNDC
+ENSDF API and Crossref keep `pyazr/nds (research tool)`. `pyazr/sources/nds.py` (`EXFOR_UA`, `_http_get`), ctest
+`pyazr_nds_exfor_user_agent` (dev's test without its check of the GUI client, which this build does not have).
+Offline test; passes here. No number changes.
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-udr-low-energy`: dev's time-of-flight kernels at low energy
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. dev's `a68474f0`
+(`dev_features.md` section 4), written for this structure. Design, the table of the six places and the measured
+numbers: `energy_grid.md` section 13.
+
+**Where it is.** `experiment/src/KernelUdr.cpp` (relative floor of the window, a one-node window is the node's
+value), `experiment/src/KernelDoppler.cpp` (the floor under a UDR kernel),
+`experiment/include/azure2/experiment/UdrKernel.h` (flight time and its inverse without cancellation),
+`src/TargetEffect.cpp` (`BuildUdrKernel`: the support includes the bracketing zero nodes),
+`include/MeshPlanner.h`, `src/MeshPlanner.cpp`, `src/MeshSlots.cpp`, `include/Unit.h`, `src/TargetSetup.cpp`
+(`MeshSupport::zeroWidth`, `SubGridSpec::timeOfFlight`, the ladder step's floor at one spacing of the doubles).
+`MeshZeroWidth()` itself is unchanged: no support without a `udr` detector can move.
+
+**Tests.** `tests/udr_low_energy` (dev's, model converted with `--convert`, the three kernels as detector records
+edited into it): passes here, fails on the base (3 of 3; zeros at 17, 7 and 3 of the 67 points).
+`tests/upgrade/mesh_planner_test.cpp`: the case "time of flight" (8 checks).
+
+**Run here** (CRC, GCC 11.5): the two above; `repo_consistency_test.py`. **The full gate** (queue job 1756614, base `7a1d96d0`): consistency, configure and build pass; unit tests 307 of
+310, failing the base's two (`pyazr_park_dsde`, `pyazr_units_scales`) and `upgrade_predictions`, which lists every
+project under `tests/`: the new model is added to `tests/upgrade/predictions.txt` in a follow-up commit (2 lines
+added, none changed) and the test passes; physics suites 171 pass, the base's two fail (`capture_ay_coupling`, the
+ancai06 warning) -- no project without a `udr` detector moved; the pages build. **Not run:** CI; a `udr` detector with a fitted energy shift at a thermal point.
+
+**Seen on the way, not changed:** `--convert` writes dev's negative channel width (|n| bins per decade of energy)
+as `channel -7.55 ns`; the engine still reads a negative number that way, so the unit on the line is wrong for it.
+A keyword of its own (bins per decade) would be the format's answer; it is the format owner's.
+
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-ec-tests`: dev's two capture tests of what is already here
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. No engine file
+changed: two tests, their models, two READMEs, two lines of `dev_features.md` section 1.
+
+- `tests/two_nuclei_ec` (dev `6e918ed1`): three models converted with `--convert`; six checks pass (default,
+  `--no-brune`, `--no-ec-table`); the merged project equals the standalone ones exactly.
+- `tests/formal_ec_final_state` (dev `081dddf9`, `630dff75`): four models converted; 45 of dev's 51 checks passed
+  as written, the six others were rewritten to this branch's rules (the test's README has the table); 50 pass.
+
+**What dev's checks found here (both open, neither a wrong number):**
+1. With every parameter of the final state's J^π group free, a formal fit has no analytic gradient
+   (`AZUREGrad.cpp`, `HasFormalECFinalBlocks`): finite differences and a numerical MIGRAD seed. dev differentiates
+   the final state's amplitude (`CNuc::FormalECFinalPullback`). The fit converges here all the same (220.515 to
+   0.00048).
+2. `--no-transform` with the final state's formal energy off its pair's energy: refused here, a WARNING on dev. For
+   the owner, with the level of the boundary condition.
+
+**Run here** (CRC, GCC 11.5): both scripts pass with the build of `feature/upgrade-5-dev-seed` (base `486d746e`);
+`repo_consistency_test.py` passes. **The gate of this branch itself** (queue job 1756600, base `7a1d96d0`): consistency, configure and build pass;
+unit tests 307 of 310, failing the base's two (`pyazr_park_dsde`, `pyazr_units_scales`) and `upgrade_predictions`,
+which lists every project under `tests/`: the seven new models are added to `tests/upgrade/predictions.txt` in a
+follow-up commit (19 lines added, none changed) and the test passes; physics suites 172 pass, the base's two fail
+(`capture_ay_coupling`, the ancai06 warning); the pages build. **Not run:** CI.
 
 ## 2026-11-17 (director, 01:10) — merged: 64-bit x87 precision in every thread (the Windows unit tests)
 

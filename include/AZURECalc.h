@@ -65,6 +65,8 @@ struct FitterStates {
  * process to perform the minimization.
  */
 
+class MigradSeed;
+
 class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
  public:
   /*!
@@ -156,6 +158,11 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   bool HasG2() const override { return g2Enabled_; }
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
+  /// Back to Minuit2's numerical seed (the restart after a failed first step, FitMigrad.cpp).
+  void DisableG2() { g2Enabled_ = false; }
+  /// The seed of the MIGRAD that is running (owned by the fitter, which outlives its use; nullptr: none): it bounds
+  /// the G2 handed to Minuit2 and is told of every gradient call (MigradSeed.h).
+  void SeedWith(MigradSeed *seed) { seed_ = seed; }
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalcDiagnostics.cpp).
   void DumpNonFinite(const vector_r &p, double chi, const CompoundSystem *lc, WorkingCopy *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
@@ -291,6 +298,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
 
  private:
   std::atomic<long> *callCounter_ = nullptr;  ///< CountCallsInto: not owned
+  MigradSeed *seed_ = nullptr;                ///< SeedWith: not owned
   const EvaluationObserver *observer_ = nullptr;  ///< Observe: not owned
   const Config &configure_;
   WorkingCopy *data_;

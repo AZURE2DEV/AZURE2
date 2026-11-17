@@ -25,6 +25,12 @@ int ParamIndexMap::AppendAmplitude(int jGroup, int level, int channel, bool radi
   return i;
 }
 
+int ParamIndexMap::AppendIsospin(ParamKind kind, int jGroup, int level, int channel, int nucleus) {
+  ParamDesc d{kind, jGroup, level, channel, -1, false};
+  d.nucleus = nucleus;
+  return Append(d);
+}
+
 int ParamIndexMap::AppendAbundance(int ordinal, int sample, int nucleus) {
   ParamDesc d{ParamKind::Abundance, -1, -1, -1, -1, false};
   d.sample = sample;

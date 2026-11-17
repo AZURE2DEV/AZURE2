@@ -37,11 +37,11 @@ bool RateMode(const Config &configure) {
 }
 
 /// Everything the integral depends on besides the energy.
-std::vector<double> TermKey(const PPair *pair, const Config &configure, const CoulFunc &coul, int li, int lf,
+std::vector<double> TermKey(const PPair *pair, double radius, const Config &configure, const CoulFunc &coul, int li, int lf,
                             double si, double sf, double ji, double jf, int multL, char radType,
                             double levelEnergy, bool isChannelCapture, int nodesPerDecade) {
   std::vector<double> key{(double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2), pair->GetRedMass(),
-          pair->GetJ(1), pair->GetJ(2), pair->GetG(1), pair->GetG(2), pair->GetChRad(),
+          pair->GetJ(1), pair->GetJ(2), pair->GetG(1), pair->GetG(2), radius,
           pair->GetSepE() + pair->GetExE(),
           (double)li, (double)lf, si, sf, ji, jf, (double)multL, (double)radType, levelEnergy,
           isChannelCapture ? 1.0 : 0.0,
@@ -65,11 +65,11 @@ std::vector<double> TermKey(const PPair *pair, const Config &configure, const Co
  * carries it, and it turns with energy).  Both are exact and cheap (the
  * Coulomb table answers them at the channel radius).
  */
-bool Reduction(const PPair *pair, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture, complex &n) {
+bool Reduction(double radius, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture, complex &n) {
   if (isChannelCapture)
-    n = coul.HardSpherePhase(li, twoJi, pair->GetChRad(), outEnergy);
+    n = coul.HardSpherePhase(li, twoJi, radius, outEnergy);
   else
-    n = complex(sqrt(coul.Penetrability(li, twoJi, pair->GetChRad(), outEnergy)), 0.0);
+    n = complex(sqrt(coul.Penetrability(li, twoJi, radius, outEnergy)), 0.0);
   return std::isfinite(n.real()) && std::isfinite(n.imag()) && std::abs(n) > 0.0;
 }
 
@@ -78,29 +78,29 @@ bool Reduction(const PPair *pair, CoulFunc &coul, int li, int twoJi, double outE
 /// them would inherit.  Nodes are few, so they are converged instead.
 const double kNodeTolerance = 1e-10;
 
-complex Direct(const PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
+complex Direct(const PPair *pair, double radius, const Config &configure, int li, int lf, double si, double sf, double ji,
                double jf, int multL, char radType, double inEnergy, double levelEnergy, bool isChannelCapture) {
-  ECIntegral integral(pair, configure);
+  ECIntegral integral(pair, configure, radius);
   return integral(li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
 }
 
 /// The integral converged to kNodeTolerance, or at the direct integrals' own
 /// tolerance where the quadrature cannot reach it (a GSL error or status).
-complex Converged(const PPair *pair, const Config &configure, int li, int lf, double si, double sf, double ji,
+complex Converged(const PPair *pair, double radius, const Config &configure, int li, int lf, double si, double sf, double ji,
                   double jf, int multL, char radType, double inEnergy, double levelEnergy, bool isChannelCapture) {
   try {
-    ECIntegral integral(pair, configure);
+    ECIntegral integral(pair, configure, radius);
     integral.SetRelativeTolerance(kNodeTolerance);
     complex v = integral(li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
     if (integral.Status() == 0) return v;
   } catch (...) {
   }
-  return Direct(pair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
+  return Direct(pair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy, isChannelCapture);
 }
 
 }  // namespace
 
-complex ECTable::Integral(const PPair *finalPair, const Config &configure,
+complex ECTable::Integral(const PPair *finalPair, double radius, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
                           bool isChannelCapture, const ChannelTable *table, int finalPairNum) {
@@ -115,12 +115,17 @@ complex ECTable::Integral(const PPair *finalPair, const Config &configure,
   // sqrt(P) or exp(-i phi) at a_c from the point's channel table where it holds the open channel (same function).
   // the entrance channel's 2J key: its waves depend on J_i when the pair has a spin-orbit term
   const int twoJi = finalPair->SpinOrbitTwoJ(ji);
-  const ChannelTable::Row *row = table ? table->Find({finalPairNum, li, twoJi, outEnergy}) : nullptr;
-  if (row && row->P > 0.0)
+  const ChannelTable::Row *row = table ? table->Find({finalPairNum, li, twoJi, radius, outEnergy}) : nullptr;
+  // An unbound final state (levelEnergy above this pair's threshold, ECIntegral::IntegrateUnbound) is integrated
+  // directly: its integral grows like (k_i - k_f)^-2 towards the photon threshold E = levelEnergy and is zero below
+  // it, which a Lagrange stencil in ln(E_out) cannot follow.
+  const bool unboundFinal = levelEnergy > threshold;
+  if (!unboundFinal && row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
-  else if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
+  else if (unboundFinal || !(outEnergy > 0.0) ||
+           !Reduction(radius, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
     ++counts.direct;
-    return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+    return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
   }
 
@@ -128,7 +133,7 @@ complex ECTable::Integral(const PPair *finalPair, const Config &configure,
   const double h = log(10.0) / perDecade;
   Term *term;
   {
-    std::vector<double> key = TermKey(finalPair, configure, coul, li, lf, si, sf, ji, jf, multL, radType,
+    std::vector<double> key = TermKey(finalPair, radius, configure, coul, li, lf, si, sf, ji, jf, multL, radType,
                                       levelEnergy, isChannelCapture, perDecade);
     ECTermStore &store = configure.scratch->ecTerms;
     std::lock_guard<std::mutex> lock(store.mutex);
@@ -166,8 +171,8 @@ complex ECTable::Integral(const PPair *finalPair, const Config &configure,
     const double nodeOut = exp((double)(first + s) * h);
     try {
       complex n;
-      if (Reduction(finalPair, coul, li, twoJi, nodeOut, isChannelCapture, n)) {
-        complex v = Converged(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, nodeOut + threshold,
+      if (Reduction(radius, coul, li, twoJi, nodeOut, isChannelCapture, n)) {
+        complex v = Converged(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, nodeOut + threshold,
                               levelEnergy, isChannelCapture) / n;
         node.ok = std::isfinite(v.real()) && std::isfinite(v.imag());
         node.value = v;
@@ -194,14 +199,14 @@ complex ECTable::Integral(const PPair *finalPair, const Config &configure,
   }
   if (!ok) {
     ++counts.direct;
-    return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+    return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
   }
   ++counts.lookups;
   complex result = sum * reduction;
 
   if (CheckMode()) {
-    complex exact = Converged(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+    complex exact = Converged(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                               isChannelCapture);
     if (std::abs(exact) > 0.0) {
       double dev = std::abs(result - exact) / std::abs(exact);

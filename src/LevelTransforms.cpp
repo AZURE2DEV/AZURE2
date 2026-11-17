@@ -361,7 +361,7 @@ void CompoundSystem::ObservedWidths(const Config &configure, const LevelState &s
         if (theChannel->GetRadType() == 'P') {
           const PPair *pair = this->GetPair(theChannel->GetPairNum());
           out.mu_u[k] = pair->GetRedMass();
-          out.a_fm[k] = pair->GetChRad();
+          out.a_fm[k] = theChannel->GetRadius();  // the channel's own radius (channel_radius records)
         }
       }
   }

@@ -376,6 +376,39 @@ class GammaDecayTerm : public ObjectiveTerm {
   }
 };
 
+// T12: the priors of the fitted isospin shifts and mixes and the soft ties of the isospin levels (IsospinTies.h), at
+// the levels and isospin values of the last fill.
+class IsospinTerm : public ObjectiveTerm {
+ public:
+  bool ModelOnly() const override { return true; }
+  std::string Name() const override { return "isospin priors and soft ties"; }
+  void Add(const ObjectiveContext &c, double &chi2) const override {
+    const IsospinSet &isospin = c.compound->GetIsospin();
+    if (!isospin.HasPenalty()) return;
+    const double v = isospin.Penalty(*c.compound, c.state);
+    chi2 += v;
+    StoreTotal(c, v);
+  }
+  // In the parameters alone: straight to the shifts' and mixes' indices (GradAccum::direct), as T11.
+  TermGradient AddGradient(const ObjectiveContext &c, const ParamIndexMap &, const vector_matrix_r *,
+                           GradAccum &accum) const override {
+    if (!c.compound->GetIsospin().HasPenalty()) return TermGradient::kNone;
+    c.compound->GetIsospin().AddPenaltyGradient(*c.compound, c.state, accum.direct);
+    return TermGradient::kAdded;
+  }
+  // r and dr/dq of the priors and soft ties (IsospinSet::PenaltyRows; none without an <isospin> prior or tie).
+  void AppendRows(const ObjectiveContext &c, ModelRows &rows) const override {
+    for (const IsospinSet::PenaltyRow &row : c.compound->GetIsospin().PenaltyRows(*c.compound, c.state))
+      rows.Append(row.r, nullptr, &row.d);
+  }
+  // The priors on the internal Coulomb shifts and isospin-forbidden amplitudes, and the soft ties, whenever the
+  // project has any.
+  std::string TotalLabel() const override { return "Total-Isospin-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
+    if (results.objective.Stored(Slot())) WriteStoredTotal(results, out);
+  }
+};
+
 // T10: the prior parameter covariance (<config> priorCovariance=), (p - mu)^T C^-1 (p - mu).
 class PriorCovarianceTerm : public ObjectiveTerm {
  public:
@@ -439,13 +472,14 @@ Objective::Objective() {
   const ObjectiveTerm *modelData = Append<ModelDataTerm>();
   priorCovariance_ = Append<PriorCovarianceTerm>();
   const ObjectiveTerm *gammaDecay = Append<GammaDecayTerm>();
+  const ObjectiveTerm *isospin = Append<IsospinTerm>();
   // The other walks have orders of their own, older than the list (each is part of a result: the gradient's and the
   // rows' sums, the bytes of chiSquared.out).  Each names the terms that take part, in that order; every other term
   // follows in the value's order (its function does nothing), so a new term is visited last by every walk.
-  gradientWalk_ = WalkOrder(Terms(), {gammaDecay, modelData, park, abundance});
-  rowWalk_ = WalkOrder(Terms(), {park, gammaDecay, abundance});
+  gradientWalk_ = WalkOrder(Terms(), {gammaDecay, isospin, modelData, park, abundance});
+  rowWalk_ = WalkOrder(Terms(), {park, gammaDecay, isospin, abundance});
   reportWalk_ = WalkOrder(Terms(), {park, segments, abundance, screening, density, apparatus, doppler, thickness,
-                                    nuisance, modelData, gammaDecay, priorCovariance_});
+                                    nuisance, modelData, gammaDecay, isospin, priorCovariance_});
 }
 
 void Objective::WriteTotals(const WorkingCopy &data, const Config &config, const azure2::Results &results,

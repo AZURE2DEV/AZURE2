@@ -31,6 +31,8 @@ add_library(azure2_experiment STATIC
   src/BuildEffects.cpp
   src/BuildFinalStates.cpp
   src/BuildPotentials.cpp
+  src/ChannelRadii.cpp
+  src/Isospin.cpp
   src/BuildUnits.cpp
   src/Expression.cpp
   src/Frames.cpp
@@ -99,7 +101,7 @@ endif()
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src expression_test.cpp frames_test.cpp schema_test.cpp diagnostics_test.cpp quantities_test.cpp
              parsers_test.cpp build_test.cpp prediction_test.cpp grids_test.cpp measurement_test.cpp kernels_test.cpp
-             layout_base_test.cpp)
+             layout_base_test.cpp isospin_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(experiment_${_t}_test tests/${_src})
   target_link_libraries(experiment_${_t}_test PRIVATE azure2_experiment_reader)

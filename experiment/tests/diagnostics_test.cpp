@@ -213,6 +213,8 @@ int main() {
                        "    truncation 0\n    detailed_balance no\n</targets>\n"},
       {"E_FORMULA_SYNTAX", "<targets>\nbeam b1\n    spread formula a0*x a0=1 MeV lab\n</targets>\n"},
       {"E_SPIN_SYNTAX", Model(Set(kDatum, "J", "    J 3"))},
+      {"E_SPIN_OPERATOR", Data(Set(Set(Set(kDataset, "quantity", "    quantity spin_observable"), "unit", "    unit 1"),
+                                   "columns", "    columns E_lab[MeV] theta_cm[deg] value error") + "    operator b:w\n")},
       {"E_NUCLEUS_SYNTAX", Set(kTargets, "active", "    active C13")},
       {"E_UNKNOWN_ELEMENT", Set(kTargets, "active", "    active 13Xx")},
       {"E_PAIR_SYNTAX", Model("datum a1\n    quantity scattering_length\n    pair n20Ne\n    s coherent\n"
@@ -481,7 +483,8 @@ int main() {
     check("E_STOPPING_RANGE: the energy, the projectile and the library's reason", okR);
     if (okR) tested.insert(r.code);
   }
-  // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build);
+  // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build; the
+  // <isospin> codes in isospin_test.cpp);
   // E_UNKNOWN_PAIR and E_AMBIGUOUS_PAIR have a case in both (a datum's pair above, a data set's reaction there)
   // (E_THM_OLD_LIST: build_test.cpp, the reading path; E_LAB_JACOBIAN_AT_LIMIT: frames_test.cpp, the frames of the set-up)
   const std::set<std::string> buildCodes = {"E_REFERENCE_TABLE", "E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ", "E_DATA_ROW", "W_DATA_ERROR",
@@ -489,6 +492,8 @@ int main() {
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
                                             "E_THM_EXPERIMENT_UNKNOWN", "E_THM_OLD_LIST", "E_LAB_JACOBIAN_AT_LIMIT",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
+                                            "E_CHANNEL_RADIUS_TWICE", "E_CHANNEL_RADIUS_PAIR_KIND", "E_CHANNEL_RADIUS_THM",
+                                            "E_ISOSPIN_RECORD", "E_ISOSPIN_PAIR",
                                             "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_CONFIG_KEY_REMOVED", "E_CONFIG_OPTION_VALUE",
                                             "E_UNKNOWN_SECTION", "E_UNREAD_LINE",
                                             "E_CONFIG_OPTIONS_CONTRADICT", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",

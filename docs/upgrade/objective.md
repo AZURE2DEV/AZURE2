@@ -25,6 +25,7 @@ Abbreviations: `AC` = `src/AZURECalc.cpp`, `ED` = `src/EData.cpp`, `MC` = `src/A
 | T9 | measured scattering lengths | Σ_{Re, Im} ((a − a_m)/σ)² | `ScatteringLength.cpp` 209 |
 | T10 | prior covariance | (p − μ)ᵀC⁻¹(p − μ) | `PriorCovariance.cpp` 273 |
 | T11 | gamma_decay priors and the remainder's wall | Σ ((q − c)/w)² over the record numbers with a prior and the remainder 1 − Σb; ((Σb − 1)/10⁻³)² for Σb > 1 | `GammaDecayMap.cpp` (`gamma_parametrisation.md` §2.6); rows in `AppendModelRows`, gradient direct (`GradAccum::direct`) |
+| T12 | isospin priors and soft ties | Σ ((x − c)/w)² over the fitted `isospin_shift` and `isospin_mix` numbers with a prior, and ((x − x_tie)/σ)² over the derived slots of a soft `isospin_level` | `IsospinTies.cpp` (`IsospinSet::PenaltyRows`); rows in `AppendModelRows`, gradient direct (`GradAccum::direct`); the sampler has the whole term in its likelihood |
 
 The paths that evaluate them, and which they include:
 1. the Minuit FCN `operator()` (`AC` 561–742);

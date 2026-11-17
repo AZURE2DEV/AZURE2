@@ -32,7 +32,8 @@ struct FlatInterference {
   int l;          ///< Legendre order
   char r1, r2;    ///< 'R' internal, 'E' external capture pathway
   double z;       ///< Z1Z2 coefficient (0 for a cross-spin UPOS group)
-  double z_upos;  ///< the unobserved-primary, observed-secondary coefficient (0 unless a particle exit != entrance)
+  double z_upos;  ///< the unobserved-primary, observed-secondary coefficient: a particle exit != entrance, or a photon
+                  ///< exit (the secondary gamma ray of a capture cascade: pathways of one multipole); else 0
   bool spEqual;   ///< the group has s' equal to s2' (s2' = 0 for a group without one)
   int s1, s2;     ///< positions of the two pathways in the exit's interference pathways (0-based)
 };
@@ -89,6 +90,9 @@ struct ExternalRow {
   int cc_exit, cc_group, cc_pathway;  ///< channel capture: the internal pathway it passes through, as positions (exit,
                                       ///< k, m; 1-based); 0 for direct capture
   int cc_row;                 ///< that pathway as an index into EntrancePathways::internal; -1 for direct capture
+  int through_row;            ///< the internal pathway the capture goes through, for direct capture too (whose entrance
+                              ///< and exit channel it is): `ch` is the entrance channel, `chp` the channel of the
+                              ///< wave the radial integral folds
   int photon_channel;         ///< J-group channel of the block's photon channel to the final state (1-based), 0 if none
 };
 

@@ -31,6 +31,7 @@ enum class ValueType {
   NumberList,      ///< <number> <number> ...
   Spin,            ///< 0, 1, 3/2, ...
   SpinParity,      ///< 0+, 3-, 1/2+, ...
+  SpinOperator,    ///< the operator token of a spin observable: b:y, b:y*t:y, b:T20, b:y>e1:y (physics/SpinObservable.h)
   Nucleus,         ///< <A><Symbol>: 13C
   Pair,            ///< <particle>+<nucleus>[<E_x>]: p+15N, a+12C[4.439]
   Composition,     ///< <Symbol> <number> ...: C 1 O 2
@@ -174,7 +175,8 @@ struct Value {
   ValueType type = ValueType::Text;
   int line = 0;
   int col = 0;
-  std::string word;   ///< Enum (canonical spelling), Reference/Name, Path, Text, Form (its alternative's keyword)
+  std::string word;   ///< Enum (canonical spelling), Reference/Name, Path, Text, SpinOperator (the token), Form (its
+                      ///< alternative's keyword)
   std::string epoch;  ///< Reference: the epoch of name@epoch
   long integer = 0;
   Number number;               ///< Number, Integer (its text), NumberWithUnit

@@ -547,12 +547,15 @@ for top in ("src", "api/src"):
 #      AppendModelRows, WriteTotals) loop over the terms.  So outside src/Objective.cpp: no total of a term by name in
 #      Results::objective (they are slots, ObjectiveTerm::Slot); no field "Total-<x>-Chi-Squared" written other than the
 #      data's own (the writer's Total-Chi-Squared, Total-Norm-Chi-Squared) and the apparatus rows' helper; and the
-#      arithmetic of the model terms (Park's wall, the abundances, the gamma_decay records) is called by the term only.
+#      arithmetic of the model terms (Park's wall, the abundances, the gamma_decay records, the isospin priors and ties)
+#      is called by the term only.
 TERM_ARITHMETIC = ("ParkWallChi2", "ParkWallGradient", "ParkWallRow", "AbundanceChi2", "AbundanceGradient",
-                   "AbundanceSumRows", "PenaltyRows", "AddPenaltyGradient", "GetGammaDecays().Penalty")
-TERM_ARITHMETIC_DEFINERS = {"src/Objective.cpp", "src/GammaDecayMap.cpp", "include/GammaDecayMap.h"}
+                   "AbundanceSumRows", "PenaltyRows", "AddPenaltyGradient", "GetGammaDecays().Penalty",
+                   "GetIsospin().Penalty")
+TERM_ARITHMETIC_DEFINERS = {"src/Objective.cpp", "src/GammaDecayMap.cpp", "include/GammaDecayMap.h",
+                            "src/IsospinTies.cpp", "include/IsospinTies.h"}
 NAMED_TOTAL = re.compile(r"\bobjective\.(park|abundance|nuisance|priorCovariance|modelData|hasModelData|gammaDecay|"
-                         r"hasGammaDecay)\b")
+                         r"hasGammaDecay|isospin|hasIsospin)\b")
 TOTAL_FIELD = re.compile(r'"\s*(Total-[A-Za-z-]+-Chi-Squared)\b')
 TOTAL_FIELD_ALLOWED = {("src/DataOutputFiles.cpp", "Total-Norm-Chi-Squared")}
 for top in ("src", "include", "api/src", "api/include"):

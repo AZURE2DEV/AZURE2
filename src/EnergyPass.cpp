@@ -93,16 +93,26 @@ void SolveAtOneEnergy(const CompoundSystem *compound, const LevelState &state, c
   // The first T-matrix after a fill is built directly, every later one through RecalculateTMatrix (which drops the
   // elements held).
   int last = -1;  // the last unit that read the T-matrix
+  bool afterLineWindow = false;
   for (int k = 0; k < n; k++) {
     if (progress) *progress = k;
     if (units[k]->Observable() == SiteObservable::kHoes) {
       HoesCrossSection(*levels, units[k], thmCoherentValues, results);
       continue;
     }
+    // capture into a broad unbound final state: the line-shape integration over E_f (LineWindow.h).  It builds a
+    // T-matrix per node and leaves the last one, so the unit after it builds its own.
+    if (units[k]->GetLineWindow() > 0.0) {
+      azure2::LineWindowCrossSection(*func, units[k], results);
+      last = k;
+      afterLineWindow = true;
+      continue;
+    }
     if (last < 0)
       func->CalculateTMatrix(units[k]);
-    else if (StartsTMatrix(units, last, k, tGroups))
+    else if (afterLineWindow || StartsTMatrix(units, last, k, tGroups))
       func->RecalculateTMatrix(units[k]);
+    afterLineWindow = false;
     last = k;
     func->CalculateCrossSection(units[k], results);
   }
@@ -181,8 +191,12 @@ long CheckEnergyTasks(WorkingCopy &data, const CompoundSystem *compound, const L
       if (o == ownT.get()) {
         HoesCrossSection(*ownT, u, data.ThmCoherentValues(), scratch);
       } else {
-        o->CalculateTMatrix(u);
-        o->CalculateCrossSection(u, scratch);
+        if (u->GetLineWindow() > 0.0) {
+          azure2::LineWindowCrossSection(*o, u, scratch);
+        } else {
+          o->CalculateTMatrix(u);
+          o->CalculateCrossSection(u, scratch);
+        }
       }
       const std::vector<double> &mine = sharedRecords[(std::size_t)k];
       if (why.empty() && u->ResultSlot() != Unit::kNoRecord &&

@@ -36,13 +36,17 @@ class AChannel {
   /// Radiation type: 'P' particle, 'E'/'M' electric/magnetic multipole, 'F'/'G' beta decay.
   char GetRadType() const;
   void SetBoundaryCondition(double);
-  /// Compute the Wigner limit from the pair's reduced mass (u) and channel radius (fm).
+  /// Set the channel's radius a_c (fm) and, from it and the pair's reduced mass (u), its Wigner limit.
   /// Deferred until the PPair is known; a zero radius leaves the limit zero.
-  void SetWignerLimit(double reducedMass, double channelRadius);
+  void SetRadius(double channelRadius, double reducedMass);
+  /// The channel radius a_c (fm) at which every quantity of this channel is taken: penetrability, shift function
+  /// and its derivatives, hard-sphere phase, boundary condition, Wigner limit, the bound-state integrals.  Set at
+  /// set-up (CompoundSystem's build); std::logic_error before it.
+  double GetRadius() const;
   /// Wigner limit on the *reduced width* \f$\gamma^2\f$ in MeV, i.e.
   /// \f$3\hbar^2 / (2 m_{red} a^2)\f$ (Teichmann-Wigner, with the 3/2 factor)
   /// -- not a bound on the partial width.
-  /// Zero until SetWignerLimit has been called.
+  /// Zero until SetRadius has been called.
   double GetWignerLimit() const;
 
  private:
@@ -53,6 +57,8 @@ class AChannel {
   double boundary_condition_;
   bool hasBoundaryCondition_ = false;  ///< set by SetBoundaryCondition; GetBoundaryCondition refuses before
   double wigner_limit_;
+  double radius_ = 0.0;
+  bool hasRadius_ = false;  ///< set by SetRadius; GetRadius refuses before
 };
 
 #endif

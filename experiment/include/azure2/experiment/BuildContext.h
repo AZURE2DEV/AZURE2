@@ -87,6 +87,15 @@ void EnergyWindow(const ValidatedRecord &r, DatasetSpec &d);
 /// refusals that need the pairs, the THM data sets and the relativistic flag.  After the data sets are built.
 void BuildPotentials(Context &c);
 
+/// The `channel_radius` records of <channelRadii> (ChannelRadii.cpp): one entry per record into out_.channelRadii, and
+/// the refusals that need the pairs (a photon or beta pair, a selection of channels given twice).
+void BuildChannelRadii(Context &c);
+
+/// The records of <isospin> (Isospin.cpp): into out_.isospin, with the refusals that need the pairs and level IDs of
+/// <levels> or another record (a nucleus or a level named twice, no reference, a mix or a factor on a level without
+/// an isospin_level record, a threshold pair that is not a particle pair of its nucleus).
+void BuildIsospin(Context &c, const LevelTables &levels);
+
 /// The effects of targets, beams and detectors on the data sets and extrapolations, the abundances of the targets'
 /// isotopes and the sample thicknesses (BuildEffects.cpp).
 void BuildEffects(Context &c);

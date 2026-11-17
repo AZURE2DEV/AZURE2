@@ -21,6 +21,7 @@ const char *ValueTypeName(ValueType t) {
     case ValueType::NumberList: return "number_list";
     case ValueType::Spin: return "spin";
     case ValueType::SpinParity: return "spin_parity";
+    case ValueType::SpinOperator: return "spin_operator";
     case ValueType::Nucleus: return "nucleus";
     case ValueType::Pair: return "pair";
     case ValueType::Composition: return "composition";

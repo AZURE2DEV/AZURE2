@@ -29,7 +29,7 @@ class PPair;
  * implementation of a particle channel's functions: EngineChannelFunctions and the binding's level doors
  * (api/src/pybind_level_doors.cpp) call it.
  */
-azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec);
+azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double radius, double Ec);
 
 /*!
  * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, with

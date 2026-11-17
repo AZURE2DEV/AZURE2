@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <stdexcept>
 #include <sstream>
 #include <vector>
 
@@ -34,19 +36,21 @@ std::string Trim(const std::string &s) {
   return s.substr(a, b - a + 1);
 }
 
-// The reason a <segmentsData> or <segmentsTest> line the old parser cannot read is one of a newer AZURE2 (its dev
+// The reason a <segmentsData> or <segmentsTest> line the old parser cannot read is one of another AZURE2 (its dev
 // branch), "" otherwise: its type (the token at 0-based place `typeAt`) followed by a spin operator such as b:y,
-// t:y, b:y*t:y or b:T20 (dev's general spin observables, type 10; type 9 before dev renumbered it), where this
-// program's grammar has the normalization.
+// t:y, b:y*t:y or b:T20, where this program's grammar has the normalization.  dev's general spin observables are
+// type 10 with the operator (read: SegLine.h, ExtrapLine.h; a spin_observable record); before 2026-11-11 dev wrote
+// them as type 9, which is Legendre-coefficient data since, and that line is refused with the way out.
 std::string NewerLineType(const std::string &line, std::size_t typeAt) {
   std::istringstream in(line);
   std::vector<std::string> tokens;
   for (std::string t; in >> t;) tokens.push_back(t);
   if (tokens.size() <= typeAt + 1 || tokens[typeAt + 1].find(':') == std::string::npos) return "";
+  if (tokens[typeAt] == "10") return "";
   return " has type " + tokens[typeAt] + " followed by the spin operator '" + tokens[typeAt + 1] +
-         "': a general spin observable (an analysing power, a spin correlation, a polarization or a tensor power) of "
-         "a newer AZURE2 (its dev branch), which this build does not compute yet.  Keep running the project with that "
-         "program, or convert a copy without this line";
+         "': a general spin observable (an analysing power, a spin correlation, a polarization or a tensor power) is "
+         "type 10 followed by its operator (AZURE2's dev branch wrote type 9 before 2026-11-11).  Write 10 for the "
+         "type on this line";
 }
 
 // The refusal of a line's end that no keyword block of the old grammar reads: the old engine stopped reading there
@@ -263,6 +267,91 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     std::istringstream in(text);
     out.potential = ReadPotentialBlock(in);
     out.hasPotential = true;
+  }
+
+  // <isospin> of dev (2026-10-17): "reference Z A key", "shift Z A key value vary centre sigma", "level id T",
+  // "mix id key l s value vary sigma", "factor id key value", "pairT key t1 t2", "soft id sigmaE sigmaGamma", as
+  // IsospinLevels::Read read them.  A block whose first line is an isospin_* record is format 3 already and is left
+  // alone.
+  if (const io::Document::Section *s = doc.Find("isospin")) {
+    if (s->close == io::Document::Section::npos) return "<isospin> is not closed";
+    const std::map<std::string, std::size_t> kFields = {{"reference", 3}, {"shift", 7}, {"level", 2}, {"mix", 7},
+                                                        {"factor", 3},    {"pairT", 3}, {"soft", 3}};
+    bool first = true;
+    for (const std::string &raw : doc.Body(*s)) {
+      const std::string line = raw.substr(0, raw.find('#'));
+      if (BlankLine(line)) continue;
+      std::istringstream in(line);
+      OldProject::IsospinLine c;
+      c.text = raw;
+      in >> c.kind;
+      if (first && c.kind.compare(0, 8, "isospin_") == 0) break;
+      first = false;
+      std::string field;
+      while (in >> field) c.fields.push_back(field);
+      const auto known = kFields.find(c.kind);
+      if (known == kFields.end())
+        return "<isospin> line \"" + raw + "\": unknown keyword \"" + c.kind + "\" (reference, shift, level, mix, factor, pairT, soft)";
+      if (c.fields.size() != known->second)
+        return "<isospin> line \"" + raw + "\": " + c.kind + " takes " + std::to_string(known->second) + " fields";
+      for (const std::string &f : c.fields) {
+        try {
+          std::size_t used = 0;
+          (void)std::stod(f, &used);
+          if (used != f.size()) throw std::invalid_argument(f);
+        } catch (...) {
+          return "<isospin> line \"" + raw + "\": \"" + f + "\" is not a number";
+        }
+      }
+      out.isospin.push_back(c);
+    }
+  }
+
+  // <channelRadii> of dev (2026-11-10): "<pair key> <l> <radius> [s=<s>] [J=<J>]" a line, as CNuc read it.  A block
+  // whose first line is a `channel_radius` record is format 3 already and is left alone.
+  if (const io::Document::Section *s = doc.Find("channelRadii")) {
+    if (s->close == io::Document::Section::npos) return "<channelRadii> is not closed";
+    bool records = false, first = true;
+    for (const std::string &raw : doc.Body(*s)) {
+      const std::string line = raw.substr(0, raw.find('#'));
+      if (BlankLine(line)) continue;
+      std::istringstream stm(line);
+      std::string word;
+      stm >> word;
+      if (first && word == "channel_radius") records = true;
+      first = false;
+      if (records) break;
+      const std::string bad = "<channelRadii> line \"" + raw + "\" is not \"<pair key> <l> <radius> [s=<s>] [J=<J>]\"";
+      OldProject::ChannelRadiusLine c;
+      c.text = raw;
+      std::istringstream in(line);
+      double radius = 0.0;
+      std::string radiusText;
+      if (!(in >> c.key >> c.l >> radiusText)) return bad;
+      try {
+        std::size_t used = 0;
+        radius = std::stod(radiusText, &used);
+        if (used != radiusText.size()) return bad;
+      } catch (...) {
+        return bad;
+      }
+      if (c.l < 0 || !(radius > 0.0)) return "<channelRadii> line \"" + raw + "\": l must be >= 0 and the radius positive";
+      c.radius = radiusText;
+      std::string token;
+      while (in >> token) {
+        const bool isS = token.compare(0, 2, "s=") == 0, isJ = token.compare(0, 2, "J=") == 0;
+        const std::string value = token.substr(2);
+        bool ok = (isS || isJ) && !value.empty();
+        // <n> or <n>/2
+        const std::size_t slash = value.find('/');
+        const std::string num = value.substr(0, slash);
+        ok = ok && !num.empty() && num.find_first_not_of("0123456789") == std::string::npos &&
+             (slash == std::string::npos || value.substr(slash) == "/2");
+        if (!ok || (isS && !c.s.empty()) || (isJ && !c.J.empty())) return bad + ": \"" + token + "\" is not s=<s> or J=<J>";
+        (isS ? c.s : c.J) = value;
+      }
+      out.channelRadii.push_back(c);
+    }
   }
 
   // <scatteringLengths>

@@ -11,6 +11,9 @@ namespace azure2 {
 namespace experiment {
 namespace {
 
+/// The lowest energy a time-of-flight window reaches, as a fraction of the point's energy.
+constexpr double kUdrRelativeFloor = 1.0e-6;
+
 /*!
  * The kernel R(tau) is the density of time-of-flight delays at this point's energy; a node at true lab energy E' is
  * seen at the delay tau(E') = t(E0) - t(E'), so the folded value is sum_i w_i sigma_i / sum_i w_i with
@@ -21,9 +24,10 @@ namespace {
 template <class V>
 V FoldUdr(const KernelParameters &p, const KernelPoint &point, const KernelNodes &nodes, const V *values) {
   const int numPoints = nodes.n;
-  if (numPoints < 2) return V(0.0);
   const UdrKernel *kernel = point.udr;
-  if (!kernel || kernel->tau.size() < 2) return V(0.0);
+  if (!kernel || kernel->tau.size() < 2 || numPoints < 1) return V(0.0);
+  // A window the grid could not split (a kernel narrower than the grid resolves) is the point itself, not zero.
+  if (numPoints == 1) return values[0];
   const double mass = point.udrMass;
   const double path = p.flightPath;
   const double cmPerLab = (point.labEnergy != 0.0) ? point.energy / point.labEnergy : 1.0;
@@ -86,7 +90,11 @@ void UdrSupport(const KernelParameters &p, const SupportPoint &s, double &high, 
   if (eHighLab <= s.labEnergy) eHighLab = s.labEnergy * 1.0001;
   if (eLowLab <= 0.0 || eLowLab >= s.labEnergy) eLowLab = s.labEnergy * 0.9999;
   high = eHighLab * cmPerLab;
-  low = std::max(eLowLab * cmPerLab, 0.001);
+  // A floor relative to the point, not the 1 keV of charged particles: a neutron point can be thermal and a kernel
+  // wide in time reaches far below 1 keV.  With the absolute floor the window of such a point ran from the point UP
+  // to 1 keV, and the kernel's support sat on one side of the first hat interval (a bias of half the channel width on
+  // a 1/v cross section) or ended at the first node (zero).
+  low = std::max(eLowLab * cmPerLab, kUdrRelativeFloor * s.energy);
 }
 
 }  // namespace

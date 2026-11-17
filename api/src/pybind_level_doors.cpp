@@ -186,7 +186,7 @@ phys::ChannelFunctions ParticleChannelFunctions(const Block &blk) {
     const double Ec = E - pair->GetSepE() - pair->GetExE();
     const int l = ch.l;
     const int twoJ = pair->SpinOrbitTwoJ(b->J);
-    return ParticleChannelValues(*pair, l, twoJ, Ec);
+    return ParticleChannelValues(*pair, l, twoJ, ch.radius_fm, Ec);
   };
 }
 

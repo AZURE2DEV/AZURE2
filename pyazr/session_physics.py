@@ -40,8 +40,10 @@ class SessionPhysics:
         pair : particle-pair key (1-based, as in ``<levels>``).
         e_cm : c.m. energies of the pair (MeV), a number or an array of any shape.
         l : orbital angular momentum (a whole number >= 0).
-        radius : evaluation radius (fm); 0 means the pair's channel radius (where P, S and the hard-sphere phase
-            belong).
+        radius : evaluation radius (fm); 0 means the channel radius (where P, S and the hard-sphere phase
+            belong): the pair's, or the one a ``channel_radius`` record gives the pair's channels of this ``l``.
+            When records with ``s`` or ``J`` give those channels more than one radius, 0 is refused
+            (``ValueError``): name the radius.
         J : the channel's total J, required (and only allowed) for a pair whose potential has a spin-orbit term.
 
         Returns

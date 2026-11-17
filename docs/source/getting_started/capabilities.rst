@@ -39,6 +39,9 @@ Observables
 - **Total capture**, summed over final states
 - **Reaction rates** as a function of temperature
 - **Analyzing powers** :math:`A_y` (:doc:`../theory/polarization_theory`)
+- **Spin observables** of reactions between particle pairs: tensor analysing
+  powers, spin correlations, outgoing polarizations and polarization transfers
+  (:doc:`../theory/polarization_implementation`)
 - **Trojan Horse (THM) half-off-energy-shell excitation functions**, fitted
   together with direct data (below)
 

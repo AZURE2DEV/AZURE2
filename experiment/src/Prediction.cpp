@@ -35,7 +35,10 @@ LeafSelector Leaf(const PredictionSetup &s, int t, LeafPart part) {
     case Observable::TotalCapture: kind = term.total ? "sigma_total" : "sigma"; break;
     case Observable::DifferentialLab:  // lab data are compared in the c.m. frame (converted at load)
     case Observable::DifferentialCM: kind = "dsdo_cm"; break;
-    case Observable::AnalyzingPower: kind = "ay"; break;
+    case Observable::AnalyzingPower:
+      kind = r.spinObservable.empty() ? "ay" : "spin";
+      if (!r.spinObservable.empty()) options += "; op=" + r.spinObservable;
+      break;
     case Observable::PhaseShift:
       kind = "phase";
       options += "; J=" + Number(r.phaseJ) + "; l=" + std::to_string(r.phaseL);
