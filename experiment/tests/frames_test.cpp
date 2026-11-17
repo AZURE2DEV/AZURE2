@@ -251,8 +251,17 @@ void TestBitForBit() {
       double cm = angle;
       AngleLimit lim;
       const bool okNew = ElasticLabToCM(in, angle, cm, lim);
-      elastic = elastic && okOld == okNew && (!okOld || same(cm, q.cmAngle)) &&
-                (lim.maxSet ? same(lim.max, q.labAngleMax) : q.labAngleMax == -1.0);
+      // The old map is the new one except where the new one refuses what the old one let pass (2026-11-17, the
+      // PI's decision): a projectile no lighter than the target at a lab angle above 90 deg, which no elastic
+      // scattering reaches (the old map gave theta_lab + asin((m1/m2) sin theta_lab) there); and for equal masses
+      // the old map set no maximum, the new one 90 deg.
+      const double ratio = in.m1 / in.m2;
+      if (ratio >= 1.0 && angle > 90.0) {
+        elastic = elastic && !okNew && lim.maxSet && !lim.why.empty();
+      } else {
+        elastic = elastic && okOld == okNew && (!okOld || same(cm, q.cmAngle)) &&
+                  (lim.maxSet ? (ratio == 1.0 ? lim.max == 90.0 : same(lim.max, q.labAngleMax)) : q.labAngleMax == -1.0);
+      }
     }
     {
       OldPoint q = pt;
