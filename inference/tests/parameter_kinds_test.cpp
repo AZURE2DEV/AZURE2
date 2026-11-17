@@ -12,7 +12,7 @@ using namespace azure2::inference;
 
 int main() {
   const std::vector<ParamKindRow> &table = ParamKindTable();
-  check("fourteen kinds", table.size() == 14);
+  check("sixteen kinds", table.size() == 16);
   bool ordered = true, filled = true;
   std::set<std::string> keys;
   for (std::size_t i = 0; i < table.size(); i++) {

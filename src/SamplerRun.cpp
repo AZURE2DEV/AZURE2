@@ -42,6 +42,9 @@ std::string PrettyParameterName(const ParameterRecord &r, const std::string &nam
     case ParamKind::Abundance:
       return "Abundance " + (r.sampleName.empty() ? std::string() : "sample " + r.sampleName + " ") +
              "Z=" + std::to_string(r.nucleusZ) + " A=" + std::to_string(r.nucleusA);
+    case ParamKind::IsospinShift:
+      return "Isospin Coulomb Shift (MeV) Z=" + std::to_string(r.nucleusZ) + " A=" + std::to_string(r.nucleusA);
+    case ParamKind::IsospinMix: return "Isospin-Forbidden Amplitude (MeV^1/2), record " + r.isospinRecord;
     case ParamKind::ThmCoherent: case ParamKind::Apparatus: case ParamKind::RadiativeDecay: break;  // their names say what they are
   }
   return name;

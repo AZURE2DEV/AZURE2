@@ -87,10 +87,10 @@ what it would otherwise drop or copy through unread, since the converted project
 would then compute as if it were absent:
 
 * a section it does not convert: a section of a newer AZURE2 (its ``dev``
-  branch) that this build does not compute yet, ``<isospin>`` (isospin ties of
-  levels across compound nuclei), is named as such (the ``dev`` branch's
-  ``<channelRadii>`` lines are converted, one ``channel_radius`` record a
-  line); any other unknown section is refused as one that
+  branch) that this build does not compute yet is named as such (the ``dev``
+  branch's ``<channelRadii>`` lines are converted, one ``channel_radius``
+  record a line, and its ``<isospin>`` lines into ``isospin_*`` records,
+  :doc:`levels_channels`); any other unknown section is refused as one that
   no AZURE2 the converter knows wrote.  Keep running such a project with the
   program that wrote it, or convert a copy without the section if its numbers
   may change;

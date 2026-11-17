@@ -107,6 +107,14 @@ struct OldProject {
     std::string radius, s, J;  ///< s, J: "" when not given
     std::string text;
   };
+  /// A line of dev's <isospin> block (2026-10-17): its keyword (reference, shift, level, mix, factor, pairT, soft) and
+  /// its fields as written.
+  struct IsospinLine {
+    std::string kind;
+    std::vector<std::string> fields;
+    std::string text;
+  };
+  std::vector<IsospinLine> isospin;  ///< the lines of an old <isospin> block (none: no block, or records)
   std::vector<ChannelRadiusLine> channelRadii;  ///< the lines of an old <channelRadii> block (none: no block, or records)
   bool hasPotential = false;  ///< a <potential> block (the hybrid model on for some pair)
   PotentialBlock potential;   ///< as the engine reads it (its warnings included)

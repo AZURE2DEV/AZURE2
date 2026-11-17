@@ -89,6 +89,9 @@ struct Results {
     /// record (the total is written to chiSquared.out whenever it has).
     double gammaDecay = 0.0;
     bool hasGammaDecay = false;
+    /// The priors of the isospin shifts and mixes and the soft ties (IsospinTies.h), when the project has any.
+    double isospin = 0.0;
+    bool hasIsospin = false;
   } objective;
 
   /// The scratch of the energy tasks that write this buffer, one per thread (TaskScratch.h): solvers and their

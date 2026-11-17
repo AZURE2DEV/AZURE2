@@ -31,9 +31,9 @@ commits were not read. The hours are estimates of an agent that did not do the w
   lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. dev's
   `tests/formal_ec_final_state` is here since 2026-11-15 (50 checks pass; its README lists the two differences from
   dev that remain open: no analytic derivative of the final state's amplitude, and a refusal where dev warns).
-- **dev's new blocks in an old project file** (`<isospin>`, spin-operator data types): refused by
+- **dev's new blocks in an old project file** (spin-operator data types): refused by
   the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands
-  (`<channelRadii>`: lifted, section 2).
+  (`<channelRadii>`: lifted, section 2; `<isospin>`: lifted, section 5).
 - **The flight path of a UDR record** is in metres (it was mis-scaled here; repaired).
 
 ## 2. Per-channel radii
@@ -140,7 +140,25 @@ a fit vector, from an observed vector, the transforms in and out, the parameter 
 Brune basis the ties act on observed energies and amplitudes, which here are transformed per group
 (`src/LevelTransforms.cpp`), so the tie must sit on the right side of that transform in each basis; one
 `CompoundSystem` serves one project. Estimate 30–60 h, after the channel radii (the partner-radius check reads
-them). Nothing was started.
+them).
+
+*Written* on `feature/upgrade-5-dev-isospin` (2026-11-16, the owner's session; cut from the channel-radii port), along
+the recipes above:
+
+- six record kinds of `<isospin>`: `isospin_reference`, `isospin_shift`, `isospin_level` (the soft tie is its two
+  fields `soft_energy`, `soft_amplitude`), `isospin_mix`, `isospin_factor`, `isospin_pair`; the converter reads dev's
+  block and maps the names of its parameter files;
+- the tie table is `IsospinSet` (`include/IsospinTies.h`), a set-up fact read by `CompoundSystem::Fill`; a tied group
+  has B_c = -l_c in the formal basis (`CalcBoundaryConditions`);
+- two parameter kinds, `isospin_shift` and `isospin_mix`, right after the level block (`CompoundSystem::NumParameters`),
+  named by their records (`<record>.shift`, `<record>.amplitude`);
+- the derived slots: `IsospinSet::Apply` at the head of `CompoundSystem::FillCompoundFromParams` (the one fill from a
+  fit vector), the values of the shifts and mixes kept in `LevelState`, the chain rule at the end of
+  `GradAccum::Scatter`, the free mask of the formal basis, the slots written synced (`IsospinSet::Sync`);
+- the priors and the soft ties are one term of the objective (T12), with rows for the least-squares fitters;
+- `isospin.out`, the member labels of `parameters.out`, `Total-Isospin-Chi-Squared`.
+
+`tests/isospin_levels` is dev's test (58 checks). HANDOFF has the entry, with what differs from dev and what is open.
 
 ## 6. Smaller items
 

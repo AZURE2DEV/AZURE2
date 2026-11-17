@@ -27,6 +27,7 @@ using azure2::inference::GaussianPriorChi2;
 using azure2::inference::GaussianPriorCurvature;
 using azure2::inference::GaussianPriorGradient;
 using azure2::inference::IsLevelSlot;
+using azure2::inference::IsRMatrixParameter;
 using azure2::inference::KindRow;
 using azure2::inference::LevelParameterLayout;
 using azure2::inference::ParamDesc;

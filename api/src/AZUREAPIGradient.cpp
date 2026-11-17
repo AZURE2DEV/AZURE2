@@ -192,7 +192,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
     // THM coherent backgrounds (cbackground=) are columns of the THM rows above.
-    if (eg && (IsLevelSlot(kind) || kind == ParamKind::Norm ||
+    if (eg && (IsRMatrixParameter(kind) || kind == ParamKind::Norm ||
                kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness ||
                kind == ParamKind::ThmCoherent))
       continue;

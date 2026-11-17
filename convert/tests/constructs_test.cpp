@@ -806,8 +806,10 @@ int main(int argc, char **argv) {
           !badRadius.ok && badRadius.refusal.find("<channelRadii> line") != std::string::npos);
     const ConvertResult noPair = Convert({line, "", "", "<channelRadii>\n9 1 4.0\n</channelRadii>\n", ""});
     check("<channelRadii>: an unknown pair key is refused", !noPair.ok && noPair.refusal.find("pair key 9") != std::string::npos);
-    const ConvertResult iso = Convert({line, "", "", "<isospin>\nreference 1\n</isospin>\n", ""});
-    check("<isospin>: refused as a newer AZURE2's section", !iso.ok && iso.refusal.find("isospin ties") != std::string::npos);
+    const ConvertResult iso = Convert({line, "", "", "<isospin>\nreference 6 13 1\nlevel 1 1/2\n</isospin>\n", ""});
+    check("<isospin>: a field that is not a number is refused", !iso.ok && iso.refusal.find("is not a number") != std::string::npos);
+    const ConvertResult isoShort = Convert({line, "", "", "<isospin>\nreference 1\n</isospin>\n", ""});
+    check("<isospin>: a line with too few fields is refused", !isoShort.ok && isoShort.refusal.find("takes 3 fields") != std::string::npos);
     const ConvertResult notes = Convert({line, "", "", "<notes>\nrun 7 was bad\n</notes>\n", ""});
     check("<notes>: refused as a section of no AZURE2", !notes.ok && notes.refusal.find("not a section of any AZURE2") != std::string::npos);
     const ConvertResult nested = Convert({line, "", "", "<mcmc>\n<priors>\n</priors>\n</mcmc>\n", ""});

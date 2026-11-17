@@ -109,9 +109,10 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) {
   for (size_t i = 0; i < nfree; ++i) {
     const ParamKind kind = freeKinds_[i];
 
-    if (KindRow(kind).ownPrior && IsLevelSlot(kind)) {
-      // A number of a gamma_decay record: its prior is a term of the objective (the record's), which the
-      // likelihood evaluates (Objective::SamplerChi2); no Gaussian log-prior here.
+    if (KindRow(kind).ownPrior && IsRMatrixParameter(kind)) {
+      // A number of a gamma_decay record, an isospin shift or mix: its prior is a term of the objective (the
+      // record's; the isospin term, with the soft ties), which the likelihood evaluates (Objective::SamplerChi2); no
+      // Gaussian log-prior here.
       usePriors_[i] = false;
       nRecord++;
     } else if (KindRow(kind).ownPrior) {
@@ -195,8 +196,8 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) {
                         << " taken from the quoted experimental errors\n";
   if (nRecord > 0)
     configure().outStream << "  " << nRecord << " number" << (nRecord == 1 ? "" : "s")
-                          << " of gamma_decay records: their priors and the remainder's wall are terms of the objective, "
-                          << "sampled inside their limits\n";
+                          << " of gamma_decay or isospin records: their priors (the remainder's wall, the soft ties) "
+                          << "are terms of the objective, sampled inside their limits\n";
   if (nNoError > 0) {
     configure().outStream << "  " << nNoError << " normalization/energy-shift "
                           << "parameter" << (nNoError == 1 ? " has" : "s have")
@@ -272,6 +273,13 @@ bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) {
 }
 
 bool AZURECalcMCMC::PrepareRun(const std::vector<double> &initialParams, bool useRWA) {
+  // Isospin levels (IsospinTies.h): the ties act on the fit's basis, and the transformation from observed widths
+  // mixes the levels of a J^pi group, so a chain on the observed parameters cannot hold them.
+  if (!useRWA && compound()->GetIsospin().Active()) {
+    configure().outStream << "**ERROR: a project with isospin levels is sampled in the fit's basis (the level energies and "
+                          << "reduced-width amplitudes): switch the MCMC parameter type to RWA." << std::endl;
+    return false;
+  }
   UpdateParameterVectors(initialParams);
   // Classify the varying parameters and derive the normalization and energy-shift priors from the data. Must follow
   // UpdateParameterVectors() (it needs fixed_) and precede any log-probability evaluation.

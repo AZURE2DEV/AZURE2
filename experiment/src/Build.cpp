@@ -40,6 +40,9 @@ std::vector<std::string> ParameterNamesOf(const BuiltProject &b) {
     add(item.spec.names.energyShift);
     add(item.spec.names.energyShiftSqrt);
   }
+  for (const IsospinNucleusEntry &e : b.isospin.nuclei)
+    if (!e.reference) add(e.record + ".shift");
+  for (const IsospinMixEntry &e : b.isospin.mixes) add(e.record + ".amplitude");
   for (const AbundanceRowSpec &row : b.abundances.abundances.rows)
     if (!row.isSum && !row.isotope.empty()) add(AbundanceParameterName(row.sample, row.isotope, row.z, row.a));
   for (const SpecList<TargetEffectSpec> *effects : {&b.data.targetEffects, &b.extrapolations.targetEffects})
@@ -923,6 +926,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   build::BuildEffects(c);
   build::BuildPotentials(c);
   build::BuildChannelRadii(c);
+  build::BuildIsospin(c, levels);
   if (options.setUpChecks) build::CheckFinalStates(c, levels);
   build::CheckUnboundFinalStates(c, levels);
   NameParameters(c);

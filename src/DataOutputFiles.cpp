@@ -405,6 +405,8 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   // The gamma_decay records (T11): their priors and the wall on a negative remainder, whenever the project has a
   // record.  Without this field the file's totals did not add up to the minimised chi-squared for such a project.
   if (results.objective.hasGammaDecay) chiOut << " Total-Gamma-Decay-Chi-Squared: " << results.objective.gammaDecay;
+  // Isospin levels: the priors on the internal Coulomb shifts and isospin-forbidden amplitudes, and the soft ties.
+  if (results.objective.hasIsospin) chiOut << " Total-Isospin-Chi-Squared: " << results.objective.isospin;
   // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
   // Written with 15 significant digits (a new field: the older ones keep their 6).
   if (!configure.priorCovariance.empty()) {

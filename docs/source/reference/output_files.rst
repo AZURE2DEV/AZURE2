@@ -132,6 +132,17 @@ vector:
        the level's photon amplitudes are computed from them at every evaluation.  ``parameters.out`` ends with a
        block ``RADIATIVE DECAYS`` that gives every :math:`b_f` (the remainder too), :math:`\delta_f` and the
        partial widths they imply.
+   * - ``isospin_shift``
+     - ``<record>.shift``
+     - MeV
+     - the internal Coulomb energy shift of the isospin levels of one compound nucleus (an ``isospin_shift`` record,
+       :doc:`../user_guide/levels_channels`); right after the level parameters.  Its prior, with the soft ties of the
+       isospin levels, adds ``Total-Isospin-Chi-Squared`` to ``chiSquared.out``.
+   * - ``isospin_mix``
+     - ``<record>.amplitude``
+     - MeV\ :sup:`1/2`
+     - the amplitude of an isospin-forbidden channel of an isospin level (an ``isospin_mix`` record), which the
+       channel's slot of the level follows; after the shifts.
 
 param.fit
 ^^^^^^^^^
@@ -375,6 +386,17 @@ The same holds for ``Total-Park-Chi-Squared`` and
 ``Total-Abundance-Chi-Squared``; the file written through pyazr's
 ``write_outputs`` carries all three evaluated at the parameters it was
 asked for (before October 2026 the API left them at zero or stale).
+
+isospin.out
+^^^^^^^^^^^
+
+Written beside ``parameters.out`` when the project has ``<isospin>`` records
+(:doc:`../user_guide/levels_channels`): the reference nucleus and every shift
+with its threshold pair, every mix amplitude, and for every isospin level its
+members, nucleus by nucleus: the fitted energy (formal, or observed in the
+Brune basis), and per particle channel the boundary value (formal basis), the
+factor, the fitted amplitude, whether it is free, derived, forbidden or soft,
+and its isospin channel.  With soft ties the first lines give their penalty.
 
 modelData.out
 ^^^^^^^^^^^^^

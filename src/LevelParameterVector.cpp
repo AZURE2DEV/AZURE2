@@ -82,6 +82,9 @@ void CompoundSystem::FillMnParams(AZUREParams &params, const LevelState &state, 
       }
     }
   }
+  // The isospin parameters (the shifts, then the mixes), with the derived slots of the level block written and fixed
+  // (IsospinTies.h).
+  isospin_->AddParameters(params);
   // The isotopic abundances follow, written by WorkingCopy::FillMnParams (AbundanceSamples::AddParameters).
 }
 
@@ -91,6 +94,7 @@ vector_r CompoundSystem::GetTransformParams(const LevelState &state, const Obser
   // C (fm^-1/2), mu, Q, B and the Brune amplitude of a gammaIsRWA column, signed, as a <levels> line holds them.
   const LevelParameterLayout &layout = this->ParameterLayout();
   vector_r params(layout.Size());
+  // (the isospin parameters, which follow the level block in the fit's vector, are appended below)
   for (int i = 0; i < layout.Size(); i++) {
     const LevelParameterLayout::Slot &slot = layout.Slots()[i];
     const ObservedLevel &level = table.Level(slot.group, slot.level);
@@ -99,7 +103,10 @@ vector_r CompoundSystem::GetTransformParams(const LevelState &state, const Obser
             ? level.E
             : gammaDecays_->ValueOr(*this, state, slot.group, slot.level, slot.channel, level.value[slot.channel - 1]);
   }
-  // The level block only: the caller appends the abundance block of the fit's vector (AbundanceSamples::AppendTo).
+  // The isospin parameters are the same numbers in the fit's and the observed vector (IsospinTies.h).
+  if (isospin_->Active()) params.insert(params.end(), state.IsospinValues().begin(), state.IsospinValues().end());
+  // The compound's parameters only: the caller appends the abundance block of the fit's vector
+  // (AbundanceSamples::AppendTo).
   return params;
 }
 

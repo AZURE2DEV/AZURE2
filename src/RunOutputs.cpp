@@ -111,7 +111,7 @@ void WriteRunOutputs(ProgramRun &run) {
         std::vector<std::string> names;
         for (unsigned int i = 0; i < mp.Params().size(); i++) {
           const ParamKind kind = run.params.Kind((int)i);
-          if (!mp.Parameter(i).IsFixed() && IsLevelSlot(kind))
+          if (!mp.Parameter(i).IsFixed() && IsRMatrixParameter(kind))
             names.push_back(mp.GetName(i));
         }
         if ((int)names.size() == run.bandCov.size()) run.bandCov.names = names;

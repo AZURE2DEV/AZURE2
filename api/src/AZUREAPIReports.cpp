@@ -125,6 +125,14 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   localData = data();
 
   AZUREParams params;
+  if (localCompound->GetIsospin().Active()) {
+    // The transformation from observed widths mixes the levels of a J^pi group, so the observed values of derived
+    // isospin members would leak into the free ones (IsospinTies.h): the fit-basis calls take such a project.
+    configure().outStream << "ERROR: a project with isospin levels takes parameters in the fit's basis "
+                          << "(UpdateSegmentsRWA / CalculateChi2RWA), not observed ones." << std::endl;
+    ReportSegments(nullptr, nullptr);
+    return -1;
+  }
   localCompound->FillCompoundFromParamsPhysical(params_, state(), inputs());
   localData->FillAbundancesFromVector(params_);
   bool isValid = localCompound->TransformIn(configure(), state(), inputs());

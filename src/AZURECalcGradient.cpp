@@ -258,7 +258,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       for (int col = 0; col < nCols; col++) {
         const int f = tmap.PackedToFull(col);
         const ParamKind kind = tmap.Desc(f).kind;
-        if (!IsLevelSlot(kind) && kind != ParamKind::ThmCoherent) continue;
+        if (!IsRMatrixParameter(kind) && kind != ParamKind::ThmCoherent) continue;
         double g = 0.0;
         for (size_t i = 0; i < tr.r.size(); i++) g += tr.r[i] * tr.J[i * nCols + col];
         if (f < (int)grad.size()) grad[f] += 2.0 * g;
@@ -287,7 +287,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     // segment carries none).
     if (eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
       continue;  // analytic (dev: Doppler weights, the transmission / yield transform)
-    if (eg && (IsLevelSlot(kind) || kind == ParamKind::Norm || kind == ParamKind::ThmCoherent)) {
+    if (eg && (IsRMatrixParameter(kind) || kind == ParamKind::Norm || kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
       if (thmAnalytic && kind != ParamKind::Norm) continue;  // THM part added above
       if (kind == ParamKind::Norm) {
@@ -393,7 +393,7 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
         if (idx < nMn && fixedMask[idx]) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && !haveTHM && (IsLevelSlot(kind) || kind == ParamKind::Norm)) &&
+        if (!(eg && !haveTHM && (IsRMatrixParameter(kind) || kind == ParamKind::Norm)) &&
             !(eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
@@ -409,7 +409,8 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
     const std::string &gc = environment.Text(azure2::support::Switch::kGradCheck);
     if (!configure().diagnostics->gradientChecked.exchange(true)) {
       static const char *const kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative"};
+                                       "density", "doppler", "thickness", "cbkg", "apparatus", "radiative",
+                                       "isospin_shift", "isospin_mix"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind

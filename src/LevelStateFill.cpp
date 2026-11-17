@@ -22,8 +22,17 @@
  */
 
 void CompoundSystem::FillCompoundFromParams(const vector_r &params, LevelState &state) const {
+  // IsospinTies.h: the derived members of the isospin levels follow the free parameters of the vector.
+  // A vector that holds the isospin parameters sets them; a shorter one (the level block alone) keeps the state's.
+  vector_r tied;
+  if (isospin_->Active()) {
+    if ((int)params.size() >= this->NumParameters()) state.SetIsospinValues(isospin_->ValuesIn(params));
+    tied = params;
+    isospin_->Apply(tied, state.IsospinValues());
+  }
+  const vector_r &untransformed = tied.empty() ? params : tied;
   // GammaDecayMap.h: the records' numbers become amplitudes; what the map computed is the state's.
-  const vector_r &p = gammaDecays_->Empty() ? params : gammaDecays_->ToEngine(*this, state, params);
+  const vector_r &p = gammaDecays_->Empty() ? untransformed : gammaDecays_->ToEngine(*this, state, untransformed);
   for (const LevelParameterLayout::Level &slots : this->ParameterLayout().Levels()) {
     const int j = slots.group, la = slots.level;
     state.SetE(j, la, p[slots.energy]);

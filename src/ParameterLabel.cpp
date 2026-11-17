@@ -122,7 +122,7 @@ std::string LevelAndChannel(const CompoundSystem *compound, const LevelInputs &i
 
 int NumParameters(const CompoundSystem *compound, WorkingCopy *data) {
   int n = 0;
-  if (compound) n += compound->ParameterLayout().Size();
+  if (compound) n += compound->NumParameters();
   if (data) {
     n += data->Data().Abundances().NumParams();  // isotopic abundances, right after the level block
     const std::vector<Segment> &segments = data->Data().GetSegments();
@@ -154,7 +154,9 @@ std::string Parameter(const CompoundSystem *compound, const LevelInputs &inputs,
         return "level energy: " + Level(jgroup, inputs.E(slot.group, slot.level), slot.group, slot.level);
       return "width: " + LevelAndChannel(compound, inputs, jgroup, slot.group, slot.level, slot.channel);
     }
-    index = layout.Size();
+    // then the isospin shifts and mix amplitudes (IsospinTies.h)
+    if (minuitIndex < compound->NumParameters()) return compound->GetIsospin().ParamLabel(minuitIndex);
+    index = compound->NumParameters();
     // then the isotopic abundances, one per (sample, nucleus) (AbundanceSamples::AddParameters)
     const int numAbundances = data ? data->Data().Abundances().NumParams() : 0;
     for (int k = 1; k <= numAbundances; k++) {

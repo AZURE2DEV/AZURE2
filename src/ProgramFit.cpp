@@ -299,5 +299,6 @@ void RunFitStage(ProgramRun &run, const ProgramProgress &progress) {
   }
   run.data->SyncShiftGroupParams(run.params.GetMinuitParams());
   run.data->SyncNormGroupParams(run.params.GetMinuitParams());
+  run.compound->GetIsospin().Sync(run.params.GetMinuitParams());
   run.params.WriteUserParameters(configure, true);
 }

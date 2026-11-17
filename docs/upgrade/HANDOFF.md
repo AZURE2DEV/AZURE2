@@ -2,6 +2,102 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — isospin-labelled levels across compound nuclei
+
+**Branch** `feature/upgrade-5-dev-isospin`, cut from `feature/upgrade-5-dev-channel-radii` (`d4c260da`; the
+partner-radius check reads the channels' radii). dev's `IsospinLevels` of 2026-10-17 with its later repairs (Brune
+ties, photon channels outside the ties, the state rank of an excited particle), re-written along the six recipes of
+`dev_features.md` section 5. Record names by the PI's decision of 2026-11-16: this branch's, `isospin_*`.
+
+**What is new.**
+- Six record kinds of section `<isospin>` (`experiment/src/Schema.cpp`): `isospin_reference` (nucleus, threshold
+  pair), `isospin_shift` (nucleus, threshold pair, `shift` as a nuisance), `isospin_level` (level ID, `T`; the soft
+  tie is its two fields `soft_energy` and `soft_amplitude`), `isospin_mix` (level, pair, l, s, `amplitude` as a
+  nuisance), `isospin_factor`, `isospin_pair`. `<isospin>` left `Schema::NewerSections()`, which is empty now. Build:
+  `experiment/src/Isospin.cpp` into `BuiltProject::isospin` (`Isospin.h`); codes `E_ISOSPIN_RECORD` (records that
+  contradict one another or `<levels>`) and `E_ISOSPIN_PAIR`. Schema version unchanged.
+- The tie table `IsospinSet` (`include/IsospinTies.h`, `src/IsospinTies.cpp`): a set-up fact of the compound system,
+  read by `CompoundSystem::Fill` after the parameter layout (`GetIsospin()`). Members, Clebsch-Gordan factors, owners,
+  derived slots and ties as dev; what needs the channels is refused there with a message (radii of one arrangement,
+  a mix on an allowed channel, T below a nucleus's T3, Park's basis, the RMC formalism). A level ID that an
+  `isospin_level` record declares may have lines in several nuclei (`CompoundSystem::Fill`).
+- Formal basis: B_c = -l_c on the particle channels of a group that holds a member
+  (`CompoundSystem::CalcBoundaryConditions`); such a group has no level "at the boundary energy", which
+  `SetUpECFinalBlocks` now knows (capture into a final state of a tied group, `--no-brune`).
+- Two parameter kinds, `isospin_shift` and `isospin_mix` (`ParameterKind.h`, the fields in
+  `api/src/pybind_records.cpp`), written by `CompoundSystem::FillMnParams` right after the level block:
+  `CompoundSystem::NumParameters()` is where the data's parameters start (`ParameterLabel.cpp`, `ThmNorm.cpp`, the
+  observed vector of `GetTransformParams`). Names by the format's rule, `<record>.shift` and `<record>.amplitude`
+  (`ParameterNamesOf` lists them); `--convert-params` maps dev's `isospin_shift_<Z>_<A>` and `isospin_mix_<k>`.
+- The derived slots: `IsospinSet::Apply` at the head of `CompoundSystem::FillCompoundFromParams`, before the
+  `gamma_decay` map; the values of the shifts and mixes are the level state's (`LevelState::IsospinValues`, set by a
+  fill from a vector that holds them, the records' values before). The derived slots are fixed parameters, written
+  synced after a parameter file is read (`AZUREParams::ReconcileBasis`) and before `param.sav`.
+- Gradient: the chain rule of the ties at the end of `GradAccum::Scatter`; a derived slot counts as free in the
+  formal basis's mask when a source is (`BuildFreeMask`, moved to `src/GradFreeMask.cpp`: `AZUREGrad.cpp` was at its
+  size); `IsRMatrixParameter` (a level slot, a shift or a mix) where the code asked
+  `IsLevelSlot` for "the adjoint covers it" (the fit's gradient, the Jacobian rows, the band's columns).
+- Objective: term T12, the priors of the fitted shifts and mixes and the soft ties (`IsospinSet::PenaltyRows`), with
+  its gradient (`GradAccum::direct`) and its rows in `AppendModelRows`; `Total-Isospin-Chi-Squared` in
+  `chiSquared.out`. The sampler has the whole term in its likelihood and refuses a chain on observed parameters; a
+  session refuses the observed-parameter calls (`UpdateSegments`, `CalculateChi2Physical`), as dev.
+- Reports: the start-up report of the factors, `isospin.out` (written with `parameters.out`), the member labels of
+  `parameters.out`.
+- Converter: dev's `<isospin>` lines into records (`Builder::BuildIsospin`), a `soft` line into its level's two
+  fields.
+- Docs: `user_guide/levels_channels.rst` ("Isospin Levels Across Compound Nuclei"), `reference/output_files.rst`,
+  `objective.md` (T12), the regenerated `format3.rst`.
+
+**Test.** `tests/isospin_levels` (dev's models converted, dev's checks; README there): 58 checks, 56 without the
+sampler. Against dev's build on dev's own files: the factors and every relation of `isospin.out`; the tied cross
+sections to 1e-8 away from the n+t interference minimum (the formal parameters of the two builds differ by 3e-10
+after the input transformation, and the minimum, 1e-6 of the peak, shows it as 7e-7); the soft fit's penalty
+(6.24993); the capture models to 1e-9. A derived member equals the stand-alone level with its parameters exactly, in
+both bases and with `relativistic=1`. `experiment/tests/isospin_test.cpp` (the kinds and the two codes; its own file, `build_test.cpp` being at the size
+the ratchet allows),
+`convert/tests/constructs_test.cpp`, `tests/pyazr/parameter_kinds_test.py` (the two kinds, `iso_free.azr`),
+`tests/pyazr/isospin_levels_test.py` (ctest `pyazr_isospin_levels`: the parameters and their priors, the objective
+and its rows, the gradient and the Jacobian through the ties against finite differences, two `Project` edits).
+
+**Differences from dev.**
+- Parameter names are the records' (`shift_4H.shift`, `mix_1.amplitude`).
+- The isospin parameters follow the level block; on dev they follow the abundances.
+- dev refused a soft tie with the least-squares fitters; here the soft ties are rows, and the fitters take them.
+- dev required the lines of an isospin level to be consecutive in `<levels>`; the level grouping here is by ID
+  (`io::LevelGrouper`), so the order is free.
+- A prior of a mix has the centre its record writes (dev: 0).
+- A cross section out of the d+d pair of the test's model is twice dev's: this branch's 1 + delta_12 of an identical
+  entrance pair (FOR_THE_OWNER, section 3, row 1), not the ties.
+
+**Open.**
+- `pyazr`: no Python was written. The records are edited through `Project` (generic), the parameters read through
+  `parameter_records`, and a session's objective, rows, gradient and Jacobian carry the ties and the term
+  (`tests/pyazr/isospin_levels_test.py`). dev's `AzrModel.join_levels` and `set_isospin_*` have no counterpart: a
+  level ID across nuclei is written in `<levels>` by hand.
+- `describe` and the compound-nucleus check do not show the ties.
+- A THM vertex with `vertex=constant` in a tied group of the formal basis takes B at the group's lowest level, not
+  -l (not tested; a THM data set on an isospin project was never run).
+- The web page's forms come from the schema; the Qt GUI has no editor (as dev).
+
+**Run here** (CRC, GCC 11.5): build; `tests/isospin_levels`; the unit tests named above. The full gate: see the end
+of this entry. **Not run:** CI.
+
+**A real project, outside the tree:** the A = 4 fit of the PI's archive (43 isospin levels in 4Li, 4H and 4He, 14
+mixes, formal basis; 87 data sets, 5,005 points, its spin-observable sets left out). From one formal parameter file
+(dev's `param.par`, its names converted by `--convert-params`) the model values of dev and of this branch agree to
+1e-9 (1.7e-7 at worst), and the d+d reaction data sets are exactly twice dev's (`FOR_THE_OWNER.md` section 3, row 1).
+From the project's own level values the formal parameters of the two builds differ by 4e-7, with 14 whole-level
+signs reversed: the input transformation, not the ties.
+
+**Decided by the owner (2026-11-16):** the identical-entrance-pair factor stays as this branch has it ("Go with
+Jakub's convention for the identical particles"): `FOR_THE_OWNER.md` section 3 row 1 is answered, keep 1 + δ₁₂. The
+A = 4 project's d + d reaction data were halved for `dev`'s convention (`*_azconv`) and go in un-halved here.
+
+**The full gate** (queue job, 8 slots, on the commit before this paragraph): consistency, configure, build and the
+docs clean; ctest 315 of 317, the base's two failing (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites
+172 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"),
+`tests/isospin_levels` passing (58 checks).
+
 ## 2026-11-16 (owner's session, dev port) — per-channel radii, step 3: the session side
 
 **Branch** `feature/upgrade-5-dev-channel-radii`, on the entry below. dev's step 3 was a session method

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "azure2/experiment/ChannelRadii.h"
+#include "azure2/experiment/Isospin.h"
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/experiment/GammaDecay.h"
 #include "azure2/experiment/HybridPotentialSettings.h"
@@ -80,6 +81,9 @@ struct BuiltProject {
   /// The `channel_radius` records of <channelRadii>, in record order (BuildChannelRadii): the channels that take a
   /// radius of their own.  Which channel takes which is the set-up's (ChannelRadiusFor), which knows the channels.
   std::vector<ChannelRadiusEntry> channelRadii;
+  /// The records of <isospin> (BuildIsospin): the isospin levels across compound nuclei, resolved against the pairs
+  /// and level IDs of <levels>.  Which level lines, channels and parameters they tie is the set-up's (IsospinSet).
+  IsospinSpec isospin;
   /// The record of each pair's potential: pair key -> (record name, line).
   std::map<int, std::pair<std::string, int>> potentialRecords;
   /// The defaults of the table the potential records used (matching radius, step), one line each for the log.
@@ -99,7 +103,8 @@ struct BuiltProject {
 /*!
  * Every fit-parameter name a built project gives that is made from a record's name, in record order, each once: the
  * data sets' (norm, shift offset and sqrt, shift-function parameters, sample thickness, a group follower's
- * <record>.<field>[<data set>]), the extrapolations', the isotope abundances' (AbundanceParameterName) and the target
+ * <record>.<field>[<data set>]), the extrapolations', the isospin records' (<isospin_shift>.shift,
+ * <isospin_mix>.amplitude), the isotope abundances' (AbundanceParameterName) and the target
  * effects' (<target>.screening, .areal_density, .doppler: the names src/EDataParameters.cpp EffectParameterName gives).
  * pyazr's Project.rename maps the names before and after a rename by position.
  */

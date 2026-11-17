@@ -1,6 +1,7 @@
 // The sections that are not records: <scatteringLengths> as model data, <thm>, <parameterSettings>, <config> and
 // the prior-covariance copy (Builder.h).
 #include <cctype>
+#include <cmath>
 #include "Builder.h"
 
 namespace azure2 {
@@ -236,6 +237,99 @@ void Builder::BuildPotentials() {
   }
   for (const std::string &n : r.notes) Note(Construct::kPotential, "", n);
   out_.potentials = r.records;
+}
+
+// ================================================================ <isospin>
+// dev's block (2026-10-17) -> isospin_* records in the lines' order (the k of isospin_mix_<k> is the order of the mix
+// records): reference -> isospin_reference, shift -> isospin_shift (its prior when the width is > 0), level ->
+// isospin_level with the widths of its soft line, mix -> isospin_mix (a prior centred on 0 when the width is > 0),
+// factor -> isospin_factor, pairT -> isospin_pair.  Pairs by their labels (pair_key where a label names two pairs);
+// what dev's engine refused (an unknown pair, a level without lines) is refused by this build's validation.
+void Builder::BuildIsospin() {
+  auto integer = [](const std::string &f) { return (int)std::lround(std::stod(f)); };
+  auto half = [](const std::string &f) {
+    const long twice = std::lround(2.0 * std::stod(f));
+    return twice % 2 == 0 ? std::to_string(twice / 2) : std::to_string(twice) + "/2";
+  };
+  auto refuse = [&](const OldProject::IsospinLine &c, const std::string &why) {
+    res_.refusal = "<isospin> line \"" + c.text + "\" " + why;
+  };
+  auto pairFields = [&](io::Record &r, const std::string &field, const OldProject::IsospinLine &c, const std::string &key) {
+    const OldPair *pair = Pair(integer(key));
+    if (!pair) {
+      refuse(c, "names pair key " + key + ", which <levels> does not have");
+      return false;
+    }
+    Add(r, field, PairLabel(*pair));
+    if (Ambiguous(*pair)) Add(r, "pair_key", std::to_string(pair->key));
+    return true;
+  };
+  auto nuisance = [](const std::string &value, const std::string &unit, const std::string &vary, const std::string &centre,
+                     const std::string &sigma) {
+    std::string text = value + (unit.empty() ? "" : " " + unit) + (std::stod(vary) != 0.0 ? " fit" : " fixed");
+    if (std::stod(sigma) > 0.0) text += " prior " + centre + " " + sigma;
+    return text;
+  };
+  int mixes = 0;
+  for (const OldProject::IsospinLine &c : old_.isospin) {
+    const std::vector<std::string> &f = c.fields;
+    io::Record r;
+    if (c.kind == "soft") continue;  // with its level, below
+    if (c.kind == "reference" || c.kind == "shift") {
+      const std::string nuclide = experiment::NuclideLabel(integer(f[0]), integer(f[1]));
+      r.kind = c.kind == "reference" ? "isospin_reference" : "isospin_shift";
+      r.name = Unique((c.kind == "reference" ? "reference_" : "shift_") + nuclide);
+      Add(r, "nucleus", nuclide);
+      if (!pairFields(r, "threshold", c, f[2])) return;
+      if (c.kind == "shift") {
+        Add(r, "shift", nuisance(f[3], "MeV", f[4], f[5], f[6]));
+        Param("isospin_shift_" + std::to_string(integer(f[0])) + "_" + std::to_string(integer(f[1])), r.name + ".shift");
+      }
+    } else if (c.kind == "level") {
+      r.kind = "isospin_level";
+      r.name = Unique("level_" + std::to_string(integer(f[0])));
+      Add(r, "level", std::to_string(integer(f[0])));
+      Add(r, "T", half(f[1]));
+      for (const OldProject::IsospinLine &s : old_.isospin)
+        if (s.kind == "soft" && integer(s.fields[0]) == integer(f[0])) {
+          Add(r, "soft_energy", s.fields[1] + " MeV");
+          Add(r, "soft_amplitude", s.fields[2]);
+        }
+    } else if (c.kind == "mix") {
+      r.kind = "isospin_mix";
+      r.name = Unique("mix_" + std::to_string(++mixes));
+      Add(r, "level", std::to_string(integer(f[0])));
+      if (!pairFields(r, "pair", c, f[1])) return;
+      Add(r, "l", std::to_string(integer(f[2])));
+      Add(r, "s", half(f[3]));
+      Add(r, "amplitude", nuisance(f[4], "", f[5], "0", f[6]));
+      Param("isospin_mix_" + std::to_string(mixes), r.name + ".amplitude");
+    } else if (c.kind == "factor") {
+      r.kind = "isospin_factor";
+      r.name = Unique("factor_" + std::to_string(integer(f[0])) + "_" + std::to_string(integer(f[1])));
+      Add(r, "level", std::to_string(integer(f[0])));
+      if (!pairFields(r, "pair", c, f[1])) return;
+      Add(r, "factor", f[2]);
+    } else if (c.kind == "pairT") {
+      r.kind = "isospin_pair";
+      r.name = Unique("pair_" + std::to_string(integer(f[0])));
+      if (!pairFields(r, "pair", c, f[0])) return;
+      Add(r, "t_light", half(f[1]));
+      Add(r, "t_heavy", half(f[2]));
+    }
+    out_.isospin.records.push_back(r);
+    Count(Construct::kIsospin);
+  }
+  for (const OldProject::IsospinLine &c : old_.isospin) {
+    if (c.kind != "soft") continue;
+    bool declared = false;
+    for (const OldProject::IsospinLine &l : old_.isospin)
+      declared = declared || (l.kind == "level" && integer(l.fields[0]) == integer(c.fields[0]));
+    if (!declared) {
+      refuse(c, "names level ID " + c.fields[0] + ", which has no 'level' line");
+      return;
+    }
+  }
 }
 
 // ================================================================ <channelRadii>

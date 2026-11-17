@@ -260,3 +260,34 @@ channel_radius a12C_l0_s2                       # l = 0, channel spin 2 only
     radius          5.2 fm
     s               2
 </channelRadii>
+<isospin>
+isospin_reference ref_4Li                       # Hale's A = 4 scheme: the reference nucleus and its threshold pair
+    nucleus        4Li
+    threshold      p+3He
+isospin_shift shift_4H                          # another nucleus: its internal Coulomb shift, here fitted with a prior
+    nucleus        4H
+    threshold      n+3H
+    shift          -0.86 MeV fit prior -0.86 0.3
+isospin_level T1                                # the level with ID 1 is a T = 1 level in every nucleus it has lines in
+    level          1
+    T              1
+isospin_level T0_soft                           # a soft tie: derived energies and amplitudes free, penalised
+    level          2
+    T              0
+    soft_energy    50 keV
+    soft_amplitude 0.02
+isospin_mix dd_T1                               # an isospin-forbidden channel with an amplitude of its own
+    level          1
+    pair           d+2H
+    l              1
+    s              1
+    amplitude      0.05 fit prior 0 0.1
+isospin_factor f_pt                             # a factor in place of the Clebsch-Gordan coefficient
+    level          1
+    pair           p+3H
+    factor         0.70
+isospin_pair t_12C_T1                           # an excited state of another isospin
+    pair           p+12C[15.11]
+    t_light        1/2
+    t_heavy        1
+</isospin>

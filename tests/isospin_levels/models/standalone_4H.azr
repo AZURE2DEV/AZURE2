@@ -1,0 +1,39 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+2 -1 4.6413372228257 0 1 2 2 2 1 1 0 0.80803154007647 0.5 1 0.5 1 0 1.008665 3.016049 0 1 0.0 0.0 0 0 0.0 0 4.9 0 0 0
+
+</levels>
+<isospin>
+isospin_reference reference_4H
+    nucleus        4H
+    threshold      n+3H
+
+isospin_level level_1
+    level          1
+    T              1
+</isospin>
+<data>
+</data>
+<extrapolations>
+# <segmentsTest> line 1
+extrapolation x1
+    reaction       3H(n,n)3H
+    quantity       sigma
+    unit           b
+    energies       range 2.0 12.0 MeV lab step 0.05
+</extrapolations>
+<targets>
+</targets>

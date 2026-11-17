@@ -164,6 +164,12 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) {
   WorkingCopy *localData = data();
 
   AZUREParams params;
+  if (localCompound->GetIsospin().Active()) {
+    // See UpdateSegments: observed parameters are not available with isospin levels.
+    configure().outStream << "ERROR: a project with isospin levels takes parameters in the fit's basis "
+                          << "(CalculateChi2RWA), not observed ones." << std::endl;
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   localCompound->FillCompoundFromParamsPhysical(params_, state(), inputs());
   localData->FillAbundancesFromVector(params_);
   bool isValid = localCompound->TransformIn(configure(), state(), inputs());
