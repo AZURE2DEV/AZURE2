@@ -126,7 +126,8 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) {
   FillFromFullRWA(full);
   // Prior parameter covariance (dev b7e77292): not part of this chi2 (pyazr's objective() adds
   // penalties()["prior_covariance"]), recorded for chiSquared.out (WriteOutputFiles).
-  if (const PriorCovariance *pc = data()->Data().GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(full);
+  if (data()->Data().GetPriorCovariance())
+    Objective::Engine().RecordPriorCovariance(ObjectiveContext{compound(), state(), inputs(), data(), results(), full, configure()});
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
 
@@ -186,7 +187,8 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) {
   localData->FillEnergyShiftsFromParams(params_, results(), localCompound, &state(), &inputs(), &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), state());
 
-  if (const PriorCovariance *pc = localData->Data().GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(params_);
+  if (localData->Data().GetPriorCovariance())
+    Objective::Engine().RecordPriorCovariance(ObjectiveContext{localCompound, state(), inputs(), localData, results(), params_, configure()});
   // The same terms CalculateChi2RWA adds: the two bases must give one objective (dev 7284d09).
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
@@ -212,6 +214,12 @@ std::vector<std::string> AZUREAPI::ObjectiveTermNames() const {
   std::vector<std::string> names;
   for (const auto &t : Objective::Engine().Terms()) names.push_back(t->Name());
   return names;
+}
+
+std::vector<std::string> AZUREAPI::ObjectiveTermLabels() const {
+  std::vector<std::string> labels;
+  for (const auto &t : Objective::Engine().Terms()) labels.push_back(t->TotalLabel());
+  return labels;
 }
 
 double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<double> *terms,

@@ -2,8 +2,10 @@
 // of AZURECalc::operator() before Phase 2, moved here unchanged, in its order.
 #include "Objective.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
+#include <ostream>
 
 #include "AChannel.h"
 #include "ALevel.h"
@@ -18,6 +20,7 @@
 #include "InferenceTypes.h"
 #include "ModelData.h"
 #include "DiagonalPriors.h"
+#include "ApparatusParameters.h"
 
 namespace {
 
@@ -79,6 +82,22 @@ class SegmentTerms : public ObjectiveTerm {
       }
     }
   }
+  // The per-segment table, Total-Chi-Squared, Total-Norm-Chi-Squared and Total-N are the writer's own
+  // (WorkingCopy::WriteChiSquaredFile); here the energy-shift priors the fit minimised (AppendShiftPriors), when any
+  // shift is a fit parameter.  Without this the file reported less than the minimiser's own total by this amount.
+  void WriteTotal(const WorkingCopy &data, const Config &, const azure2::Results &, std::ostream &out) const override {
+    bool anyShiftVaried = false;
+    DiagonalPriors shiftPriors;
+    for (int i = 1; i <= data.Data().NumSegments(); i++) {
+      const Segment *segment = data.Data().GetSegment(i);
+      if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
+      if (segment->OwnsShiftFn())
+        for (int q = 0; q < segment->NumShiftFnParams(); q++)
+          if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
+      AppendShiftPriors(data, i, nullptr, shiftPriors);
+    }
+    if (anyShiftVaried) out << " Total-Shift-Chi-Squared: " << PriorsChi2(shiftPriors);
+  }
 };
 
 // T2: r^T M^-1 r over each covariance group in place of its points' r_i^2.  (A THM segment carries no covariance
@@ -100,7 +119,12 @@ class NuisanceTerm : public ObjectiveTerm {
     if (!c.nuisance) return;
     const double v = c.nuisance(c.p);
     chi2 += v;
-    c.results.objective.nuisance = v;
+    StoreTotal(c, v);
+  }
+  // Part of the objective in every path (objective.md D6); the total of the last evaluation with the limits manager.
+  std::string TotalLabel() const override { return "Total-Nuisance-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
+    if (results.objective.Total(Slot()) != 0.0) WriteStoredTotal(results, out);
   }
 };
 
@@ -123,7 +147,12 @@ class ParkTerm : public ObjectiveTerm {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
     const double parkPenalty = ParkWallChi2(ParkLevelsOf(c.compound, c.state, false), kParkNormScale);
     chi2 += parkPenalty;
-    c.results.objective.park = parkPenalty;
+    StoreTotal(c, parkPenalty);
+  }
+  // Park formalism: the J > 0 wall, when a level sits beyond it (0 otherwise, printed in the Park formalism).
+  std::string TotalLabel() const override { return "Total-Park-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &config, const azure2::Results &results, std::ostream &out) const override {
+    if (config.paramMask & Config::USE_PARK_FORMALISM) WriteStoredTotal(results, out);
   }
 };
 
@@ -144,6 +173,50 @@ class TargetPriorTerm : public ObjectiveTerm {
     DiagonalPriors priors;
     AppendTargetPriors(*c.data, Source(), nullptr, priors);
     chi2 += PriorsChi2(priors);
+  }
+  // The apparatus priors are printed one field per row (WriteApparatusChiSquared): no field holds the whole term.
+  std::string TotalLabel() const override {
+    switch (kind_) {
+      case Screening: return "Total-Screening-Chi-Squared";
+      case Density: return "Total-Density-Chi-Squared";
+      case Doppler: return "Total-Doppler-Chi-Squared";
+      case Thickness: return "Total-Thickness-Chi-Squared";
+      case Apparatus: break;
+    }
+    return "";
+  }
+  // The subtotal of the kind at the working copy's present values, re-formed by the term's own gather (a stored total
+  // could be stale after pyazr's write_outputs: objective_arrays.md section 4), when a parameter of the kind has a prior.
+  void WriteTotal(const WorkingCopy &data, const Config &, const azure2::Results &, std::ostream &out) const override {
+    const DataSet &set = data.Data();
+    bool anyPrior = false;
+    switch (kind_) {
+      case Screening:
+        for (int k = 1; k <= set.NumScreeningParams(); k++)
+          if (set.GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
+        break;
+      case Density:
+        for (int k = 1; k <= set.NumDensityParams(); k++)
+          if (set.GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
+        break;
+      case Doppler:
+        for (int k = 1; k <= set.NumDopplerParams(); k++)
+          if (set.GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
+        break;
+      case Thickness:
+        for (int k = 1; k <= set.NumThicknessParams(); k++) {
+          const Segment *seg = set.GetSegment(set.GetThicknessSegment(k));
+          if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
+        }
+        break;
+      case Apparatus:  // one line per row with a fitted prior
+        WriteApparatusChiSquared(data, out);
+        return;
+    }
+    if (!anyPrior) return;
+    DiagonalPriors priors;
+    AppendTargetPriors(data, Source(), nullptr, priors);
+    out << " " << TotalLabel() << ": " << PriorsChi2(priors);
   }
 
  private:
@@ -178,7 +251,12 @@ class AbundanceTerm : public ObjectiveTerm {
     if (!c.data->Data().Abundances().Present()) return;
     const double abundancePenalty = AbundanceChi2(AbundanceBlockOf(*c.data, c.config.abundanceSumSigma), true);
     chi2 += abundancePenalty;
-    c.results.objective.abundance = abundancePenalty;
+    StoreTotal(c, abundancePenalty);
+  }
+  // Isotopic abundances: their priors and the sum-to-one term.
+  std::string TotalLabel() const override { return "Total-Abundance-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
+    if (results.objective.Total(Slot()) != 0.0) WriteStoredTotal(results, out);
   }
 };
 
@@ -193,10 +271,12 @@ class ModelDataTerm : public ObjectiveTerm {
     if (set.NumResiduals() == 0) return;
     const double v = ModelData::Chi2(c.compound, c.state, c.inputs, c.config, set);
     chi2 += v;
-    if (set.hasSection) {
-      c.results.objective.modelData = v;
-      c.results.objective.hasModelData = true;
-    }
+    if (set.hasSection) StoreTotal(c, v);
+  }
+  // The <modelData> data (modelData.out), whenever the project has the section.
+  std::string TotalLabel() const override { return "Total-Model-Data-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
+    if (results.objective.Stored(Slot())) WriteStoredTotal(results, out);
   }
 };
 
@@ -210,8 +290,13 @@ class GammaDecayTerm : public ObjectiveTerm {
     if (c.compound->GetGammaDecays().Empty()) return;
     const double v = c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
     chi2 += v;
-    c.results.objective.gammaDecay = v;
-    c.results.objective.hasGammaDecay = true;
+    StoreTotal(c, v);
+  }
+  // Whenever the project has a record.  Without this field the file's totals did not add up to the minimised
+  // chi-squared for such a project.
+  std::string TotalLabel() const override { return "Total-Gamma-Decay-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
+    if (results.objective.Stored(Slot())) WriteStoredTotal(results, out);
   }
 };
 
@@ -226,26 +311,75 @@ class PriorCovarianceTerm : public ObjectiveTerm {
     if (!pc) return;
     const double pcChi2 = pc->Chi2(c.p);
     chi2 += pcChi2;
-    c.results.objective.priorCovariance = pcChi2;
+    StoreTotal(c, pcChi2);
+  }
+  // Whenever the key is set; with 15 significant digits (a newer field: the older ones keep their 6).
+  std::string TotalLabel() const override { return "Total-Prior-Covariance-Chi-Squared"; }
+  void WriteTotal(const WorkingCopy &, const Config &config, const azure2::Results &results, std::ostream &out) const override {
+    if (config.priorCovariance.empty()) return;
+    const std::streamsize prec = out.precision(15);
+    WriteStoredTotal(results, out);
+    out.precision(prec);
   }
 };
 
 }  // namespace
 
+void ObjectiveTerm::WriteStoredTotal(const azure2::Results &results, std::ostream &out) const {
+  out << " " << TotalLabel() << ": " << results.objective.Total(Slot());
+}
+
+template <class T, class... A>
+const ObjectiveTerm *Objective::Append(A &&...args) {
+  std::unique_ptr<ObjectiveTerm> term = std::make_unique<T>(std::forward<A>(args)...);
+  term->slot_ = (int)terms_.Terms().size();
+  const ObjectiveTerm *t = term.get();
+  terms_.Append(std::move(term));
+  return t;
+}
+
+namespace {
+// A walk's order: the terms named, in that order, then every other term of the list in the value's order.
+std::vector<const ObjectiveTerm *> WalkOrder(const std::vector<std::unique_ptr<ObjectiveTerm>> &terms,
+                                             std::vector<const ObjectiveTerm *> first) {
+  for (const auto &t : terms)
+    if (std::find(first.begin(), first.end(), t.get()) == first.end()) first.push_back(t.get());
+  return first;
+}
+}  // namespace
+
 Objective::Objective() {
-  terms_.Append(std::make_unique<SegmentTerms>());
-  terms_.Append(std::make_unique<DataCovarianceTerm>());
-  terms_.Append(std::make_unique<NuisanceTerm>());
-  terms_.Append(std::make_unique<ParkTerm>());
-  terms_.Append(std::make_unique<TargetPriorTerm>(TargetPriorTerm::Screening));
-  terms_.Append(std::make_unique<TargetPriorTerm>(TargetPriorTerm::Density));
-  terms_.Append(std::make_unique<TargetPriorTerm>(TargetPriorTerm::Doppler));
-  terms_.Append(std::make_unique<TargetPriorTerm>(TargetPriorTerm::Thickness));
-  terms_.Append(std::make_unique<TargetPriorTerm>(TargetPriorTerm::Apparatus));
-  terms_.Append(std::make_unique<AbundanceTerm>());
-  terms_.Append(std::make_unique<ModelDataTerm>());
-  terms_.Append(std::make_unique<PriorCovarianceTerm>());
-  terms_.Append(std::make_unique<GammaDecayTerm>());
+  // The value: the order of the sum (part of its bits).  A new term is appended here.
+  const ObjectiveTerm *segments = Append<SegmentTerms>();
+  Append<DataCovarianceTerm>();
+  const ObjectiveTerm *nuisance = Append<NuisanceTerm>();
+  const ObjectiveTerm *park = Append<ParkTerm>();
+  const ObjectiveTerm *screening = Append<TargetPriorTerm>(TargetPriorTerm::Screening);
+  const ObjectiveTerm *density = Append<TargetPriorTerm>(TargetPriorTerm::Density);
+  const ObjectiveTerm *doppler = Append<TargetPriorTerm>(TargetPriorTerm::Doppler);
+  const ObjectiveTerm *thickness = Append<TargetPriorTerm>(TargetPriorTerm::Thickness);
+  const ObjectiveTerm *apparatus = Append<TargetPriorTerm>(TargetPriorTerm::Apparatus);
+  const ObjectiveTerm *abundance = Append<AbundanceTerm>();
+  const ObjectiveTerm *modelData = Append<ModelDataTerm>();
+  priorCovariance_ = Append<PriorCovarianceTerm>();
+  const ObjectiveTerm *gammaDecay = Append<GammaDecayTerm>();
+  // The other walks have orders of their own, older than the list (each is part of a result: the gradient's and the
+  // rows' sums, the bytes of chiSquared.out).  Each names the terms that take part, in that order; every other term
+  // follows in the value's order (its function does nothing), so a new term is visited last by every walk.
+  gradientWalk_ = WalkOrder(Terms(), {gammaDecay, modelData, park, abundance});
+  rowWalk_ = WalkOrder(Terms(), {park, gammaDecay, abundance});
+  reportWalk_ = WalkOrder(Terms(), {park, segments, abundance, screening, density, apparatus, doppler, thickness,
+                                    nuisance, modelData, gammaDecay, priorCovariance_});
+}
+
+void Objective::WriteTotals(const WorkingCopy &data, const Config &config, const azure2::Results &results,
+                            std::ostream &out) const {
+  for (const ObjectiveTerm *t : reportWalk_) t->WriteTotal(data, config, results, out);
+}
+
+void Objective::RecordPriorCovariance(const ObjectiveContext &c) const {
+  double scratch = 0.0;
+  priorCovariance_->Add(c, scratch);
 }
 
 const Objective &Objective::Engine() {

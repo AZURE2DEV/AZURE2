@@ -40,12 +40,13 @@ class Term {
 /*!
  * The ordered list of an objective's terms and the rules of its sums.  The order of the list is the order of the
  * floating-point additions; it is part of the result.  The list holds no state of an evaluation: every sum is a
- * const function of the context.
+ * const function of the context.  TermT is the type of the terms (Term<Context> or a class derived from it that
+ * states more, as the engine's ObjectiveTerm does).
  */
-template <class Context>
+template <class Context, class TermT = Term<Context>>
 class TermList {
  public:
-  using TermPtr = std::unique_ptr<Term<Context>>;
+  using TermPtr = std::unique_ptr<TermT>;
 
   /// Appends a term: the list's order is the order of the calls.
   void Append(TermPtr term) { terms_.push_back(std::move(term)); }
