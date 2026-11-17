@@ -53,7 +53,9 @@ check() {  # check LABEL VALUE REFERENCE TOL
 
 # same_file PARTIAL RECORD: the record's output file is the partial widths', byte for byte, once the record's own
 # field of chiSquared.out, which must be 0 here (no prior), is taken out
-same_file() { sed 's/ Total-Gamma-Decay-Chi-Squared: 0\( \|$\)/\1/' "$2" | cmp -s "$1" -; }
+# (sed -b and the carriage return: MSYS's sed otherwise drops the CR of a Windows build's lines, and every file differs)
+CR=$'\r'
+same_file() { sed -b "s/ Total-Gamma-Decay-Chi-Squared: 0\\([ $CR]\\|\$\\)/\\1/" "$2" | cmp -s "$1" -; }
 # project NAME FILE: $WORK/NAME/p.azr = FILE, with the data
 project() {
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"

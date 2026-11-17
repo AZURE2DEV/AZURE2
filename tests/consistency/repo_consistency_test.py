@@ -1292,8 +1292,9 @@ try:
         for _name, _option in {_n: _o for _n, _o, _b in _fitter_rows}.items():  # a row once, absent or not
             _word = _form(_name, _option)
             if _word and _word not in _scope:
-                problems.append(f"{_page}: the fitter '{_name}' of Fitters() is not named ({_word}) in "
-                                f"{'the section \"' + _title + '\"' if _title else 'the page'} (check 46)")
+                _where = 'the section "' + _title + '"' if _title else "the page"  # no backslash in an f-string's
+                problems.append(f"{_page}: the fitter '{_name}' of Fitters() is not named ({_word}) in "  # braces: 3.10
+                                f"{_where} (check 46)")
     for _bit in re.findall(r"(?m)^\s*(USE_\w+_MINIMIZER|USE_ANALYTIC_GRADIENT)\s*=", read("include/Config.h")):
         problems.append(f"include/Config.h: the bit {_bit} selects a fitter; the chosen fitter is the row's name, "
                         "Config::fitter, set by ChooseFitter (docs/upgrade/fit.md section 5) (check 46)")
