@@ -57,6 +57,11 @@ include_directories(${AZURE2_SOURCE_DIR}/include)
 add_library(AZURE2Core STATIC ${AZURE2_CORE_SOURCES})
 target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
 set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# The engine's value of a model datum (LevelValue) is a switch on experiment::ModelQuantity: a value of the enum without
+# its case must not compile (docs/upgrade/data_model.md section 11).
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties(ModelData.cpp PROPERTIES COMPILE_OPTIONS "-Werror=switch")
+endif()
 
 # ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
 # two use convert/, linked below); RunPreparation.cpp: a run request into the Config.  RunRequest.cpp (the commands

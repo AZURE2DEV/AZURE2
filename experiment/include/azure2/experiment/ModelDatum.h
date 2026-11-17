@@ -2,7 +2,6 @@
 #define AZURE2_EXPERIMENT_MODELDATUM_H
 
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "azure2/experiment/Diagnostics.h"
@@ -18,11 +17,10 @@ namespace experiment {
  * rather than with the model at a beam energy.  A validated `datum` record (Schema::Validate) becomes a ModelDatum
  * (SetupSpecs.h) once its level and pairs are found in <levels>: BuildModelData, which takes <levels> as the plain
  * tables of LevelTables.h, so that it needs no engine (they are made from the <levels> rows, LevelTablesOfRows; the
- * tests write them by hand).  Schema::Build calls it for the <modelData> records of a format-3 project.
+ * tests write them by hand).  Schema::Build calls it for the <modelData> records of a format-3 project.  What a
+ * quantity is to the engine and what the build checks come from its row of the quantity table (Quantity::datum,
+ * Quantities.h; docs/upgrade/data_model.md section 11).
  */
-
-/// (table name, quantity) for every datum quantity the engine evaluates.
-const std::vector<std::pair<std::string, ModelQuantity>> &ModelQuantities();
 
 struct ModelDataBuild {
   std::vector<ModelDatum> data;          ///< in record order

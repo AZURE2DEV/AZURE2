@@ -84,6 +84,9 @@ target_compile_features(azure2_experiment PUBLIC cxx_std_17)
 set_target_properties(azure2_experiment PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(azure2_experiment PRIVATE -Wall -Wextra -Wpedantic)
+  # The build's check of a datum is a switch on DatumCheck: a value without its case must not compile
+  # (docs/upgrade/data_model.md section 11).
+  set_source_files_properties(src/ModelDatum.cpp PROPERTIES COMPILE_OPTIONS "-Werror=switch")
 endif()
 
 # expression: each node against the engine's expression written out in the test, bit for bit, and backward against

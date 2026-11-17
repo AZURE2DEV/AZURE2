@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "azure2/experiment/LegendreExpansion.h"
+#include "azure2/experiment/ModelQuantity.h"
 #include "azure2/experiment/ReferenceTable.h"
 
 namespace azure2 {
@@ -420,18 +421,7 @@ struct AbundanceSpecs {
 /// of a scattering length, made by BuildModelData from a `datum` record.  Values are in the engine unit of the
 /// quantity's dimension (MeV for energies and widths, 1, fm, fm^-1/2), with the unit and factor as written kept for
 /// the output.
-/// The quantities a datum can be, each evaluated by the engine (src/ModelData.cpp).  ModelQuantities() maps the
-/// table's names (Quantities.cpp, record kind datum) to them; repo_consistency check 27 fails for a datum quantity of
-/// the table without a row there and a test named after it.
-enum class ModelQuantity {
-  ResonanceStrength,  ///< omega gamma = omega Gamma_a Gamma_b / Gamma (data_kinds.md eq. 8)
-  ResonanceEnergy,    ///< the observed level energy E_lambda, as E_x, E_cm or E_lab of a pair
-  TotalWidth,         ///< Gamma = sum_c |Gamma_c|
-  PartialWidth,       ///< Gamma of one pair: the sum over its channels
-  BranchingRatio,     ///< Gamma_b / Gamma
-  Anc,                ///< |C| of a closed channel (pair, l, s)
-  ScatteringLength    ///< Re and Im of the s-wave scattering length a_0 (include/ScatteringLength.h)
-};
+/// The quantity of a datum: ModelQuantity.h, the key of its row in the quantity table (Quantity::datum).
 
 struct ModelDatum {
   std::string name;
