@@ -11,6 +11,7 @@ import os
 import numpy as np
 
 from .errors import Refused
+from ..paths import is_absolute
 
 
 def _with_covariance(project):
@@ -86,7 +87,7 @@ def covariance_write(state, datasets, parts, path, rev=None):
     the ``covariance`` field of every data set of ``datasets`` to it: one history entry, which undo takes back with
     the file (removed, or restored as it was).  Refused when the engine would refuse the matrix."""
     from pyazr import Project, covariance
-    if not path or os.path.isabs(str(path)):
+    if not path or is_absolute(str(path)):
         raise Refused(f"{path!r}: a file name relative to the project's directory", allowed="a relative path",
                       fix="give the name the builder proposes, or another inside the project's directory")
     with state.lock:
@@ -177,7 +178,7 @@ def rate_engine(tracker, x0, settings, names):
     gamow = rate.gamow_window(s.file, settings["entrance"], best.T9)
     path = tracker.product("rate", ".csv")
     rate.write_rate_table(path, best, band=band, comparison=comparison)
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         table = fh.read()
     out = {"rate": {"T9": best.T9.tolist(), "rate": best.rate.tolist(), "reaction": best.reaction,
                     "entrance": best.entrance, "exit": best.exit, "source": best.source, "units": best.units},
@@ -221,7 +222,7 @@ def _library_formats(file, settings, best, band, tracker):
         path = tracker.product(name, ".dat")
         try:
             facts = make(path)
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 out[name] = {"text": fh.read(), "path": path, **facts}
         except Error as e:
             out[name] = {"refused": str(e), "what": e.what, "allowed": e.allowed, "fix": e.fix}

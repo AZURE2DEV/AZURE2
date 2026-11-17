@@ -18,6 +18,7 @@
 
 #include "azure2/experiment/AdaptiveGrid.h"
 #include "azure2/experiment/Grids.h"
+#include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/Units.h"
 
 using namespace azure2::experiment;
@@ -133,6 +134,16 @@ int main() {
     check("file resolved in the project's directory (absent there): E_DATA_FILE, named as written",
           !w.ok && std::string(w.code) == "E_DATA_FILE" && w.error.find("grid file grids_test_grid.txt") != std::string::npos &&
               w.error.find("no_such_directory") == std::string::npos);
+    // One rule for "absolute", the same on every system: a Windows drive path is not relative to the project.
+    using azure2::experiment::IsAbsolutePath;
+    using azure2::experiment::PathToOpen;
+    check("absolute: /x, \\x, C:/x, c:\\x; not x, a/b, C:x, 1:/x, an empty path",
+          IsAbsolutePath("/x") && IsAbsolutePath("\\x") && IsAbsolutePath("C:/x") && IsAbsolutePath("c:\\x") &&
+              !IsAbsolutePath("x") && !IsAbsolutePath("a/b") && !IsAbsolutePath("C:x") && !IsAbsolutePath("1:/x") &&
+              !IsAbsolutePath(""));
+    check("the file to open: a drive path as written, a relative one in the project's directory",
+          PathToOpen("D:/p", "D:/t/g.dat") == "D:/t/g.dat" && PathToOpen("D:/p", "g.dat") == "D:/p/g.dat" &&
+              PathToOpen("/p/", "g.dat") == "/p/g.dat" && PathToOpen("/p", "") == "/p" && PathToOpen("", "g.dat") == "g.dat");
     std::ofstream("grids_test_bad.txt") << "0.1\n0.2 0.3\n";
     g.path = "grids_test_bad.txt";
     check("file with two numbers on a line: refused", !ReadGridValues(g, cm).ok);

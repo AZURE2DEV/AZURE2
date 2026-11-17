@@ -87,8 +87,9 @@ jobs:
           # test failed without a report; build.yml gates test failures, so here it is a warning, one per step.
           # Exit 3: the toolchain or build is broken (the job fails).
           sev=error; [ "$rc" -eq 2 ] && sev=warning
-          # A step shows ten annotations of a kind and drops the rest.  Eight at most are written: the first report
-          # of up to five report files, the table of distinct reports, the script's own line, the failed steps.
+          # A step shows ten annotations of a kind and drops the rest.  Nine at most are written: the first report
+          # of up to five report files, the table of distinct reports, the script's own line, the failed steps,
+          # the last lines of their logs.
           # A report with its stacks, as one annotation: a summary line does not say whose race it is.
           for k in 1 2 3 4 5; do
             rep="$(awk -v k="$k" '/^---- / { n++ } /^steps: / { n = 0 } n == k' sanitize.log | head -45 \
@@ -103,6 +104,10 @@ jobs:
           grep -m1 '^sanitize_upgrade:' sanitize.log | while read -r l; do echo "::error::$l"; done
           failed="$(grep -E '^  FAIL' sanitize.log | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
           [ -n "$failed" ] && echo "::$sev::${{ matrix.sanitizer }}: failed steps:%0A$failed"
+          # Why they failed: the last lines of each failed step's log, as the script prints them.
+          tails="$(awk '/^==== last lines of / { t = 1 } /^reports and logs: / { t = 0 } t' sanitize.log | head -70 \
+                   | sed "s|$GITHUB_WORKSPACE/||g" | awk '{ gsub(/%/, "%25"); printf "%s%%0A", $0 }')"
+          [ -n "$tails" ] && echo "::$sev::${{ matrix.sanitizer }}: the failed steps' logs:%0A$tails"
           [ "$rc" -eq 2 ] && exit 0
           exit "$rc"
 

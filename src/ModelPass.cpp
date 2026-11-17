@@ -383,7 +383,7 @@ void AppendInDataFrame(const WorkingCopy &data, const Segment &segment, int i, d
 void Unit::NoModelRecord(const azure2::Results &r) const {
   throw std::logic_error(
       "Unit: a model value was read or written on a point without a model record in the buffer it was given "
-      "(segment " + std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) + " MeV, offset " +
+      "(segment " + std::to_string(segment_key_) + ", E_lab " + std::to_string(values_.lab_energy) + " MeV, offset " +
       (model_slot_ == kNoRecord ? std::string("none") : std::to_string(model_slot_)) + ", " +
       std::to_string(r.model.size()) + " model values): only the points of a data set's own segments have one "
       "(WorkingCopy::LayoutResults), and WorkingCopy::BeginEvaluation sizes the buffer");

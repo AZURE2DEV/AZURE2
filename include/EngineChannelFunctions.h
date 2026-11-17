@@ -25,11 +25,11 @@ class PPair;
 /*!
  * The functions of one particle channel of `pair` with orbital l and 2j (PPair::SpinOrbitTwoJ) at the channel energy
  * Ec (MeV, c.m.): S, dS/dE and P, evaluated on one ChannelFunc in that order (P = ChannelFunc::Penetrability above
- * threshold, mu a / (hbar^2 W^2) from WhitFunc below it, 0 at threshold).  `gsl`: GSL's Coulomb functions.  The one
+ * threshold, mu a / (hbar^2 W^2) from WhitFunc below it, 0 at threshold).  The one
  * implementation of a particle channel's functions: EngineChannelFunctions and the binding's level doors
  * (api/src/pybind_level_doors.cpp) call it.
  */
-azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec, bool gsl);
+azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec);
 
 /*!
  * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, with
@@ -43,9 +43,9 @@ azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, i
  */
 azure2::physics::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map,
                                                            const Config &configure);
-/// The same, with the two settings it reads from the Config given directly: GSL Coulomb functions, --use-rmc.
+/// The same, with the setting it reads from the Config given directly: --use-rmc.
 azure2::physics::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map,
-                                                           bool gslCoulomb, bool rmc);
+                                                           bool rmc);
 
 /*!
  * The input values of block b (form Observed): E_lambda, the widths (eV), ANCs (fm^-1/2), amplitudes (gammaIsRWA)

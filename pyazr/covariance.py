@@ -47,6 +47,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .paths import is_absolute
+
 __all__ = ["PART_KINDS", "Covariance", "build", "read_parts", "rows_of", "MARKER"]
 
 #: The comment line that carries the parts in a written file.
@@ -280,7 +282,7 @@ def _length_terms(rows, part, index):
 
 
 def _correlation_terms(rows, part, index, directory):
-    path = part["file"] if os.path.isabs(part["file"]) else os.path.join(directory, part["file"])
+    path = part["file"] if is_absolute(part["file"]) else os.path.join(directory, part["file"])
     try:
         rho = np.loadtxt(path, comments="#", ndmin=2)
     except OSError as e:
@@ -399,7 +401,7 @@ class Covariance:
         """Write the file the engine reads (refused while :attr:`refusal` is set); returns ``path``."""
         if self.refusal:
             raise ValueError(f"the covariance is not written: {self.refusal}")
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(self.text(comment))
         return path
 
@@ -521,7 +523,7 @@ def _notes(cov):
 def read_parts(path):
     """``{"datasets": [...], "parts": [...]}`` of a file :meth:`Covariance.write` wrote (its ``#pyazr.covariance``
     line); None for a file without the line (written by hand or by another program)."""
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             if line.startswith(MARKER + " "):
                 return json.loads(line[len(MARKER) + 1:])

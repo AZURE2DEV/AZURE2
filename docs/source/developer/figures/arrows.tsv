@@ -26,6 +26,7 @@ AZURE2Core	azure2_stopping	links	libraries		src/CMakeLists.txt (same line)
 AZURE2Core	azure2_io	links	libraries		src/CMakeLists.txt (same line)
 AZURE2Core	azure2_experiment	links	libraries		src/CMakeLists.txt (same line)
 AZURE2Core	azure2_experiment_reader	links	libraries		src/CMakeLists.txt (same line)
+AZURE2Core	azure2_inference	links	libraries		src/CMakeLists.txt (same line)
 AZURE2Core	numcmc	links	libraries		CMakeLists.txt: with USE_MCMC, numcmc is appended to EXTRA_LIBS, which AZURE2Core links
 AZUREAPI	AZURE2Core	links	libraries		api/src/CMakeLists.txt target_link_libraries(AZUREAPI PUBLIC AZURE2Core)
 AZURE2	AZUREAPI	links	libraries		src/CMakeLists.txt target_link_libraries(AZURE2 ${AZUREAPI_LIBRARIES} AZURE2Core)
@@ -47,7 +48,7 @@ JGroup	AChannel	owns	setup		JGroup::channels_ (std::vector<AChannel>)
 JGroup	ALevel	owns	setup		JGroup::levels_ (std::vector<ALevel>)
 CompoundSystem	LevelState	makes	setup		CompoundSystem::Fill(const Config &, LevelState &, LevelInputs &, ...) shapes the set-up's (SetUpCompoundSystem); Initialize, the fills and the transformations write the state they are given
 CompoundSystem	LevelInputs	makes	setup		CompoundSystem::Fill makes the set-up's from the <levels> rows; TransformIn and FillCompoundFromParamsPhysical write the inputs they are given
-CompoundSystem	LevelParameterLayout	reads	setup	const	CompoundSystem::parameterLayout_ (shared_ptr<const LevelParameterLayout>), made once in CompoundSystem::Fill; read by every walk of the level block through CompoundSystem::ParameterLayout()
+CompoundSystem	azure2::inference::LevelParameterLayout	reads	setup	const	CompoundSystem::parameterLayout_ (shared_ptr<const LevelParameterLayout>), made once in CompoundSystem::Fill; read by every walk of the level block through CompoundSystem::ParameterLayout()
 CompoundSystem	ObservedLevelTable	makes	setup		CompoundSystem::TransformOut(const Config &) returns it; WriteParametersOut, LevelValue, WarnLargeRadiativeWidths read it
 CompoundSystem	SystemOfCompound	reads	setup	const	CompoundSystem::systemStructure_, systemAllGroups_ (shared_ptr<const SystemOfCompound>), made once by BuildSystemOfCompound(const CompoundSystem &, ...) in CompoundSystem::Fill
 SystemOfCompound	azure2::physics::System	owns	setup		SystemOfCompound::system
@@ -77,7 +78,7 @@ WorkingCopy	Site	owns	evaluation		WorkingCopy::slots_ (std::vector<Site>)
 azure2::Results	azure2::TaskScratch	owns	evaluation		Results::scratch (TaskScratchSet::slots_, std::vector<std::unique_ptr<TaskScratch>>)
 azure2::TaskScratch	AMatrixFunc	owns	evaluation		TaskScratch::point_, gradient_ (std::unique_ptr<AMatrixFunc>)
 azure2::TaskScratch	THMMatrixFunc	owns	evaluation		TaskScratch::pointThm_, gradientThm_ (std::unique_ptr<THMMatrixFunc>)
-AMatrixFunc	LevelMatrixSolver	owns	evaluation		AMatrixFunc::solvers_ (std::vector<LevelMatrixSolver>)
+AMatrixFunc	azure2::physics::LevelMatrixSolver	owns	evaluation		AMatrixFunc::solvers_ (std::vector<azure2::physics::LevelMatrixSolver>)
 AMatrixFunc	CompoundSystem	reads	evaluation	const	AMatrixFunc::compound_ (const CompoundSystem *)
 AMatrixFunc	LevelState	reads	evaluation	const	AMatrixFunc(const CompoundSystem *, const LevelState &, const Config &): the state it is solved at (GenMatrixFunc::state())
 RMatrixFunc	CompoundSystem	reads	evaluation	const	RMatrixFunc(const CompoundSystem *, const LevelState &, const Config &), made per energy task in SolveAtOneEnergy (src/EnergyPass.cpp)
@@ -96,13 +97,15 @@ ObjectiveContext	CompoundSystem	reads	inference	const	ObjectiveContext::compound
 ObjectiveContext	LevelState	reads	inference	nonconst	ObjectiveContext::state (LevelState &): the evaluation's
 ObjectiveContext	WorkingCopy	reads	inference	nonconst	ObjectiveContext::data (WorkingCopy *)
 ObjectiveContext	azure2::Results	reads	inference	nonconst	ObjectiveContext::results (Results &: the terms store their totals)
-Objective	ObjectiveTerm	owns	inference		Objective::terms_ (std::vector<std::unique_ptr<ObjectiveTerm>>)
-ObjectiveTerm	ObjectiveContext	reads	inference	const	ObjectiveTerm::Add(const ObjectiveContext &, double &)
+Objective	azure2::inference::TermList	owns	inference		Objective::terms_ (azure2::inference::TermList<ObjectiveContext>)
+azure2::inference::TermList	azure2::inference::Term	owns	inference		TermList::terms_ (std::vector<std::unique_ptr<Term<Context>>>)
+azure2::inference::Term	ObjectiveContext	reads	inference	const	Term<ObjectiveContext>::Add(const ObjectiveContext &, double &): the terms of src/Objective.cpp
+AZURECalcMCMC	azure2::inference::PriorCovariance	reads	inference	const	AZURECalcMCMC::priorCov_ (std::shared_ptr<const PriorCovariance>, LoadPriorCovariance); the fit reads the run's through DataSet::GetPriorCovariance
 AZURECalc	ParameterLimitsManager	reads	inference	nonconst	AZURECalc::limitsManager_ (ParameterLimitsManager *)
 AZUREParams	ROOT::Minuit2::MnUserParameters	owns	inference		AZUREParams::params_
-AZUREParams	ParameterRecord	owns	inference		AZUREParams::records_ (std::vector<ParameterRecord>)
-ParameterRecord	ParamKindRow	reads	inference	const	ParameterRecord::Row() (const ParamKindRow &, a row of ParamKindTable())
-AZURECalc	ParamIndexMap	makes	inference		BuildParamIndexMap(const CompoundSystem *, const WorkingCopy *, ...) in AZURECalc::GradientBy
+AZUREParams	azure2::inference::ParameterRecord	owns	inference		AZUREParams::records_ (std::vector<ParameterRecord>)
+azure2::inference::ParameterRecord	azure2::inference::ParamKindRow	reads	inference	const	ParameterRecord::Row() (const ParamKindRow &, a row of ParamKindTable())
+AZURECalc	azure2::inference::ParamIndexMap	makes	inference		BuildParamIndexMap(const CompoundSystem *, const WorkingCopy *, ...) in AZURECalc::GradientBy
 AZURECalc	GradAccum	makes	inference		AZURECalc::GradientBy: GradAccum accum
 AZURECalcMCMC	WorkingData	makes	inference		AZURECalcMCMC::GetPooledData: a Clone of the caller's working copy with its buffer when the caller's pool has none idle
 AZURECalcMCMC	CompoundSystem	reads	inference	const	AZURECalcMCMC::compound_ (const CompoundSystem *): the caller's, which outlives it
@@ -110,8 +113,8 @@ AZURECalcMCMC	WalkerLevels	owns	inference		AZURECalcMCMC::levels_ (WalkerLevels)
 AZURECalcMCMC	SamplerStates	reads	inference	nonconst	AZURECalcMCMC::states_ (SamplerStates &): the caller's, taken by GetPooledLevels and GetPooledData
 SamplerStates	StatePool	owns	inference		SamplerStates::levels (StatePool<WalkerLevels>), data (StatePool<WorkingData>)
 WalkerLevels	LevelState	owns	inference		WalkerLevels::state (LevelState)
-AZURECalcMCMC	PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (PosteriorSupport)
-PosteriorSupport	ParameterLimitsManager	makes	inference		PosteriorSupport::OfFit: ParameterLimitsManager settings(&configure, compound, data, &params)
+AZURECalcMCMC	azure2::inference::PosteriorSupport	owns	inference		AZURECalcMCMC::support_ (PosteriorSupport)
+AZURECalcMCMC	ParameterLimitsManager	makes	inference		PosteriorSupportOfFit (src/PosteriorSupport.cpp), called by AZURECalcMCMC: ParameterLimitsManager settings(&configure, compound, state, inputs, data, &params)
 nu::Mcmc	nu::Ensemble	owns	inference		Mcmc::sample (Ensemble)
 nu::Ensemble	nu::Walker	owns	inference		Ensemble::walkers (std::vector<Walker>)
 AZUREMain	Config	reads	frontends	const	AZUREMain::configure_ (const Config &)

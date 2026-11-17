@@ -161,6 +161,9 @@ void Synthetic() {
   check("unknown name", !ConfigEdits(lines, "relativstic", "1", ConfigChange::Set, e, why) && why.find("not an entry") != std::string::npos);
   check("a removed key is no entry", !ConfigEdits(lines, "useAdaptiveGrid", "1", ConfigChange::Set, e, why) &&
                                          why.find("not an entry") != std::string::npos);
+  check("the removed option use_gsl_coul is no entry any more, with why",
+        !ConfigEdits(lines, "use_gsl_coul", "0", ConfigChange::Set, e, why) && why.find("not an entry of <config> any more") != std::string::npos &&
+            why.find("wrong by up to 5 % in the penetrability") != std::string::npos);
   check("bad bool", !ConfigEdits(lines, "relativistic", "yes", ConfigChange::Set, e, why));
   check("bad check word", !ConfigEdits(lines, "check_data", "print", ConfigChange::Set, e, why));
   check("'#' in a path", !ConfigEdits(lines, "output_dir", "out#1/", ConfigChange::Set, e, why));
@@ -198,7 +201,33 @@ void Synthetic() {
     check(std::string(k.name) + ": no other row of the same name",
           std::count_if(ConfigKeys().begin(), ConfigKeys().end(), [&](const ConfigKey &x) { return std::string(x.name) == k.name; }) == 1);
   }
-  check("eleven options", options == 11);
+  check("ten options (eleven until use_gsl_coul was removed, 2026-11-16)", options == 10);
+  // The keys <config> had and has no more: no row of ConfigKeys(), one text per front end, refused by an edit.
+  {
+    const RemovedConfigKey *gsl = RemovedConfigKeyNamed("use_gsl_coul");
+    const RemovedConfigKey *grid = RemovedConfigKeyNamed("useAdaptiveGrid");
+    check("removed keys: use_gsl_coul and useAdaptiveGrid, neither a key any more, no other name",
+          gsl && grid && RemovedConfigKeys().size() == 2 && !ConfigKeyNamed("use_gsl_coul") &&
+              !ConfigKeyNamed("useAdaptiveGrid") && !RemovedConfigKeyNamed("use_brune"));
+    check("removed keys: found by the flag they had", gsl && RemovedConfigKeyOfFlag("--gsl-coul") == gsl &&
+                                                         !RemovedConfigKeyOfFlag("") && !RemovedConfigKeyOfFlag("--use-brune"));
+    if (gsl && grid) {
+      const std::string why = "wrong by up to 5 % in the penetrability inside the outer turning point";
+      const std::string key = RemovedConfigKeyText(*gsl, OptionSpelling::kKey);
+      const std::string flag = RemovedConfigKeyText(*gsl, OptionSpelling::kFlag);
+      const std::string keyword = RemovedConfigKeyText(*gsl, OptionSpelling::kKeyword);
+      check("use_gsl_coul as a key: delete the line, and why",
+            key.rfind("use_gsl_coul is no longer a key of <config>: delete the line.  ", 0) == 0 && key.find(why) != std::string::npos);
+      check("--gsl-coul as a flag: leave it out, and why",
+            flag.rfind("--gsl-coul is no longer an option of AZURE2: leave it out.  ", 0) == 0 && flag.find(why) != std::string::npos);
+      check("use_gsl_coul as a keyword: leave it out, and why",
+            keyword.rfind("use_gsl_coul is no longer a keyword of pyazr.Session: leave it out.  ", 0) == 0 &&
+                keyword.find(why) != std::string::npos);
+      check("useAdaptiveGrid: the text it always had",
+            RemovedConfigKeyText(*grid, OptionSpelling::kKey).rfind(
+                "useAdaptiveGrid is no longer a key of <config>: delete the line.  Every folded point is on the shared mesh", 0) == 0);
+    }
+  }
   check("a key that is not an option", ConfigOptionNamed("relativistic") == nullptr && ConfigOptionNamed("amatrix") == nullptr);
   bool parkBeforeBrune = false, seenBrune = false;
   for (const ConfigKey &k : ConfigKeys()) {

@@ -263,6 +263,7 @@ ObservedLevels observed_levels(const System &system, std::size_t b, const std::v
   out.W.assign(gamma.size(), 0.0);
   out.value.assign(gamma.size(), 0.0);
   out.norm.assign(E.size(), 1.0);
+  out.P.assign(gamma.size(), 0.0);
   // cnuc_split.md section 8, Eq. (8.1); the arithmetic of CNuc::TransformOut's second loop (9d50667f, 2423-2516).
   for (std::size_t la = 0; la < E.size(); la++) {
     double sum = 0.0;  // sum over particle columns of gamma_int^2 dS/dE
@@ -303,6 +304,7 @@ ObservedLevels observed_levels(const System &system, std::size_t b, const std::v
       }
       const double W = sign * 2.0 * mod2 * P / N;
       out.W[i] = W;
+      out.P[i] = P;
       const double r = (W < 0.0) ? -std::sqrt(std::fabs(W)) : std::sqrt(std::fabs(W));
       switch (out.kind[i]) {
         case ObservedKind::Width: out.value[i] = W * kEVPerMeV; break;

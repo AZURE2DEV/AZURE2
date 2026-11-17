@@ -75,7 +75,7 @@ class TabulatedCrossSection:
 
     def save(self, path, header=True):
         """Write ``E_cm  E_lab  sigma`` columns (MeV, MeV, barn)."""
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             if header:
                 f.write(f"# AZURE2 adaptive tabulation: entrance pair "
                         f"{self.entrance} -> exit pair {self.exit}\n"

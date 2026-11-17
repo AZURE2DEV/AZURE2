@@ -63,7 +63,7 @@ def dataset(data, data_dir, name, norm=None, file_name=None):
     role = "E_cm" if energy == "EN-CM" else "E_lab"
     os.makedirs(data_dir, exist_ok=True)
     path = os.path.join(data_dir, (file_name or nds._safe_name(data.dataset_id, data.author, data.year)) + ".dat")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(f"# EXFOR {data.dataset_id} {data.reaction}: {role}(MeV) unused S(MeV b) dS(MeV b)\n")
         for row in rows:
             f.write("  ".join(f"{v:.10g}" for v in row) + "\n")

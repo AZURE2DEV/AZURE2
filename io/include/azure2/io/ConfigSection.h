@@ -113,6 +113,25 @@ const std::vector<ConfigOptionContradiction> &ConfigOptionContradictions();
 /// ("--no-brune"), a session's keyword ("use_brune=False"), the project's key ("use_brune=0").
 enum class OptionSpelling { kFlag, kKeyword, kKey };
 
+/// A key <config> had and has no more.  A file that still holds the line is refused with either value
+/// (E_CONFIG_KEY_REMOVED, experiment/'s reader), and so are the flag the key had as an option of the calculation
+/// (`flag`, "" when it had none) and its keyword of a pyazr session: the key says nothing any more, and going on
+/// without it would hide that from the user who wrote it.  `why` says in a sentence what replaced it.
+struct RemovedConfigKey {
+  const char *name;
+  const char *flag;
+  const char *why;
+};
+const std::vector<RemovedConfigKey> &RemovedConfigKeys();
+/// The removed key named `name`, or nullptr.
+const RemovedConfigKey *RemovedConfigKeyNamed(const std::string &name);
+/// The removed key whose flag was `flag` ("--gsl-coul"), or nullptr.
+const RemovedConfigKey *RemovedConfigKeyOfFlag(const std::string &flag);
+/// The one refusal of a removed key, in the spelling of the front end that met it: "<name> is no longer a key of
+/// <config>: delete the line.  <why>" (kKey), "<flag> is no longer an option of AZURE2: leave it out.  <why>" (kFlag),
+/// "<name> is no longer a keyword of pyazr.Session: leave it out.  <why>" (kKeyword).
+std::string RemovedConfigKeyText(const RemovedConfigKey &key, OptionSpelling spelling);
+
 /// The refusal's text in three parts, one line: what ("use_rmc=1 (command line) with use_brune=1 (the default) cannot
 /// hold together: <why>"), "allowed: ..." and "fix: ..." (b's other value, else a's, in `spelling`).  `aWords` and
 /// `bWords` are the two values with their sources as the caller names them; `aGiven` and `bGiven` say whether the

@@ -152,7 +152,7 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
 struct CompoundSystem::ECFinalBlocks {
   std::shared_ptr<const SystemOfCompound> structure;
   std::vector<std::size_t> blocks;
-  bool gslCoulomb = false, rmc = false;
+  bool rmc = false;
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
@@ -168,7 +168,7 @@ void CompoundSystem::SetUpECFinalBlocks(const Config &configure, const LevelInpu
     return;
   auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
       this->SystemStructureHandle(), {},
-      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
+      !!(configure.paramMask & Config::USE_RMC_FORMALISM),
       configure.printedOnce});
   for (std::size_t b = 0; b < record->structure->system.num_blocks(); b++) {
     const std::vector<int> &levels = record->structure->map.levelOfBlockLevel[b];
@@ -191,7 +191,7 @@ void CompoundSystem::SetUpECFinalBlocks(const Config &configure, const LevelInpu
   if (record->blocks.empty()) return;
   ecFinalBlocks_ = record;
   // The Brune energies of their final states, from the formal parameters (EvaluationIteration).
-  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, record->structure->map, record->gslCoulomb, record->rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, record->structure->map, record->rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : record->blocks) {
     const int j = record->structure->map.groupOfBlock[b];
@@ -219,7 +219,7 @@ void CompoundSystem::SetUpECFinalBlocks(const Config &configure, const LevelInpu
  */
 void CompoundSystem::ECFinalStatesFromFormal(LevelState &state) const {
   const ECFinalBlocks &r = *ecFinalBlocks_;
-  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, r.structure->map, r.gslCoulomb, r.rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, r.structure->map, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : r.blocks) {
     const int j = r.structure->map.groupOfBlock[b];
@@ -252,7 +252,7 @@ void CompoundSystem::ECFinalStatesFromFormal(LevelState &state) const {
 struct CompoundSystem::CaptureMaskSetup {
   std::shared_ptr<const SystemOfCompound> structure;
   std::vector<CaptureMaskSlot> slots;
-  bool gslCoulomb = false, rmc = false;
+  bool rmc = false;
   std::shared_ptr<Config::NoteLog> printedOnce;  ///< the run's once-only warnings (Config::printedOnce)
 };
 
@@ -264,7 +264,7 @@ void CompoundSystem::SetUpFormalCaptureMasks(const Config &configure, LevelState
     return;
   auto setup = std::make_shared<CaptureMaskSetup>(CaptureMaskSetup{
       this->SystemStructureHandle(), {},
-      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM),
+      !!(configure.paramMask & Config::USE_RMC_FORMALISM),
       configure.printedOnce});
   const SystemOfCompoundMap &map = setup->structure->map;
   for (int p = 1; p <= this->NumPairs(); p++) {
@@ -291,7 +291,7 @@ void CompoundSystem::SetUpFormalCaptureMasks(const Config &configure, LevelState
  */
 void CompoundSystem::FormalCaptureMasksFromParams(LevelState &state) const {
   const CaptureMaskSetup &r = *captureMaskSetup_;
-  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, r.structure->map, r.gslCoulomb, r.rmc);
+  const phys::ChannelFunctions cf = EngineChannelFunctions(*this, r.structure->map, r.rmc);
   const phys::FormalToBruneOptions options = EvaluationIteration(true);
   for (std::size_t i = 0; i < r.slots.size(); i++) {
     const CaptureMaskSlot &mask = r.slots[i];

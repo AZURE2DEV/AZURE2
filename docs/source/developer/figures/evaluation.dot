@@ -19,7 +19,7 @@ digraph evaluation {
   n_AMatrixFunc [label=<<b>AMatrixFunc</b><br/><font point-size="12">level matrix,<br/>T-matrix, observables<br/>(a GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_THMMatrixFunc [label=<<b>THMMatrixFunc</b><br/><font point-size="12">the HOES cross section<br/>of THM sites</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_RMatrixFunc [label=<<b>RMatrixFunc</b><br/><font point-size="12">the channel-matrix<br/>route (a<br/>GenMatrixFunc)</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
-  n_LevelMatrixSolver [label=<<b>LevelMatrixSolver</b><br/><font point-size="12">factorizes one J<br/>group&#x27;s level matrix</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
+  n_azure2__physics__LevelMatrixSolver [label=<<b>azure2::physics::LevelMatrixSolver</b><br/><font point-size="12">factorizes one J<br/>group&#x27;s level matrix</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_CompoundSystem [label=<<b>CompoundSystem</b><br/><font point-size="12">the compound nuclei as<br/>set up, shared<br/>constant by every<br/>evaluation</font>>, shape=box, peripheries=2, style="filled", fillcolor="white"];
   n_LevelState [label=<<b>LevelState</b><br/><font point-size="12">the levels at the<br/>evaluation&#x27;s vector,<br/>the owner&#x27;s</font>>, shape=box, style="rounded,filled", fillcolor="#d9d9d9"];
   n_WorkingCopy -> n_DataSet [style=dashed, arrowhead=vee];
@@ -36,7 +36,7 @@ digraph evaluation {
   n_azure2__Results -> n_azure2__TaskScratch [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_azure2__TaskScratch -> n_AMatrixFunc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_azure2__TaskScratch -> n_THMMatrixFunc [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
-  n_AMatrixFunc -> n_LevelMatrixSolver [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
+  n_AMatrixFunc -> n_azure2__physics__LevelMatrixSolver [style=solid, dir=both, arrowtail=diamond, arrowhead=normal];
   n_AMatrixFunc -> n_CompoundSystem [style=dashed, arrowhead=vee];
   n_AMatrixFunc -> n_LevelState [style=dashed, arrowhead=vee];
   n_RMatrixFunc -> n_CompoundSystem [style=dashed, arrowhead=vee];

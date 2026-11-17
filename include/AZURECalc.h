@@ -27,7 +27,7 @@ class ParameterLimitsManager;
 /// are copies of that fitter's level state and working copy.
 struct FitterStates {
   FitterStates();
-  ~FitterStates();  // where WorkingCopy is complete (AZURECalc.cpp)
+  ~FitterStates();  // where WorkingCopy is complete (AZURECalcPool.cpp)
 
   /// The idle level states and working copies (each with the buffer it writes) of the evaluations that run at the
   /// same time.  Each is a copy of the caller's, made when no idle one is left; no value of an evaluation survives
@@ -163,7 +163,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// The seed of the MIGRAD that is running (owned by the fitter, which outlives its use; nullptr: none): it bounds
   /// the G2 handed to Minuit2 and is told of every gradient call (MigradSeed.h).
   void SeedWith(MigradSeed *seed) { seed_ = seed; }
-  /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
+  /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalcDiagnostics.cpp).
   void DumpNonFinite(const vector_r &p, double chi, const CompoundSystem *lc, WorkingCopy *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
@@ -268,10 +268,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * Calculate nuisance parameter chi-squared contribution
    */
   double CalculateNuisanceChiSquared(const vector_r &p) const;
-  /// The nuisance prior (nominal, sigma) of full index f, false for none or one the prior covariance replaces (D3).
+  /// The nuisance prior (nominal, sigma) of full index f, false for none or one the prior covariance replaces (D3;
+  /// the rule: NuisancePriorOf of DiagonalPriors.h).
   bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
-  /// Is full index f a parameter of the prior covariance (<config> priorCovariance=)?
-  bool CoveredByPriorCovariance(int f) const;
 
   /*!
    * Add the analytic gradient of the nuisance-parameter penalty to `grad`,

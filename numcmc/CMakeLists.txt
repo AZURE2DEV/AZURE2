@@ -31,6 +31,8 @@ target_link_libraries(numcmc
     PUBLIC
         OpenMP::OpenMP_CXX
 )
+# The x87 precision scope its parallel regions take: a header of support/ (azure2/support/FloatingPointPrecision.h)
+target_include_directories(numcmc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../support/include)
 
 target_compile_features(numcmc PRIVATE cxx_auto_type)
 # target_compile_options(hitdic PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wall>)

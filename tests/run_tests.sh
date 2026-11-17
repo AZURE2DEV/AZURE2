@@ -232,6 +232,8 @@ for check in "$REPO_ROOT"/tests/*/check.sh; do
     tail -1 "$log"
     pass=$((pass + 1))
   else
+    # the failing lines above the tail first: a check that fails early in a long script is not in the last 30 lines
+    awk '{ L[NR] = $0 } END { for (i = 1; i <= NR - 30; i++) if (L[i] ~ /FAIL/ && L[i] !~ /^ *ok / && ++k <= 12) print "  " L[i] }' "$log"
     sed 's/^/  /' "$log" | tail -30
     echo "  FAIL"
     fail=$((fail + 1))

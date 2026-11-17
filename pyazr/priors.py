@@ -21,8 +21,8 @@ The values are in the parameter vector's own space, the one ``param.sav`` holds:
 amplitudes of the run's parametrization, normalizations, shifts, ...  A file whose tag differs from the run's
 parametrization is refused (the amplitudes would be in another basis; nothing is converted).
 
-The engine's reader (``src/PriorCovariance.cpp``, ``PriorCovariance::Read``) defines the grammar; :func:`read_prior`
-reads as it does and refuses what it refuses: a ``#parametrization`` tag counts only before the names line and must be
+The engine's reader (``inference/src/PriorCovariance.cpp``, ``PriorCovariance::Parse``) defines the grammar;
+:func:`read_prior` reads as it does and refuses what it refuses: a ``#parametrization`` tag counts only before the names line and must be
 0, 1 or 2 (a tag without a value is refused); a number is a whole C ``strtod`` token and finite (``nan``, ``inf``,
 ``1_0``, ``1d0`` are refused, a hexadecimal ``0x1p-3`` is read); tokens are separated by ASCII white space only; a
 name listed twice, a matrix not symmetric to 1e-10 of ``sqrt(C_ii C_jj)``, or one whose Cholesky factorization meets
@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .errors import FormatError, ParameterError, ParameterKeyError, close_names, listed
+from .paths import is_absolute
 
 __all__ = ["prior_from_fit", "read_prior", "write_prior", "read_covariance_dat", "read_chain", "chain_basis", "build",
            "Prior",
@@ -84,7 +85,7 @@ def _tokens(text):
 
 def _cholesky_pivot(cov):
     """The row at which the engine's Cholesky factorization fails (a pivot not above 1e-13 of its diagonal entry),
-    or None when it succeeds: ``Cholesky`` of ``src/PriorCovariance.cpp``, its sums in the same order."""
+    or None when it succeeds: ``Cholesky`` of ``inference/src/PriorCovariance.cpp``, its sums in the same order."""
     A = np.array(cov, float)
     n = A.shape[0]
     for j in range(n):
@@ -243,7 +244,7 @@ def write_prior(path, names, mean, cov, basis=None, comment=None):
     refusal = _matrix_refusal(names, cov, "write_prior")
     if refusal is not None:
         raise _refuse(refusal["what"], refusal["allowed"], refusal["fix"])
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(_file_text(names, mean, cov, basis, comment))
     return path
 
@@ -253,7 +254,7 @@ def write_prior(path, names, mean, cov, basis=None, comment=None):
 def _read_sav(path):
     """``({name: value}, basis or None)`` from a param.sav / param.par / param.fit."""
     vals, basis = {}, None
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             t = line.split()
             if len(t) < 2:
@@ -286,7 +287,7 @@ def read_covariance_dat(path):
     file ``columns`` is None and ``scale`` 1.0 (unknown).
     """
     columns, scale = None, 1.0
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             t = line.split()
             if not t or not t[0].startswith("#"):
@@ -377,7 +378,7 @@ def read_chain(path, discard=None):
         raise _refuse(f"cannot read the chain {path} ({e})", "a chain_<id>.npy a sampler job wrote",
                       "choose it in the project's output directory") from None
     try:
-        with open(stem + ".json") as fh:
+        with open(stem + ".json", encoding="utf-8") as fh:
             meta = json.load(fh)
     except (OSError, ValueError):
         raise _refuse(f"{os.path.basename(stem)}.json, beside the chain, is missing or unreadable (it names the "
@@ -401,7 +402,7 @@ def chain_basis(path):
     values of a prior file's ``#parametrization`` tag, :data:`BASES`), or None for a chain whose summary does not
     record it (an older one).  Beside :func:`read_chain`, whose return value is unchanged."""
     try:
-        with open(os.path.splitext(path)[0] + ".json") as fh:
+        with open(os.path.splitext(path)[0] + ".json", encoding="utf-8") as fh:
             tag = json.load(fh).get("parametrization")
     except (OSError, ValueError):
         return None
@@ -524,7 +525,7 @@ class _Block:
 
 
 def _path(directory, p):
-    return p if os.path.isabs(p) else os.path.join(directory, p)
+    return p if is_absolute(p) else os.path.join(directory, p)
 
 
 def _fit_part(part, index, table, directory, basis):
@@ -706,7 +707,7 @@ class Prior:
         if self.refusal:
             raise _refuse(f"the prior is not written: {self.refusal['what']}", self.refusal["allowed"],
                           self.refusal["fix"])
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(self.text(comment))
         return path
 
@@ -714,7 +715,7 @@ class Prior:
         """Write the file at ``path`` (relative to the directory of the :class:`pyazr.Project` ``project``) and set
         the project's ``<config>`` key ``priorCovariance`` to it (``Project.set_config``; saving the project is the
         caller's).  Returns ``path``."""
-        if os.path.isabs(str(path)):
+        if is_absolute(str(path)):
             raise _refuse(f"{path}: an absolute path", "a path relative to the project's directory",
                           "give the file's name inside the project's directory")
         self.write(os.path.join(project.directory, path))
@@ -836,7 +837,7 @@ def _notes(prior, rows):
 def read_parts(path):
     """``{"parts": [...]}`` of a file :meth:`Prior.write` wrote (its ``#pyazr.prior`` line); None for a file without
     the line (written by hand, or by :func:`prior_from_fit`)."""
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             if line.startswith(MARKER + " "):
                 return json.loads(line[len(MARKER) + 1:])

@@ -15,7 +15,7 @@ pointers and line tables; no GUI), then runs at `OMP_NUM_THREADS=8` (`SAN_THREAD
 | section | runs | what it exercises |
 |---|---|---|
 | `upgrade` | T1, T3: calculation (menu 1), extrapolation (3), reaction rate (5), fit from the start model with the analytic gradient (2, `--use-gradient`); T2: calculation and a fit bounded to `SAN_FIT_CALLS` = 30 function calls (`--use-lm`, Minuit2's numerical gradient, as `scripts/bench_upgrade.sh`) | all three lines of `ARCHITECTURE.md` §1; Minuit2's OpenMP gradient calling the objective from eight threads |
-| `checks` | 26 `tests/<name>/check.sh`: `angle_mapping`, `component_mapping`, `component_subpoint_angle`, `shared_point_tables`, `shared_tables_race`, `shared_effect_pairs`, `upos_pair_index`; `shift_fn`, `shift_fn_groups`, `shift_groups`, `shift_penalty_zero`, `shift_sqrt_subpoints`, `shift_subpoint_angle`, `energy_shift_sqrt`; `target_auto_windows`, `target_density`, `target_effect_shared`, `target_thickness_exact`, `target_window_fallback`, `thick_target`, `convolution_unify`, `convolution_window`, `straggling_bohr`, `natural_target`, `natural_neon` | point mapping across segments and angles and the shared point tables; energy shifts (groups, functions, √E, sub-points, penalties, the parallel re-energising of `EData::FillEnergyShiftsFromParams`); target integration (thickness, density, windows, thick targets, straggling, convolution, natural targets) |
+| `checks` | 23 `tests/<name>/check.sh`: `angle_mapping`, `component_mapping`, `component_subpoint_angle`, `shared_point_tables`, `shared_tables_race`, `shared_effect_pairs`, `upos_pair_index`; `shift_fn`, `shift_fn_groups`, `shift_groups`, `shift_penalty_zero`, `shift_sqrt_subpoints`, `shift_subpoint_angle`, `energy_shift_sqrt`; `target_density`, `target_effect_shared`, `target_thickness_exact`, `thick_target`, `convolution_unify`, `convolution_window`, `straggling_bohr`, `natural_target`, `natural_neon` | point mapping across segments and angles and the shared point tables; energy shifts (groups, functions, √E, sub-points, penalties, the parallel re-energising of `EData::FillEnergyShiftsFromParams`); target integration (thickness, density, windows, thick targets, straggling, convolution, natural targets) |
 | `regress` | menu 1 of `beam_profile_kernel`, `beam_spread_ay`, `thick_target_resonance` | the target and profile folds that have no `check.sh` |
 | `reference` | ctest `beam_profile_reference`, `udr_reference`, `adaptive_grid_reference`, `compound_stopping_reference` | the integrators on their own |
 | `pyazr` | 12 tests in-process: `shift_fn`, `sqrt_shift`, `shift_first_call`, `jacobian_shift_columns`, `target_density`, `thickness`, `natural_target`, `doppler`, `data_covariance`, `composite_terms`, `parallel_points`, `shared_state` | the `_azure2` module: sessions, the parallel point pass of the API, shifts and targets through pyazr |
@@ -258,6 +258,31 @@ re-read).
 
 Whether a report of AZURE2 stands behind these two shows in the first run in which both are silent: no
 thread-sanitizer run of this code has passed since 2026-11-07.
+
+**The run with the three entries (the tenth push; 72 minutes).** No report file is written by any step, under
+either sanitizer; both jobs pass. So nothing of AZURE2 stood behind the two reports in the steps that ran to their
+end. **Four steps did not**, the same four in the thread and the address job, without a sanitizer report: the
+calculation of T2 and its fit of 30 calls (exit 1), and the checks `target_auto_windows` and
+`target_window_fallback`. The job counts a failure without a report as a warning (`build.yml` gates the tests),
+which is why it passes. What the program printed was not readable (the log needs a login): the cause is not
+known, and **T2 was not run under a sanitizer in this run**. The same checks pass in the CI's Linux job, built
+with GCC; these builds differ by clang 18, the sanitizer's flags and `--no-coulomb-table`. Whether the four
+failed in the address job of the seventh push too is not known: that job passed by the same rule and its
+annotations did not list failed steps then. `scripts/sanitize_upgrade.sh` now prints the last six lines of every
+log of a failed step and the job writes them as one annotation.
+
+**The cause of the four (the eleventh push's annotations).** It is this script's, not clang's. The T2 steps ended
+at set-up with "cannot open the prior covariance file prior_cov.f3.txt": `run_project` copied `prior_cov.txt`
+only, and T2's project names `prior_cov.f3.txt` since it is written in format 3. The two checks have no
+`check.sh`: their directories were deleted with the fold windows (decision D3) and their names stayed in the
+script's list. So the sentence above, that the same checks pass in the Linux job, was wrong for these two: they
+do not exist. Repaired in the twelfth push (the file is copied, the names are gone; 23 checks). Run here with
+the script's file list, GCC and no sanitizer: T2's calculation fails as on the CI before the repair and gives
+its output after it, and the fit of 30 calls ends with exit 0. **T2 has not run under a sanitizer since its
+conversion to format 3** until the twelfth push, so every statement of this document about T2 between those
+dates rests on the runs before the conversion. The twelfth push's run (2026-11-16, clang 18 on the CI's Linux
+machine; thread job 73 minutes, address job 69) is the first with it: both jobs pass, no step fails, and neither
+sanitizer writes a report, T2's calculation and fit included.
 
 ### 4.5 Memory not freed at exit (AZURE2; deliberate; not a leak that grows)
 

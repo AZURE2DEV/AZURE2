@@ -707,13 +707,18 @@ what is computed or how:
 | `use_long_wavelength` | none / `--no-long-wavelength` | on / on | physics: the long-wavelength approximation for EL |
 | `ec_convection_current` | `--ec-convection-current` / `--no-ec-...` | on / on | physics (exact EL only) |
 | `use_rmc` | `--use-rmc` / none | off / off | physics: Reich-Moore capture (neutron capture) |
-| `use_gsl_coul` | `--gsl-coul` / none | off / off | numerics: GSL's Coulomb functions |
 | `use_coulomb_table` | `--coulomb-table` / `--no-coulomb-table` | on / on | numerics, cost: the Coulomb table |
 | `use_ec_table` | `--ec-table` / `--no-ec-table` | on / on | numerics, cost: EC from energy tables |
 | `replace_grids` | `--grid-replacement` / `--no-grid-replacement` | on / on | numerics: grids re-laid as levels move |
 | `data_mode` | the menu (1 or 3) | data / data | not project state: what a run evaluates |
 | `coulomb_table` (path) | `--coulomb-table=FILE` | `$AZURE2_COULOMB_TABLE` / same | not project state: a file here |
 | `cwd` (`base_directory`) | the project's directory | the same | not project state: a directory here |
+
+`use_gsl_coul` (`--gsl-coul`: GSL's Coulomb functions) was an option until 2026-11-16 and is removed (the PI;
+`coulomb.md` sections 8 and 9): GSL's P and S are wrong by up to 5 % inside the outer turning point. It is a row of
+`io::RemovedConfigKeys()` beside `useAdaptiveGrid`: the key with either value is refused (`E_CONFIG_KEY_REMOVED`:
+delete the line), the flag is refused by the program (exit 2) and the keyword by `pyazr.Session` (`TypeError`), each
+with the same sentence of why.
 
 Left out as not a property of a project: the fit's and the job's choices (`--use-gradient`, `--use-lm`,
 `--use-gsl-lm`, `--use-nlopt`, `--max-calls`, `--refreeze-covariance`), output choices (`--covariance-band`,
@@ -722,7 +727,7 @@ Left out as not a property of a project: the fit's and the job's choices (`--use
 environment switches (their own table, `azure2/support/Environment.h`; whether a number-changing switch should also
 become an option is a question the PI has open).
 
-The eleven defaults are the same in the program and in a session, and so is the rule that combines them (decided by
+The ten defaults are the same in the program and in a session, and so is the rule that combines them (decided by
 the PI on 2026-11-13; before, the two front ends differed in two places: `--use-rmc` dropped Brune and Park with a
 warning where a session kept them, and the program applied `--use-park` and `--no-brune` in the order given where a
 session let Park win). **One rule:** a pair of the table of contradictions below is refused, whatever the source of its

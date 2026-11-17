@@ -15,6 +15,10 @@
 # scripts/sanitizers/, by hand, and nightly on the default branch only: a push that changes nothing of these does
 # not run it, and the branch then shows the result of its last run.
 #
+# The functions of physics/ that the engine calls for the collision matrix and the observables' sums
+# (CollisionMatrix.h, ChannelSolve.h, Observables.h; since 2026-11-16) run here through the projects T1 to T3.
+# Their own unit tests (physics/tests) are not part of this script.
+#
 # Environment (all optional):
 #   SAN_THREADS        OpenMP threads (default 8)
 #   SAN_FIT_CALLS      function calls of the bounded T2 fit (default 30; the full fit needs about 1100)
@@ -147,7 +151,7 @@ run_project() {
   local d="$WORK/$step" src="$REPO_ROOT/tests/upgrade/$proj"
   mkdir -p "$d/output" "$d/checks"
   cp -R "$src"/*.azr "$src/data" "$d/"
-  for f in temperatures.dat cov_diff.txt prior_cov.txt; do [ -f "$src/$f" ] && cp "$src/$f" "$d/"; done
+  for f in temperatures.dat cov_diff.txt prior_cov.txt prior_cov.f3.txt; do [ -f "$src/$f" ] && cp "$src/$f" "$d/"; done
   san_env "$step"
   (cd "$d" && "$BIN" $command --no-gui --no-coulomb-table "$@" "$azr" > run.log 2>&1)
   local rc=$?
@@ -178,7 +182,7 @@ fi
 CHECKS="angle_mapping component_mapping component_subpoint_angle shared_point_tables shared_tables_race
 shared_effect_pairs upos_pair_index
 shift_fn shift_fn_groups shift_groups shift_penalty_zero shift_sqrt_subpoints shift_subpoint_angle energy_shift_sqrt
-target_auto_windows target_density target_effect_shared target_thickness_exact target_window_fallback thick_target
+target_density target_effect_shared target_thickness_exact thick_target
 convolution_unify convolution_window straggling_bohr natural_target natural_neon"
 if want checks; then
   echo "== behavioural checks (tests/<name>/check.sh)"
@@ -290,6 +294,17 @@ if [ "$nrep" -gt 0 ]; then
 fi
 echo "steps: ${#results[@]}; failed: $nfail; sanitizer report files: $nrep"
 for r in "${results[@]}"; do case "$r" in FAIL*) echo "  $r" ;; esac; done
+# Why a step failed without a report: the last lines of its log (the job's log needs a login; the workflow turns
+# these lines into an annotation).  The marker is not "---- ", which the workflow reads as a sanitizer report.
+for r in "${results[@]}"; do
+  case "$r" in FAIL*) ;; *) continue ;; esac
+  step="${r#FAIL }"; step="${step%% *}"
+  for l in "$REP/$step"/*.log; do
+    [ -f "$l" ] || continue
+    echo "==== last lines of ${l#"$REP"/}"
+    grep -v '^[[:space:]]*$' "$l" | tail -6 | cut -c1-240
+  done
+done
 if [ "$nrep" -gt 0 ] || [ "$nfail" -gt 0 ]; then keep=1; echo "reports and logs: $REP"; fi
 [ "$nrep" -gt 0 ] && exit 1
 [ "$nfail" -gt 0 ] && [ "${SAN_ALLOW_FAILURES:-0}" != 1 ] && exit 2

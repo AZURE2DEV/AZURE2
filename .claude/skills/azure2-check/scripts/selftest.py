@@ -11,7 +11,9 @@ something:
   (CODATA 2018); the Brune norm J of the 1/2+ and 3/2- levels equals 1 - Gamma S'(E)/(2 P(E)) from the engine's
   physics functions (0.2553: the 1/2+ proton width of T1, 33 keV, is three quarters of the most a level there can
   have, 2P/S' = 44.3 keV, so it is the one flag of T1); a fixed 60 MeV width on the 1/2+ background pole is flagged
-  theta^2 > 1;
+  theta^2 > 1; on T2 (tests/upgrade/T2: levels with fixed and free widths in several open channels) the norm of
+  each level with a free width equals J = 1 - sum_c Gamma_c S'_c/(2 P_c) over all its channels (0.797, 0.745,
+  0.972), and Gamma_W of a free or fixed channel is 2 P gamma^2_W (the session's, which the script reads);
 - radius_scan.py, from the perturbed start of T1 at its own radius, refits to the truth's chi2 neighbourhood
   (objective lowered by the refit, the 1/2+ energy back to 2.365 MeV within 2 keV), and a second radius is fitted
   from the first's result.
@@ -111,6 +113,41 @@ def test_widths(work):
           any("theta^2" in f for f in flags), "; ".join(flags) or "no flag")
 
 
+def test_widths_fixed(work):
+    """A level with fixed and free widths: theta^2 / theta^2_formal is the level's whole norm J."""
+    import pyazr
+    from pyazr import physics
+    t2 = work / "T2"
+    shutil.copytree(REPO / "tests" / "upgrade" / "T2", t2, ignore=shutil.ignore_patterns("output", "checks"))
+    for d in ("output", "checks"):
+        (t2 / d).mkdir()
+    r = run("widths_check.py", "T2.azr", "--json", "w.json", cwd=t2)
+    w = json.loads((t2 / "w.json").read_text())
+    with pyazr.Session(str(t2 / "T2.azr")) as s:
+        pairs = {q.number: q for q in s.pairs}
+    worst, worst_width, n, n_fixed = 0.0, 0.0, 0, 0
+    for lv in w["levels"]:
+        if lv["norm"] is None:
+            continue
+        j_ref = 1.0
+        for c in w["channels"]:
+            if c["photon"] or c["jpi"] != lv["jpi"] or abs(c["level_energy"] - lv["level_energy"]) > 1e-9:
+                continue
+            q = pairs[c["pair"]]
+            args = (c["L"], q.Z1, q.Z2, q.M1, q.M2, q.channel_radius, c["level_energy"] - q.sep_energy - q.excitation)
+            two_p = 2 * float(physics.penetrability(*args))
+            j_ref -= abs(c["value"]) * 1e-6 * float(physics.shift_derivative(*args)) / two_p
+            if c["wigner_width"]:  # free and fixed channels alike
+                n_fixed += not c["free"]
+                worst_width = max(worst_width, abs(c["wigner_width"] / (two_p * c["wigner_gamma2"] * 1e6) - 1))
+        n += 1
+        worst = max(worst, abs(lv["norm"] - j_ref))
+    check("widths_check: on T2 the norm of a level with fixed and free widths is J = 1 - sum Gamma S'/(2P)",
+          r.returncode in (0, 1) and n == 3 and worst < 1e-5, f"{n} levels, largest difference {worst:.1e}")
+    check("widths_check: on T2 Gamma_W of a free or fixed channel is 2 P gamma^2_W", worst_width < 1e-6 and n_fixed > 0,
+          f"{worst_width:.1e}, {n_fixed} fixed channels")
+
+
 def test_radius_scan(work):
     import pyazr
     r = run("radius_scan.py", "T1_start.azr", "--pair", "1", "--radii", "3.6", "3.9", "--table", "scan.txt",
@@ -144,7 +181,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="azure2_check_selftest_") as tmp:
         work = Path(tmp)
         copy_t1(work)
-        for test in (test_chi2_report, test_widths, test_radius_scan):
+        for test in (test_chi2_report, test_widths, test_widths_fixed, test_radius_scan):
             try:
                 test(work)
             except Exception as err:

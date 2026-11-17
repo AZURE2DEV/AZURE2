@@ -393,14 +393,14 @@ class ModelAverage:
                     variants=[v.to_dict() for v in self.variants])
 
     def write_json(self, path):
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             json.dump(self.to_dict(), fh, indent=1)
         return path
 
     def write_csv(self, path):
         """One row per averaged quantity: kind, name, mean, stat, model,
         total, min, max, coverage."""
-        with open(path, "w", newline="") as fh:
+        with open(path, "w", newline="", encoding="utf-8") as fh:
             wr = csv.writer(fh)
             wr.writerow(["kind", "name", "mean", "stat", "model", "total",
                          "min", "max", "coverage"])
