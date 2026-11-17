@@ -226,6 +226,49 @@ class NormGroups:
         return out
 
 
+def moved_leaders(base_azr: str, variant_azr: str, kw: str = "normgroup") -> Dict[int, int]:
+    """``{old leader key: new leader key}`` for every group whose first ACTIVE member differs between ``base_azr``
+    and a variant of it with some segments switched off (a group with no active member left is not listed)."""
+    g0, g1 = NormGroups.from_azr(base_azr, kw), NormGroups.from_azr(variant_azr, kw)
+    lead0 = {lab: g0.owner(k) for k, lab in g0.label.items()}
+    lead1 = {lab: g1.owner(k) for k, lab in g1.label.items()}
+    return {lead0[lab]: l1 for lab, l1 in lead1.items() if lab in lead0 and lead0[lab] != l1}
+
+
+def carry_group_norms(base_azr: str, variant_azr: str) -> Dict[int, int]:
+    """Keep a normgroup's normalization when its leader is switched off.
+
+    The engine takes the group's norm, vary flag and norm error (the penalty's centre and width) from the group's
+    first ACTIVE segment.  Switching the leader off therefore hands the group to the next member, whose own fields
+    may differ (in one archived fit the leader carried one nominal norm and the other members another,
+    6 % apart).  pyazr 2: the old leader's norm triple is
+    copied onto the new leader's line of ``variant_azr`` (rewritten in place).  pyazr 3: the group's norm is one shared
+    ``normalization`` record, nothing to copy.  Either way the fitted norm moves to a new parameter key
+    (``ParamKey("norm", seg=new)``), so the caller must carry the start value over.  Returns ``moved_leaders``."""
+    moved = moved_leaders(base_azr, variant_azr)
+    if not moved or PYAZR3:
+        return moved
+    src = segment_lines(base_azr)
+    text = open(variant_azr).read()
+    a = text.find("<segmentsData>")
+    b = text.find("</segmentsData>")
+    start = text.index("\n", a) + 1
+    lines, key = [], 0
+    for l in text[start:b].splitlines():
+        if l.strip():
+            key += 1
+            for old, new in moved.items():
+                if key == new:
+                    t, t0 = l.split(), src[old - 1]
+                    f, f0 = norm_field(t), norm_field(t0)
+                    t[f:f + 3] = t0[f0:f0 + 3]
+                    l = "  ".join(t)
+        lines.append(l)
+    with open(variant_azr, "w") as fh:
+        fh.write(text[:start] + "".join(l + "\n" for l in lines) + text[b:])
+    return moved
+
+
 def shift_groups(azr: str) -> NormGroups:
     """``shiftgroup`` membership (same leader rule as normgroup)."""
     return NormGroups.from_azr(azr, "shiftgroup")

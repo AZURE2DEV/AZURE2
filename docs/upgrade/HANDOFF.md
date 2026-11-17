@@ -29,6 +29,15 @@ rmfit tests, `W_PARAMETER_SETTING_UNKNOWN` per shard). New: the pyazr 2 halves a
 runs (the design note's last section); a worker started with `AZURE2_ROOT` at an upgrade checkout imports that
 checkout's `rmfit/` first, so another rmfit is tested against an upgrade build only through a view without it.
 
+**Later the same day.** CI on `1471fd14` failed as on the base `49adbcf9` (the same tests on every platform; macOS does
+not compile `api/src/pybind_api.cpp` against pybind11 under Python 3.14). Nine of the Linux failures were rmfit's own:
+five f-strings in `enginepin.py` and `review.py` reused their quote inside a replacement field, which only Python
+3.12 accepts, so `import rmfit.campaign` failed on CI's Python 3.10. `rmfit/` is now the public tree `1997494`:
+those lines rewritten (same text out), a fast test `rmfit_py_compat` that flags such fields, and rmfit's
+new dataset-off fix for a normgroup whose leader is switched off (a pyazr 2 change; its test skips on pyazr 3). Still
+open on Windows: `rmfit_enginepin` (the engine module is a `.pyd`), `rmfit_patterns_signs_memory` (no `resource`
+module), `rmfit_site_shell` / `rmfit_site_slurm` (POSIX shell stubs), `rmfit_azure2_root`.
+
 ## 2026-11-16 (owner's session, dev port) — rmfit beside pyazr, on pyazr 3.0
 
 **Branch** `feature/upgrade-5-dev-rmfit`, cut from `feature/upgrade` (`e8b1fe94`). `rmfit/` is the package of `dev`

@@ -23,7 +23,7 @@ set(RMFIT_FAST
     flip_floor keys ledger_signs new_level_cap nudge_zero_widths pair_family patterns_signs_memory point_weights
     sanity_same_jpi scoring_segments separate_close_levels sign_distance site_mail site_shell site_slurm
     split_evidence template_channels total_width_floor uq_rerun width_bound width_bound_pins width_floor window_delta
-    window_patterns threshold_guard azure2_root spec_decisions seed_omitted audit_subagent)
+    window_patterns threshold_guard azure2_root spec_decisions seed_omitted audit_subagent py_compat)
 
 file(GLOB RMFIT_TEST_SCRIPTS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.py)
 foreach(script ${RMFIT_TEST_SCRIPTS})
