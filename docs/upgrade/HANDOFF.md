@@ -2,6 +2,43 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (director, 10:20) — merged: a lab angle no elastic scattering reaches is refused; T3's `x8`
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 110 (rehearsal 109 plus four commits of mine). The
+PI's decision of 2026-11-17 on the question of e110's morning list: "I agree, make it point (a)" (refuse such a
+point and regenerate that golden file). The base build is `work/b-trial110`; the reference tag stays
+`tab-trial103-1`.
+
+- `experiment::ElasticLabToCM` refused a lab angle only where (m1/m2) sin theta_lab > 1: never for equal masses,
+  and not for a heavier projectile at a backward angle. It now also refuses every lab angle above 90 degrees
+  when the projectile is no lighter than the target. Angles up to 90 degrees keep their bits.
+- Seen on the unchanged T3: `AZURE2 extrapolate` stops at set-up, exit 1, "ERROR: test segment #8: lab angle 100
+  deg at E_lab = 4 MeV: beyond the kinematic maximum 90 deg of elastic scattering with a projectile as heavy as
+  the target (give the point as c.m., code 4 / 5, or drop it)." `AZURE2 --validate` still calls such a project
+  valid: it checks no kinematics of any point (the same holds for every other unreachable lab angle).
+- T3 and T3_start: `x8` asks 10 to 80 degrees lab. The golden file `T3/extrap/AZUREOut_aa=1_R=1.extrap` lost its
+  nine rows at 90 to 170 degrees (each 3.6873994268e+62 b/sr at 180 degrees c.m.); the 103 others are byte for
+  byte the old ones. `golden.py --write` also rewrote three files of `T3/calc` and `ENGINE` (differences within
+  its tolerance, older than this change); those were put back and are not part of this.
+- `experiment_frames` compares the map with a copy of the old engine's on random cases, and failed on the angles
+  now refused (so did `experiment_standalone`, which runs it). In that region it now asks for the refusal;
+  elsewhere the old map must be met bit for bit. Three new checks by hand (equal masses at 100 and 80 degrees,
+  m1 = 3 m2 at 170 degrees). User guide: `segments.rst`, the paragraph on the kinematic maximum.
+
+**Verified by me** (`work/director/verify_l110.out`, then `ctest_110.out` after the test's update): build with 0
+warnings; every project in three bases against `tab-trial103-1`: 887, 851 and 887 files, all identical (no project
+of the tree used an angle now refused); eight fits identical; 172 of 172 regression scripts; quick tests 336 of
+338 in the full check (the two above), 338 of 338 after the update, on a rebuild; `pyazr_ui_sampler_bands`
+passes. Not run: the slow tests, macOS (whose one failing unit test this answers: inferred, for its next run).
+
+Also on 2026-11-17, by the PI's "Clean the work project": scratch removed (`work/director/clean_2026-11-17.sh`,
+its log beside it): 268 GB -> 15 GB. Kept: `AZURE2`, `wt-data`, rehearsals 109 and 110 with their builds, the
+build and reference outputs of rehearsal 103, the director's records, and three worktrees with uncommitted files
+(`wt-devres`, `wt-radii`, `wt-spin`). All branches are still in the repository.
+
+The CI, read the same morning: the wheels workflow of `8c24fe35` passes on its four platforms (the first run
+since the call guard's repair for clang); the build run of `88e84675` passes on Linux.
+
 ## 2026-11-17 (director, 08:00) — merged: the last long file split, the data term once per call
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 109: rehearsal 108 plus
