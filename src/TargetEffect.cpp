@@ -548,6 +548,11 @@ std::shared_ptr<const azure2::experiment::UdrKernel> TargetEffect::BuildUdrKerne
   size_t a = 0, b = k->r.size() - 1;
   while (a < b && k->r[a] <= 1.0e-9 * peak) a++;
   while (b > a && k->r[b] <= 1.0e-9 * peak) b--;
+  // The kernel is piecewise linear: it is non-zero up to the zero-valued nodes that bracket the first and the last
+  // significant one, so the support includes them.  Without them a narrow tabulated function (a one-node spike) has
+  // tauMin == tauMax and the weights are all zero.
+  if (a > 0) a--;
+  if (b + 1 < k->r.size()) b++;
   k->tauMin = k->tau[a];
   k->tauMax = k->tau[b];
   double norm = 0.0;

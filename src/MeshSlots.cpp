@@ -80,6 +80,7 @@ azure2::MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSe
   support.lowHard = spec.lowHard;
   support.dataSet = dataSet;
   support.kernelWidth = spec.startEnergy - spec.endEnergy;
+  if (spec.timeOfFlight) support.zeroWidth = azure2::MeshTimeOfFlightZeroWidth(support.high);
   return support;
 }
 

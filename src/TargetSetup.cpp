@@ -580,6 +580,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, const CompoundSyste
       Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
       spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, conversion);
       spec.supportThickness = targetThickness;
+      spec.timeOfFlight = support.udr != nullptr;
       SetShiftLayout(spec, Draft().GetSegments(), segment, State(segment), *point, minSubEnergy);
       // Every folded point is a support of the shared mesh; a pair without an E_x frame has no place on it.
       if (!OnSharedMesh(segment, entrance, exit)) {

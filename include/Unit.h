@@ -56,6 +56,10 @@ class Unit : public Site {
     /// The c.m. energy loss below the point the support spans at the set-up (TargetEffect::SupportThickness at the
     /// nominal energy; 0 without a target integration), from which an energy shift moves its low edge (ShiftedFold.h).
     double supportThickness = 0.0;
+    /// A time-of-flight window (a UDR kernel): its width scales with the point's energy, down to neV at a thermal
+    /// point, so the mesh measures "too narrow for a ladder" against the node spacing there (MeshPlanner.h,
+    /// MeshTimeOfFlightZeroWidth), not against MeshZeroWidth().
+    bool timeOfFlight = false;
   };
   /// What the set-up worked out for this point that its evaluations read again (its sub-point grid's layout, its
   /// user-defined resolution kernel): record SetUpIndex of the data set's DataSet::PointSetUps, -1 for none.
