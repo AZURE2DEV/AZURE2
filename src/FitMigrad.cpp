@@ -173,6 +173,7 @@ FitResult MigradOnce(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
                        << freeParameters << " free parameters, with no gradient calls; chi^2 does not change while it runs."
                        << std::endl;
         if (inner && inner->evaluated) inner->evaluated(evaluation, value, p, errorAnalysis);
+        seed->Forward(control.stop);  // a stop asked by the caller's progress just now: no evaluation after it
       };
       if (seed) {
         watching.stop = seed->Stop();
