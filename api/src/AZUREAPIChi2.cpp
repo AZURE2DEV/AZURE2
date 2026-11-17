@@ -1,5 +1,6 @@
-// AZUREAPI, the objective's value: the session's objects filled at a full vector (FillFromFullRWA), the data
-// chi-squared and its residuals on them (EvaluateFilledChi2), the terms beyond the data (FilledModelPenalties),
+// AZUREAPI, the objective's value: the session's objects filled at a full vector (FillFromFullRWA), the model pass
+// (EvaluateFilledModel), the data chi-squared and its residuals on them (EvaluateFilledChi2), the terms beyond the
+// data (FilledModelPenalties),
 // the chi-squared in each basis (CalculateChi2RWA, CalculateChi2Physical, CalculateResidualsRWA), the diagonal
 // priors of the limits manager (NuisancePriorOf, NuisanceChi2, AddNuisanceGradient), and the whole objective as
 // the program's fit evaluates it (CalculateObjectiveRWA, ObjectiveTermNames).  One unit because the two bases and
@@ -64,6 +65,23 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) {
 }
 
 
+// Every point's model value on the filled canonical objects, in one parallel pass first (dev 37cdd34), as the CLI's
+// AZURECalc::PrecalculatePoints: the model pass of EvaluateFilledChi2 alone, for a caller whose sum of the objective
+// forms the data term itself (CalculateObjectiveRWA, EvaluateObjectiveRWA: Objective::Chi2's first two terms are
+// DataChi2's walk with the segment priors added, so a DataChi2 before them was a second walk whose sum was discarded).
+void AZUREAPI::EvaluateFilledModel() {
+  const CompoundSystem *lc = compound();
+  WorkingCopy *ld = data();
+  AZUREProfile::ScopedReport profileReport(configure().profile, "api chi2");
+  const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, state(), configure(), results());
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+    const Segment *segment = ld->Data().GetSegment(i);
+    if (!segment) continue;
+    azure2::EvaluateModelSegment(*ld, *segment, lc, state(), configure(), results(),
+                                 pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
+  }
+}
+
 // The data term of the objective on the filled canonical objects: every point's model value first, then the
 // objective's own data terms (Objective::DataChi2: T1 with the profiled norms and the THM profiles, T2), so that the
 // API's chi-squared and the objective take the data chi-squared from one implementation (until 2026-11-16 this
@@ -75,15 +93,8 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) {
   const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   if (res) res->clear();
-  // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport(configure().profile, "api chi2");
-  const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, state(), configure(), results());
-  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
-    const Segment *segment = ld->Data().GetSegment(i);
-    if (!segment) continue;
-    azure2::EvaluateModelSegment(*ld, *segment, lc, state(), configure(), results(),
-                                 pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
-  }
+  EvaluateFilledModel();
   const vector_r none;
   const double chiSquared =
       Objective::Engine().DataChi2(ObjectiveContext{lc, state(), inputs(), ld, results(), none, configure()});
@@ -218,7 +229,7 @@ double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<doubl
                                        ObjectiveContext::SegmentPriors *segments) {
   const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
-  EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
+  EvaluateFilledModel();  // the model value of every point; the objective's first terms form the data term once
   ObjectiveContext context{compound(), state(), inputs(), data(), results(), full, configure()};
   context.termsOut = terms;
   context.segmentPriorsOut = segments;
