@@ -152,4 +152,16 @@ else
   bad "(t) intEC.dat from before the coupling coefficients of physics/ was reused"
 fi
 
+# (u) an intEC.dat of signature v7 (models/stale_v7: p14n_s1 with --no-coulomb-table by feature/upgrade 01a701ad,
+# before F of a neutral pair became the Riccati-Bessel function, docs/upgrade/coulomb.md section 10) is refused and
+# recomputed.  This pair is charged, so its integrals are the same bits: only the signature's version tells, which is
+# what this case checks; a neutral pair's file of v7 is refused the same way.
+mkdir -p "$WORK/p14n_stale7/output" && cp "$HERE/models/stale_v7/intEC.dat" "$HERE/models/stale_v7/intEC.dat.sig" "$WORK/p14n_stale7/output/"
+run p14n_stale7 p14n_s1 "--no-coulomb-table" output/intEC.dat
+if grep -q "$SIGWARN" "$WORK/p14n_stale7/run.log" && same4 "$WORK/p14n_s1_exact/$OUT" "$WORK/p14n_stale7/$OUT"; then
+  ok "(u) intEC.dat from before the neutral pair's Riccati-Bessel F (signature v7) is refused and recomputed"
+else
+  bad "(u) intEC.dat from before the neutral pair's Riccati-Bessel F (signature v7) was reused"
+fi
+
 if [ "$failures" -eq 0 ]; then echo "ec_m1_exact: PASS"; else echo "ec_m1_exact: FAIL ($failures)"; exit 1; fi

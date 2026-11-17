@@ -6,9 +6,9 @@ Reads a format-3 project and, optionally, a parameter file (by name); prints one
 an open particle channel, the ANC in fm^-1/2 for a closed one, Gamma_gamma in eV for a photon), and
 
 - particle channels: theta^2 = Gamma/Gamma_W (Gamma_W = 2 P_l(E_lambda) gamma^2_W, in eV) and
-  theta^2_formal = gamma^2/gamma^2_W, with gamma^2_W = 3 hbar^2/(2 mu a_c^2) (Teichmann-Wigner, MeV); a fixed channel
-  (not in the fit vector) gets Gamma_W from ``pyazr.physics.single_particle_width`` at the level energy, and no
-  theta^2_formal;
+  theta^2_formal = gamma^2/gamma^2_W, with gamma^2_W = 3 hbar^2/(2 mu a_c^2) (Teichmann-Wigner, MeV); Gamma_W and
+  theta^2 are the session's for free and fixed channels alike (at the level's physical energy); a fixed channel (not
+  in the fit vector) has no theta^2_formal;
 - photon channels: the Weisskopf estimate (eV) and the strength in Weisskopf units (W.u.).
 
 In the Brune basis the ratio theta^2/theta^2_formal of an open channel is the level's norm
@@ -42,19 +42,12 @@ def option_value(text):
 
 def widths_report(session, x):
     """(channel rows, level rows) at the fit vector x."""
-    from pyazr import physics
     table = session.dimensionless_widths(x)
     channels = []
     levels = {}
     for c in table:
         jpi = c.jpi
         theta2, wigner_width = getattr(c, "theta2", None), getattr(c, "wigner_width", None)
-        if not c.is_photon and c.is_open and wigner_width is None and c.value is not None:
-            # a fixed channel: the session gives no Gamma_W; the engine's single-particle width at the level energy
-            q = session.pairs.by_number(c.pair)
-            wigner_width = 1e6 * float(physics.single_particle_width(c.L, q.Z1, q.Z2, q.M1, q.M2, q.channel_radius,
-                                                                      c.level_energy - c.threshold))
-            theta2 = abs(c.value) / wigner_width
         row = dict(name=c.name, jpi=jpi, level_energy=c.level_energy, pair=c.pair, L=c.L, S=c.S,
                    photon=bool(c.is_photon), open=bool(c.is_open), value=c.value, free=not c.fixed,
                    theta2=theta2, theta2_formal=getattr(c, "theta2_formal", None),

@@ -460,6 +460,16 @@ Available Options
        the units with their factors, and the diagnostic codes
        (:doc:`format3`).  No project file is needed.  The same document is
        ``pyazr.schema()``; ``tests/schema/schema_v3.json`` is its committed copy.
+   * - ``--schema-out=FILE``
+     - Write the text ``--schema`` prints (byte for byte) to ``FILE``, all or
+       nothing: the program writes a temporary file ``FILE.tmp`` beside it and
+       renames it over ``FILE`` only after the whole text was written and
+       flushed without error.  On any error (an unwritable directory, a full
+       disk, ``FILE`` a directory) ``FILE`` is untouched, the message names the
+       cause on standard output and the exit status is 1; ``FILE`` empty is
+       refused with exit 2.  Use it, not ``--schema > FILE``, to regenerate
+       ``tests/schema/schema_v3.json``: a redirect empties the file before the
+       program runs.  ``--schema`` itself is unchanged.
    * - ``--no-long-wavelength``
      - Electric external capture without the long-wavelength approximation:
        the radial operator :math:`\bar e_L r^L` becomes the charge term of the

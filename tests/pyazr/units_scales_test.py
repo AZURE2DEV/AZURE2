@@ -25,6 +25,7 @@ import re
 import shutil
 import sys
 import tempfile
+from decimal import ROUND_HALF_EVEN, Decimal, Inexact, localcontext
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -70,6 +71,31 @@ def conversion(e_cm):
 
 def cm_of_lab(e_lab):
     return mpmath.mpf(e_lab) * M2 / (M1 + M2)
+
+
+def g17(x):
+    """What format(x, ".17g") writes for an mpf with mpmath >= 1.4: its exact binary value rounded once to 17
+    significant digits (half to even) by the decimal module, written as Python writes a float with ".17g".  An mpf of
+    mpmath 1.3.0 has no __format__ (the Windows job's TypeError, 2026-11-16); float(x) would round twice."""
+    sign, man, exp, _ = mpmath.mpf(x)._mpf_  # mpmath has no negative zero
+    with localcontext() as ctx:
+        ctx.prec, ctx.Emax, ctx.Emin = 2000, 10**6, -10**6
+        exact = Decimal(man) * Decimal(2) ** exp if exp >= 0 else Decimal(man) / Decimal(2) ** -exp
+        if ctx.flags[Inexact]:
+            raise ValueError("g17: the exact value needs more than 2000 digits")
+        ctx.prec, ctx.rounding = 17, ROUND_HALF_EVEN
+        r = +exact
+    if r == 0:
+        return "0"
+    digits = "".join(map(str, r.as_tuple().digits)).ljust(17, "0")
+    point = r.adjusted()  # the decimal exponent of the first digit
+    if -4 <= point < 17:  # fixed notation, as for a float
+        text = digits[:point + 1] + "." + digits[point + 1:] if point >= 0 else "0." + "0" * (-point - 1) + digits
+        text = text.rstrip("0").rstrip(".")
+    else:
+        mantissa = (digits[0] + "." + digits[1:]).rstrip("0").rstrip(".")
+        text = f"{mantissa}e{'-' if point < 0 else '+'}{abs(point):02d}"
+    return ("-" if sign else "") + text
 
 
 LEVELS = re.search(r"<levels>.*?</levels>\n", open(os.path.join(ROOT, "tests", "13N", "13N.azr")).read(), re.S).group(0)
@@ -133,6 +159,7 @@ with tempfile.TemporaryDirectory() as work:
         # nstr, not format(): an mpf of the Windows job's mpmath has no __format__
         return str(mpmath.mpf(x)) if x == int(x) else mpmath.nstr(mpmath.mpf(x), 40, strip_zeros=True)
 
+    print(f"mpmath {mpmath.__version__}")
     print("1. units of the columns of a data file")
     rows_b = [(e, "0", decimal(mpmath.mpf(v) / 10**9), decimal(mpmath.mpf(dv) / 10**9)) for e, v, dv in zip(E_MEV, nb, dnb)]
     rows_nb = [(e, "0", repr(v), repr(dv)) for e, v, dv in zip(E_MEV, nb, dnb)]
@@ -182,10 +209,10 @@ with tempfile.TemporaryDirectory() as work:
     print("2. quantity sfactor")
     s_kevb = [mpmath.mpf(v) * 1e-9 * conversion(cm_of_lab(e)) * 1000 for v, e in zip(nb, E_MEV)]
     ds_kevb = [mpmath.mpf(dv) * 1e-9 * conversion(cm_of_lab(e)) * 1000 for dv, e in zip(dnb, E_MEV)]
-    rows_s = [(e, "0", format(s, ".17g"), format(ds, ".17g")) for e, s, ds in zip(E_MEV, s_kevb, ds_kevb)]
+    rows_s = [(e, "0", g17(s), g17(ds)) for e, s, ds in zip(E_MEV, s_kevb, ds_kevb)]
     # the same S data as sigma by this script: sigma = S / (E exp(2 pi eta)), b from keV b
-    rows_sig = [(e, "0", format(mpmath.mpf(s[2]) / 1000 / conversion(cm_of_lab(e)), ".17g"),
-                 format(mpmath.mpf(s[3]) / 1000 / conversion(cm_of_lab(e)), ".17g")) for e, s in zip(E_MEV, rows_s)]
+    rows_sig = [(e, "0", g17(mpmath.mpf(s[2]) / 1000 / conversion(cm_of_lab(e))),
+                 g17(mpmath.mpf(s[3]) / 1000 / conversion(cm_of_lab(e)))) for e, s in zip(E_MEV, rows_s)]
     in_s = write_project(work, "s", project_text(dataset("s.dat", "sfactor", "keV*b")), {"s.dat": rows_s})
     in_sig = write_project(work, "sig", project_text(dataset("s.dat")), {"s.dat": rows_sig})
     ms, cs = terms_of(in_s)

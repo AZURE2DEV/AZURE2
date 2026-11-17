@@ -64,14 +64,17 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) {
 }
 
 
-// The data term of AZURECalc::operator(), on the filled canonical objects.
+// The data term of the objective on the filled canonical objects: every point's model value first, then the
+// objective's own data terms (Objective::DataChi2: T1 with the profiled norms and the THM profiles, T2), so that the
+// API's chi-squared and the objective take the data chi-squared from one implementation (until 2026-11-16 this
+// function summed the squares of the pulls, (d/e)^2, where the objective sums d^2/e^2, which differs in the last
+// bits).  DataChi2 stores what it forms in Results::objective (each segment's chi^2, a profiled norm, a THM
+// experiment's profile); the rows below are read from there.  With `res`: each point's pull at the norm used (the
+// profiled n* for a profiled norm) and a THM experiment's rows from its profile, in segment and point order.
 double AZUREAPI::EvaluateFilledChi2(vector_r *res) {
   const CompoundSystem *lc = compound();
   WorkingCopy *ld = data();
   if (res) res->clear();
-  double chiSquared = 0.0;
-  // Rows of the segments of a THM experiment, filled once it is profiled.
-  std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->Data().NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport(configure().profile, "api chi2");
   const bool pre = PrecalculateAll(*ld, AllSegments(ld), lc, state(), configure(), results());
@@ -80,47 +83,31 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) {
     if (!segment) continue;
     azure2::EvaluateModelSegment(*ld, *segment, lc, state(), configure(), results(),
                                  pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
-
-    // A THM experiment: one profile (shared norm, background) over its
-    // segments, at the last of them, as the CLI.
+  }
+  const vector_r none;
+  const double chiSquared =
+      Objective::Engine().DataChi2(ObjectiveContext{lc, state(), inputs(), ld, results(), none, configure()});
+  if (!res) return chiSquared;
+  std::vector<double> r;
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+    const Segment *segment = ld->Data().GetSegment(i);
+    if (!segment) continue;
     const int g = ld->Data().ThmGroupOf(i);
     if (g >= 0) {
-      if (res) {
-        groupRows[g].push_back(std::make_pair(i, res->size()));
-        for (int pid = 0; pid < segment->NumPoints(); pid++)
-          if (segment->GetPoint(*ld, pid + 1)) res->push_back(0.0);
-      }
-      if (ld->Data().IsLastOfThmGroup(g, i)) {
-        chiSquared += ld->ProfileThmGroup(g, results());
-        if (res) {
-          std::vector<double> r;
-          for (const std::pair<int, size_t> &row : groupRows[g]) {
-            ld->ThmGroupResiduals(g, row.first, results(), r);
-            std::copy(r.begin(), r.end(), res->begin() + row.second);
-          }
-        }
-      }
+      // A THM experiment's rows, one per point the segment holds, from the profile DataChi2 made.
+      size_t n = 0;
+      for (int pid = 0; pid < segment->NumPoints(); pid++)
+        if (segment->GetPoint(*ld, pid + 1)) n++;
+      ld->ThmGroupResiduals(g, i, results(), r);
+      const size_t at = res->size();
+      res->resize(at + n, 0.0);
+      std::copy(r.begin(), r.begin() + std::min(n, r.size()), res->begin() + at);
       continue;
     }
-
-    // A free THM norm is the arbitrary HOES scale: profiled to its optimum
-    // (n* stored in the buffer), exactly as the CLI does.
-    double segChi = 0.0;
-    const bool profiled = segment->IsProfiledNorm();
-    if (profiled) segChi = segment->ProfileNormChiSquared(*ld, results(), results().objective.norm[i]);
-
     const double norm = ld->NormUsed(i, results());
-    for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      const double r = azure2::PointResidual(*ld, *segment, pid, results(), norm).Pull();
-      if (!profiled) segChi += r * r;
-      if (res) res->push_back(r);
-    }
-
-    results().objective.segmentChi2[i] = segChi;
-    chiSquared += segChi;
+    for (int pid = 0; pid < segment->NumPoints(); pid++)
+      res->push_back(azure2::PointResidual(*ld, *segment, pid, results(), norm).Pull());
   }
-  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2 (never a THM segment).
-  if (ld->Data().HasCovariance()) chiSquared += ld->CovarianceChi2Correction(results());
   return chiSquared;
 }
 

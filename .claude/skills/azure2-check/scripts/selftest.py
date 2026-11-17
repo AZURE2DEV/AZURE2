@@ -13,7 +13,7 @@ something:
   have, 2P/S' = 44.3 keV, so it is the one flag of T1); a fixed 60 MeV width on the 1/2+ background pole is flagged
   theta^2 > 1; on T2 (tests/upgrade/T2: levels with fixed and free widths in several open channels) the norm of
   each level with a free width equals J = 1 - sum_c Gamma_c S'_c/(2 P_c) over all its channels (0.797, 0.745,
-  0.972), and Gamma_W of a free channel is 2 P gamma^2_W;
+  0.972), and Gamma_W of a free or fixed channel is 2 P gamma^2_W (the session's, which the script reads);
 - radius_scan.py, from the perturbed start of T1 at its own radius, refits to the truth's chi2 neighbourhood
   (objective lowered by the refit, the 1/2+ energy back to 2.365 MeV within 2 keV), and a second radius is fitted
   from the first's result.
@@ -125,7 +125,7 @@ def test_widths_fixed(work):
     w = json.loads((t2 / "w.json").read_text())
     with pyazr.Session(str(t2 / "T2.azr")) as s:
         pairs = {q.number: q for q in s.pairs}
-    worst, worst_width, n = 0.0, 0.0, 0
+    worst, worst_width, n, n_fixed = 0.0, 0.0, 0, 0
     for lv in w["levels"]:
         if lv["norm"] is None:
             continue
@@ -137,13 +137,15 @@ def test_widths_fixed(work):
             args = (c["L"], q.Z1, q.Z2, q.M1, q.M2, q.channel_radius, c["level_energy"] - q.sep_energy - q.excitation)
             two_p = 2 * float(physics.penetrability(*args))
             j_ref -= abs(c["value"]) * 1e-6 * float(physics.shift_derivative(*args)) / two_p
-            if c["free"] and c["wigner_width"]:
+            if c["wigner_width"]:  # free and fixed channels alike
+                n_fixed += not c["free"]
                 worst_width = max(worst_width, abs(c["wigner_width"] / (two_p * c["wigner_gamma2"] * 1e6) - 1))
         n += 1
         worst = max(worst, abs(lv["norm"] - j_ref))
     check("widths_check: on T2 the norm of a level with fixed and free widths is J = 1 - sum Gamma S'/(2P)",
           r.returncode in (0, 1) and n == 3 and worst < 1e-5, f"{n} levels, largest difference {worst:.1e}")
-    check("widths_check: on T2 Gamma_W of a free channel is 2 P gamma^2_W", worst_width < 1e-6, f"{worst_width:.1e}")
+    check("widths_check: on T2 Gamma_W of a free or fixed channel is 2 P gamma^2_W", worst_width < 1e-6 and n_fixed > 0,
+          f"{worst_width:.1e}, {n_fixed} fixed channels")
 
 
 def test_radius_scan(work):

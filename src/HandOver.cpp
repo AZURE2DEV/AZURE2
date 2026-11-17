@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -291,8 +292,10 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const Compou
         work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, compound, configure);
     } else {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int q = 0; q < (int)work.size(); q++)
+      for (int q = 0; q < (int)work.size(); q++) {
+        const azure2::support::ExtendedPrecisionScope fpPrecision;
         work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, compound, configure);
+      }
     }
     if (compound && configure)
       for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(*this, t.term, compound, *configure);

@@ -138,6 +138,17 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME physics_coulomb COMMAND physics_coulomb_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
 
+# coulomb_neutral: F, F', G, G' of coulsm at eta = 0 (Riccati-Bessel functions) against mpmath for l = 0-8 and
+# rho = 1e-6-5e4 (tests/data/neutral_coulomb.csv, make_neutral_coulomb.py), 1e-13 and the Wronskian
+# (docs/upgrade/coulomb.md section 10).
+add_executable(physics_coulomb_neutral_test tests/coulomb_neutral_test.cpp)
+target_link_libraries(physics_coulomb_neutral_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_coulomb_neutral_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_coulomb_neutral COMMAND physics_coulomb_neutral_test
+         ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/neutral_coulomb.csv)
+
 # coulomb_threshold: the Coulomb functions' zero-energy fallback just above a heavy-ion threshold, S against its exact
 # limit S_l(0) within the slope the limit leaves out (physics/coulomb/README.md, local changes).
 add_executable(physics_coulomb_threshold_test tests/coulomb_threshold_test.cpp)

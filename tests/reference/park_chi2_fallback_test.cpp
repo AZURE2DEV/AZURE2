@@ -36,6 +36,8 @@
  *   D  variant A's project with --use-rmc (Reich-Moore capture, --no-brune): the adjoint does not cover it, for
  *      every point.
  * The gates of PointTBar that no project reaches are assertions there (the reason at each).
+ *   E  variant A with the wall level's J set to NaN: the value, the rows and the gradient all skip it (the gradient
+ *      tested J >= 0 until 2026-11-16 and gave NaN; NanVariant).
  * Checked, at the starting point:
  *   - AccumulateEGammaGradient succeeds for A and B and bails for C;
  *   - Chi2Value(p) = operator()(p), the penalty included (rel. 1e-10);
@@ -49,6 +51,7 @@
  *   park_chi2_fallback_test <path to identical_pp_res.azr> <path to 13N_capture_ay.azr>   (ctest: park_chi2_fallback)
  */
 #include <memory>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -339,6 +342,64 @@ void FallbackVariant(const std::string &label, const std::string &azr, unsigned 
   }
 }
 
+// A level whose overlap J is not a number (a NaN width or shift-function derivative) is not on the wall: the value
+// (ParkTerm), the rows (AppendModelRows) and the gradient (AddParkPenaltyGradient) skip it alike.  Until 2026-11-16 the
+// gradient tested J >= 0, which a NaN fails, so it added 2 J/s^2 (...) = NaN to the level's energy and widths while
+// the value and the rows added nothing.  On variant A: the wall level's J set to NaN after the shift functions.
+void NanVariant(const std::string &azr) {
+  const std::string label = "E: a level with J = NaN";
+  std::printf("== %s\n", label.c_str());
+  Model m(azr, false);
+  if (!m.Load()) {
+    check(label + ": project loads", false, azr);
+    return;
+  }
+  const vector_r p = m.params.GetMinuitParams().Params();
+  m.compound->FillCompoundFromParams(p, m.state);
+  m.compound->CalcShiftFunctions(m.cfg, m.state);
+  const ParamIndexMap pmap = BuildParamIndexMap(m.compound, m.data, std::vector<bool>());
+  auto gradient = [&]() {
+    GradAccum accum;
+    accum.Init(m.compound, m.state);
+    AddParkPenaltyGradient(m.compound, m.state, m.cfg, accum);
+    vector_r g(pmap.NumFull(), 0.0);
+    accum.Scatter(pmap, g);
+    return g;
+  };
+  auto wallValue = [&]() {
+    azure2::Results results;
+    double v = 0.0;
+    for (const auto &term : Objective::Engine().Terms())
+      if (term->Name() == "Park J > 0") term->Add(ObjectiveContext{m.compound, m.state, m.inputs, m.data, results, p, m.cfg}, v);
+    return v;
+  };
+  // The level beyond the wall (J < 0): there must be one, or the check below tests nothing.
+  int wallJ = 0, wallLa = 0;
+  for (int j = 1; j <= m.compound->NumJGroups() && !wallJ; j++)
+    for (int la = 1; la <= m.compound->GetJGroup(j)->NumLevels(); la++)
+      if (m.state.ParkNorm(j, la) < 0.0) {
+        wallJ = j;
+        wallLa = la;
+        break;
+      }
+  check(label + ": a level beyond the wall at the start", wallJ > 0);
+  if (!wallJ) return;
+  double before = 0.0;
+  for (double x : gradient()) before = std::max(before, std::fabs(x));
+  check(label + ": with J < 0 the wall has a gradient (largest " + num(before) + ")", before > 0.0 && std::isfinite(before));
+  m.state.SetParkNorm(wallJ, wallLa, NAN);
+  const vector_r g = gradient();
+  bool zero = true;
+  for (double x : g) zero = zero && x == 0.0;
+  check(label + ": no gradient from it (every component 0, none NaN)", zero);
+  check(label + ": no value from it (" + num(wallValue()) + ")", wallValue() == 0.0);
+  vector_r rows;
+  AppendModelRows(m.compound, m.state, *m.data, m.cfg, &pmap, 0, rows, nullptr);
+  bool rowsZero = !rows.empty();
+  for (double r : rows) rowsZero = rowsZero && r == 0.0;
+  check(label + ": its row is 0 (" + std::to_string(rows.size()) + " rows)", rowsZero);
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -355,6 +416,7 @@ int main(int argc, char **argv) {
   const double gB = Variant("B: a convolved analyzing power", "park_b.azr", true, 1, false);
   Variant("C: a folded capture analyzing power (the fallback)", "park_c.azr", false, 4, true);
   FallbackVariant("D: Reich-Moore capture (--use-rmc)", "park_a.azr", Config::USE_RMC_FORMALISM);
+  NanVariant("park_a.azr");
   check("A and B agree on the wall width's derivative (" + num(gA) + " vs " + num(gB) + ")",
         std::fabs(gA - gB) <= 1e-3 * std::fabs(gA));
   std::printf("%s\n", failures ? "FAIL" : "PASS");

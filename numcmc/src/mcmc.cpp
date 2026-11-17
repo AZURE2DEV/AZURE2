@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <random>
+#include "azure2/support/FloatingPointPrecision.h"
 
 namespace nu {
 namespace {
@@ -242,6 +243,7 @@ int Mcmc::run_impl(const LogProbability &func, int steps, int threads,
     // costs one evaluation per walker instead of two.
 #pragma omp parallel for num_threads(threads) schedule(dynamic)
     for (int k = 0; k < nwalkers; k++) {
+        const azure2::support::ExtendedPrecisionScope fpPrecision;
         if (!walkers[k].hasLogP()) {
             std::vector<double> pos = walkers[k].getPos();
             walkers[k].setLogP(func(pos));
@@ -279,6 +281,7 @@ int Mcmc::run_impl(const LogProbability &func, int steps, int threads,
 #pragma omp parallel for num_threads(threads) schedule(dynamic) \
     reduction(+ : accepted_here)
             for (int k = lo; k < hi; k++) {
+                const azure2::support::ExtendedPrecisionScope fpPrecision;
                 std::mt19937_64 &rng = this->rngs[k];
                 std::uniform_real_distribution<double> unif(0.0, 1.0);
 

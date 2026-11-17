@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -204,6 +205,7 @@ void WorkingCopy::WhitenResidualRows(std::vector<double> &residuals, std::vector
     std::vector<double> &J = *jacobian;
 #pragma omp parallel for schedule(dynamic, 4)
     for (int c = 0; c < nCols; c++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       std::vector<double> col(g.n);
       bool any = false;
       for (int a = 0; a < g.n; a++) any |= (col[a] = J[(size_t)rows[a] * nCols + c]) != 0.0;

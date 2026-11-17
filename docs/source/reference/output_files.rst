@@ -149,6 +149,10 @@ Contains the **physical** (observable) parameters resulting from the fit. If
 the user wishes to use these as new starting values, they must be manually
 entered into the **Levels and Channels** tab.
 
+A partial width Γ is printed in keV, eV or meV with six decimals: the largest of
+the three in which it prints as at least 1.000000 (a width of 0.9999999999 keV,
+the round trip of a width entered as 1 keV, prints as ``1.000000 keV``).
+
 relativistic.out
 ^^^^^^^^^^^^^^^^
 
@@ -178,6 +182,23 @@ shifts.out
 Written when a segment's energy shift or :math:`\sqrt{E}` shift coefficient
 is varied: one row per such segment with its key, data file, angle and energy
 bounds, norm, ``shift`` (MeV) and ``sqrt_shift`` (MeV\ :sup:`1/2`).
+
+When a data set has a shift function (an ``energy_scale`` record with a
+``function``), the rows are followed by one line per function, starting with
+``#``: the owning segment's key, the keys of every member, the function, the
+constant shift (MeV), the parameters :math:`a_j`, the lowest and highest
+original lab energies of the members' points (MeV), the total shift at those
+two energies (MeV), and ``penalty``: the function's own prior penalty,
+:math:`\sum_j ((a_j - a_j^0)/\sigma_j)^2` over the varied parameters
+:math:`a_j` with a prior, exactly the shift-function part of the objective.
+It does not contain the constant shift's prior, and a parameter whose prior
+the prior covariance (``priorCovariance=<file>``) replaces is left out, as
+the objective leaves it out (its term is in
+``Total-Prior-Covariance-Chi-Squared`` of ``chiSquared.out``). A last line
+``# Total-Shift-Chi-Squared:`` repeats the total of every energy-shift prior.
+(Builds before 2026-11-16 printed the owner's shift priors minus the constant
+shift's prior formed again, which subtracted that prior also when the prior
+covariance had replaced it.)
 
 thm_experiments.out
 ^^^^^^^^^^^^^^^^^^^

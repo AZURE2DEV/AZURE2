@@ -1184,6 +1184,12 @@ set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 add_test(NAME pyazr_session_lock COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/session_lock_test.py)
 set_tests_properties(pyazr_session_lock PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# The x87 precision of a thread does not reach the results: T1 in a threading.Thread whose precision is lowered to 53
+# bits (as a Windows thread starts) and in the main thread lowered, bit for bit the main thread's; the control words
+# of the threads printed (support/include/azure2/support/FloatingPointPrecision.h).  Two threads: the regions' scopes.
+add_test(NAME pyazr_x87_precision COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/x87_precision_test.py)
+set_tests_properties(pyazr_x87_precision PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # pyazr's Evaluation (Session.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
 # per Evaluation, and the self-description of the objects.
 add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)

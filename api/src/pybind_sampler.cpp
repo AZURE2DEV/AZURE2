@@ -16,6 +16,7 @@
 #ifdef USE_MCMC
 #include "AZUREAPISampler.h"
 #endif
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -81,7 +82,7 @@ py::dict SampleWithEngineDict(AZUREAPI &api, const py::kwargs &options) {
   }
   EngineSample sample;
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     sample = SampleWithEngine(api, request);
   }
   if (error) throw *error;

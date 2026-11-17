@@ -23,6 +23,14 @@ void WriteBoundaryConditionsCheck(const CompoundSystem &compound, const Config &
 /// checks/angulardistributions.chk: the interference terms and their coefficients, from the pathway table.
 void WriteAngularDistributionsCheck(const CompoundSystem &compound, const Config &configure);
 
+/// An observed width as parameters.out prints it: the value in keV, eV or meV, the largest unit in which it prints
+/// (six decimals) as at least 1.000000.
+struct ReportedWidth {
+  double value;
+  const char *unit;
+};
+ReportedWidth ReportWidth(double W_MeV);
+
 /// parameters.out: every level's Brune (Park) energy and, per channel, the observed width, ANC, moment or B with the
 /// internal and external amplitudes (the table CompoundSystem::TransformOut returns); relativistic.out too with relativistic=1.
 void WriteParametersOut(const CompoundSystem &compound, const LevelState &state, const ObservedLevelTable &table,

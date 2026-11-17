@@ -616,3 +616,45 @@ with the rows computed once per energy, the channel table adds little to the set
 its four direct extrapolations folded as well; the peak memory above that of the same project unfolded is bounded at
 125 MiB (measured 97.6; with the THM pieces of every channel again 139, with a table per slot 229, the build before
 334).
+
+## 10. The observed-level record carries the channel's P, mu and a (design, 2026-11-16; approved by the PI)
+
+**What it is.** `ObservedLevel` (`include/ObservedLevelTable.h`) is the record of one level at one set of fit values:
+the Brune (Park) energy E (MeV, E_x: the physical energy, after `brune_from_formal` in the formal basis), the
+amplitudes, and per channel the observed width W, the reported value and its kind (`CompoundSystem::TransformOut`,
+`ObservedWidthsAt`, `ObservedOfFitValues`; `cnuc_split.md` section 12.3, step 3). A model datum of a reduced width (a
+reduced-width ratio, a dimensionless width theta^2 = Gamma / (2 P gamma_W^2)) needs, beside W, the penetrability at the
+level's energy, the reduced mass and the channel radius; the record had none of them, so a reader had to evaluate the
+channel functions a second time (`ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), E_c)`, `GetRedMass`,
+`GetChRad`; the recipes trial of 2026-11-16, items R1-3 and C-2). The record now carries them, per channel:
+
+| Member | What | Unit |
+|---|---|---|
+| `P` | the factor the observed W was formed with, W = s 2 \|gamma\|^2 P / N (`ChannelValues::P` at the record's E): an open particle channel (kind Width) P_l(E_c), the penetrability at the channel radius; a closed one (kind ANC) mu a / (hbar^2 W_l(2 kappa a)^2); 0 at a threshold; a photon channel (E_gamma / hbar c)^(2L+1) (1 with `--use-rmc`) or a static moment's factor; 0 for a beta channel | 1; MeV^-1 fm^-1 (closed); fm^-(2L+1) (photon) |
+| `mu_u` | the reduced mass of the channel's pair, `PPair::GetRedMass()`; 0 for a photon or beta channel | u |
+| `a_fm` | the channel radius of the channel's pair, `PPair::GetChRad()`; 0 for a photon or beta channel | fm |
+
+**Where it is filled.** P is handed on, not computed again: physics/ `observed_levels` evaluates the channel functions
+of every column once at E to form W, and `ObservedLevels` gains the member `P` (row-major as W) holding the value it
+multiplied by. `CompoundSystem::ObservedWidths`, which copies W, the value and the kind into the record, copies P
+beside them and sets `mu_u` and `a_fm` from the channel's pair in the same loop. P is therefore the penetrability of
+the energy at which W is observed, in the three bases, with the run's channel functions (the Coulomb table when one
+is in use, a pair's hybrid potential, the level's J for a spin-orbit term). E_c is formed as for W, (E - S) - e.
+
+**What it replaces.** Nothing printed changes: W and every value are the same bits (the factor was already the one
+W used), and no file writes the new members. Readers, by grep of the callers (`ParticleChannelValues`,
+`GetRedMass`, `GetChRad`, `Penetrability(` in `src/` and `api/src/`): no engine reader of the record recomputes P, mu
+or a at a level's own energy today -- `LevelValue` (`src/ModelData.cpp`) reads W, the value and E; the binding's
+reports read the observed values through `GetTransformParams`; `ParticleChannelFunctions` of
+`api/src/pybind_level_doors.cpp` is the channel function of a block the caller gives, not a reading of the record.
+Two estimates evaluate P at a level energy from the *input* widths, not from the record (`AdaptiveIntegrationGrid.cpp`,
+the rate grid's widths; `ThmLineshape.cpp`, at a mesh energy): they are not readers of the record, and moving them
+would move the grids. The one reader that recomputes P is pyazr's `Session.wigner_widths` (P of `channel_functions`
+at the level's physical energy): `pyazr3.md` section 13. The recipe "A model-only datum" (`CLAUDE.md`, step 3) names the
+members; a new datum reads `level.P[ch - 1]`, `level.mu_u[ch - 1]`, `level.a_fm[ch - 1]`.
+
+**Test.** `tests/upgrade/observed_level_record_test.cpp` (ctest `upgrade_observed_level_record`): on T1, T2, T3 and
+13N in Brune's, the formal and Park's parametrization, every particle channel of every level of
+`ObservedOfFitValues` at the project's values: P against `ParticleChannelValues(pair, l, SpinOrbitTwoJ(J), E - S - e)`
+at the record's E, mu and a against the pair; and W = s 2 gamma^2 P / N with N from the record's amplitudes, so that
+a P not used for W fails. The output files of every project are compared before and after (`verify_branch.sh`).

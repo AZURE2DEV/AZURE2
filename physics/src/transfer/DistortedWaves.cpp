@@ -113,48 +113,12 @@ void Fill(RadialChannel &c, const std::function<cplx(double)> &central_of, const
   if (c.spin_orbit) c.spin_orbit_at_origin_MeV = c.spin_orbit_MeV[1];
 }
 
-/// u_l = x j_l(x), l = 0 ... l_max, at x >= 0 into u (l_max + 1 values): upward from j_0, j_1 where l_max < x,
-/// else Miller's downward recurrence from far above both, normalised with sum (2l+1) j_l^2 = 1.
-void RiccatiBessel(int l_max, double x, double *u) {
-  if (!(x > 0.0)) {
-    for (int l = 0; l <= l_max; ++l) u[l] = 0.0;
-    return;
-  }
-  if (l_max < x) {
-    double jm = std::sin(x) / x, j = std::sin(x) / (x * x) - std::cos(x) / x;
-    u[0] = x * jm;
-    for (int l = 1; l <= l_max; ++l) {
-      u[l] = x * j;
-      const double next = (2 * l + 1) / x * j - jm;
-      jm = j;
-      j = next;
-    }
-    return;
-  }
-  const double top = std::max<double>(l_max, x);
-  const int start = static_cast<int>(top + 30.0 + std::sqrt(40.0 * top));
-  std::vector<double> j(start + 2, 0.0);
-  j[start] = 1.0;
-  for (int l = start; l >= 1; --l) {
-    j[l - 1] = (2 * l + 1) / x * j[l] - j[l + 1];
-    if (std::fabs(j[l - 1]) > 1e100)  // kept below 1e100, so that the sum of squares cannot overflow
-      for (int m = l - 1; m <= start; ++m) j[m] *= 1e-100;
-  }
-  double sum = 0.0;
-  for (int l = start; l >= 0; --l) sum += (2 * l + 1) * j[l] * j[l];
-  // The sign from the closed form of j_0 or, where it is small, j_1.
-  const double j0 = std::sin(x) / x, j1 = std::sin(x) / (x * x) - std::cos(x) / x;
-  const double sign = std::fabs(j0) > std::fabs(j1) ? (j0 * j[0] < 0.0 ? -1.0 : 1.0) : (j1 * j[1] < 0.0 ? -1.0 : 1.0);
-  const double scale = sign / std::sqrt(sum);
-  for (int l = 0; l <= l_max; ++l) u[l] = x * j[l] * scale;
-}
-
 /// u_l(r_i) = F_l(0, k r_i), l = 0 ... l_max, i < n: [l][i].
 std::vector<std::vector<double>> RiccatiTable(int l_max, double k, double h, int n) {
   std::vector<std::vector<double>> u(l_max + 1, std::vector<double>(n, 0.0));
   std::vector<double> ric(l_max + 1);
   for (int i = 1; i < n; ++i) {
-    RiccatiBessel(l_max, k * i * h, ric.data());
+    coulomb::riccati_bessel(l_max, k * i * h, ric.data());  // physics/coulomb (moved there 2026-11-16)
     for (int l = 0; l <= l_max; ++l) u[l][i] = ric[l];
   }
   return u;

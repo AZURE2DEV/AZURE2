@@ -33,6 +33,7 @@
 #include "azure2/physics/LevelParameters.h"
 #include "azure2/physics/System.h"
 #include "azure2/support/Environment.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
@@ -280,7 +281,7 @@ py::dict ObservedLevels(const py::list &pairs, int two_J, int parity, const std:
 }  // namespace
 
 void BindLevelDoors(py::module_ &m) {
-  m.def("formal_levels_of_block", &FormalLevels, py::arg("pairs"), py::arg("two_J"), py::arg("parity"),
+  m.def("formal_levels_of_block", &FormalLevels, PrecisionGuard(), py::arg("pairs"), py::arg("two_J"), py::arg("parity"),
         py::arg("channels"), py::arg("E"), py::arg("values"), py::arg("is_amplitude"), py::arg("form"),
         py::arg("basis"), py::arg("use_coulomb_table") = true,
         "One J^pi block of particle channels in the project's basis -> its formal levels (physics/ level_parameters, "
@@ -290,7 +291,7 @@ void BindLevelDoors(py::module_ &m) {
         "fm^-1/2, or amplitudes where is_amplitude) or 'amplitudes' (MeV^1/2 of `basis`, 'brune' or 'park').  Returns "
         "{E, gamma (formal, MeV^1/2), B (S_c at the lowest level), basis_E, basis_gamma, warnings}; ValueError for "
         "records that make no block, std::domain_error (ValueError) when no formal parameters correspond.");
-  m.def("observed_levels_of_block", &ObservedLevels, py::arg("pairs"), py::arg("two_J"), py::arg("parity"),
+  m.def("observed_levels_of_block", &ObservedLevels, PrecisionGuard(), py::arg("pairs"), py::arg("two_J"), py::arg("parity"),
         py::arg("channels"), py::arg("E"), py::arg("gamma"), py::arg("B"),
         py::arg("energy_tolerance_MeV") = phys::FormalToBruneOptions().energy_tolerance_MeV,
         py::arg("use_coulomb_table") = true,

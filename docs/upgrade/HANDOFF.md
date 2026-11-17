@@ -93,6 +93,452 @@ branch changes no file under `pyazr/`, `src/`, `include/` or `tests/pyazr/`: the
 the 37 added tests raise under `-j4`. **For the director:** either that check wants a wider margin or the rmfit
 tests a `RUN_SERIAL`/resource lock; neither is done here.
 
+## 2026-11-17 (director, 01:10) — merged: 64-bit x87 precision in every thread (the Windows unit tests)
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 103: `feature/upgrade-0-windows-tests-3` (the Windows
+agent's two entries follow). The base build is `work/b-trial103`, **the reference tag is `tab-trial103-1`**, the
+quick set is 334 tests.
+
+**What it answers.** The CI's Windows job of `3579fb87` failed three unit tests: one on the mpmath version's
+`format` of an `mpf` (now `g17` of a float, independent of the version), two that compare a worker thread's values
+with the main thread's bit for bit. `long double` keeps the x87 precision control of the thread, 53 bits in a
+Windows Python thread (inferred; shown on Linux by lowering the control word: T1's objective moves by 8e-16).
+Now every OpenMP parallel region, `main` and every computing function of the binding opens a scope that sets 64
+bits and restores the caller's word (`ExtendedPrecisionScope`, `EngineCallScope`, `PrecisionGuard`); check 60
+refuses a parallel region or a binding function without one unless it is listed as computing nothing the
+precision can change. At the merge `observed_levels_all_rwa` (rehearsal 102's) got the guard.
+
+**Verified** (`work/director/verify_l103.out`): 0 warnings; against `tab-trial102-1` 887, 851 and 887 of 887, 851
+and 887 files identical; the eight fits identical to `work/b-trial102`; 334 of 334 quick tests; 172 of 172
+regression scripts. On Linux a thread starts at 64 bits, so this shows only that nothing moved; Windows itself is
+tested by the CI's next run alone. Not run by me: the slow tests, sanitizers, other platforms.
+
+**Waiting for the PI:** T3's extrapolation `x8` (`4He(a,a)4He`) asks lab angles above 90 degrees, which equal
+masses cannot reach; the engine maps them to 180 degrees c.m. without a word and the golden file holds
+3.6873994268e+62 there. Refuse at validation (recommended), NaN with a warning, or leave: his word is needed,
+since a golden file changes.
+
+## 2026-11-16 (Windows agent) — the three Windows unit tests: an old mpmath, and a thread's x87 precision
+
+Worktree `wt-win3`, branch `feature/upgrade-0-windows-tests-3` (from `feature/upgrade-4-data`, e8b04682), two
+commits, not pushed. Build `work/b-win3` (0 warnings). No Windows machine: what follows separates what was run on
+Linux from what is inferred.
+
+### (A) pyazr_units_scales: `format(mpf, ".17g")`
+
+- Cause, shown: `mpf.__format__` exists in mpmath 1.4.x (1.4.1 here, `ctx_mp_python.py`) and not in 1.3.0 (three
+  copies on this machine). With mpmath 1.3.0 first on PYTHONPATH the old test fails here with the CI's exact
+  TypeError at line 185. That the Windows job has 1.3.x (MSYS2's package; Linux/macOS take pip's) is inferred: the
+  job does not print it. The test now prints `mpmath <version>`.
+- Repair (commit 46784682): `g17(x)` in the test, the mpf's exact binary value rounded once to 17 digits by the
+  decimal module, written in Python's ".17g" layout. Run: 228 strings written by the test, 0 differ from
+  `format(mpf, ".17g")` of 1.4.1; the test's output before/after identical (but the version line); the new test
+  passes with 1.3.0 with the same output. g17 = `format(float, ".17g")` for 400,000 random doubles (-0.0 aside).
+- Other tests: no other `format()`/f-string spec applied to an mpf found (grep); the non-slow ones ran on the CI.
+
+### (B) pyazr_session_lock (b), (C) pyazr_objective_object (d): a Python thread's x87 precision
+
+Both compare values computed in the MAIN thread ("alone") with values computed in two `threading.Thread`s at once,
+both at `OMP_NUM_THREADS=1`.
+
+- Cause 1, shown on Linux (trial-101 build, no Coulomb table; a 3-line C helper for fnstcw/fldcw via ctypes): T1's
+  objective value, gradient, rows, Jacobian and evaluate() in a worker thread are bit-identical to the main thread's;
+  with the worker's x87 control word lowered to 0x27F (53-bit precision) before the calls: value 8e-16 rel., 7/13
+  gradient components (1.3e-13), 27/442 rows (1.4e-12), 217/5746 Jacobian entries, 27/442 model values differ, at
+  OMP_NUM_THREADS 1 and 2. The main thread lowered gives the same at 1 thread; at 2 threads it differs from both
+  (its OpenMP workers, made earlier, stay at 64 bits: mixed precision).
+- Why Windows only (inferred, not shown here: no MinGW sources or headers on disk): MinGW-w64's start-up
+  (`_fpreset`, CRT_fp10) gives the process's main thread 64-bit precision (0x37F); a thread made by the UCRT's
+  `_beginthreadex` (Python's threading) starts with the Windows default 0x27F. Linux threads inherit the creator's
+  word (clone copies the FPU state), so the tests pass there. The engine's `long double` sites (src/AngCoeff.cpp,
+  AMatrixFunc.cpp, ECIntegral.cpp, ChannelSpace.cpp; physics/src/AngularCoupling.cpp, ChannelFunctions.cpp,
+  ChannelSolve.cpp and their headers) carry it; on MinGW its x87-based libm functions may too (not shown).
+- Cause 2 (a race on one session), not seen: tests (b) and (d) repeated 200 times in one process at
+  OMP_NUM_THREADS 1, 2, 4 (pinned to 4 cores, trial-101): 0 of 600 differ.
+- Repair (commit 9d7ec793): `azure2::support::ExtendedPrecisionScope` (support/include/azure2/support/
+  FloatingPointPrecision.h): sets the precision control to 64 bits, restores the word at scope end, holds only the
+  word it found. Compiled on x86/x86-64 with GCC/clang everywhere (not only MinGW: no number moves where threads
+  are at 64 bits already, and the test then runs on Linux and macOS-intel too); empty on arm64. Taken (i) by every
+  GIL release of the binding: `EngineCallScope` (api/src/pybind_engine_call.h) replaces all 31
+  `gil_scoped_release`; (ii) as the first statement of the body of each of the 39 OpenMP parallel regions of src/,
+  numcmc/ and the binding (OpenMP workers on Windows start with whatever winpthreads gives them: not shown);
+  (iii) at the top of AZURE2's main. Consistency check 60 keeps (i) and (ii). Diagnostics for the CI:
+  `_azure2._x87_control_words()` and the test hook `_azure2._set_x87_control_word()`.
+- Test: `pyazr_x87_precision` (OMP 2): prints the words of the main thread, a threading.Thread and their OpenMP
+  threads (found and in scope); requires 64 bits inside every scope and the word restored after; T1 in a thread
+  lowered to 53 bits, and in the main thread lowered, bit for bit the main thread's. Passes here at OMP 1 and 2.
+  On Linux the region scopes are not exercised (workers made inside the call scope inherit 64 bits); on Windows the
+  printed "OpenMP threads found" says what winpthreads gives, and the in-scope check exercises them.
+  session_lock (b) and objective_object (d) gained a check "one thread alone in a threading.Thread = the main
+  thread" before the two-at-once check, and print what differs and by how much.
+- Not covered: binding calls that keep the GIL (cheap ones: the nuclear-part edits, readers) compute in the
+  caller's precision; a Python callback during a fit runs inside the scope (Python's floats are SSE: no effect).
+
+### AZURE2.exe on Windows today (before the repair)
+
+Main thread at 64 bits (inferred from MinGW's start-up). Its OpenMP workers: not shown (from memory winpthreads'
+thread wrapper calls `_fpreset`; whether that is the 64-bit CRT_fp10 one or the C runtime's 53-bit one is not
+established). If they start at 53 bits, results depend on the thread count at the 1e-15..1e-12 relative level (the
+Linux experiment above, mixed precision at 2 threads). The CI's regression checks that compare 1 and 2-4 threads
+(angle_mapping gradients, thm_dw_vertex byte-identical, extrapolation_grids, stopping_yield, layer_yield,
+ratio_to_rutherford, modified_sfactor, format3_engine T2) pass on Windows; they compare printed numbers (11
+significant digits), so they bound the effect below the printed digits, not to zero. After the repair every region
+runs at 64 bits, so the question is moot for results; the next CI run's pyazr_x87_precision output answers it.
+
+### Run, and not run
+
+Run: the x87 experiment above; the 600 repetitions; units_scales old/new with mpmath 1.4.1 and 1.3.0; build
+work/b-win3 (0 warnings); x87_precision_test at OMP 1, 2; `ctest -j2 -R 'pyazr_session_lock|
+pyazr_objective_object|pyazr_units_scales|repo_consistency|pyazr_evaluation|upgrade|pyazr_x87_precision'`;
+`tests/upgrade/check.sh work/b-win3/src/AZURE2`: all 30 ctests pass (repo_consistency once the new files were
+staged: its scan reads `git ls-files`), check.sh "upgrade T1-T3: ok" (log work/b-win3.upgrade_check.log).
+Not run: the full regression (tests/run_tests.sh), `ctest -L slow`, any Windows run.
+
+## 2026-11-16 (Windows agent, part 2) — the binding functions that keep the GIL
+
+Commit 2d42d0e4 on `feature/upgrade-0-windows-tests-3` (not pushed); build `work/b-win3` (0 warnings).
+
+### Inventory (run: a scan of the `.def*(` calls of api/src/pybind_*.cpp, then each body read)
+
+158 functions exposed; 11 took EngineCallScope at the `.def` or in their lambda, 19 inside a named body (16 Session
+methods, physics_evaluate, stopping.evaluate, _x87_control_words); 128 took none. Per file (none / all):
+api 46/71, nuclear_part 23/23, project 16/16, stopping 9/10, convert 6/6, schema 6/6, fit 5/5, describe 4/6,
+thm 3/3, level_doors 2/2, physics 2/3, records 2/2, collision_matrix 1/1, optical 1/1, data_rows 1/1, precision 1/2.
+- (b) computes, 28: Session.__init__ (the set-up), calculate_objective_rwa, objective_terms_rwa, log_prob_rwa,
+  sampler_log_probability, scattering_lengths_rwa, park_norms, prior_covariance_residuals, thm_lineshape;
+  collision_matrix, formal_/observed_levels_of_block, optical_scattering; data_rows, predictions,
+  extrapolation_grid, refine_grid; convert_parameter_file, validate_/describe_/convert_format3_text; stopping's
+  material, stopping, areal_density_between, energy_after, range, straggling, provenance.
+- (a) nothing the precision changes, 100 (+ cache_stats and _x87_control_words, which have a body scope): Session
+  readers, module tables, RuntimeOptions (api 37), document edits and parsing
+  (nuclear_part 23, project 16), tables and texts (schema 3, convert 2, thm 3, describe 4, records 2, physics 2,
+  stopping 2, fit 5), the test hook _set_x87_control_word (a scope would undo it). Criterion: no long double, no
+  libm call; fabs/floor/lround and double +-*/ (SSE on x86-64) only.
+
+### Repair
+
+`PrecisionGuard` = `py::call_guard<ExtendedPrecisionScope>` (api/src/pybind_engine_call.h), written at 45 `.def`s:
+the 28 and the 17 with an inner GIL-released block (so their code outside the block is covered too). No GIL release
+added. pybind_api.cpp stays at 1016 lines. Check 60 (iii): a `.def` without a scope and not in
+BINDING_WITHOUT_ARITHMETIC (by file, grouped, with reasons; stale names fail) is refused; planted cases; seen to
+fail with the guard removed from optical_scattering. CLAUDE.md "Determinism" states the rule.
+
+### Test, and what failed before
+
+pyazr_x87_precision (c): 17 representatives, lowered thread vs main thread, bit for bit. Run against the build of
+9d7ec793: only the set-up failed (a Session made in a lowered thread: Objective(x) 4.1e-15 rel. with the Coulomb
+table, 2.1e-14 without). Against trial 101 (no scope, ctypes fldcw helper): also Objective(x), log_prob (8.2e-16).
+Physics rows, transform, channel_functions, scattering lengths, Park norms, from_session, collision_matrix,
+optical_scattering, extrapolation_grid, stopping: no difference in either build on Linux (inferred: double/SSE
+arithmetic here, or inside OpenMP region scopes; with MinGW's x87 libm they may differ: not shown).
+After: all pass at OMP 1, 2 and without the table; ctest selection of 59 tests passes.
+Not run: tests/run_tests.sh, ctest -L slow, Windows.
+
+## 2026-11-16 (director, 23:40) — merged: F of a neutral pair repaired; the observed-level record; widths' table
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 102: `feature/upgrade-1-coulomb-neutral-f`,
+`feature/upgrade-8-observed-level`, `feature/upgrade-8-fixed-row-value` (agents'; their entries follow). The base
+build is `work/b-trial102`, **the reference tag is `tab-trial102-1`**, the quick set is 333 tests, pyazr is
+3.0.0.dev6, the external-capture signature is v8.
+
+**F and F' at eta = 0** (the PI: "Yes to all 3 your proposals"). `coulsm` stepped F upward in l from sin and cos,
+the unstable direction for rho < l: wrong by 2e-4 at l = 1 and by many orders above, at small rho. F and F' of a
+neutral pair with l >= 1 now come from the Riccati-Bessel function `riccati_bessel` (physics/transfer's routine,
+moved into `physics/coulomb`, one implementation): within 6.1e-15 of mpmath for l = 0..8, rho 1e-6..5e4; G, G'
+and every charged pair bit for bit as before (1,404 charged points compared by the agent). A capture project
+recomputes its integral file once (signature v8; stale-file case (u) of `tests/ec_m1_exact`).
+
+**The observed-level record** carries, per channel, the P its width was formed with, the reduced mass and the
+channel radius (`include/ObservedLevelTable.h`; P handed on by `observed_levels` of `physics/`, equal to the
+independent route with difference 0 on T1, T2, T3, 13N in three bases). **`Session.dimensionless_widths`** (the
+PI's words: "I agree with the other points"; "Okay, I agree about the widths"): the physical level energy in the
+formal basis (T1's 3/2- level 3.736361 -> 3.502000 MeV, with its photon rows' Weisskopf units); Gamma_W and
+theta^2 for fixed open channels; every row's value, fixed ones included, is `transform(params)`'s (a fixed
+width's row showed the session's start value: 11 % stale on T2 with the free widths times 1.2).
+
+**Verified** (`work/director/verify_l102.out`, before the last branch, which changes Python only): 0 warnings;
+against `tab-trial101-1` 859, 823 and 857 of 887, 851 and 887 files identical; the 86 others are: 23
+`intEC.dat.sig` per basis (v8); `ec_threshold` `ng`'s `intEC.dat` per basis (no number differing by value);
+`sum_lab_frame`'s chi-squared, a zero of 4e-17, in `chiSquared.out` and `run.log` (2 projects, each basis); in
+Park's basis `6Li_d` in the last printed digit (1.4e-11; its chi-squared 1.1e-12). The eight fits: six identical
+to `work/b-trial101`, the two of 13N differing in `intEC.dat.sig` alone, chi-squared the same. 333 of 333 quick
+tests; 172 of 172 regression scripts. After the last branch: `repo_consistency`, `check_skills`,
+`pyazr_wigner_widths`, `skill_azure2-check`, `pyazr_small_defects`, `docs_build`. Not run by me: the slow tests,
+sanitizers, other platforms.
+
+**The CI's Windows job of `3579fb87`** (the first with the repairs of entry e101): 172 of 172 regression scripts;
+324 of 327 unit tests. The three: an mpmath version (`format` of an `mpf`); two tests that compare a worker
+thread's values with the main thread's bit for bit. Shown on Linux by an agent: lowering a thread's x87
+precision control to 53 bits moves T1's objective by 8e-16, its gradient by up to 1.3e-13; inferred, not shown:
+that a Python thread on MinGW starts so. The repair (a precision scope at every binding call, every parallel
+region and `main`) is `feature/upgrade-0-windows-tests-3`, not merged yet; an agent closes its gap.
+
+**Running:** slices 4 to 6 of the objective note (`feature/upgrade-7-objective-arrays-2`).
+
+## 2026-11-16 (neutral-F agent) — coulsm's F and F' at eta = 0 repaired; two >1e-10 rows read benign by the reviewer
+
+Branch feature/upgrade-1-coulomb-neutral-f, worktree wt-f0, cut at 01a701ad. The PI's word: "Yes to all 3 your
+proposals" (this one: closed forms for F, F' at eta = 0, moving neutral P, S, phi at ~1e-16). Not pushed.
+
+Commits:
+- f36cac82 docs(coulomb): section 10, the repair of coulsm's F and F' at eta = 0 (design)
+- 7c925f70 fix(coulomb): coulsm's F and F' at eta = 0 from the Riccati-Bessel function (coulomb.md section 10)
+- b7c21c63 docs(coulomb): section 10.5, the neutral-F repair as built, with the full check and the reviewer's reading
+
+Cause (coulsm/src/cwfcomp_accurate.cpp, solve_cwf, eta = 0 branch): F and G both climb in l from sin, cos with
+A&S 14.2.1-2; for rho < l F is the recessive solution, each step cancels a factor L(2L+1)/rho^2.  The estimate
+eps prod L(2L+1)/rho^2 reproduces the measured errors.  G climbs in its stable direction (right).
+Repair: adaptor method_coulsm.cpp, eta == 0 and l >= 1: F = u_l, F' = u_{l-1} - (l/rho) u_l of riccati_bessel,
+which is physics/transfer's RiccatiBessel moved unchanged into physics/coulomb (Coulomb.h/.cpp); DistortedWaves.cpp
+calls it there.  G, G', l = 0 keep their bits.  Third-party file untouched.
+
+Accuracy, largest relative error over rho = 1e-6 ... 5e4 (369 mpmath points), F / F', before -> after:
+l=1 2.0e-4/1.0e-4 -> 1.8e-15/5.4e-16; l=2 3.0e9/2.0e9 -> 7.4e-16/8.6e-16; l=3 1.0e23 -> 2.2e-15/6.1e-15;
+l=4 6.6e36 -> 3.0e-15/2.8e-15; l=8 4.7e93 -> 8.0e-16/7.6e-16; G, G' unchanged (<= 5.9e-15); Wronskian <= 6.7e-16.
+New test physics_coulomb_neutral fails on the old library (98 of 369 points), passes now.
+Bitwise: 1404 charged arguments (l 0-8, 13 eta from 1e-300 to 300 and -0.5, 12 rho 1e-3-1000) identical incl.
+status; G, G' at eta = 0 identical on 11380 points.  0.08 -> 0.29 us per neutral call.
+EC signature v7 -> v8; tests/ec_m1_exact case (u), fixture stale_v7 (fails on the old binary, passes now).
+
+Full check (verify_f0.out, against tab-trial99-1): 30 files differ per basis (887/851/887), none new:
+23 intEC.dat.sig (v8) + ng intEC.dat (509 numbers, 3.9e-14 per number, 2.3e-16 per complex value) in each basis;
+brune and no-brune: secondary_gamma spin2_minus/spin2_plus parameters.out "1000.000000 eV" -> "1.000000 keV" (the
+same width across the unit boundary; maxrel 0.999 is the unit), sum_lab_frame sum_data/sum_free chiSquared.out and
+run.log 3.98668e-17 -> 3.98735e-17 (a chi2 that is zero to rounding: 1.7e-4 relative, 6.7e-21 absolute);
+use-park: the same sum_lab_frame rows (2.5e-6 rel; run.log 9.0e-6), 6Li_d R=4 last digit (1.39e-11) and its run.log
+chi2 9312.1177619 -> 9312.11776191.  Eight fits: six identical, 13N-grad and 13N-lm differ only in intEC.dat.sig;
+chi2 unchanged.  STOPPED as instructed (rows above 1e-10): no expected/golden file, tolerance or reference touched.
+Tests in the check: 0 warnings, ctest -LE slow 332/332, tests/run_tests.sh 172/172.  Before it, by hand: 73 ctests
+(coulomb|channel_function|transfer|gsl|whittaker|ec_|thm|physics_table|hybrid|bound_functions|pyazr_evaluation) with
+and without AZURE2_COULOMB_TABLE, ec_* check.sh scripts with and without the table, repo_consistency.
+The step stopped on the two rows above 1e-10; the reviewer (not the PI) read them, 2026-11-16: (1) the
+sum_lab_frame chi2 of 4e-17 is zero to rounding (6.7e-21 absolute), not a moved chi2; (2) the secondary_gamma
+"1000.000000 eV" -> "1.000000 keV" is the unit choice at an exact boundary, and parameters.out chooses the unit by
+the printed value since rehearsal 101 (ReportWidth, src/LevelReport.cpp), so the row goes with that merge.  The
+6Li_d last-digit rows are the approved size.  No expected file, tolerance or reference changed; no merge; the full
+check not rerun.  coulomb.md section 10.5 "as built" written with these numbers: commit b7c21c63.
+
+## 2026-11-16 (observed-level agent) — the record carries P, mu, a; dimensionless_widths physical and fixed
+
+**Merged.** Branch `feature/upgrade-8-observed-level` in `wt-olevel`, cut at a196ff82. Build `work/b-olevel`.
+Commits: 179717eb (design, `data_model.md` section 10), 7900664b (the record), 6d45ce2b (design, `pyazr3.md`
+section 13), 1e6f34f8 (pyazr). pyazr 3.0.0.dev5 -> 3.0.0.dev6. Both jobs approved by the PI on 2026-11-16.
+
+**A. The observed-level record.** `ObservedLevel` (`include/ObservedLevelTable.h`) gains per channel `P` (the factor
+the observed W was formed with, W = s 2 |gamma|^2 P / N, at the record's physical E: an open particle channel's
+P_l(E_c); a closed one's mu a / (hbar^2 W_l^2), MeV^-1 fm^-1; 0 at a threshold; a photon channel's factor; 0 beta),
+`mu_u` (u) and `a_fm` (fm) of a particle channel's pair (0 otherwise). P is handed on: physics/ `ObservedLevels` has
+a member `P` set where `observed_levels` forms W; `CompoundSystem::ObservedWidths` copies it and sets mu, a. Readers
+switched: none in the engine -- no reader of the record recomputed P, mu or a at a level's energy (grep in `src/`,
+`api/src/`: `LevelValue` reads W, value, E; `pybind_level_doors`' channel functions are a caller-given block;
+`AdaptiveIntegrationGrid` and `ThmLineshape` take P from input widths for an estimate, not from the record, left
+alone). The one reader that recomputed P was pyazr's `wigner_widths` (job B). CLAUDE.md, recipe "A model-only
+datum" step 3, names the members now. Test `tests/upgrade/observed_level_record_test.cpp` (ctest
+`upgrade_observed_level_record`): T1, T2, T3, 13N in three bases, 53 particle channels each: P against
+`ParticleChannelValues` at the record's E identical in every case (largest difference 0, table set and unset), mu,
+a equal the pair's, W = s 2 gamma^2 P / N to 2.4e-16. No printed number can change by it (P was W's factor already;
+nothing writes the new members) -- the full check below.
+
+**B. `dimensionless_widths`.** P from the record (binding `_engine.observed_levels_all_rwa`, not public;
+`AZUREAPI::ObservedLevelRowsAllRWA`), one rule `_wigner_width` for `wigner_widths` and every row. (1) level_energy,
+is_open, a photon's e_gamma (weisskopf, wu) at the physical energy. (2) A fixed open particle channel gets
+wigner_width = 2 P gamma_W^2 and theta2 = |value| / wigner_width. Old -> new at x0 (pyazr3.md 13.4): Brune and Park
+on the four projects: only the fixed channels' two fields (None -> value; 2, 16, 8, 8 channels), all else bit for
+bit. Formal: level_energy of 3, 3, 1, 4 levels (T1 3/2- 3.736361 -> 3.502000 MeV, T2 20.01682 -> 17.00000, T3
+25.31282 -> 22.00000, 13N 22.83132 -> 20.00000) and their photon rows (T1 width_3_4 wu 0.4648 -> 0.6081, 13N
+width_6_3 186.1 -> 229.5). No is_open changed. `wigner_widths` unchanged: equal to the dev5 `channel_functions`
+route bit for bit (the two orders of E_c's subtraction gave the same bits on all channels, measured first). Test
+`tests/pyazr/wigner_widths_test.py` (h)-(j): fixed channels against mpmath (8.6e-10), the formal rows equal to
+Brune's (level_energy 2.2e-7 MeV, wigner_width 1.0e-6). Check (e)'s "a fixed channel has neither" became (h); no
+expected value changed. The skill `azure2-check`: `widths_check.py` reads the numbers (its `single_particle_width`
+computation removed), self-test covers 8 fixed T2 channels; `widths.md`, `older-results.md` (note, expires
+2027-02-10), `pyazr.rst` (note for builds before 3.0.0.dev6), `widths.py`.
+
+**What was run.** `verify_branch.sh wt-olevel olevel tab-trial99-1 trial100 6` on 1e6f34f8
+(`work/director/verify_olevel.out`, logs `vlolevel/`): 0 warnings; **887/882, 851/846, 887/875 files identical**
+(not the expected 887, 851, 887): 22 `parameters.out` differ, all by a width's printed unit (`G = 1000.000000 meV`
+-> `1.000000 eV`, same value). They are the base's fix bce1d61f (merged in 25004d02), which the reference
+tab-trial99-1 predates: the 22 files are byte-identical to those of tab-trial101-1 (wt-trial101, a build with
+bce1d61f and without this branch), and verify_l101.out lists the same 22. No other file differs, no new file.
+Eight fits identical to `b-trial100`. Quick tests 331 of 332: `pyazr_evaluation` failed once in the full run and
+passed on 4 reruns (alone and at -j3); it has a timing check (evaluate < 1.3 x objective) and touches no changed
+code. Regression scripts 172 of 172. Besides: `upgrade_observed_level_record` and `pyazr_wigner_widths` with
+AZURE2_COULOMB_TABLE set and unset; the skill self-test (set and unset); `tools/check_skills.py` (exit 0);
+`repo_consistency_test.py`. Not run: the other slow pyazr tests (`pyazr_examples_slow` was run and passed), a
+sanitizer build, other platforms.
+
+**For the PI.** A fixed row's `value` is `Parameter.value`, the physical value as the session was made, not at
+`params`: under Brune's and the formal basis it moves with the level's other widths (T2, free widths x1.2: fixed
+`width_2_3` -747275 eV against -674499 eV of `transform(x)`, 11 %), and its new theta2 is formed with it. At x0
+they agree. Taking `transform(params)` would change `value` of fixed rows away from x0: not done (not approved).
+
+**Not done / noticed.** No injection of a wrong P into the record to see check (c) fail. `pyazr_library_answers` and
+`pyazr_library_calls` fail (skip, exit 1) when ctest runs without PYAZR_ENGINE_DIR exported: their registration has
+no PYAZR_ENGINE_DIR (pre-existing; they pass with it). A record P of a pair with a nonzero excitation could, on a
+project not tested, differ in the last bit from the dev5 route ((E - S) - e against E - (S + e)); none of T1-T3,
+13N, spin_orbit_potential does.
+
+## 2026-11-17 (fixed-row agent) — dimensionless_widths: a fixed row's value at params
+
+**Merged.** Branch `feature/upgrade-8-fixed-row-value` in `wt-frow`, cut at f89c5dae. Build `work/b-frow`
+(0 warnings; no C++ changed, the build is the base's). Commits: 0c552294 (design, `pyazr3.md` 13.5), cf65c130
+(fix, test, docs). Approved by the PI on 2026-11-16 ("Okay, I agree about the widths"). pyazr stays 3.0.0.dev6
+(not released).
+
+**The defect.** `Session.dimensionless_widths(params)` took a fixed row's `value` from `Parameter.value` (the value as
+the session was made), so `value`, `theta2` and a photon's `wu` of fixed rows were stale away from x0. Measured
+before the change on T1, T2, T3, 13N in three bases at x0 and at three displaced points (free widths x 1.2; free
+energies x (1 + 1e-3); both): only those three fields of fixed rows; `level_energy`, `is_open`, `e_gamma`,
+`wigner_width` and every free row already equal to `transform(params)` (they read the record). Stale in Brune on T2,
+T3 (T2 width_2_3 at widths x 1.2: -747275 -> -674499 eV, theta2 0.16147 -> 0.14575; T2 width_1_1 at energies
+x (1 + 1e-3): 547.90 -> 693.67 eV, 21 %), in the formal basis on all four (a fixed zero amplitude is a non-zero
+observed width there: T1 width_6_2 1.5e-20 -> -3.02 eV, its wu 1.2e-23 -> 2.35e-3), in Park only when an energy
+moves (T2 width_1_1 547.90 -> 695.00 eV, through P(E)); Park with widths x 1.2: every fixed width as it was, bit for
+bit. T1 and 13N Brune, Park: no fixed row moves.
+
+**The repair.** One line in `pyazr/session_physics.py`: `value = transform(params)[p.index]` for every row (the free
+rows read the same call already). Design `pyazr3.md` 13.5. Test `tests/pyazr/wigner_widths_test.py` (k): every row's
+value equal to transform's bit for bit, theta2 and wu formed with it, at x0 and the three points, three bases, four
+projects; Park's fixed widths unmoved by widths x 1.2. Before: 22 (k) checks FAIL; after: all ok. No expected value
+changed. Docs: `pyazr.rst` (text and the dev6 note), skill `azure2-check` `widths.md`, `older-results.md` (the same
+note: `widths_check.py --params` showed the project's fixed values, not the fit's), `widths.py` (field comment).
+
+**Neighbours.** `wigner_widths` skips fixed rows (keyed by free index): no value read. No other per-channel report at
+`params` reads `Parameter.value`: grep of `pyazr/` finds one other reader, `LevelScheme.from_azr` (`Session.scheme`),
+which takes no vector and describes the project as stated. The fixed readers of `p.start` (`bands.py`,
+`endf/model.py`, `endf/covariance.py`, `endf/engine_values.py`) read a fixed parameter's fit-basis value, which is
+constant: correct.
+
+**What was run.** Build `work/b-frow` (JOBS=4, 0 warnings). ctest -j2 with the table: pyazr_wigner_convention,
+pyazr_wigner_widths, pyazr_gamma_decay, pyazr_small_defects, pyazr_describe, all 18 pyazr_ui_* (smoke, node
+included), pyazr_examples, pyazr_examples_slow, repo_consistency, docs_build, skill_azure2-check: 30/30. Table unset:
+pyazr_wigner_widths, skill_azure2-check, pyazr_small_defects, pyazr_examples: 4/4. The test directly: 141 ok, set and
+unset. `tools/check_skills.py` exit 0. Callers of dimensionless_widths (grep): the skill's widths_check.py, the
+example, small_defects_test (x0), wigner_widths_test; the web UI does not serve it (SESSION_NOT_SERVED).
+
+**Not run / unsure.** Not run: `ctest -LE slow` in full, `tests/run_tests.sh`, the full check (no C++ or engine
+file changed; nothing an engine output reads). A project with a `gamma_decay` section was not measured: its
+numbers are parameters of kind `radiative`, not `width`, so they are no rows of the table (pyazr_gamma_decay passed).
+Unsure: the Park energy shift moves T2 width_1_1 by 21 % for a 1e-3 relative energy step: a
+level close to its channel's threshold (P steep); read as physics, not checked further.
+
+## 2026-11-16 (director, 21:50) — merged: the macOS findings, three objective repairs, the converter's GSL note
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 101: `feature/upgrade-0-macos-3`,
+`feature/upgrade-7-objective-repairs`, `feature/upgrade-0-small-traps` (agents'; the last two's entries follow, the
+first's findings are below). The base build is `work/b-trial101`, **the reference tag is `tab-trial101-1`**, the
+quick set is 331 tests.
+
+**The macOS job of run 43828542125** (170 of 172 regression scripts; the unit tests cut off at six hours).
+
+- *T3's `parameters.out`, 1000 against 1.* A width entered as 1000 eV goes to a reduced width and back and lands
+  one rounding step above or below 1e-3 MeV; `WriteParametersOut` chose keV or eV by that exact comparison.
+  Reproduced on Linux by moving the level (17.66 and 17.67 MeV print eV). Repaired: `ReportWidth`
+  (`src/LevelReport.cpp`) takes the largest unit in which the six-decimal print is at least 1.000000. **This
+  changes the printed unit, not the value, of a width within 5e-7 of a unit boundary:** against `tab-trial99-1`
+  22 `parameters.out` files differ (5, 5 and 12 in the three bases), every differing token "1000.000000 eV" ->
+  "1.000000 keV" (17) or "1000.000000 meV" -> "1.000000 eV" (5), read token by token by the director.
+- *T3's alpha+alpha d-wave phase, 3.7e-6.* A difference of two terms of 0.57 deg leaving 0.0025 deg; a one-bit
+  change of the complex elementary functions on Linux moves it by 1e-6 to 2.4e-6 and every other number by at
+  most 2.9e-9 (the agent's preload shim). Not an engine fault. **The PI, asked: "Use also 2e-5":**
+  `tests/upgrade/check.sh` compares at 1e-6 on Linux and 2e-5 on another system (the director's reading of
+  "also"; no golden file changed).
+- *`transmission_yield` (j), 0 parameters listed.* The run takes 540 s here under a 1200 s limit and prints its
+  rows only at the end; a stopped run prints the CI's line. Not shown that macOS hit the limit: the script now
+  says whether it did and what one evaluation took.
+- *The unit tests.* 127 of 327 had no time limit. Now: 40 minutes per test, the step ends 20 minutes before the
+  job's limit and names the tests still running, every run lists its 15 slowest tests. The cause is not found;
+  libomp's waiting was tried on Linux and ruled out there. The tests run are the same.
+
+The agent's full account: `work/director/entries/mac_agent.md` (local, not in the repository).
+
+**The three repairs** (the PI: "The 3 problems need solving"): the Park gradient skips a NaN norm; `shifts.out`'s
+function penalty is the function's own priors (no test project's file changes; the wrong case needed a prior
+covariance); the API's data chi-squared is the objective's term (largest change of the returned value 2.5e-16).
+
+**Small:** the converter notes a ticked "use GSL Coulomb functions" box of an old `<lastRun>` (bit 12 of its first
+number, from the old program's source); `--schema-out=FILE` writes the schema all or nothing, and the recipes
+use it.
+
+**Verified** (`work/director/verify_l101.out`): 0 warnings; 882, 846 and 875 of 887, 851 and 887 files identical
+to `tab-trial99-1`, the 22 others as above; the eight fits identical to `work/b-trial100`; 331 of 331 quick tests;
+172 of 172 regression scripts. Not run by me: the slow tests, sanitizers, any other platform.
+
+**The PI, 2026-11-16 about 22:00: "Okay, add these to the plan, then we are finished."** The closing plan (local
+`NEXT_AGENT.md`, block 0i): what runs; the CI; the objective to the end (abundances, Park's wall, profiled norms
+on arrays; a term stated in one place); a fitter without a `Config.h` bit and a datum quantity declared once;
+the long files (`AMatrixFunc.cpp`, `WorkingCopy.cpp`, `AZUREGrad.cpp`, `pybind_api.cpp`); the data term computed
+once per `evaluate()` and the T2 gradient fit's +0.3 to 0.6 %; then the close. Not in it: shared read-only
+data; everything that waits for the owner.
+
+**Not merged yet:** `feature/upgrade-1-coulomb-neutral-f` (reported: F and F' at eta = 0 within 6e-15 of mpmath;
+EC signature v8) and `feature/upgrade-8-observed-level` (in its check).
+
+## 2026-11-16 (objective repairs agent) — three objective inconsistencies repaired (Park NaN, shifts.out, API chi2)
+
+Branch feature/upgrade-7-objective-repairs, worktree wt-fix3, cut at 01a701ad.  The PI's word: "The 3 problems need
+solving".  Not pushed.
+
+Commits:
+- 48dc8f89 fix(grad): the Park wall's gradient skips a NaN J as its value and rows do
+- 1e5a80a7 fix(output): shifts.out prints the shift function's own priors
+- 1ac8cd41 fix(api): the API's data chi-squared is the objective's data term
+- 940965e6 docs(upgrade): the commits of the three repairs in objective_arrays.md (hashes only)
+
+(1) src/AZUREGrad.cpp AddParkPenaltyGradient: `J >= 0` -> `!(J < 0)`, one line, file stays 1108 lines.
+    Test: ctest park_chi2_fallback, variant E (NanVariant, from the previous worker's draft, checked): with the wall
+    level's J set to NaN the gradient is 0 in every component, value 0, rows 0.  Ran on work/b-fix3 built with the
+    test and without the fix: "no gradient from it" FAIL, the rest ok; with the fix: pass.  Outputs: none moved.
+(2) src/DataOutputFiles.cpp WriteShiftsFile: the function line's penalty is PriorsChi2(owner priors, kShiftFn, s)
+    (was: owner's shift priors minus the offset's prior formed again, also when the prior covariance replaced it).
+    Test: tests/shift_fn/check.sh case 8 (nopcov: 9 and Total-Shift 13; pcov: Total-Prior-Covariance 4, Total-Shift
+    9, function penalty 9).  On work/b-trial99 and on the pre-fix b-fix3: penalty 5.0000e+00, FAIL; after: pass.
+    Before the change: the new binary on the 8 projects of tests/ whose shifts.out has a function line, 3 bases
+    (24 files), against tab-trial99-1: every '#' line the same.  No expected/ file holds a shifts.out.
+    Docs: reference/output_files.rst (the function lines and the penalty column).
+(3) api/src/AZUREAPIChi2.cpp EvaluateFilledChi2: model pass, then Objective::DataChi2 (previous worker's efc_new.cpp,
+    checked); the rows as before (Pull at NormUsed; THM rows from ThmGroupResiduals).  Check 11's allowed entry
+    (AZUREAPIChi2.cpp, CovarianceChi2Correction) removed.  Test: tests/pyazr/objective_test.py section 6:
+    calculate_chi2_rwa(x) == terms[data] + terms[data covariance] + model terms, bit for bit, T1-T3 and 13N, three
+    bases, x0 and level parameters x(1 + 1e-4), with no segment prior active (asserted).  Before: 11 of 24 FAIL (on
+    b-trial99 and the pre-fix b-fix3); after: pass.  calculate_chi2_rwa before -> after: 11 of 24 moved, largest
+    relative change 2.5e-16 (scratch: work/fix3/probe_chi2.py, probe_pre.txt, probe_post.txt).
+
+Full check (verify_branch.sh wt-fix3 fix3 tab-trial99-1 trial99 6, work/director/verify_fix3.out, at 940965e6):
+warnings 0; brune 887 of 887, no-brune 851 of 851, use-park 887 of 887 files identical, 0 differ, 0 new; the eight
+fits identical to trial99; ctest -LE slow 331 of 331 passed; tests/run_tests.sh passed 172, failed 0.
+
+Not run: ctest -L slow, sanitizers, thread comparison, CI, other compilers.  Not done: CLAUDE.md unchanged (its check-11
+sentence is now true without an exception); inference.md had no sentence made untrue.  The data term still runs a
+second time in evaluate()/objective() (EvaluateFilledChi2 then Objective::Chi2), as before.
+
+## 2026-11-16 (small-traps agent) — a note for a ticked GSL box of an old file; `--schema-out`
+
+**Merged.** Branch `feature/upgrade-0-small-traps` in `wt-traps`, two commits: e6c9ec53 (the converter's note) and
+26592499 (`--schema-out`). Build `work/b-traps`, 0 warnings. No number of any calculation changes; no `expected/` file,
+tolerance or reference value was touched.
+
+**Job 1, the converter's note.** The old program's check box "use GSL Coulomb functions" is bit 12 (4096) of the first
+number of `<lastRun>` (dev: `gui/src/AZURESetup.cpp` `writeLastRun` writes `paramMask` first, `readLastRun` reads it
+with `>>`; `include/Config.h` `USE_GSL_COULOMB_FUNC = 1 << 12`). `ConvertToFormat3` (`convert/src/Convert.cpp`) reads
+the bit of a format-1 file before `ConvertToFormat2` removes the section and adds one `ConvertNote`, construct
+"<lastRun> use GSL Coulomb functions": the report, `--json-report`, `pyazr.convert_azr`. The converted text is
+byte for byte the same with and without the note. No committed fixture has the bit set (masks 0, 1857, 1865, 9985,
+9997, 10025, 10089), so no committed conversion changes. Test: `convert_constructs` (masks 9997 off; 14093 and 4096
+on). It failed 3 checks without the change. Docs: `older_projects.rst`, `coulomb.md` 9.1 (which said "nothing
+changes in `convert/`").
+
+**Job 2, `--schema-out=FILE`.** `src/ProjectCommands.cpp` `writeSchemaOut`: FILE.tmp, stream checked after write,
+flush and close, then `std::filesystem::rename`; FILE untouched on any error, exit 1 (empty FILE: exit 2). Help line,
+`command_line.rst`, `repo_consistency_test.py` (`handled_in_main`). The redirect form is gone from `CLAUDE.md`,
+`extending.rst`, `experiment/README.md`, two test messages and `tools/gen_schema_docs.py`. Test: `tests/cli_commands`
+section 5. Shown failing against the old binary and with the temporary name made equal to FILE.
+
+**Not verified / open.** The unwritable-folder case is skipped (printed as ok) when the user is root; the taken-name
+and FILE-is-a-directory cases cover the same code path then. Windows: `std::filesystem::rename` replaces an existing
+file there; not run. A format-2 file with a `<lastRun>` (hand-made) gets no note, as `ConvertToFormat2` does not
+remove its section either.
+
 ## 2026-11-16 (director, 20:30) — merged: the objective's diagonal priors on one list (slices 1-3)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 100: `feature/upgrade-7-objective-arrays` (an agent's;

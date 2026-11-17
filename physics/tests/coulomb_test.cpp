@@ -75,15 +75,16 @@ double Error(const CoulombWaves &w, const double *ref, bool osc, int which) {
 // grid (GCC 11.5, x86-64, -O3; pycoulomb README for coulsm, coul, coulfg; this test for coulcc) rounded up to the next
 // power of ten and multiplied by ten, so that a regression of more than about a decade fails.  Entries above 1e-2
 // mark where an algorithm is known to be inaccurate (physics/coulomb/README.md); they are bounds too, so that a change
-// there is noticed.  coulsm's F at eta = 0 comes from an unstable upward recurrence in l (wrong for l >= 2 at small
-// rho); it enters P, S and phi only through F/G, whose absolute error stays below 1.4e-16 on this grid.
+// there is noticed.  coulsm's F at eta = 0 came from an unstable upward recurrence in l (wrong for l >= 2 at small
+// rho; bound 1e47, Wronskian 1e31) until 2026-11-16, when F and F' became the Riccati-Bessel function (coulomb.md
+// section 10; 7.4e-16, Wronskian 6.7e-16 measured; coulomb_neutral_test.cpp covers rho down to 1e-6).
 struct Bound {
   double f, g, w;
   int failed;
 };
 const std::map<Method, std::array<Bound, kNRegions>> kBound = {
     //                 eta = 0                   eta > 0, rho < rho_tp       eta > 0, rho >= rho_tp
-    {Method::coulsm, {{{1e47, 1e-14, 1e31, 0}, {1e-8, 1e-8, 1e-14, 0}, {1e-8, 1e-8, 1e-9, 0}}}},
+    {Method::coulsm, {{{1e-14, 1e-14, 1e-14, 0}, {1e-8, 1e-8, 1e-14, 0}, {1e-8, 1e-8, 1e-9, 0}}}},
     {Method::coul, {{{1e0, 1e-9, 1e-2, 0}, {1e-8, 1e-8, 1e-14, 0}, {1e-8, 1e-8, 1e-9, 0}}}},
     {Method::coulfg, {{{1e1, 1e1, 1e-14, 0}, {1e1, 1e2, 1e-13, 7}, {1e-13, 1e-12, 1e-13, 0}}}},
     {Method::coulcc, {{{1e-12, 1e-11, 1e-14, 0}, {1e-12, 1e-10, 1e-14, 0}, {1e-11, 1e-11, 1e-14, 0}}}},

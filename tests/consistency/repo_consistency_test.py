@@ -165,7 +165,7 @@ fitter_help = function_body(read("src/Fitters.cpp"), "std::string FitterSwitches
     if "FitterSwitchesHelp()" in help_text else ""
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--validate",
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--convert-params", "--schema", "--schema-out", "--validate",
                    "--describe", "--print-predictions",
                    # option of --convert-params
                    "--project",
@@ -515,9 +515,8 @@ PENALTIES = ("ScatteringLength::Chi2",
 DEFINERS = {"src/Objective.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
             "src/Segment.cpp", "src/TargetEffect.cpp", "src/DiagonalPriors.cpp"}
 ALLOWED_PENALTY_USES = {
-    # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
-    # pyazr_objective checks it against the CLI's objective.
-    ("api/src/AZUREAPIChi2.cpp", "CovarianceChi2Correction"),
+    # The API's analytic gradient: T2 for its seeds and rows; pyazr_objective checks it against the CLI's objective.
+    # (The API's data chi^2, EvaluateFilledChi2, asks Objective::DataChi2 since 2026-11-16.)
     ("api/src/AZUREAPIGradient.cpp", "CovarianceChi2Correction"),
     # The output writer (docs/upgrade/objective_arrays.md section 4): chiSquared.out prints the target-effect and
     # apparatus prior totals from the term's own gather at the working copy's present values (a stored total could be
@@ -569,7 +568,7 @@ try:
     import json
     if _gen.generate(json.loads(read("tests/schema/schema_v3.json"))) != read("docs/source/reference/format3.rst"):
         problems.append("docs/source/reference/format3.rst: not the output of tools/gen_schema_docs.py; run it "
-                        "(after AZURE2 --schema > tests/schema/schema_v3.json if the table changed)")
+                        "(after AZURE2 --schema-out=tests/schema/schema_v3.json if the table changed)")
 except (OSError, ValueError) as e:
     problems.append(f"check 18: {e}")
 
@@ -1562,6 +1561,188 @@ if not OLD_COMPOUND_NAME.search("const CNuc *c") or not OLD_COMPOUND_NAME.search
         or not COMPOUND_CLONE.search("std::unique_ptr<CompoundSystem> Clone() const;"):
     problems.append("check 59: the old-name pattern no longer matches the forms it guards; update this check")
 
+# 60. Every thread computes long double with a 64-bit mantissa (azure2/support/FloatingPointPrecision.h in support/):
+#     on Windows a thread's x87 precision is the runtime's that made it (53 bits in a Python thread, 64 in the main
+#     one), and a pyazr call in a Python thread gave other bits than in the main thread.  The body of every OpenMP
+#     parallel region of the engine, the binding and numcmc opens with `const azure2::support::ExtendedPrecisionScope`
+#     (the first statement after the region's or its loop's opening brace) (i); the binding releases the GIL only
+#     through EngineCallScope (api/src/pybind_engine_call.h), which takes the same scope (ii); and every function of
+#     the module that computes takes the scope at its `.def` (iii, below).
+PRECISION_DIRS = ("src/", "include/", "api/src/", "numcmc/src/", "numcmc/include/")
+PRECISION_SCOPE = re.compile(r"\s*const\s+azure2::support::ExtendedPrecisionScope\s+\w+\s*;")
+
+
+def regions_without_precision_scope(text):
+    """The line numbers of the OpenMP parallel regions of `text` whose body does not open with the scope."""
+    bad = []
+    for m in re.finditer(r"^[ \t]*#[ \t]*pragma[ \t]+omp[ \t]+parallel\b(?:[^\n]*\\\n)*[^\n]*\n", text, re.M):
+        i = m.end()
+        while True:  # preprocessor lines between the pragma and the statement
+            pp = re.match(r"[ \t]*#[^\n]*\n", text[i:])
+            if not pp:
+                break
+            i += pp.end()
+        i += len(text[i:]) - len(text[i:].lstrip())
+        if text.startswith("for", i):  # a parallel for: the loop's body
+            depth, j = 0, text.index("(", i)
+            for j in range(j, len(text)):
+                depth += {"(": 1, ")": -1}.get(text[j], 0)
+                if depth == 0:
+                    break
+            i = j + 1 + len(text[j + 1:]) - len(text[j + 1:].lstrip())
+        if not (text.startswith("{", i) and PRECISION_SCOPE.match(text, i + 1)):
+            bad.append(text.count("\n", 0, m.start()) + 1)
+    return bad
+
+
+_precision_regions = 0
+for rel in tracked_files():
+    if not rel.startswith(PRECISION_DIRS) or not rel.endswith((".cpp", ".h", ".hpp")):
+        continue
+    try:
+        text = read(rel)
+    except (OSError, UnicodeDecodeError):
+        continue
+    _precision_regions += len(re.findall(r"^[ \t]*#[ \t]*pragma[ \t]+omp[ \t]+parallel\b", text, re.M))
+    for number in regions_without_precision_scope(text):
+        problems.append(f"{rel}:{number}: an OpenMP parallel region whose body does not open with "
+                        "`const azure2::support::ExtendedPrecisionScope fpPrecision;` (check 60)")
+    if rel.startswith("api/src/") and rel != "api/src/pybind_engine_call.h":
+        for number, line in enumerate(text.splitlines(), 1):
+            if "gil_scoped_release" in line:
+                problems.append(f"{rel}:{number}: releases the GIL without the engine's precision scope; use "
+                                "EngineCallScope (api/src/pybind_engine_call.h) (check 60)")
+_good = ("#pragma omp parallel for schedule(dynamic)\n  for (int k = 0; k < (int)v.size(); k++) {\n"
+         "    const azure2::support::ExtendedPrecisionScope fpPrecision;\n    f(k);\n  }\n"
+         "#pragma omp parallel \\\n    num_threads(2)\n  {\n"
+         "    const azure2::support::ExtendedPrecisionScope s;\n  }\n")
+_bad = "#pragma omp parallel for\n  for (int k = 0; k < n; k++) f(k);\n#pragma omp parallel\n  {\n    int x = 0;\n  }\n"
+if regions_without_precision_scope(_good) or regions_without_precision_scope(_bad) != [1, 3]:
+    problems.append("check 60: the planted regions are misjudged; update regions_without_precision_scope")
+if _precision_regions < 39:
+    problems.append(f"check 60: {_precision_regions} OpenMP parallel regions found (39 on 2026-11-16); the scan "
+                    "misses them")
+
+#     (iii) Every function the module _azure2 exposes (a `.def*(` of api/src/pybind_*.cpp) takes the precision at its
+#     definition: `py::call_guard<EngineCallScope>()` (the GIL released), `PrecisionGuard()` (the GIL held), or
+#     EngineCallScope in the body of its lambda; or it is one of BINDING_WITHOUT_ARITHMETIC, functions that compute
+#     nothing the precision control can change (no `long double`, no mathematical library function: they return
+#     stored numbers, text, tables or sizes, parse, format or edit a document; at most a double +, -, *, / or fabs,
+#     floor, lround, which do not use the x87 on x86-64).  A new function is refused until it takes the scope or is
+#     listed here with the reason of its group.
+BINDING_WITHOUT_ARITHMETIC = {
+    # Session: stored numbers (copies of the engine's arrays and records), names, notices, option tables
+    "api/src/pybind_api.cpp": {
+        "parameter_kinds", "point_output_fields", "project_format", "data_mode", "coulomb_table", "base_directory",
+        "options", "RuntimeOptions()", "option_sources", "get_potential", "parameter_records", "pair_records",
+        "params_values", "params_values_rwa", "params_all_rwa", "params_names", "params_fixed", "data_energies",
+        "data_angles", "data_segments", "data_segments_errors", "data_excitation_energies", "data_conv", "norms",
+        "calculated_segments", "calculated_segments_e1", "calculated_segments_e2", "calculated_energies",
+        "calculated_angles", "calculated_angular_dists", "calculated_excitation_energies", "calculated_conv",
+        "prior_covariance_names", "refreeze_covariance", "objective_term_names", "thm_experiments", "cache_stats",
+        "take_notices"},
+    # documents: parse, edit, format (the edits write the caller's numbers as text)
+    "api/src/pybind_nuclear_part.cpp": {
+        "jpi_text", "level_table", "reaction_label", "find_level", "set_level_edits", "set_channel_edits",
+        "set_pair_edits", "add_level_edits", "add_pair_edits", "remove_pair_edits", "allowed_channels",
+        "remove_level_edits", "level_value_edits", "merge_level_rows", "config_entries", "config_keys",
+        "config_table", "config_edits", "thm_keys", "thm_entries", "thm_option_edits", "thm_experiment_edits",
+        "check_format3_thm"},
+    "api/src/pybind_project.cpp": {
+        "parse", "write", "num_lines", "line", "ending", "sections", "problems", "replace_lines", "format",
+        "record_sections", "record_lines", "value_text", "nuisance_text", "record_references", "parameter_names",
+        "parameter_value_edits"},
+    # tables and texts
+    "api/src/pybind_schema.cpp": {"schema", "schema_json", "covariance_file_names"},
+    "api/src/pybind_convert.cpp": {"not_format3_message", "match_parameter_file_names"},
+    "api/src/pybind_thm.cpp": {"parse_thm_cbackground", "thm_nuclides", "thm_global_opticals"},
+    "api/src/pybind_describe.cpp": {"build_info", "coulomb_table_default_path", "removed_option_text",
+                                    "session_options"},
+    "api/src/pybind_records.cpp": {"parameter_record_fields", "pair_record_fields"},
+    "api/src/pybind_physics.cpp": {"physics_functions", "element_symbols"},
+    "api/src/pybind_stopping.cpp": {"light_projectile", "functions"},
+    "api/src/pybind_fit.cpp": {"StopRequest()", "set", "clear", "is_set", "fitters"},
+    # the diagnostic reads the calling thread's word before its own scope; the test hook sets it (a scope would undo it)
+    "api/src/pybind_precision.cpp": {"_x87_control_words", "_set_x87_control_word"},
+}
+BINDING_SCOPE = re.compile(r"call_guard<EngineCallScope>|PrecisionGuard\(\)|\bEngineCallScope\s+\w+\s*;")
+
+
+def binding_definitions(text):
+    """(line, name, argument text) of every `.def*(` call of `text`: the name is the first argument's string, or
+    `<Class>()` for a constructor (py::init<...>)."""
+    out = []
+    for m in re.finditer(r"\.def(?:_static|_readwrite|_readonly|_property\w*)?\(", text):
+        i, depth, quote = m.end(), 1, None
+        while depth and i < len(text):
+            c = text[i]
+            if quote:
+                if c == "\\":
+                    i += 1
+                elif c == quote:
+                    quote = None
+            elif c in "\"'":
+                quote = c
+            elif text.startswith("//", i):
+                i = text.find("\n", i)
+                continue
+            else:
+                depth += {"(": 1, ")": -1}.get(c, 0)
+            i += 1
+        span = text[m.end():i - 1]
+        named = re.match(r'\s*"([^"]*)"', span)
+        if named:
+            name = named.group(1)
+        else:
+            owner = re.findall(r"py::class_<(\w+)>\(", text[:m.start()])
+            name = (owner[-1] if owner else "?") + "()"
+        out.append((text.count("\n", 0, m.start()) + 1, name, span))
+    return out
+
+
+def binding_problems(rel, text, allowed):
+    """The `.def`s of `text` that take no precision scope and are not in `allowed` (check 60 (iii))."""
+    return [f"{rel}:{number}: _azure2.{name} takes no precision scope; give it PrecisionGuard() (or "
+            "py::call_guard<EngineCallScope>() where it may release the GIL), or, if it computes nothing the x87 "
+            "precision can change, list it in BINDING_WITHOUT_ARITHMETIC with its group's reason (check 60)"
+            for number, name, span in binding_definitions(text)
+            if not BINDING_SCOPE.search(span) and name not in allowed]
+
+
+_bindings = 0
+for rel in tracked_files():
+    if not (rel.startswith("api/src/pybind_") and rel.endswith(".cpp")):
+        continue
+    text = read(rel)
+    found = binding_definitions(text)
+    _bindings += len(found)
+    problems.extend(binding_problems(rel, text, BINDING_WITHOUT_ARITHMETIC.get(rel, set())))
+    for name in sorted(BINDING_WITHOUT_ARITHMETIC.get(rel, set()) - {n for _, n, _ in found}):
+        problems.append(f"{rel}: BINDING_WITHOUT_ARITHMETIC lists {name}, which the file does not define; remove it "
+                        "(check 60)")
+for rel in sorted(set(BINDING_WITHOUT_ARITHMETIC) - set(tracked_files())):
+    problems.append(f"check 60: BINDING_WITHOUT_ARITHMETIC names {rel}, which is not a tracked file")
+_planted = (
+    'void Bind(py::module_ &m) {\n'
+    '  m.def("scoped", &F, PrecisionGuard(), py::arg("x"), "a doc (with \\"(\\" in it");\n'
+    '  m.def("released", &F, py::call_guard<EngineCallScope>(), py::arg("x"));\n'
+    '  m.def(\n      "in_body",\n      [](double x) {\n        EngineCallScope engine;\n        return x;\n      },\n'
+    '      py::arg("x"));\n'
+    '  m.def("listed", &G, "a table (no arithmetic)");\n'
+    '  m.def("bare", &F, py::arg("x"), "computes; no scope )(");\n'
+    '  py::class_<Thing>(m, "Thing").def(py::init<double>()).def("value", &Thing::Value, PrecisionGuard());\n'
+    '  m.def("lambda_bare", [](double x) { return std::exp(x); }, "// EngineCallScope in a string only");\n'
+    '}\n')
+if [(n, name) for n, name, _ in binding_definitions(_planted)] != [
+        (2, "scoped"), (3, "released"), (4, "in_body"), (11, "listed"), (12, "bare"), (13, "Thing()"),
+        (13, "value"), (14, "lambda_bare")] \
+        or [p.split(":")[1] for p in binding_problems("planted", _planted, {"listed"})] != ["12", "13", "14"]:
+    problems.append("check 60: the planted binding functions are misjudged; update binding_definitions or "
+                    "BINDING_SCOPE")
+if _bindings < 150:
+    problems.append(f"check 60: {_bindings} binding functions found in api/src (158 on 2026-11-16); the scan misses "
+                    "them")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -1576,4 +1757,6 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
       f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's, "
-      f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files")
+      f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files, "
+      f"{_precision_regions} parallel regions and {_bindings} binding functions in the x87 precision scope or "
+      "listed")

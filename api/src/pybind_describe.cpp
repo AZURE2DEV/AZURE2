@@ -11,6 +11,7 @@
 #endif
 #include "CoulombTable.h"
 #include "azure2/io/ConfigSection.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -90,7 +91,7 @@ void BindDescription(py::module_ &m) {
         const CoulombTable *table = nullptr;
         std::string identity;
         {
-          py::gil_scoped_release release;
+          EngineCallScope engine;
           table = CoulombTable::Shared(path);  // loaded once per process, as a session loads it
           if (table) identity = table->ContentIdentity();
         }
@@ -119,7 +120,7 @@ void BindDescription(py::module_ &m) {
         std::string error;
         bool built = false;
         {
-          py::gil_scoped_release release;
+          EngineCallScope engine;
           built = CoulombTable::BuildFile(file, spec, error);
         }
         if (!built) throw std::runtime_error("the Coulomb table " + file + " was not built: " + error);

@@ -26,7 +26,7 @@
 #include "ShftFunc.h"
 #include "THMMatrixFunc.h"
 #include "PointFold.h"
-#include <cstring>
+#include "azure2/support/FloatingPointPrecision.h"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -87,7 +87,7 @@ void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &st
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || state.ParkNorm(j, la) >= 0.0) continue;
+      if (!level->IsInRMatrix() || !(state.ParkNorm(j, la) < 0.0)) continue;  // J >= 0 or NaN: off the wall (ParkTerm)
       const double factor = 2.0 * state.ParkNorm(j, la) / s2;
       double dE = 0.0;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
@@ -879,7 +879,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
     }
     const long n = (long)order.size();
 #pragma omp parallel for schedule(dynamic)
-    for (long k = 0; k < n; k++) {
+    for (long k = 0; k < n; k++) { const azure2::support::ExtendedPrecisionScope fpPrecision;
       const Segment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
       out[order[k].first][slot[k]] =
           azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, state, config, results, azure2::LeafValues::Calculate);
@@ -930,7 +930,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
     bool bail = false;
     const long n = (long)order.size();
 #pragma omp parallel
-    {
+    { const azure2::support::ExtendedPrecisionScope fpPrecision;
       GradAccum accum;
       accum.Init(lc, state);
       vector_r fullRow(pmap.NumFull(), 0.0);

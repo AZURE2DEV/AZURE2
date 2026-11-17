@@ -190,6 +190,12 @@ how each was checked:
 - **Determinism.** Results must not depend on thread count, on which file a
   session started from, or on the order of levels and channels. Tests run with
   `OMP_NUM_THREADS=2`. Differences across GCC, Clang and MinGW stay near 1e-5.
+  Nor on the thread a call runs in: `long double` keeps the x87 precision of the thread (53 bits in a Windows
+  Python thread), so every OpenMP parallel region opens with `const azure2::support::ExtendedPrecisionScope`, the
+  binding releases the GIL only through `EngineCallScope`, and every `.def` of `api/src/pybind_*.cpp` takes a scope
+  (`py::call_guard<EngineCallScope>()`, `PrecisionGuard()` when it keeps the GIL, or `EngineCallScope` in its
+  lambda) unless it is listed in `BINDING_WITHOUT_ARITHMETIC` as computing nothing the precision can change (no
+  `long double`, no mathematical library function) [check 60; `tests/pyazr/x87_precision_test.py`].
 - **No hidden state.** Constant tables (masses, constants, the schema) are built
   once and reached through a function returning a `const` reference; nothing
   else is global. What a calculation writes belongs to the caller and is passed
@@ -316,10 +322,12 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    a code each, recipe "A format-3 diagnostic code"). Only check 27 sees a missing `ModelQuantities()` row; the
    `switch (d.quantity)` of `LevelPairs` and of `LevelValue` have no `default`: a missing case is seen by no check.
 3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CompoundSystem::ObservedOfFitValues` returns (never
-   formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds E, the observed widths W, the observed
-   values and their kinds, not P, mu or a: a quantity that needs the channel functions at the level's energy calls
-   `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; mu and a are
-   `PPair::GetRedMass()` and `GetChRad()`; E_c = E_x - `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
+   formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds the physical E, and per channel the
+   observed width W, the observed value and its kind, and the factor `P` W was formed with (an open particle channel's
+   penetrability at E), the pair's reduced mass `mu_u` (u) and channel radius `a_fm` (fm): read them there, never
+   through a second evaluation (`docs/upgrade/data_model.md` section 10). Only S or dS/dE at the level's energy still
+   need `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; E_c = E_x -
+   `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
    quantity of the table has its `ModelQuantities()` row and a function so named (that it is called is not checked:
    add it to the list under "every quantity, three bases")]; `reference/data_formats.rst` (the list of datum
@@ -457,8 +465,8 @@ parameter name].
    `experiment/tests/quantities_test.cpp` (the test tries it on every quantity that does not list it).
 2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
    if the field brings a refusal of its own.
-3. After the build: `<build>/src/AZURE2 --schema > schema.tmp && cp schema.tmp tests/schema/schema_v3.json` (a
-   redirect straight onto the file empties it when the binary path is wrong), bump `Schema::kVersion` if an existing
+3. After the build: `<build>/src/AZURE2 --schema-out=tests/schema/schema_v3.json` (it writes a temporary file and renames it, so a
+   wrong binary path or a failure leaves the file as it was; a shell redirect onto the file empties it first), bump `Schema::kVersion` if an existing
    project changes meaning [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py`
    [check 18: `format3.rst` against `schema_v3.json` only].
 
@@ -540,7 +548,7 @@ base unit with factor 1, as `inverse_energy`, 1/MeV); `experiment_parsers` check
 on every quantity (a unit is offered to every quantity of its dimension); its place in the table is its place in every
 `units` list of the schema.  The row tests pass for any positive factor, so state the factor in one line of
 `experiment/tests/parsers_test.cpp` ("The unit table", beside `keV`) and use the unit once in a fixture of
-`experiment/tests/data/`.  Then build and regenerate: `AZURE2 --schema > tests/schema/schema_v3.json`, `python3
+`experiment/tests/data/`.  Then build and regenerate: `AZURE2 --schema-out=tests/schema/schema_v3.json`, `python3
 tools/gen_schema_docs.py`, and run `ctest -R 'experiment_schema|pyazr_schema'` (the two tests that see a stale schema;
 the consistency script does not).  A factor is applied only by `Units.h` `Rescale` (through
 `ToBase`, `ToUnit`, `Context::InBase`; the columns of a data file through `experiment/DataRows.h`, where the points
@@ -579,7 +587,7 @@ parameters; the engine applies whatever the table holds.
    a derivative against central differences (the node values are linear between nodes: a closed form for a curved σ
    carries + σ'' h²/12, h the node spacing); a format-3 fixture that validates (a `detector` record with
    `energy_resolution <form> <parameter> <value> <unit>` in `experiment/tests/data/section_examples.azr`, which
-   `schema_test.cpp` lists); after a build, `AZURE2 --schema > tests/schema/schema_v3.json`, `python3
+   `schema_test.cpp` lists); after a build, `AZURE2 --schema-out=tests/schema/schema_v3.json`, `python3
    tools/gen_schema_docs.py`, then `ctest -R 'experiment_schema|pyazr_schema'` [check 18, 21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
    the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
    --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
