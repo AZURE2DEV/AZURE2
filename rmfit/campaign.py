@@ -366,8 +366,10 @@ class Campaign:
         if spec_sha:
             cfg["spec_sha"] = spec_sha
         # engine pin: recorded once at the first init; re-pinned only with RMFIT_ALLOW_ENGINE_CHANGE=1
+        old_pin = prev.get("engine")
         if "engine" not in prev or os.environ.get("RMFIT_ALLOW_ENGINE_CHANGE", "") not in ("", "0"):
             cfg["engine"] = enginepin.fingerprint()
+        repinned = bool(old_pin and old_pin.get("so_md5") and old_pin.get("so_md5") != cfg["engine"].get("so_md5"))
         if cov_reference:
             import shutil
             shutil.copy2(os.path.abspath(cov_reference), os.path.join(directory, "cov_reference.npz"))
@@ -376,7 +378,12 @@ class Campaign:
             json.dump(cfg, f, indent=2)
         c = cls(directory)
         c.log(f"init: engine pinned {enginepin.short(c.cfg['engine'])}" +
-              (" (new pin)" if "engine" not in prev else " (kept)"))
+              (" (new pin)" if "engine" not in prev else
+               f" (re-pinned from {enginepin.short(old_pin)})" if repinned else " (kept)"))
+        if repinned:
+            c.note(f"init: engine re-pinned (RMFIT_ALLOW_ENGINE_CHANGE): {enginepin.short(old_pin)} -> "
+                   f"{enginepin.short(c.cfg['engine'])}; objectives before and after are not comparable")
+            enginepin.repin_job_scripts(directory, old_pin, c.cfg["engine"], log=c.log)
         if cov_reference:
             c.log(f"init: relvector covariance model fixed at the reference {os.path.abspath(cov_reference)} "
                   f"(copied to cov_reference.npz)")
