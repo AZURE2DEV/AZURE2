@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "ThmProfile.h"
+#include "InferenceTypes.h"
 
 struct ThmWeightTable;
 
@@ -58,6 +58,26 @@ std::string ThmResolveReaction(const ThmNuclide &beam, const ThmNuclide &target,
                                double beamEnergy, const int Z[2], const double M[2], ThmReactionKinematics &out);
 
 /// One experiment[<name>] record, merged over the lines that name it.
+/*!
+ * One term of `ffNodes=` (vertexModel=ff): the radial node count n_r of the level functions of the levels of a J^pi
+ * group, optionally only its k-th level (1-based, in the order of <levels>) and/or only its entrance channels of
+ * orbital momentum l.
+ */
+struct ThmFfNodeTerm {
+  double J = 0.0;
+  int parity = 1;
+  int level = 0;  ///< 0: every level of the group
+  int l = -1;     ///< -1: every entrance channel
+  int nodes = 0;
+};
+/// Parses an `ffNodes=` value: terms `<J><+|->[,k<k>][,l<l>]:<n>` separated by ';' (J as 1/2 or 0.5), e.g.
+/// `1/2+:1;5/2+:0;3/2-,k2,l1:1`.  "" or what is wrong (a term given twice is refused).
+std::string ParseThmFfNodes(const std::string &value, std::vector<ThmFfNodeTerm> &out);
+/// The `ffNodes=` value that ParseThmFfNodes reads back as `terms`.
+std::string FormatThmFfNodes(const std::vector<ThmFfNodeTerm> &terms);
+/// The most specific term for (J, parity, level, l): level and l, then level, then l, then the group; null if none.
+const ThmFfNodeTerm *MatchThmFfNodes(const std::vector<ThmFfNodeTerm> &terms, double J, int parity, int level, int l);
+
 struct ThmExperiment {
   std::string name;
   /// The keys of the data sets that name the experiment (DatasetSpec::key), ascending (ReadFormat3ThmSection).
@@ -143,6 +163,19 @@ struct ThmExperiment {
    * which then replaces R(E) (not applied).
    */
   bool vertexDW = false;
+  /*!
+   * vertexModel=ff: the full transfer form factor of each level, La Cognata et al., ApJ 708 (2010) 796, Eqs. 20-21
+   * (ThmFormFactor.h): the plane-wave surface term M_l plus the volume term of a Woods-Saxon level function with its
+   * radial node count.  Needs vertex=perlevel, the Brune basis and fixed energies of the levels it applies to.
+   */
+  bool vertexFF = false;
+  /// vertexModel=ff: the Woods-Saxon r0 and diffuseness a0 (fm) of the level functions, `ffWell=<r0>,<a0>`.
+  double ffR0 = 1.25, ffA0 = 0.65;
+  /// vertexModel=ff: `ffVolume=off` drops the volume term, so the vertex is exactly vertex=perlevel's (a check).
+  bool ffVolume = true;
+  /// vertexModel=ff: radial node counts (`ffNodes=`, ParseThmFfNodes); a level and channel without a term take the
+  /// Wildermuth rule.
+  std::vector<ThmFfNodeTerm> ffNodes;
   /*!
    * Angular window of the exit pair (`theta=`, ThmAngular.h): the model of
    * every segment is the HOES dsigma/dOmega averaged over theta_cm in
@@ -293,6 +326,11 @@ std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experim
  * the experiment's prefix; the GUI shows the same words.
  */
 std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey);
+/*!
+ * vertexModel=ff needs vertex=perlevel in the Brune basis: the level function of each level has the boundary value
+ * B_lambda = S_c(E_lambda) that the surface term M_l uses too.  "" or the reason, prefixed by the experiment.
+ */
+std::string CheckThmFormFactorVertex(const std::vector<ThmExperiment> &experiments, bool perLevel, bool brune);
 
 /// Reads a `spectatorAngles=table:` file: two columns, the spectator polar
 /// angle (deg, 0-180, strictly increasing) and the acceptance A >= 0; '#'
@@ -305,34 +343,8 @@ std::string ReadThmAngleTable(const std::string &path, std::vector<double> &thet
 /// rows and some positive value.  "" or what is wrong.
 std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std::vector<double> &w);
 
-
-/// The profile of m, d, e, E (all of equal length) with `terms` background terms.
-ThmProfile SolveThmProfile(const std::vector<double> &m, const std::vector<double> &d,
-                           const std::vector<double> &e, const std::vector<double> &energy, int terms);
-
-/*!
- * Total derivatives through the profile.  `Jm` is d m_i/d p_c (n x nCols,
- * row-major).  Returns in `J` the derivative of the standardized residual
- * r_i = (f_i - d_i)/e_i with the linear parameters at their optimum c*(p),
- * and in `G` the derivative of the curve as the output files show it next to
- * data scaled by n*(p0): q_i = f_i(p) / s(p0), i.e. G = (s Jm + A dc/dp)/s.
- *
- * With A~(p) = A(p)/e, rho = y~ - A~c (minus the residual) and
- * dA~/dp = [Jm/e, 0, ...] (only the model column depends on p), the
- * derivative of the least-squares solution is exact (Golub & Pereyra 1973):
- *   dc/dp = G^-1 ( (dA~/dp)^T rho - A~^T (dA~/dp) c ),
- *   dr/dp = (dA~/dp) c + A~ dc/dp.
- * The second term of dc/dp alone gives dr/dp = P_perp (dA~/dp) c, the
- * projection onto the orthogonal complement of the columns of A~ (Kaufman's
- * approximation, exact at zero residual); the first carries the curvature
- * that the residual adds.  With the model column alone this is the
- * ds/dp = (sum d J/e^2 - 2 s sum m J/e^2)/S_mm of ComputeTHMRows.  A column
- * that is not profiled has no row in dc/dp.
- */
-void ThmProfileDerivative(const ThmProfile &profile, const std::vector<double> &m,
-                          const std::vector<double> &d, const std::vector<double> &e,
-                          const std::vector<double> &energy, const std::vector<double> &Jm, int nCols,
-                          std::vector<double> &J, std::vector<double> &G);
+/// The profile of an experiment's points (SolveThmProfile) and the derivatives through it (ThmProfileDerivative):
+/// inference/'s LinearProfile.h.
 
 /// What the output file and pyazr report for one experiment.
 struct ThmExperimentReport {

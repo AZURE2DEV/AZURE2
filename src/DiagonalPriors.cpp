@@ -64,17 +64,36 @@ void AppendSegmentPriors(const WorkingCopy &data, int s, const ParamIndexMap *pm
   AppendShiftPriors(data, s, pmap, out);
 }
 
-void AppendAbundancePriors(const WorkingCopy &data, const ParamIndexMap *pmap, DiagonalPriors &out) {
+AbundanceBlock AbundanceBlockOf(const WorkingCopy &data, double globalSumSigma) {
   const AbundanceSamples &samples = data.Data().Abundances();
   const std::vector<double> &values = data.AbundanceValues();
-  for (int k = 1; k <= samples.NumParams(); k++) {
-    int sample, nucleus;
-    samples.Of(k, sample, nucleus);
-    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
-    if (!(e.sigma > 0.0) || e.priorReplaced) continue;
-    Add(out, pmap ? pmap->AbundanceIndex(k) : -1, (k - 1 < (int)values.size()) ? values[k - 1] : std::numeric_limits<double>::quiet_NaN(), e.nominal,
-        e.sigma, PriorSource::kAbundance, sample);  // no value before the first hand-over
+  AbundanceBlock b;
+  if (samples.NumParams() == 0) return b;
+  b.numSamples = samples.NumSamples();
+  b.numNuclei = samples.NumParams() / samples.NumSamples();
+  for (int s = 1; s <= b.numSamples; s++) {
+    const AbundanceSample &sample = samples.Sample(s);
+    b.sumCentre.push_back(sample.sumCentre);
+    b.sumSigma.push_back(samples.SumSigma(s, globalSumSigma));
+    for (int i = 1; i <= b.numNuclei; i++) {
+      const int k = samples.Ordinal(s, i);
+      const SampleAbundance &e = sample.entries[i - 1];
+      // No value before the first hand-over.
+      b.w.push_back(k - 1 < (int)values.size() ? values[k - 1] : std::numeric_limits<double>::quiet_NaN());
+      b.centre.push_back(e.nominal);
+      b.sigma.push_back(e.sigma);
+      b.active.push_back(e.sigma > 0.0 && !e.priorReplaced);
+    }
   }
+  return b;
+}
+
+void AppendAbundancePriors(const WorkingCopy &data, const ParamIndexMap *pmap, DiagonalPriors &out) {
+  const AbundanceBlock b = AbundanceBlockOf(data, 0.0);
+  for (int k = 1; k <= (int)b.w.size(); k++)
+    if (b.active[k - 1])
+      Add(out, pmap ? pmap->AbundanceIndex(k) : -1, b.w[k - 1], b.centre[k - 1], b.sigma[k - 1], PriorSource::kAbundance,
+          (k - 1) / b.numNuclei + 1);
 }
 
 DiagonalPriors DiagonalPriorsOf(const WorkingCopy &data, const ParamIndexMap &pmap) {

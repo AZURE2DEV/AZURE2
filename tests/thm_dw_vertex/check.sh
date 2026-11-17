@@ -152,7 +152,7 @@ $3"
 }
 L="experiment[A] $KIN"
 printf '0.4 1.0\n1.0 2.0\n' > "$WORK/w.dat"
-refuse value "expected pw or dw" "$L distortion=coulomb vertexModel=dwba"
+refuse value "expected pw, dw or ff" "$L distortion=coulomb vertexModel=dwba"
 refuse no_distortion "needs distortion=coulomb or distortion=optical" "$L vertexModel=dw"
 refuse table "needs distortion=coulomb or distortion=optical" "experiment[A] distortion=table:$WORK/w.dat vertexModel=dw"
 refuse ref "belongs to the distortion factor R(E)" "$L distortion=coulomb distortionRef=0.7 vertexModel=dw"

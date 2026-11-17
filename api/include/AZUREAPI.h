@@ -339,6 +339,8 @@ class AZUREAPI {
   vector_r CalculateObjectiveGradRWA(const vector_r &params);
   /// The names of the objective's terms, in the order of CalculateObjectiveRWA's `terms`.
   std::vector<std::string> ObjectiveTermNames() const;
+  /// Each term's label in chiSquared.out (ObjectiveTerm::TotalLabel; "" when no field holds the whole term), same order.
+  std::vector<std::string> ObjectiveTermLabels() const;
 
   /// What one evaluation of the objective gives (EvaluateObjectiveRWA; AZUREAPIObjective.cpp).
   struct ObjectiveBreakdown {
@@ -571,6 +573,9 @@ class AZUREAPI {
    * chi-squared to rounding (without a data covariance; with one, the caller whitens the rows).
    */
   double EvaluateFilledChi2(vector_r *res);
+  /// The model pass of EvaluateFilledChi2 alone: every point's model value into the session's Results, no data term
+  /// (for CalculateObjectiveRWA and EvaluateObjectiveRWA, whose Objective::Chi2 walks the data once itself).
+  void EvaluateFilledModel();
   /// Park's J > 0 wall, the abundance priors and the scattering-length chi^2 on the filled compound: the terms
   /// both CalculateChi2RWA and CalculateChi2Physical add to EvaluateFilledChi2.
   double FilledModelPenalties();

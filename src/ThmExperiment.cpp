@@ -282,6 +282,10 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     for (const char *key : {"spectatorAngle", "distortionRef", "distortionRatio", "boundState"})
       if (has(key) && !computed)
         return where + key + "= needs distortion=coulomb or distortion=optical; set one, or remove " + key + "=";
+    for (const char *key : {"ffWell", "ffVolume", "ffNodes"})
+      if (has(key) && !x.vertexFF)
+        return where + key + "= belongs to the full form factor: it needs vertexModel=ff; set it, or remove " + key +
+               "=";
     if (x.vertexDW) {
       if (!computed)
         return where + "vertexModel=dw builds the vertex from the distorted waves of a + A and s + F: it needs "
@@ -342,6 +346,89 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     }
   }
   return "";
+}
+
+std::string CheckThmFormFactorVertex(const std::vector<ThmExperiment> &experiments, bool perLevel, bool brune) {
+  for (const ThmExperiment &x : experiments) {
+    if (!x.vertexFF) continue;
+    if (!perLevel)
+      return "experiment[" + x.name + "]: vertexModel=ff needs vertex=perlevel: the level function of each level "
+             "carries its own boundary value B_lambda = S_c(E_lambda), which the surface term uses too; vertex=constant "
+             "and vertex=onshell have no level function behind them.  Set vertex=perlevel or vertexModel=pw";
+    if (!brune)
+      return "experiment[" + x.name + "]: vertexModel=ff needs the Brune basis (use_brune, the default): its level "
+             "functions are solved at the observed level energies with B_lambda = S_c(E_lambda)";
+  }
+  return "";
+}
+
+std::string ParseThmFfNodes(const std::string &value, std::vector<ThmFfNodeTerm> &out) {
+  out.clear();
+  const std::string form = "expected <J><+|->[,k<k>][,l<l>]:<n> terms separated by ';' (k: the k-th level of the "
+                           "J^pi group in <levels>, l: the entrance orbital momentum, n: the radial node count)";
+  for (const std::string &item : Split(value, ';')) {
+    const std::string bad = "ffNodes: '" + item + "': ";
+    if (item.empty()) return "ffNodes='" + value + "': an empty term; " + form;
+    size_t colon = item.rfind(':');
+    if (colon == std::string::npos) return bad + form;
+    ThmFfNodeTerm t;
+    const std::string nt = item.substr(colon + 1);
+    if (!ReadWholeInt(nt, t.nodes) || t.nodes < 0 || t.nodes > 20 || nt[0] == '+' || nt[0] == '-')
+      return bad + "the node count is a whole number, 0 to 20";
+    std::vector<std::string> parts = Split(item.substr(0, colon), ',');
+    if (parts.empty()) return bad + form;
+    for (size_t k = 1; k < parts.size(); k++) {
+      const std::string &q = parts[k];
+      int v = -1;
+      const bool number = q.size() >= 2 && ReadWholeInt(q.substr(1), v) && q[1] != '+' && q[1] != '-';
+      if (q[0] == 'k' && number && v >= 1 && t.level == 0)
+        t.level = v;
+      else if (q[0] == 'l' && number && v >= 0 && t.l < 0)
+        t.l = v;
+      else
+        return bad + "after J^pi, ,k<k> (the k-th level of the group, k >= 1) and/or ,l<l> (the entrance l), "
+                     "each once";
+    }
+    const std::string &spec = parts[0];
+    if (spec.size() < 2 || (spec.back() != '+' && spec.back() != '-')) return bad + form;
+    t.parity = spec.back() == '+' ? 1 : -1;
+    if (!ReadSpin(spec.substr(0, spec.size() - 1), t.J)) return bad + "J is 1/2, 3/2, ... or 0, 1, ...";
+    for (const ThmFfNodeTerm &o : out)
+      if (std::fabs(o.J - t.J) < 1.0e-9 && o.parity == t.parity && o.level == t.level && o.l == t.l)
+        return bad + "given twice";
+    out.push_back(t);
+  }
+  if (out.empty()) return "ffNodes='" + value + "': " + form;
+  return "";
+}
+
+std::string FormatThmFfNodes(const std::vector<ThmFfNodeTerm> &terms) {
+  std::string out;
+  for (const ThmFfNodeTerm &t : terms) {
+    if (!out.empty()) out += ";";
+    out += ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-");
+    if (t.level > 0) out += ",k" + std::to_string(t.level);
+    if (t.l >= 0) out += ",l" + std::to_string(t.l);
+    out += ":" + std::to_string(t.nodes);
+  }
+  return out;
+}
+
+const ThmFfNodeTerm *MatchThmFfNodes(const std::vector<ThmFfNodeTerm> &terms, double J, int parity, int level,
+                                     int l) {
+  const ThmFfNodeTerm *best = nullptr;
+  int bestRank = -1;
+  for (const ThmFfNodeTerm &t : terms) {
+    if (std::fabs(t.J - J) > 1.0e-9 || t.parity != parity) continue;
+    if (t.level > 0 && t.level != level) continue;
+    if (t.l >= 0 && t.l != l) continue;
+    const int rank = (t.level > 0 ? 2 : 0) + (t.l >= 0 ? 1 : 0);
+    if (rank > bestRank) {
+      best = &t;
+      bestRank = rank;
+    }
+  }
+  return best;
 }
 
 std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey) {
@@ -453,215 +540,4 @@ std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std:
   if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s |phi|^2); add the rows";
   if (!(total > 0.0)) return "'" + path + "': |phi|^2 is zero in every row; give |phi|^2 > 0 on some row";
   return "";
-}
-
-// ---------------------------------------------------------------------------
-// The linear profile
-
-namespace {
-
-// Inverse of a symmetric positive-definite q x q matrix (q <= 4), by Cholesky
-// on the Jacobi-scaled matrix (unit diagonal), so that the columns' units
-// (the model, 1, E, E^2) do not matter.  False if it is not positive definite
-// to working precision.
-bool InvertSPD(const std::vector<double> &Gin, int q, std::vector<double> &inv) {
-  std::vector<double> dscale(q), G(q * q), L(q * q, 0.0);
-  for (int i = 0; i < q; i++) {
-    if (!(Gin[i * q + i] > 0.0) || !std::isfinite(Gin[i * q + i])) return false;
-    dscale[i] = 1.0 / std::sqrt(Gin[i * q + i]);
-  }
-  for (int i = 0; i < q; i++)
-    for (int j = 0; j < q; j++) G[i * q + j] = Gin[i * q + j] * dscale[i] * dscale[j];
-  for (int j = 0; j < q; j++) {
-    double sum = G[j * q + j];
-    for (int k = 0; k < j; k++) sum -= L[j * q + k] * L[j * q + k];
-    if (!(sum > 1.0e-12)) return false;  // singular (collinear columns) to working precision
-    L[j * q + j] = std::sqrt(sum);
-    for (int i = j + 1; i < q; i++) {
-      double s = G[i * q + j];
-      for (int k = 0; k < j; k++) s -= L[i * q + k] * L[j * q + k];
-      L[i * q + j] = s / L[j * q + j];
-    }
-  }
-  // inv(G) = L^-T L^-1, column by column.
-  inv.assign(q * q, 0.0);
-  for (int c = 0; c < q; c++) {
-    std::vector<double> y(q, 0.0), x(q, 0.0);
-    for (int i = 0; i < q; i++) {
-      double s = (i == c) ? 1.0 : 0.0;
-      for (int k = 0; k < i; k++) s -= L[i * q + k] * y[k];
-      y[i] = s / L[i * q + i];
-    }
-    for (int i = q - 1; i >= 0; i--) {
-      double s = y[i];
-      for (int k = i + 1; k < q; k++) s -= L[k * q + i] * x[k];
-      x[i] = s / L[i * q + i];
-    }
-    for (int i = 0; i < q; i++) inv[i * q + c] = x[i] * dscale[i] * dscale[c];
-  }
-  return true;
-}
-
-// Column j of the design matrix at a point: the model, then 1, E, E^2.
-inline double Column(int j, bool withModel, double m, double energy) {
-  if (withModel) {
-    if (j == 0) return m;
-    j--;
-  }
-  return j == 0 ? 1.0 : j == 1 ? energy : energy * energy;
-}
-
-}  // namespace
-
-double ThmProfile::Background(double energy) const {
-  if (terms == 0) return 0.0;
-  double b = a[0] + (terms > 1 ? a[1] * energy : 0.0) + (terms > 2 ? a[2] * energy * energy : 0.0);
-  return b / s;
-}
-
-double ThmProfile::Residual(double m, double d, double e, double energy) const {
-  if (e == 0.0) return 0.0;
-  return (s * m + s * Background(energy) - d) / e;
-}
-
-void ThmProfile::Reported(double value[4], double covariance[16]) const {
-  value[0] = 1.0 / s;
-  for (int k = 0; k < 3; k++) value[k + 1] = k < terms ? a[k] / s : 0.0;
-  for (int i = 0; i < 16; i++) covariance[i] = 0.0;
-  // Rows of d(n, b0, b1, b2)/d(c), c the profiled coefficients.
-  const int q = (scaleProfiled ? 1 : 0) + (backgroundProfiled ? terms : 0);
-  if (q == 0 || (int)cov.size() != q * q) return;
-  std::vector<double> T(4 * q, 0.0);
-  int col = 0;
-  if (scaleProfiled) {
-    T[0 * q + col] = -1.0 / (s * s);
-    for (int k = 0; k < terms; k++) T[(k + 1) * q + col] = -a[k] / (s * s);
-    col++;
-  }
-  if (backgroundProfiled)
-    for (int k = 0; k < terms; k++) T[(k + 1) * q + col + k] = 1.0 / s;
-  for (int i = 0; i < 4; i++)
-    for (int j = 0; j < 4; j++) {
-      double sum = 0.0;
-      for (int u = 0; u < q; u++)
-        for (int v = 0; v < q; v++) sum += T[i * q + u] * cov[u * q + v] * T[j * q + v];
-      covariance[i * 4 + j] = sum;
-    }
-}
-
-ThmProfile SolveThmProfile(const std::vector<double> &m, const std::vector<double> &d,
-                           const std::vector<double> &e, const std::vector<double> &energy, int terms) {
-  ThmProfile p;
-  p.terms = terms;
-  const size_t n = m.size();
-  for (size_t i = 0; i < n; i++)
-    if (e[i] != 0.0) p.points++;
-
-  // Normal equations over the columns in use; `withModel` includes the model.
-  auto solve = [&](bool withModel, std::vector<double> &c, std::vector<double> &cov) -> bool {
-    const int q = (withModel ? 1 : 0) + terms;
-    if (q == 0) return false;
-    std::vector<double> G(q * q, 0.0), h(q, 0.0), col(q);
-    for (size_t i = 0; i < n; i++) {
-      if (e[i] == 0.0) continue;
-      const double w = 1.0 / (e[i] * e[i]);
-      // Without the model column the target is d - m (s fixed at 1).
-      const double y = withModel ? d[i] : d[i] - m[i];
-      for (int j = 0; j < q; j++) col[j] = Column(j, withModel, m[i], energy[i]);
-      for (int j = 0; j < q; j++) {
-        h[j] += col[j] * y * w;
-        for (int k = 0; k < q; k++) G[j * q + k] += col[j] * col[k] * w;
-      }
-    }
-    if (!InvertSPD(G, q, cov)) return false;
-    c.assign(q, 0.0);
-    for (int j = 0; j < q; j++)
-      for (int k = 0; k < q; k++) c[j] += cov[j * q + k] * h[k];
-    return true;
-  };
-
-  std::vector<double> c, cov;
-  if (terms == 0) {
-    // The model column alone: s = S_md/S_mm, as Segment::ProfileNormChiSquared.
-    double Smm = 0.0, Smd = 0.0;
-    for (size_t i = 0; i < n; i++) {
-      if (e[i] == 0.0) continue;
-      const double w = 1.0 / (e[i] * e[i]);
-      Smm += m[i] * m[i] * w;
-      Smd += m[i] * d[i] * w;
-    }
-    if (Smd > 0.0 && Smm > 0.0) {
-      p.s = Smd / Smm;
-      p.cov.assign(1, 1.0 / Smm);
-    } else {
-      p.scaleProfiled = false;
-      p.s = 1.0;
-      p.status = "degenerate: no positive model-data overlap, norm left at 1";
-    }
-    p.backgroundProfiled = false;
-  } else if (solve(true, c, cov) && c[0] > 0.0) {
-    p.s = c[0];
-    for (int k = 0; k < terms; k++) p.a[k] = c[k + 1];
-    p.cov = cov;
-  } else {
-    p.scaleProfiled = false;
-    p.s = 1.0;
-    if (solve(false, c, cov)) {
-      for (int k = 0; k < terms; k++) p.a[k] = c[k];
-      p.cov = cov;
-      p.status = "degenerate: model and background cannot both be profiled (singular, or n <= 0); "
-                 "norm left at 1, background profiled";
-    } else {
-      p.backgroundProfiled = false;
-      p.status = "degenerate: too few points or collinear background terms; norm left at 1, no background";
-    }
-  }
-  p.chi2 = 0.0;
-  for (size_t i = 0; i < n; i++) {
-    double r = p.Residual(m[i], d[i], e[i], energy[i]);
-    p.chi2 += r * r;
-  }
-  return p;
-}
-
-void ThmProfileDerivative(const ThmProfile &p, const std::vector<double> &m, const std::vector<double> &d,
-                          const std::vector<double> &e, const std::vector<double> &energy,
-                          const std::vector<double> &Jm, int nCols, std::vector<double> &J,
-                          std::vector<double> &G) {
-  const size_t n = m.size();
-  J.assign(n * nCols, 0.0);
-  G.assign(n * nCols, 0.0);
-  const bool withModel = p.scaleProfiled;
-  const int q = (withModel ? 1 : 0) + (p.backgroundProfiled ? p.terms : 0);
-  // Coefficients in the order of the profiled columns, and the fixed scale.
-  std::vector<double> c;
-  if (withModel) c.push_back(p.s);
-  if (p.backgroundProfiled)
-    for (int k = 0; k < p.terms; k++) c.push_back(p.a[k]);
-  const double s = p.s;
-  std::vector<double> rho(n, 0.0);  // y~ - A~ c = -r
-  for (size_t i = 0; i < n; i++) rho[i] = -p.Residual(m[i], d[i], e[i], energy[i]);
-
-  std::vector<double> v(q), dc(q);
-  for (int col = 0; col < nCols; col++) {
-    // v = (dA~)^T rho - A~^T (dA~) c, dA~ = [Jm/e, 0, ...]; (dA~) c = s Jm/e.
-    std::fill(v.begin(), v.end(), 0.0);
-    for (size_t i = 0; i < n; i++) {
-      if (e[i] == 0.0) continue;
-      const double jt = Jm[i * nCols + col] / e[i];
-      if (withModel) v[0] += jt * rho[i];
-      for (int j = 0; j < q; j++) v[j] -= Column(j, withModel, m[i], energy[i]) / e[i] * s * jt;
-    }
-    for (int j = 0; j < q; j++) {
-      dc[j] = 0.0;
-      for (int k = 0; k < q; k++) dc[j] += p.cov[j * q + k] * v[k];
-    }
-    for (size_t i = 0; i < n; i++) {
-      // d f_i/dp = s Jm_i + sum_j A_ij dc_j (unwhitened), f the curve on the data scale.
-      double df = s * Jm[i * nCols + col];
-      for (int j = 0; j < q; j++) df += Column(j, withModel, m[i], energy[i]) * dc[j];
-      if (e[i] != 0.0) J[i * nCols + col] = df / e[i];
-      G[i * nCols + col] = df / s;
-    }
-  }
 }

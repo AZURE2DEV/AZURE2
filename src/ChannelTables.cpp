@@ -66,6 +66,13 @@ complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) 
   return (boundary - 1.0) * t.jl[k] - t.rhodjl[k] + t.coul[k];
 }
 
+double Site::GetThmVertexEps() const { return values_.thm_vertex ? values_.thm_vertex->eps : 0.0; }
+
+double Site::GetThmVertexEps(int node) const {
+  const ThmPsTable *t = values_.thm_ps.get();
+  return (t && node >= 0 && node < (int)t->eps.size()) ? t->eps[node] : 0.0;
+}
+
 complex Site::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
   const ThmPsTable *t = values_.thm_ps.get();
   if (!t || node < 0 || node >= t->nodes) return 0.0;
@@ -368,11 +375,13 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
               coulOfL = &at.first->second;
               newL = at.second;
             }
+            const bool firstSlot = psTable->eps.empty();
             for (size_t k = 0; k < psNodes.size(); k++) {
               double jl = 0.0, rhoDjl = 0.0;
               complex coul(0.0, 0.0);
               double muMeV = thePair->GetRedMass() * uconv;
               double bindingE = thePair->GetBindingEnergy() + psNodes[k].es;
+              if (firstSlot) psTable->eps.push_back(std::max(localEnergy + bindingE, 0.0));
               if (!(localEnergy + bindingE > 0.0)) {
                 WarnThmBelowB(configure, localEnergy, bindingE);
               } else {
@@ -399,6 +408,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
           double bindingE = thePair->GetBindingEnergy() +
                             configure.thm.SpectatorEnergy(this->GetEntranceKey());
           if (localEnergy + bindingE > 0.0) {
+            if (vertexRows) vertexRows->eps = localEnergy + bindingE;
             ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetPairRadius(),
                            thmJl, thmRhoDjl);
             if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
@@ -436,6 +446,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
     psTable->rhodjl.shrink_to_fit();
     psTable->coul.shrink_to_fit();
     psTable->weight.shrink_to_fit();
+    psTable->eps.shrink_to_fit();
     values_.thm_ps = psTable;
   }
   // The rows grew channel by channel (push_back): give back the spare capacity,

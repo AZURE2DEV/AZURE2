@@ -68,6 +68,9 @@ struct ThmVertexRows {
   std::vector<int> channel;
   vector_r jl, rhodjl;
   vector_c coul;
+  /// eps = E + B_xs + T_s (MeV) of the entrance pair at this point: p^2/2mu of the vertex's half-off-shell momentum,
+  /// which the full form factor's volume term reads (vertexModel=ff, ThmFormFactor.h); 0 below it.
+  double eps = 0.0;
   /// The entry of (J group, channel), both 1-based, or -1 when the channel is not the entrance pair's.
   int Find(int jGroupNum, int channelNum) const {
     if (jGroupNum < 1 || jGroupNum >= (int)groupStart.size()) return -1;
@@ -113,9 +116,10 @@ struct ThmPsTable {
   std::vector<double> rhodjl;
   std::vector<complex> coul;      ///< empty unless an external Coulomb term was computed
   std::vector<double> weight;     ///< [node], normalized
+  std::vector<double> eps;        ///< [node]: E + B_xs + T_k (MeV), as ThmVertexRows::eps; 0 below it
   size_t Bytes() const {
     return sizeof(*this) + offset.capacity() * sizeof(int) + slot.capacity() * sizeof(int) +
-           (jl.capacity() + rhodjl.capacity() + weight.capacity()) * sizeof(double) +
+           (jl.capacity() + rhodjl.capacity() + weight.capacity() + eps.capacity()) * sizeof(double) +
            coul.capacity() * sizeof(complex);
   }
 };

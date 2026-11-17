@@ -67,6 +67,7 @@ void Config::Reset() {
   paramMask = 0;
   paramMask |= (USE_AMATRIX | USE_BRUNE_FORMALISM | IGNORE_ZERO_WIDTHS | TRANSFORM_PARAMETERS | CALCULATE_WITH_DATA | USE_LONGWAVELENGTH_APPROX);
   stopFlag = false;
+  fitter.clear();           // no fitter switch: the row without one (FitterOfConfig)
   outputdir = "";
   checkdir = "";
   nloptAlgorithm = 0;       // Default to SBPLX

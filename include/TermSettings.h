@@ -6,6 +6,7 @@
 struct ThmWeightTable;
 class ThmDistortion;
 class ThmDwVertex;
+class ThmFormFactorTable;
 struct ThmAngleWindow;
 struct ThmCoherentBackground;
 struct ThmLineshape;
@@ -42,6 +43,7 @@ struct TermSettings {
   const ThmSpectatorWindow *thmWindow = nullptr;
   const ThmDistortion *thmDistortion = nullptr;
   const ThmDwVertex *thmDw = nullptr;
+  const ThmFormFactorTable *thmFf = nullptr;
   const ThmAngleWindow *thmAngle = nullptr;
   const ThmCoherentBackground *thmCoherent = nullptr;
 };
@@ -55,7 +57,7 @@ bool SameThmWeight(const ThmWeightTable *a, const ThmWeightTable *b);
 ///
 /// THM (a site holds sigma_HOES at E_n without an angle, SiteObservable.h): every attachment enters the value at the
 /// node, so every one is compared.  The attachments of an experiment (line shape, spectator window, distortion, DW
-/// vertex, angular window, coherent background) are built once per <thm> experiment and held by each of its data sets
+/// vertex, full form factor, angular window, coherent background) are built once per <thm> experiment and held by each of its data sets
 /// (ThmNorm.cpp): the same object is the same experiment, which is what "equal settings" means for them (a window
 /// holds its experiment's data energies, a background its parameters).  The weight table is read per data set
 /// (thm_weight), so two data sets of one experiment that name equal tables hold two objects: it is compared by value
@@ -74,7 +76,7 @@ inline bool SameObservable(const TermSettings &a, const TermSettings &b) {
          a.crossSectionComponent == b.crossSectionComponent && a.lineWindow == b.lineWindow &&
          SameThmWeight(a.thmWeight, b.thmWeight) &&
          a.thmLineshape == b.thmLineshape && a.thmWindow == b.thmWindow && a.thmDistortion == b.thmDistortion &&
-         a.thmDw == b.thmDw && a.thmAngle == b.thmAngle && a.thmCoherent == b.thmCoherent;
+         a.thmDw == b.thmDw && a.thmFf == b.thmFf && a.thmAngle == b.thmAngle && a.thmCoherent == b.thmCoherent;
 }
 
 /// The fields of TermSettings that only the reader applies, and that SameObservable therefore does not compare.  Every

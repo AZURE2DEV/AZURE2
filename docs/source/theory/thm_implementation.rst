@@ -465,11 +465,14 @@ The members (no key of the line)
    A coherent (interfering) THM-only background amplitude per J\ :sup:`π`,
    entrance and exit channel, whose real and imaginary parts are fit
    parameters (default: none), below ("Coherent background").
-``vertexModel=pw|dw``
-   The entrance vertex of every segment: the plane-wave :math:`M_l`
-   (default ``pw``) or the surface term of the prior-form DWBA built from the
+``vertexModel=pw|dw|ff``
+   The transfer vertex of every segment: the plane-wave :math:`M_l`
+   (default ``pw``), the surface term of the prior-form DWBA built from the
    experiment's distorted waves (``dw``; needs ``distortion=coulomb|optical``,
-   and then replaces :math:`R(E)`), below ("Distorted-wave entrance vertex").
+   and then replaces :math:`R(E)`), below ("Distorted-wave entrance vertex"),
+   or the full form factor :math:`M_l + \Delta_\lambda(E)` of each level
+   (``ff``; needs ``vertex=perlevel`` and fixed level energies; keys ``ffWell``,
+   ``ffNodes``, ``ffVolume``), below ("Full form factor").
 
 Anything else -- an unknown key or nuclide, a malformed value, partial
 kinematics, a segment that does not exist, is not THM, has a fixed norm or is
@@ -512,13 +515,23 @@ background columns as terms), :math:`\tilde A = A/e`, :math:`\tilde y = d/e`,
    \operatorname{cov}(c) = G^{-1},
 
 solved by Cholesky on the Jacobi-scaled :math:`G` (``SolveThmProfile`` in
-``src/ThmExperiment.cpp``). Points with :math:`e_i = 0` carry no weight. The
+``inference/src/LinearProfile.cpp``). Points with :math:`e_i = 0` carry no weight. The
 output file writes :math:`m_i + b(E_i)` as the fitted curve next to the data
-scaled by :math:`n^*`. The background may come out negative: it is a
-phenomenological term (non-quasi-free or sequential contributions, an
-imperfect subtraction), not a positive-definite cross section, and a sign
-constraint would make the profile non-linear; judge a negative background on
-the plot. :math:`n^* = 1/s` must be positive.
+scaled by :math:`n^*`. The background stands for an incoherent contribution
+(combinatorial, non-quasi-free, sequential), so it is a cross section and cannot
+be negative (the review of M. La Cognata, November 2026); in the published
+analyses it is usually small and often left out. The profile is linear and does
+not bound it: when :math:`b(E)` comes out negative anywhere in the energy range
+of the experiment's points, the run prints ``WARNING: <thm> experiment[<name>]:
+the profiled background b(E) is negative ...``, and the analysis should then use
+``background=none`` (or a lower order). :math:`n^* = 1/s` must be positive.
+
+*Energy shifts.* THM data are not shifted in energy: the resonance energies are
+kept at their literature values, and no displacement of a HOES peak has been
+observed (the same review). A data set of a THM experiment that carries an
+energy shift (fixed or fitted) is reported at set-up (``WARNING: <thm>
+experiment[<name>]: data set <key> carries an energy shift``); a calibration of
+the measured energy scale is the only reason to keep one.
 
 *Degenerate cases.* A singular :math:`G` (the model a combination of the
 background terms, or collinear background columns), or :math:`s \le 0` (no
@@ -2151,6 +2164,116 @@ the normalization :math:`\tilde\varphi(q)` can pass through zero at large
 normalized vertex is singular; an exact zero on the grid is refused. ``vertexModel=pw`` against ``dw`` (with
 Coulomb and with optical waves) belongs in the model-dependence protocol of
 any analysis that converts peak areas of different :math:`l` into strengths.
+
+Full form factor
+----------------
+
+*Why.* The plane-wave vertex :math:`M_l(\rho; B)` is the surface term that Green's theorem leaves of the transfer
+form factor; the volume term is dropped. In a resonant reaction the level function lives in the nuclear interior, so
+the volume term need not be small: for the 144 keV level of p + :sup:`18`\ O it is 0.6-1.9 times the surface term,
+depending on the node count of the level function. The Catania groups convert peak areas with the full form factor of
+a single-particle level function (La Cognata et al., ApJ 708 (2010) 796, Eqs. 20-22), and the review of M. La Cognata
+(November 2026) asks that analyses use it, with its dependence on the number of nodes. ``vertexModel=ff`` of an
+experiment does so: the vertex of every level is the full form factor, with the level function a Woods-Saxon
+single-particle function.
+
+*Equation.* The transfer amplitude to level :math:`\lambda` is :math:`\varphi_a(p_{xs})\, W_\lambda(\mathbf p)` with
+
+.. math::
+
+   W_l(p) = \langle \varphi_\lambda | V | j_l(pr) \rangle = \int_0^a u_\lambda(r)\, V(r)\, r\, j_l(pr)\, dr ,
+
+:math:`\varphi_\lambda = u_\lambda/r` a real single-particle level function in the interior (normalized to 1 inside
+:math:`a`), :math:`V` the :math:`x`-:math:`A` interaction and :math:`\hbar^2p^2/2\mu = \varepsilon = E + B_{xs} + T_s`
+(MeV, c.m. of :math:`x + A`) the half-off-shell energy of the vertex (as for :math:`M_l`). Inside :math:`a` the level
+function obeys :math:`(T + V) u_\lambda = e_\lambda u_\lambda` (:math:`e_\lambda` the level energy above the entrance
+threshold) with :math:`a u_\lambda'(a)/u_\lambda(a) = B_\lambda`, and :math:`T\, rj_l = \varepsilon\, rj_l`. Replacing
+:math:`V u_\lambda` by :math:`(e_\lambda - T) u_\lambda` and integrating :math:`T` by parts twice (Green's theorem)
+gives, exactly,
+
+.. math::
+
+   W_l = \frac{\hbar^2}{2\mu}\, u_\lambda(a)\, \bigl[ M_l(\rho; B_\lambda) + \Delta_\lambda(E) \bigr], \qquad
+   \Delta_\lambda(E) = \frac{2\mu}{\hbar^2}\, \frac{e_\lambda - \varepsilon}{u_\lambda(a)}
+        \int_0^a u_\lambda(r)\, r\, j_l(pr)\, dr ,
+
+with :math:`\rho = pa` and :math:`M_l(\rho; B) = (B - 1) j_l(\rho) - \rho j_l'(\rho)`. Since :math:`\gamma_\lambda^2 =
+(\hbar^2/2\mu a) u_\lambda(a)^2` (times the spectroscopic factor, which multiplies both terms), the first term is
+AZURE2's vertex :math:`\gamma_\lambda M_l` up to a level-independent constant. ``vertexModel=ff`` therefore replaces
+:math:`M_l(B_\lambda)` of every level and entrance channel by :math:`M_l(B_\lambda) + \Delta_\lambda(E)`: the vertex of
+the level is multiplied by :math:`R_\lambda(E) = 1 + \Delta_\lambda(E)/M_l`, and :math:`\Delta` does not depend on the
+normalization of :math:`u_\lambda`. The spectroscopic factor cancels in the ratio of two levels' areas, as in Eq. 22 of
+La Cognata et al.; the normalization to direct data is the experiment's profiled norm. Everything else (the level
+matrix, the exit widths, the folding, the windows, :math:`R(E)` of ``distortion=``) is as with ``pw``.
+
+*The level function.* The regular solution of
+
+.. math::
+
+   V(r) = -\frac{V_0}{1 + e^{(r - R)/a_0}} + V_C(r), \qquad R = r_0 A^{1/3},
+
+:math:`A` the mass number of the heavier nucleus of the entrance pair (the core), :math:`V_C` the potential of a
+uniformly charged sphere of radius :math:`R` for a charged pair (none for a neutron), no spin-orbit term. For a node
+count :math:`n_r` the depth :math:`V_0` (MeV) is the one (it is unique: the Prüfer phase at :math:`a` increases with
+:math:`V_0`) for which :math:`a u'(a)/u(a) = B_\lambda` at :math:`e = e_\lambda`. :math:`B_\lambda` is the level
+function's own boundary value, :math:`S_c(E_\lambda)` in the Brune basis, the value the surface term uses under
+``vertex=perlevel``; ``ff`` therefore needs ``vertex=perlevel`` and the Brune basis (the default), and is refused
+otherwise.
+
+*Fixed level energies.* The level functions are solved once, at set-up, at the energies of ``<levels>``, and held in a
+constant table of the experiment. The resonance energies of a THM analysis are kept at their literature values (the
+review of M. La Cognata), so this is no restriction in practice; a level of a :math:`J^\pi` group with an entrance
+channel and a free energy is refused at set-up with ``vertexModel=ff`` ("fix the energy of this level, or use
+vertexModel=pw"). The widths are free as usual, and the analytic gradient is exact: :math:`\Delta` is a constant
+factor of each level's vertex, as :math:`M_l` is.
+
+*Inputs.* On the experiment line:
+
+``ffWell=<r0>,<a0>``
+   the Woods-Saxon radius parameter and diffuseness, fm (default ``1.25,0.65``).
+``ffNodes=<term>[;<term>...]``
+   the radial node counts, a term ``<J><+|->[,k<k>][,l<l>]:<n>``: every level of the :math:`J^\pi` group, or only its
+   ``k``-th level (in the order of ``<levels>``), and/or only its entrance channels of orbital momentum ``l``; the most
+   specific term wins (level and :math:`l`, level, :math:`l`, group), e.g. ``1/2+:1;5/2+:0;3/2-,k2,l1:1``. A term that
+   matches no level of the entrance pair is refused. Without a term a level takes the Wildermuth rule, defined when the
+   entrance pair is a nucleon + core: the nucleon goes into the lowest oscillator shell :math:`N` that the core's
+   nucleons of its kind do not fill (:math:`(N+1)(N+2)` per kind), raised to the first :math:`N \ge l` with :math:`N -
+   l` even, and :math:`n_r = (N - l)/2` --- p + :sup:`18`\ O: 1s, 0d, 1p, 0f; n + :sup:`17`\ O: 1p, 0d, 0f. For any
+   other pair (a cluster :math:`x`) every level needs a term.
+``ffVolume=on|off``
+   ``off`` sets :math:`\Delta = 0`: the vertex is then that of ``vertexModel=pw`` with ``vertex=perlevel``, bit for
+   bit (a check of the implementation).
+
+The set-up report lists, per level and entrance channel, :math:`n_r` and where it came from, :math:`e_\lambda`,
+:math:`B_\lambda`, :math:`V_0` and :math:`R_\lambda` at :math:`E = E_\lambda`. pyazr writes the keys with
+``Project.set_thm_experiment`` like every experiment key; the physics table has the function
+``pyazr.physics.thm_full_form_factor`` (and the web UI's Physics tab plots :math:`R`, :math:`\Delta`, :math:`M_l` and
+:math:`V_0` against :math:`\varepsilon` or any other argument).
+
+*Numerics.* :math:`u_\lambda` by RK4 on 1000 steps of :math:`[0, a]` (started from the series :math:`r^{l+1}(1 + c_1
+r^2 + c_2 r^4)`), the depth by the Illinois method on the Prüfer phase to :math:`10^{-13}`, the overlap by Simpson's
+rule; as a function of :math:`p` the overlap is a Chebyshev series (48 terms on :math:`[0, p_\mathrm{max}]`,
+:math:`p_\mathrm{max}` from the highest :math:`E + B_{xs} + T_s` of the points plus 1 MeV; beyond it the quadrature
+itself). Code: ``physics/transfer/FormFactor.h`` (the level function, the overlaps, the volume term),
+``include/ThmFormFactor.h`` (the experiment's table and its set-up).
+
+*Checks.* ``physics_transfer_form_factor``: :math:`W` computed directly equals surface + volume (Green's identity) to
+:math:`10^{-8}`; the boundary value, node count and norm of each level function; :math:`R = W/\mathrm{surface}` of the
+n + :sup:`17`\ O levels against an independent NumPy implementation to :math:`10^{-4}`; the spherical Bessel
+functions, the Wildermuth rule and the Chebyshev series against closed forms. ``pyazr_physics_table``: the binding's
+row against the same independent values. ``tests/thm_full_form_factor``: ``ffVolume=off`` identical to
+``vertexModel=pw``; ``ff`` changes the model of a THM project; the refusals (``vertex=constant``, a free level energy,
+an ``ff*`` key without ``vertexModel=ff``, an ``ffNodes`` term that matches no level).
+
+*Limits.* The well is ours, not that of the groups: Woods-Saxon with :math:`r_0 A^{1/3}` of the core, no spin-orbit
+term, Coulomb of a uniform sphere of the same radius. The integral stops at :math:`a` (the level function is defined
+inside); the exterior part of the complete plane-wave prior vertex is the Coulomb term :math:`C_l` of
+``coulombIntegral=1``, which adds to :math:`M_l + \Delta` if it is on. A term without a level, the coherent background
+:math:`c(E) M_l`, keeps the surface vertex. With two levels of one :math:`J^\pi`, ``vertex=perlevel`` puts a
+level-dependent factor inside the level sum, so the amplitude depends on the R-matrix representation; ``ff`` shares
+that property, and its level functions of one group come from different wells (each its own depth), so they are not
+orthogonal. The node counts, the well, and whether the groups normalize inside :math:`a` and stop the integral there
+are open questions for the Catania groups.
 
 Global optical potentials
 -------------------------

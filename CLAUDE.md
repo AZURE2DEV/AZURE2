@@ -86,12 +86,12 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 | Path | What | Notes |
 |---|---|---|
-| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; made with the data by the one set-up `SetUpCompoundSystem`, `include/CompoundSystemSetUp.h`, and shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²; one file per job, `src/AZURECalc.cpp` the evaluation, `AZURECalcGradient.cpp`, `AZURECalcJacobian.cpp`, `AZURECalcNuisance.cpp`, `AZURECalcPool.cpp`, `AZURECalcOutput.cpp`, `AZURECalcDiagnostics.cpp`), `AZUREGrad` (gradients), `AZURECalcMCMC` (`src/AZURECalcMCMC.cpp` the posterior, `AZURECalcMCMCPriors.cpp`, `AZURECalcMCMCRun.cpp`, `AZURECalcMCMCChain.cpp`, `AZURECalcMCMCPool.cpp`) |
+| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; made with the data by the one set-up `SetUpCompoundSystem`, `include/CompoundSystemSetUp.h`, and shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (`src/WorkingCopy.cpp` the set-up of the points, `WorkingCopyFill.cpp` reading the data sets and extrapolations into segments, `WorkingCopyUnits.cpp`; what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²; one file per job, `src/AZURECalc.cpp` the evaluation, `AZURECalcGradient.cpp`, `AZURECalcJacobian.cpp`, `AZURECalcNuisance.cpp`, `AZURECalcPool.cpp`, `AZURECalcOutput.cpp`, `AZURECalcDiagnostics.cpp`), `AMatrixFunc` (the level matrix and T matrix of a point's energy: `src/AMatrixFunc.cpp` the forward solve, `AMatrixFuncTBar.cpp` cross section → T cotangents (`PointTBar`), `AMatrixFuncAdjoint.cpp` T → level parameters (`TBarAdjoint`, `LevelBasis`)), `AZUREGrad` (gradients: `src/AZUREGrad.cpp` the accumulator, the parameter-index map and the adjoint's orchestration, `AZUREGradThm.cpp` the THM (HOES) rows, `ComputeTHMRows`), `AZURECalcMCMC` (`src/AZURECalcMCMC.cpp` the posterior, `AZURECalcMCMCPriors.cpp`, `AZURECalcMCMCRun.cpp`, `AZURECalcMCMCChain.cpp`, `AZURECalcMCMCPool.cpp`) |
 | `api/` | `AZUREAPI` (one file per job, `api/src/AZUREAPI.cpp` the session's model, `AZUREAPIReports.cpp`, `AZUREAPIChi2.cpp`, `AZUREAPIGradient.cpp`, `AZUREAPIObjective.cpp`, `AZUREAPIFit.cpp`, `AZUREAPIDiagnostics.cpp`) + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
-| `inference/` | The fit's parameter vector as plain data (kinds and records, the level block's layout, the index map full ↔ packed, the posterior's support), one Gaussian prior, the prior covariance (grammar and arithmetic), the sums of a list of terms | Uses nothing (no engine headers, no Minuit2: check 8b, `inference_standalone`); the engine names its types through `include/InferenceTypes.h` and keeps the walks, the values of the vector (`AZUREParams`) and the terms (`src/Objective.cpp`); `docs/upgrade/inference.md` |
+| `inference/` | The fit's parameter vector as plain data (kinds and records, the level block's layout, the index map full ↔ packed, the posterior's support), one Gaussian prior, the prior covariance (grammar and arithmetic), the sums of a list of terms, and the arithmetic of the objective's terms on arrays (the diagonal priors, the abundances, Park's wall, the profiled norms and THM profiles) | Uses nothing (no engine headers, no Minuit2: check 8b, `inference_standalone`); the engine names its types through `include/InferenceTypes.h` and keeps the walks (the gathers that fill the arrays), the values of the vector (`AZUREParams`) and the terms (`src/Objective.cpp`); `docs/upgrade/inference.md` |
 | `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by the engine's THM distortion (`src/ThmDistortion.cpp`) and the binding; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `numcmc/` | Ensemble MCMC sampler | |
@@ -241,21 +241,57 @@ section (check 34).
    (`tests/pyazr/project_test.py`, `azr_layout_test.py`).
 4. Docs: `reference/data_formats.rst` (records: `reference/format3.rst`, generated).
 
-**A term of the objective** (a prior, a penalty, a constraint).
-1. One `ObjectiveTerm` subclass in `src/Objective.cpp`, appended to the term list in the `Objective` constructor
-   (`docs/upgrade/objective.md` §4; `ObjectiveTerm` is `azure2::inference::Term<ObjectiveContext>`, whose defaults
-   say how the sampler takes a term); its gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in
-   `AppendModelRows` if the Levenberg-Marquardt path needs them. A Gaussian prior on one parameter is not a new
-   formula: `GaussianPriorChi2` / `GaussianPriorGradient` / `GaussianPriorCurvature`
-   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients,
-   the rows, the sampler and the writer read.
-   Arithmetic that needs no engine object goes in `inference/` with its test in `inference/tests/` [check 8b: only
-   its own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
-   [check 11: no term is added outside `src/Objective.cpp`].
-2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
-   the same χ² (`tests/pyazr/objective_test.py`).
-3. Its total goes into `Results::objective` (the evaluation's buffer) and from there to `chiSquared.out`; docs
-   `output_files.rst`.
+**A term of the objective** (a prior, a penalty, a constraint; `docs/upgrade/objective_arrays.md` section 8). The
+whole term is one class in `src/Objective.cpp` and one line in the `Objective` constructor; no walk names a term.
+1. A Gaussian prior on one parameter is not a new term: `GaussianPriorChi2` / `GaussianPriorGradient` /
+   `GaussianPriorCurvature` (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in
+   `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients, the rows, the sampler and
+   the writer read. Anything else is step 2.
+2. One class deriving from `ObjectiveTerm` (`include/Objective.h`) in `src/Objective.cpp`, appended with
+   `Append<YourTerm>()` at the end of the value's list in the `Objective` constructor (its place there is its slot
+   and its place in the sum; leave the walk lists of the constructor alone: they visit a new term last). Its members:
+   - `Name()`; `Add(c, chi2)`: `chi2 += v` once, with `StoreTotal(c, v)` for its line of `chiSquared.out`.
+   - `ModelOnly()` true only for a term of the model alone (levels, abundances, records): it is then part of pyazr's
+     `calculate_chi2` and its gradient; otherwise of `objective()` only (a term on the norms is not model-only).
+   - `AddGradient(c, pmap, shiftDeriv, accum)`: d chi^2/d theta into the `GradAccum`: `accum.AddE`, `AddGamma`,
+     `AddAbundance`, or `accum.direct.push_back({full index, value})` for any parameter (`pmap.NormIndex(s)` and the
+     like); return `TermGradient::kAdded`, `kNone` when it adds nothing, `kUnavailable` to make the caller take finite
+     differences. The program's gradient (`AZURECalcGradient.cpp`), pyazr's `chi2_and_grad` (model-only terms) and
+     its objective gradient (the others, `AZUREAPIGradient.cpp`) all call it.
+   - `AppendRows(c, rows)` if it is a sum of squares: `rows.Append(r, &accum or nullptr, &direct or nullptr)` per
+     row; LM, the GSL trust region, the Jacobian-path gradient, G2 and pyazr's `objective_rows` read them. A term the
+     project does not use adds no rows (return at once: tests count the rows of a project). The number of rows may
+     depend on the project, never on the parameter vector: a row of 0 is for a term the project uses that is inactive
+     at this vector.
+   - `TotalLabel()` (`"Total-<Name>-Chi-Squared"`) and `WriteTotal(data, config, results, out)`:
+     `if (<the project uses the term>) WriteStoredTotal(results, out);` -- conditional, so that the file of a project
+     without the term is unchanged byte for byte; the field lands after the existing ones. For a constant strength
+     the condition is that it is non-zero; for a project key, that the key is set.
+   - `AddForSampler` / `ExcludesForSampler` only if the sampler should not take the whole term (defaults: it does).
+   A segment's norm is `c.data->State(*segment).norm`; it is free when `segment->IsVaryNorm()`, at `pmap.NormIndex(s)`.
+   A term on the norms skips THM segments (`c.data->Data().ThmGroupOf(s) >= 0`), profiled norms and the followers of
+   a norm group, as `src/DiagonalPriors.cpp` does; the gradient assigns the norms' data part first and scatters
+   `direct` after it, so `direct` adds.
+   Its constants live in the class (not in a header other files include). Its walk of the engine's objects is a
+   gather that fills plain arrays; its arithmetic (value, gradient, rows), when more than a line, is one header of
+   `inference/` with its test in `inference/tests/` (values by hand, gradient and rows against central differences),
+   which `Add`, `AddGradient` and `AppendRows` call: `AbundancePriors.h` with `AbundanceBlockOf`, `ParkWall.h` with
+   `ParkLevelsOf` [check 8b; check 11: no term is added outside `src/Objective.cpp`; check 11b: no total, field or
+   model term's arithmetic outside its class].
+3. Tests, with the term non-zero (a temporary non-zero default or a project that sets it) and start values off its
+   minimum: `AZURE_GRAD_CHECK=exit AZURE2 fit --use-gradient --no-gui <project>` (pattern
+   `tests/shift_penalty_zero/check.sh` (b)): its stderr gives the analytic gradient against finite differences and
+   the "Jacobian-path" gradient (the rows) against the adjoint; the latter prints only differences above 1e-2
+   relative, so read the numbers. pyazr: `Session.evaluate(x).terms[<Name>]` equals the field of `chiSquared.out`
+   (`tests/pyazr/evaluation_test.py` reads the labels from the engine). Any project with free norms started away
+   from 1 serves a term on the norms (the check prints them as "idx N norm ... segS"). A term made non-zero for
+   every project fails tests by design, not by a fault: on 13N's norms `tests/pyazr/objective_test.py` section 4 (it
+   tests that the norm prior is the only norm penalty) and `prior_builder_test.py` (objective = data + priors), and,
+   when it has rows, every test that counts a project's rows (`pyazr_prior_covariance`, `pyazr_scattering_length`,
+   `pyazr_thm_profiled`, `pyazr_thm_experiment`).
+4. Docs: the field in `docs/source/reference/output_files.rst`; the term's line in the list at the top of
+   `include/Objective.h` (write it before the first build: the header rebuilds the engine) and in
+   `docs/upgrade/objective.md` section 1 (T-number).
 
 **A physics function or an observable.**
 1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an
@@ -314,14 +350,18 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    whole value in `src/ModelData.cpp`: no code); the binding, recipe "A physics function or an observable" step 2
    [check 41]. A hand value that needs Coulomb functions: mpmath `coulombf`, `coulombg` (`mp_waves`, `mp_channel` in
    `tests/pyazr/physics_table_test.py`), the inputs and the result in the comment of the case.
-2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity",
-   whose `variants` record of a datum writes value and error with their unit, `0.03 1` when dimensionless), and in
-   three places of the model-datum code: a value of `enum class ModelQuantity` (`experiment/include/azure2/experiment/
-   SetupSpecs.h`), its name in `ModelQuantities()` and its case in `Builder::LevelPairs` (both
-   `experiment/src/ModelDatum.cpp`: what `BuildModelData` must find in `<levels>` (level, pairs, channel), its refusals,
-   a code each, recipe "A format-3 diagnostic code"). Only check 27 sees a missing `ModelQuantities()` row; the
-   `switch (d.quantity)` of `LevelPairs` and of `LevelValue` have no `default`: a missing case is seen by no check.
-3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CompoundSystem::ObservedOfFitValues` returns (never
+2. A value of `enum class ModelQuantity` (`experiment/include/azure2/experiment/ModelQuantity.h`) and its row in the
+   table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`, `q.datum = Datum(ModelQuantity::<X>,
+   DatumCheck::<rule>, "<its words>")`; the recipe "A format-3 quantity", whose `variants` record of a datum writes
+   value and error with their unit, `0.03 1` when dimensionless). Nothing else in `experiment/`: `BuildModelData`
+   (`experiment/src/ModelDatum.cpp`) finds in `<levels>` what the record's fields name (`level` and `J`; a `reaction`'s
+   two pairs; `pair` with `l` and `s`, one channel; `pair`) and then applies the row's `DatumCheck` (`kResonance`,
+   `kClosedChannel`, `kOpenChannel`: the level against the pair's threshold, refused with "<its words> belongs to ...";
+   `kSWavePair`: a scattering length); a rule no value fits is a new `DatumCheck` value and its case there (a code per
+   refusal, recipe "A format-3 diagnostic code") [`docs/upgrade/data_model.md` section 11; `experiment_quantities`
+   fails for a datum row without its `datum`, check 27 for an enumerator no row names].
+3. Its case in `LevelValue` (`src/ModelData.cpp`; compiled with `-Werror=switch`: a value of the enum without its case
+   does not compile), from the table `CompoundSystem::ObservedOfFitValues` returns (never
    formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds the physical E, and per channel the
    observed width W, the observed value and its kind, and the factor `P` W was formed with (an open particle channel's
    penetrability at E), the pair's reduced mass `mu_u` (u) and channel radius `a_fm` (fm): read them there, never
@@ -329,7 +369,7 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    need `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; E_c = E_x -
    `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
-   quantity of the table has its `ModelQuantities()` row and a function so named (that it is called is not checked:
+   quantity of the table names its `ModelQuantity` and has a function so named (that it is called is not checked:
    add it to the list under "every quantity, three bases")]; `reference/data_formats.rst` (the list of datum
    quantities) and `.claude/skills/azure2-setup/references/data-kinds.md` (the row of model data). `check.sh` is no
    ctest: `bash tests/model_data/check.sh <build>/src/AZURE2`, or `tests/run_tests.sh`. A datum is a record of `t2.md`
@@ -347,13 +387,14 @@ The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<mo
    `FitEvaluations::BestPoint()` (`HasBest()`, `Stopped()`; `src/FitNLopt.cpp` is the pattern), never from its own
    last evaluation. A fitter that honours `control.maxCalls` ends by it (`FitEvaluations::Count()`).
 2. Its row in `Fitters()` (`src/Fitters.cpp`; the row's place is its precedence in the program). Columns (`FitterRow`,
-   `include/Fitters.h`): name, option, configBit, gradient, residualRows, bounds, covariance, minos, callLimit,
-   fallback, progressLabel, doc, run. `configBit` is a new enumerator `USE_<X>_MINIMIZER` of `Config::ParameterFlags`
-   (`include/Config.h`, the next bit above the highest in use; a change of that header rebuilds nearly everything). No
-   edit of `src/AZURE2.cpp`: the parser and `--help` read the row (`ApplyFitterSwitch`, `FitterSwitchesHelp`) [check 46
-   fails when it names the switch, or sets a `USE_*_MINIMIZER` bit that is no row's]. The switch's row in
-   `reference/command_line.rst` and the table "The Engine's Fitters" of `docs/source/user_guide/fitting.rst`, and the
-   fitter's name in the lists of `user_guide/pyazr.rst` ("The engine's own fitters"), `web_interface.rst`
+   `include/Fitters.h`): name, option, gradient, residualRows, bounds, covariance, minos, callLimit, fallback,
+   progressLabel, doc, run. No edit of `include/Config.h` or `src/AZURE2.cpp`: the program's choice is the row's name
+   (`Config::fitter`, set by `ChooseFitter` under the table's precedence; `docs/upgrade/fit.md` section 5), and the
+   parser and `--help` read the row (`ApplyFitterSwitch`, `FitterSwitchesHelp`) [check 46 fails when `src/AZURE2.cpp`
+   names the switch, when `Config.h` declares a fitter bit, or when code outside `src/Fitters.cpp` sets
+   `Config::fitter`; `upgrade_fit_choice` tests the precedence over every set and order of switches]. The switch's
+   row in `reference/command_line.rst` and the table "The Engine's Fitters" of `docs/source/user_guide/fitting.rst`, and
+   the fitter's name in the lists of `user_guide/pyazr.rst` ("The engine's own fitters"), `web_interface.rst`
    (`engine_<name>`) and `calculate.rst` (its switch, "Minimizer Selection") [check 46].
 3. Its case in `tests/pyazr/fit_with_engine_test.py` (the session's fit ends where the program's ends; the `hesse=`
    argument of `compare` at its call says whether the errors of `param.sav` are compared: a fitter that returns errors

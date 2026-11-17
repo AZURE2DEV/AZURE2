@@ -5,6 +5,7 @@
 // because all of them differentiate the value of AZUREAPIChi2.cpp through the same adjoint (AZUREGrad.h) and
 // the same index map.
 #include <algorithm>
+#include <stdexcept>
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREAPI.h"
@@ -16,7 +17,6 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
-#include <stdexcept>
 #include "ECAmplitudeCache.h"
 
 #include "Config.h"
@@ -125,20 +125,21 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   };
 
   bool ok = AccumulateEGammaGradient(lc, state(), ld, results(), configure(), pmap, sdp, fb, accum);
-  // The model data (T9; false -> finite differences).
-  if (ok) ok = Objective::Engine().ModelDataGradient(ObjectiveContext{lc, state(), inputs(), ld, results(), full, configure()}, pmap, sdp, accum);
+  // The gradients of the terms of the model alone (ObjectiveTerm::AddGradient; false -> finite differences).
+  if (ok)
+    ok = Objective::Engine().AddGradient(ObjectiveContext{lc, state(), inputs(), ld, results(), full, configure()}, pmap, sdp,
+                                         accum, TermSet::kModelOnly);
   if (ok) {
-    if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, state(), configure(), accum);
-    AddAbundancePenaltyGradient(*ld, configure(), accum);
-    // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
+    // Their values: the model terms of the objective (T6, T7, T9, T11; before 2026-11-09 added here in the order 9, 6, 7).
     chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, state(), inputs(), ld, results(), full, configure()});
-    accum.Scatter(pmap, gradFull);
+    // The normalizations first, assigned: the scatter after them adds a term's part on a norm (GradAccum::direct).
     for (int s = 1; s <= ld->Data().NumSegments(); s++) {
       const Segment *seg = ld->Data().GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       int idx = pmap.NormIndex(s);
       if (idx >= 0 && idx < (int)gradFull.size()) gradFull[idx] = normData[s];
     }
+    accum.Scatter(pmap, gradFull);
     chi2Out = chi2;
   }
   return ok;
@@ -231,6 +232,20 @@ vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) {
   for (int i = 0, k = 1; i < (int)all_rwa_.size(); i++)
     if (!fixed_[i]) out[k++] += gradFull[i];
   out[0] = CalculateObjectiveRWA(params);
+  // ... plus the gradients the other terms state (ObjectiveTerm::AddGradient of a term not of the model alone; none of
+  // the engine's own terms has one), at x, where CalculateObjectiveRWA has just left the session.
+  GradAccum accum;
+  accum.Init(compound(), state());
+  bool added = false;
+  if (!Objective::Engine().AddGradient(ObjectiveContext{compound(), state(), inputs(), data(), results(), full, configure()},
+                                       pmap, nullptr, accum, TermSet::kOthers, &added))
+    throw std::runtime_error("CalculateObjectiveGradRWA: a term of the objective has no gradient here");
+  if (added) {
+    vector_r termsFull(all_rwa_.size(), 0.0);
+    accum.Scatter(pmap, termsFull);
+    for (int i = 0, k = 1; i < (int)all_rwa_.size(); i++)
+      if (!fixed_[i]) out[k++] += termsFull[i];
+  }
   return out;
 }
 

@@ -19,7 +19,7 @@ struct Results;
  * THM data in the scalar gradient pass (GradEnergyTasks.h; the design is the comment of ComputeTHMRows, AZUREGrad.h).
  *
  * The chi^2 of THM data compares s m_i + b(E_i) with d_i, the scale s (and an experiment's background coefficients) a
- * closed-form least-squares profile of the models (Segment::ProfileNormChiSquared, ThmProfile.h), or s = 1/n for a
+ * closed-form least-squares profile of the models (Segment::ProfileNormChiSquared, LinearProfile.h), or s = 1/n for a
  * norm that is fixed or fitted.  A profiled linear parameter is at the minimum of chi^2 over itself, so d chi^2/d s = 0
  * there and the total derivative of chi^2 in a level parameter is its partial derivative at fixed s and b (the
  * envelope theorem): the cotangent of point i's model is

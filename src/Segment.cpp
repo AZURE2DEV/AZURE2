@@ -14,6 +14,7 @@
 #include <string>
 #include "TargetEffect.h"
 #include "ModelPass.h"
+#include "InferenceTypes.h"
 #include "azure2/experiment/Expression.h"
 #include "ExperimentAdapter.h"
 
@@ -24,6 +25,7 @@
 #include "ThmDistortion.h"
 #include "ThmAngular.h"
 #include "ThmDwVertex.h"
+#include "ThmFormFactor.h"
 
 /*!
  * The observable flags and the model-side options of a data set or an extrapolation (ReactionSpec).  A THM segment
@@ -248,39 +250,20 @@ bool Segment::IsProfiledNorm() const {
 }
 
 /*!
- * With the norm n multiplying the data (residual m - n d, error n e), the
- * chi^2 = sum ((m - n d)/(n e))^2 is minimized at n* = S_mm / S_md, giving
- * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  The
- * points' model values must be in `results` (azure2::EvaluateModelPoint); n* is
- * returned in `profiledNorm`.
+ * T1a's gather: per point the model in the frame of the datum, f/J, the datum and its error as read (the points'
+ * model values must be in `results`, azure2::EvaluateModelPoint); the profile is inference/'s ProfiledNormChi2
+ * (LinearProfile.h), n* returned in `profiledNorm`.  A point with e = 0 has no weight: its model is not read.
  */
-
 double Segment::ProfileNormChiSquared(const WorkingCopy &data, const azure2::Results &results, double &profiledNorm) const {
-  double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
   const UnitRange<const Unit> points = GetPoints(data);
   const SegmentState &state = data.State(*this);
+  std::vector<double> m, d, e;
   for (int i = 0; i < points.size(); i++) {
-    const Unit &pt = points[i];
-    double e = LabError(i);
-    if (e == 0.0) continue;
-    double w = 1.0 / (e * e);
-    double m = pt.GetModelValue(results) / Jacobian(state, 0, i);
-    double d = LabValue(i);
-    Smm += m * m * w;
-    Smd += m * d * w;
-    Sdd += d * d * w;
+    e.push_back(LabError(i));
+    d.push_back(LabValue(i));
+    m.push_back(e.back() == 0.0 ? 0.0 : points[i].GetModelValue(results) / Jacobian(state, 0, i));
   }
-  if (Smd > 0.0 && Smm > 0.0) {
-    profiledNorm = Smm / Smd;
-    double chi = Sdd - Smd * Smd / Smm;
-    return chi > 0.0 ? chi : 0.0;
-  }
-  // Degenerate (no positive model-data overlap): leave the scale at unity and
-  // report the unscaled chi^2 so the fit still sees a finite, honest value.
-  profiledNorm = 1.0;
-  double chi = 0.0;
-  for (int i = 0; i < points.size(); i++) chi += azure2::PointResidual(data, *this, i, results, 1.0).Chi2();
-  return chi;
+  return ProfiledNormChi2(m, d, e, profiledNorm);
 }
 
 /*!
@@ -805,6 +788,7 @@ std::shared_ptr<TermSettings> Segment::MakeOwnSettings() const {
   t->thmWindow = thmWindow_.get();
   t->thmDistortion = thmDistortion_.get();
   t->thmDw = thmDwVertex_.get();
+  t->thmFf = thmFormFactor_.get();
   t->thmAngle = thmAngle_.get();
   t->thmCoherent = thmCoherent_.get();
   return t;
@@ -968,6 +952,11 @@ void Segment::SetThmDistortion(WorkingCopy &data, std::shared_ptr<const ThmDisto
 
 void Segment::SetThmDwVertex(WorkingCopy &data, std::shared_ptr<const ThmDwVertex> v) {
   thmDwVertex_ = v;
+  RefreshOwnSettings(data);
+}
+
+void Segment::SetThmFormFactor(WorkingCopy &data, std::shared_ptr<const ThmFormFactorTable> f) {
+  thmFormFactor_ = f;
   RefreshOwnSettings(data);
 }
 

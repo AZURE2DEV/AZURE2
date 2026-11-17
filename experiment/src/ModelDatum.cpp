@@ -6,21 +6,10 @@
 #include <cstdlib>
 #include <string>
 
+#include "azure2/experiment/Quantities.h"
+
 namespace azure2 {
 namespace experiment {
-
-const std::vector<std::pair<std::string, ModelQuantity>> &ModelQuantities() {
-  static const std::vector<std::pair<std::string, ModelQuantity>> rows = {
-      {"resonance_strength", ModelQuantity::ResonanceStrength},
-      {"resonance_energy", ModelQuantity::ResonanceEnergy},
-      {"total_width", ModelQuantity::TotalWidth},
-      {"partial_width", ModelQuantity::PartialWidth},
-      {"branching_ratio", ModelQuantity::BranchingRatio},
-      {"anc", ModelQuantity::Anc},
-      {"scattering_length", ModelQuantity::ScatteringLength},
-  };
-  return rows;
-}
 
 bool ModelDataBuild::Ok() const {
   for (const Diagnostic &d : diagnostics)
@@ -57,13 +46,12 @@ class Builder {
     const Value *error = r.Get("error");
     if (!q || !value || !error || !value->unit || !error->unit) return;  // the validator said why
     d.quantityName = q->word;
-    bool known = false;
-    for (const auto &row : ModelQuantities())
-      if (row.first == q->word) {
-        d.quantity = row.second;
-        known = true;
-      }
-    if (!known) return;  // a datum quantity of the table without an evaluation: repo_consistency check 27
+    // The row of the quantity table (Quantities.cpp) says what the datum is to the engine and what the build checks
+    // (DatumRule; docs/upgrade/data_model.md section 11).  A datum row without one: experiment_quantities, check 27.
+    const Quantity *row = FindQuantity(q->word);
+    if (!row || !row->datum.given) return;
+    const DatumRule &rule = row->datum;
+    d.quantity = rule.quantity;
     d.unit = value->unit->token;
     d.unitFactor = value->unit->factor;
     d.value = ToBase(value->number.value, value->unit);
@@ -76,12 +64,12 @@ class Builder {
       d.imag = ToBase(im->number.value, im->unit);
       d.imagError = ToBase(ie->number.value, ie->unit);
     }
-    if (d.quantity == ModelQuantity::ScatteringLength) {
+    if (rule.check == DatumCheck::kSWavePair) {
       ScatteringLengthPair(d);
     } else {
       const LevelInfo *level = Level(d);
       if (!level) return;
-      LevelPairs(d, *level);
+      LevelPairs(d, *level, rule);
     }
     if (ok_) out_.data.push_back(d);
   }
@@ -185,28 +173,68 @@ class Builder {
     return OnePair(PairsNamed(r.ejectile, r.residual, r.state, pairs_), "reaction", what);
   }
 
-  void LevelPairs(ModelDatum &d, const LevelInfo &level) {
-    switch (d.quantity) {
-      case ModelQuantity::ResonanceStrength:
-      case ModelQuantity::BranchingRatio: {
-        const Value *reaction = record_->Get("reaction");
-        if (!reaction || reaction->reaction.terms.empty()) {
-          ok_ = false;
-          return;
-        }
-        const SingleReaction &r = reaction->reaction.terms[0].reaction;
-        if (reaction->reaction.op != ReactionExpr::Single || r.state.kind == ResidualState::Total) {
-          Report(Severity::Error, codes::kReactionNotAllowed, "reaction",
-                 "a " + d.quantityName + " names one entrance and one exit pair (no sum, ratio or [total])");
-          return;
-        }
-        d.entrancePair = ReactionPair(r, true);
-        d.exitPair = ReactionPair(r, false);
-        if (!ok_) return;
-        NeedChannel(level, d.entrancePair, "reaction");
-        NeedChannel(level, d.exitPair, "reaction");
-        if (!ok_ || d.quantity != ModelQuantity::ResonanceStrength) return;
+  /// What the datum names in <levels>, from its fields (the row's fields decide which a validated record has): the
+  /// frame; a reaction's entrance and exit pairs; a channel (pair, l, s); a pair; then the row's check (DatumCheck).
+  void LevelPairs(ModelDatum &d, const LevelInfo &level, const DatumRule &rule) {
+    if (const Value *frame = record_->Get("frame")) d.frame = frame->word;
+    if (record_->Get("reaction")) {
+      ReactionPairs(d, level);
+    } else if (record_->Get("l")) {
+      ChannelField(d, level, rule);
+    } else if (record_->Get("pair")) {
+      PairField(d, level);
+    }
+    if (ok_) Check(d, level, rule);
+  }
+
+  /// The entrance and exit pairs of a reaction (one reaction, no [total] exit), each a channel of the level.
+  void ReactionPairs(ModelDatum &d, const LevelInfo &level) {
+    const Value *reaction = record_->Get("reaction");
+    if (reaction->reaction.terms.empty()) {
+      ok_ = false;
+      return;
+    }
+    const SingleReaction &r = reaction->reaction.terms[0].reaction;
+    if (reaction->reaction.op != ReactionExpr::Single || r.state.kind == ResidualState::Total) {
+      Report(Severity::Error, codes::kReactionNotAllowed, "reaction",
+             "a " + d.quantityName + " names one entrance and one exit pair (no sum, ratio or [total])");
+      return;
+    }
+    d.entrancePair = ReactionPair(r, true);
+    d.exitPair = ReactionPair(r, false);
+    if (!ok_) return;
+    NeedChannel(level, d.entrancePair, "reaction");
+    NeedChannel(level, d.exitPair, "reaction");
+  }
+
+  /// One channel (pair, l, s) of the level; s is one channel spin, not 'coherent'.
+  void ChannelField(ModelDatum &d, const LevelInfo &level, const DatumRule &rule) {
+    const Value *l = record_->Get("l");
+    const Value *s = record_->Get("s");
+    if (!s) {
+      ok_ = false;
+      return;
+    }
+    if (s->word == "coherent") {
+      Report(Severity::Error, codes::kFieldNotApplicable, "s", rule.what + " belongs to one channel spin, not 'coherent'");
+      return;
+    }
+    PairField(d, level);
+    if (!ok_) return;
+    d.l = (int)l->integer;
+    d.twoS = s->Get("spin") ? s->Get("spin")->spin.twice : -1;
+    NeedChannel(level, d.pair, "s", d.l, d.twoS);
+  }
+
+  /// The row's check of the level against a threshold (DatumCheck), after the fields resolved.
+  void Check(const ModelDatum &d, const LevelInfo &level, const DatumRule &rule) {
+    switch (rule.check) {
+      case DatumCheck::kNone:
+      case DatumCheck::kSWavePair:
+        return;
+      case DatumCheck::kResonance: {
         const PairInfo *in = PairByKey(d.entrancePair, pairs_);
+        if (!in) return;
         const double Er = level.energy - in->threshold;  // MeV, c.m. of the entrance pair
         if (Er <= 0.0) {
           Report(Severity::Error, codes::kOutOfRange, "level",
@@ -217,48 +245,22 @@ class Builder {
         Warnings(level, Er);
         return;
       }
-      case ModelQuantity::ResonanceEnergy: {
-        const Value *frame = record_->Get("frame");
-        if (!frame) {
-          ok_ = false;
-          return;
-        }
-        d.frame = frame->word;
-        if (d.frame == "E_x") return;
-        PairField(d, level);
-        return;
-      }
-      case ModelQuantity::TotalWidth:
-        return;
-      case ModelQuantity::PartialWidth:
-        PairField(d, level);
-        return;
-      case ModelQuantity::Anc: {
-        const Value *l = record_->Get("l");
-        const Value *s = record_->Get("s");
-        if (!l || !s) {
-          ok_ = false;
-          return;
-        }
-        if (s->word == "coherent") {
-          Report(Severity::Error, codes::kFieldNotApplicable, "s", "an ANC belongs to one channel spin, not 'coherent'");
-          return;
-        }
-        PairField(d, level);
-        if (!ok_) return;
-        d.l = (int)l->integer;
-        d.twoS = s->Get("spin") ? s->Get("spin")->spin.twice : -1;
-        NeedChannel(level, d.pair, "s", d.l, d.twoS);
-        if (!ok_) return;
+      case DatumCheck::kClosedChannel: {
         const PairInfo *p = PairByKey(d.pair, pairs_);
-        if (level.energy >= p->threshold)
+        if (p && level.energy >= p->threshold)
           Report(Severity::Error, codes::kFieldNotApplicable, "pair",
                  "level " + std::to_string(d.levelId) + " lies " + Fmt(level.energy - p->threshold) + " MeV above the " +
-                     PairLabel(*p) + " threshold: an ANC belongs to a closed channel (give a partial_width)");
+                     PairLabel(*p) + " threshold: " + rule.what + " belongs to a closed channel (give a partial_width)");
         return;
       }
-      case ModelQuantity::ScatteringLength:
+      case DatumCheck::kOpenChannel: {
+        const PairInfo *p = PairByKey(d.pair, pairs_);
+        if (p && level.energy <= p->threshold)
+          Report(Severity::Error, codes::kFieldNotApplicable, "pair",
+                 "level " + std::to_string(d.levelId) + " lies " + Fmt(p->threshold - level.energy) + " MeV below the " +
+                     PairLabel(*p) + " threshold: " + rule.what + " belongs to an open channel (give an anc)");
         return;
+      }
     }
   }
 

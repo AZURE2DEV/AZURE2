@@ -198,21 +198,16 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
                  "present (RMC, or a not-yet-handled case)."
               << std::endl;
   }
-  // The model data (T9); where their gradient is not available every parameter falls back to finite differences.
-  if (eg && !Objective::Engine().ModelDataGradient(ObjectiveContext{lc, ls, inputs_, ld, results, p, configure()}, pmap, sdp, accum))
+  // The terms' own gradients (ObjectiveTerm::AddGradient: Park's wall, the abundances, the model data, the gamma_decay
+  // records); where one is not available every parameter falls back to finite differences.
+  if (eg && !Objective::Engine().AddGradient(ObjectiveContext{lc, ls, inputs_, ld, results, p, configure()}, pmap, sdp, accum))
     eg = false;
   if (eg) {
-    AddParkPenaltyGradient(lc, ls, configure(), accum); // Park J > 0 wall
-    AddAbundancePenaltyGradient(*ld, configure(), accum);  // abundance priors, sum-to-one
-    accum.Scatter(pmap, grad);                      // energies + reduced widths, abundances, screening
-    AddNuisanceGradient(p, grad);                   // nuisance penalty
-    // The diagonal priors (DiagonalPriors.h) of screening, Doppler temperature and sample thickness on p; density and
-    // apparatus priors are in the central differences of the whole chi^2 below, the norms' in the loop after this.
+    // The diagonal priors (DiagonalPriors.h): the norms' in the loop below, those of screening, Doppler temperature and
+    // sample thickness after the scatter; density and apparatus priors are in the central differences of the whole
+    // chi^2 below.
     const DiagonalPriors priors = DiagonalPriorsOf(*ld, pmap);
-    for (const DiagonalPrior &e : priors)
-      if ((e.source == PriorSource::kScreening || e.source == PriorSource::kDoppler || e.source == PriorSource::kThickness) &&
-          e.index < (int)grad.size())
-        grad[e.index] += GaussianPriorGradient(p[e.index], e.centre, e.sigma);
+    // The normalizations first, assigned: the scatter after them adds a term's part on a norm (GradAccum::direct).
     for (int s = 1; s <= ld->Data().NumSegments(); s++) {  // normalizations
       const Segment *seg = ld->Data().GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
@@ -228,6 +223,12 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
         if (e.source == PriorSource::kNorm && e.group == s) g += GaussianPriorGradient(e.value, e.centre, e.sigma);
       grad[idx] = g;
     }
+    accum.Scatter(pmap, grad);     // energies + reduced widths, abundances, screening, the terms' direct parts
+    AddNuisanceGradient(p, grad);  // nuisance penalty
+    for (const DiagonalPrior &e : priors)
+      if ((e.source == PriorSource::kScreening || e.source == PriorSource::kDoppler || e.source == PriorSource::kThickness) &&
+          e.index < (int)grad.size())
+        grad[e.index] += GaussianPriorGradient(p[e.index], e.centre, e.sigma);
   }
 
   // Fixed-parameter mask: Minuit ignores the gradient of fixed parameters, so

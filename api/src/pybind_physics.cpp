@@ -31,6 +31,7 @@
 #include "azure2/physics/Widths.h"
 #include "azure2/physics/coulomb/Coulomb.h"
 #include "azure2/physics/coulomb/Whittaker.h"
+#include "azure2/physics/transfer/FormFactor.h"
 #include "azure2/physics/transfer/ThmVertex.h"
 #include "pybind_rows.h"
 #include "pybind_engine_call.h"
@@ -308,6 +309,46 @@ std::vector<PhysicsRow> BuildTable() {
                {{"M", "", "plane-wave surface vertex M_l(p)"}},
                [](const double *a, double *o) {
                  o[0] = azure2::physics::transfer::PlaneWaveSurfaceVertex(Int(a[0]), a[1], a[2], a[3]);
+                 return std::isfinite(o[0]) ? kOk : kFailed;
+               }});
+  t.push_back({"thm_full_form_factor",
+               "Full form factor of a Trojan-horse level relative to its surface term, R = W/[(hbar^2/2mu) u(a) M_l].",
+               "vertexModel=ff (docs/upgrade/thm_form_factor.md; La Cognata et al., ApJ 708 (2010) 796, Eqs. 20-21): "
+               "W = int_0^a u V j_l(pr) r dr with u the Woods-Saxon (+ uniform-sphere Coulomb) level function of n_r "
+               "interior nodes at the level energy e_level above the pair's threshold with a u'(a)/u(a) = B, normalised "
+               "inside a; by Green's identity W = (hbar^2/2mu) u(a) [M_l + Delta], Delta the volume term.  eps = "
+               "hbar^2 p^2/2mu = E + B_xs + T_s; R = 1 + Delta/M_l.  The well's radius is r0 A^(1/3), A the mass "
+               "number of the heavier particle.",
+               "physics/transfer/FormFactor.h: SolveLevel, VolumeTerm, SurfaceM", "eps",
+               {L(), Integer("nodes", "radial node count n_r of the level function").ge(0).le(20).example(0),
+                Z("z1", "particle 1", 1), Z("z2", "particle 2", 8), M("m1_u", "particle 1", kMassH1),
+                M("m2_u", "particle 2", 17.99915961), Radius(),
+                Real("e_level", "MeV", "level energy above the pair's threshold").example(0.144),
+                Real("boundary", "", "boundary value B = a u'(a)/u(a) of the level function").example(0)
+                    .sweep(-5, 5, Spacing::linear),
+                Real("eps", "MeV", "E + B_xs + T_s: hbar^2 p^2/2mu of the transferred particle").gt(0).example(2.37)
+                    .sweep(0.05, 6, Spacing::linear),
+                Real("r0", "fm", "Woods-Saxon radius parameter").gt(0).example(1.25),
+                Real("a0", "fm", "Woods-Saxon diffuseness").gt(0).example(0.65)},
+               {{"R", "", "W / surface term"}, {"delta", "", "volume term Delta"},
+                {"M", "", "surface term M_l(pa; B)"}, {"depth", "MeV", "Woods-Saxon depth V0"}},
+               [](const double *a, double *o) {
+                 namespace ff = azure2::physics::transfer::form_factor;
+                 ff::Well w;
+                 const double m1 = a[4], m2 = a[5];
+                 w.mu = m1 * m2 / (m1 + m2) * phys::kAtomicMassUnit_MeV;
+                 w.a = a[6];
+                 w.R = a[10] * std::cbrt(std::round(std::max(m1, m2)));
+                 w.diff = a[11];
+                 w.rc = w.R;
+                 w.zze2 = a[2] * a[3] * phys::kHbarC_MeV_fm * phys::kFineStructure;
+                 const ff::LevelFunction f = ff::SolveLevel(w, Int(a[0]), a[7], a[8], Int(a[1]));
+                 if (!f.ok) return kFailed;
+                 const double p = std::sqrt(a[9] / w.H2M());
+                 o[1] = ff::VolumeTerm(w, f, a[9]);
+                 o[2] = ff::SurfaceM(Int(a[0]), p * w.a, a[8]);
+                 o[0] = o[2] != 0.0 ? 1.0 + o[1] / o[2] : std::nan("");
+                 o[3] = f.depth;
                  return std::isfinite(o[0]) ? kOk : kFailed;
                }});
   section("widths");

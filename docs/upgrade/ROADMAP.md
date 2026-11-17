@@ -31,8 +31,10 @@ push: 165 of 172 regression checks, 27 unit tests failing; a path with a drive l
 project, and pyazr read text in the local code page (answered in the fourteenth push, not run on Windows). macOS
 in that push, the first with the GNU tools: 164 of 172 regression checks and 5 unit tests failing; four scripts
 were not written for bash 3.2, three compared a path through the temporary directory's link, and two failures are
-not understood. The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
-one Linux machine only.
+not understood. **2026-11-17:** macOS passes every regression check and all unit tests but one (a band of T3 at
+an extrapolation point no kinematics reaches), Windows every regression check and all unit tests but one (a
+test's fault, repaired in the next push); `FOR_THE_OWNER.md` section 10, item 1, the last bullet. The gates'
+other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
 
@@ -359,6 +361,11 @@ split into files of one job (`FOR_THE_OWNER.md` section 10 item 5), no function 
       whether SRIM's two data files are shipped.
 - [ ] THM (`THM.md` §1–2): σ_HOES observable with plane-wave and full-form-factor vertices, THM kernel (c.m.
       resolution, QF window, OES S-fold), free or double-ratio normalization, legacy K options marked.
+  - [x] Full-form-factor vertex `vertexModel=ff` (`thm_form_factor.md`; branch `feature/upgrade-5-thm-ff`, de95311a).
+  - [x] Legacy K options marked in the key table; warnings for a THM energy shift and a negative profiled
+        background (the review of M. La Cognata; same branch).
+  - [ ] Double-ratio normalization to a reference resonance; non-negative background as an option (thm-review
+        073fe48, not ported); the OES S-fold.
 Gate: outputs within the stated quadrature tolerance, each difference explained; smooth χ² in shifts; gradient = FD.
 
 ## Phase 6 — Evaluation without copies

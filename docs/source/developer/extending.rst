@@ -223,25 +223,56 @@ the parameter vector is not a set-up fact: it belongs in ``LevelState`` (above).
 A term of the objective
 -----------------------
 
-1. One ``ObjectiveTerm`` subclass in ``src/Objective.cpp``, appended to the
-   term list in the ``Objective`` constructor (``Objective::Terms``).
-   ``ObjectiveTerm`` is ``azure2::inference::Term<ObjectiveContext>``
-   (``inference/include/azure2/inference/TermList.h``): ``Add`` is the term,
-   ``ModelOnly``, ``AddForSampler`` and ``ExcludesForSampler`` have defaults
-   (not of the model alone; the sampler takes the whole term; no point is
-   excluded). A Gaussian prior on one parameter is ``GaussianPriorChi2`` of
-   ``GaussianPrior.h`` and a line of its gather in ``src/DiagonalPriors.cpp``
-   (``include/DiagonalPriors.h``), which gives the term its value and
-   ``ForEachDiagonalPrior`` its gradient, Minuit's :math:`G_2` and its
-   least-squares row. Its
-   gradient beside the others in ``src/AZUREGrad.cpp``, and its residual rows
-   in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. No term
-   is added anywhere else (check 11).
-2. Tests: the analytic gradient against finite differences
-   (``AZURE_GRAD_CHECK``), the program and ``pyazr`` giving the same
-   :math:`\chi^2` (``tests/pyazr/objective_test.py``).
-3. Its total in ``Results::objective`` and from there in ``chiSquared.out``
-   (``reference/output_files.rst``).
+A term is one class in ``src/Objective.cpp`` and one line in the ``Objective``
+constructor; the walks of the objective (its value, gradient, least-squares
+rows and the fields of ``chiSquared.out``) loop over the terms and name none
+(``docs/upgrade/objective_arrays.md`` section 8).
+
+1. A Gaussian prior on one parameter is not a new term: ``GaussianPriorChi2``
+   of ``GaussianPrior.h`` and a line of its gather in
+   ``src/DiagonalPriors.cpp`` (``include/DiagonalPriors.h``), which gives the
+   term its value and ``ForEachDiagonalPrior`` its gradient, Minuit's
+   :math:`G_2` and its least-squares row.
+2. Otherwise one class deriving from ``ObjectiveTerm`` (``include/Objective.h``;
+   it derives from ``azure2::inference::Term<ObjectiveContext>`` of
+   ``inference/include/azure2/inference/TermList.h``), appended with
+   ``Append<YourTerm>()`` at the end of the list in the ``Objective``
+   constructor. Its place there is its place in the sum and its slot in
+   ``Results::objective``; the walk lists in the constructor are left alone
+   (they state the older terms' orders and visit a new term last). The class
+   states:
+
+   - ``Add``: the value, added once to the running sum, and
+     ``StoreTotal(c, v)`` for its field of ``chiSquared.out``;
+   - ``ModelOnly``: true only for a term of the model alone (then part of
+     ``pyazr``'s ``calculate_chi2`` and its gradient; otherwise of
+     ``objective()`` only);
+   - ``AddGradient``: :math:`\partial\chi^2/\partial\theta` into the
+     ``GradAccum`` (``AddE``, ``AddGamma``, ``AddAbundance``, or
+     ``accum.direct`` with a full index for any parameter), returning
+     ``kAdded``, ``kNone`` or ``kUnavailable`` (finite differences);
+   - ``AppendRows``: its least-squares rows if it is a sum of squares. A term
+     the project does not use adds no rows; the number of rows may depend on
+     the project, never on the parameter vector (a row of 0 where a term in
+     use is inactive at this vector);
+   - ``TotalLabel`` and ``WriteTotal``: its field, written only when the
+     project uses the term, so that other projects' files do not change;
+   - ``AddForSampler``, ``ExcludesForSampler``: only if the sampler should
+     not take the whole term.
+
+   The walk of the engine's objects is a gather in the engine that fills plain
+   arrays; the arithmetic on them (value, gradient, rows), when more than a
+   line, is one header of ``inference/`` with its test in ``inference/tests/``
+   (``AbundancePriors.h`` with ``AbundanceBlockOf``, ``ParkWall.h`` with
+   ``ParkLevelsOf`` are the pattern). No term is added anywhere else
+   (checks 11 and 11b).
+3. Tests, with the term non-zero and the start off its minimum:
+   ``AZURE_GRAD_CHECK=exit AZURE2 fit --use-gradient`` compares the analytic
+   gradient with finite differences and the rows' gradient with the adjoint;
+   ``Session.evaluate(x).terms`` against the field of ``chiSquared.out``
+   (``tests/pyazr/evaluation_test.py``).
+4. The field in ``reference/output_files.rst``; the term's line in the list at
+   the top of ``include/Objective.h`` and in ``docs/upgrade/objective.md``.
 
 A record kind or a key of the project format
 --------------------------------------------
@@ -398,16 +429,15 @@ A minimiser the program and a pyazr session can both run:
    and one that honours ``control.maxCalls`` ends by it
    (``FitEvaluations::Count()``).
 2. Its row in ``Fitters()`` (``src/Fitters.cpp``; the columns of ``FitterRow``,
-   ``include/Fitters.h``): name, the program's switch, the
-   ``Config::paramMask`` bit the switch sets (a new enumerator
-   ``USE_<X>_MINIMIZER`` of ``Config::ParameterFlags`` in ``include/Config.h``,
-   the next bit above the highest in use; a change of that header rebuilds
-   nearly everything), gradient / residual rows /
+   ``include/Fitters.h``): name, the program's switch, gradient / residual rows /
    bounds / covariance / MINOS, whether it honours a call limit
    (``callLimit``: ``RunFitter`` adds the notice for a fitter that does not),
    the row it falls back to without an analytic Jacobian (``fallback``), the
    progress label, one line of doc. Its place in the table is its precedence
-   in the program. The program's parser and usage text take the switch and
+   in the program: the program's choice is the row's name
+   (``Config::fitter``, set by ``ChooseFitter``, which keeps the earliest
+   row of the switches given), so ``include/Config.h`` is not edited. The
+   program's parser and usage text take the switch and
    the doc line from the row (``ApplyFitterSwitch``, ``FitterSwitchesHelp``:
    ``src/AZURE2.cpp`` is not edited);
    a fitter behind a build option also gets a row in ``AbsentFitters()`` for
@@ -419,8 +449,9 @@ A minimiser the program and a pyazr session can both run:
    fitters"), ``user_guide/web_interface.rst`` (``engine_<name>``) and
    ``user_guide/calculate.rst`` (its switch, "Minimizer Selection") (check
    46 fails for a row missing from any of them, for a switch named in
-   ``src/AZURE2.cpp`` outside the table, and for a minimizer bit of the
-   parser that is no row).
+   ``src/AZURE2.cpp`` outside the table, for a fitter bit declared in
+   ``include/Config.h`` and for ``Config::fitter`` set outside
+   ``src/Fitters.cpp``).
 4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
    ends where the program ends, with the program's covariance (the ``hesse=``
    argument of ``compare`` says whether the errors of ``param.sav`` are
@@ -697,7 +728,8 @@ Other tables
 ------------
 
 The repository's ``CLAUDE.md`` has the recipes for a model-only datum
-(``ModelQuantities()``, check 27), a derived parametrisation of a level
+(a value of ``ModelQuantity``, its row of ``Quantities()`` with
+``q.datum``, its case in ``LevelValue``; check 27), a derived parametrisation of a level
 (``gamma_decay``), a new optical potential term or global optical set
 (``physics/src/transfer``), a material or stopping source (``stopping/``,
 ``TargetStopping``), a cache, and a regression check (``tests/<name>/check.sh``

@@ -45,7 +45,7 @@ integrated on one mesh per compound nucleus.  At the parameters where the capped
 then ends elsewhere after its five calls: 109.263831704 (shared mesh, 1 and 4 threads), 109.250542525 (before),
 109.219622427 (refined eightfold); five calls are not a minimum, so the end point follows the path, not the rule.
 
-2026-11-15, the bounded seed (`docs/upgrade/fit.md` section 5): the first MIGRAD step is bounded, so the five calls
+2026-11-15, the bounded seed (`docs/upgrade/fit.md` section 6): the first MIGRAD step is bounded, so the five calls
 take another path and end lower: 106.432604829 at 1 and at 4 threads (the same build without the bound, this
 branch's base: 109.263831704).  The same test moved on dev for the same reason (109.134 to 106.338).  Nothing in the
 calculation changed: checks (a), (c) and (d) pass unchanged.

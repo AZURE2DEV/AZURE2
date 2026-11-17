@@ -15,6 +15,7 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "CoulFunc.h"
+#include "Fitters.h"
 #include "GenMatrixFunc.h"
 #include "JGroup.h"
 #include "Kinematics.h"
@@ -266,7 +267,7 @@ std::shared_ptr<const LineNodeSet> LineNodesOf(const Site &site, const CompoundS
 std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable, const CompoundSystem *compound,
                               const Config &configure) {
   if (configure.paramMask & Config::USE_RMC_FORMALISM) return "the RMC formalism is not supported";
-  if (configure.paramMask & Config::USE_ANALYTIC_GRADIENT)
+  if (std::string(FitterOfConfig(configure).name) == "migrad-gradient")
     return "--use-gradient is not supported (its gradient does not run over the line shape); fit without it";
   if (otherObservable)
     return "only a capture cross section (angle-integrated or differential) can be integrated over the line shape";

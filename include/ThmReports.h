@@ -36,7 +36,8 @@ struct ThmVertexReport {
   std::vector<char> reached;
   /// The plane-wave window itself (null without one), e.g. for its Density.
   std::shared_ptr<const ThmSpectatorWindow> windowObject;
-  /// "pw" (the plane-wave vertex) or "dw" (vertexModel=dw, ThmDwVertex.h).
+  /// "pw" (the plane-wave vertex), "ff" (vertexModel=ff: m2 and m2qf include each level's volume term,
+  /// ThmFormFactor.h) or "dw" (vertexModel=dw, ThmDwVertex.h).
   /// For dw, m2 is the DW vertex averaged over the nodes the DW vertex uses
   /// (the reachable part of the window at each E), m2qf the DW vertex at the
   /// spectatorAngle direction, and the nodes are per energy:

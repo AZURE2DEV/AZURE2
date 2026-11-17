@@ -29,15 +29,17 @@ AZUREAPI::ObjectiveBreakdown AZUREAPI::EvaluateObjectiveRWA(const vector_r &para
   ObjectiveBreakdown out;
   const vector_r full = FullOf(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
-  EvaluateFilledChi2(nullptr);  // the model value of every point: the one model evaluation
+  EvaluateFilledModel();  // the model value of every point: the one model evaluation
   ObjectiveContext context{compound(), state(), inputs(), data(), results(), full, configure()};
   context.nuisance = [this](const vector_r &q) { return NuisanceChi2(q); };
-  // The sum as CalculateObjectiveRWA forms it (the same steps, so the same bits), then the breakdown: each term
-  // summed on its own, from the model values already in the buffer (no point is evaluated again).
-  out.total = Objective::Engine().Chi2(context);
+  // One walk of the terms: each term summed on its own (the breakdown), and their sum in order.  That sum is
+  // CalculateObjectiveRWA's, bit for bit: the first term starts from 0 in both sums, and every later term adds its
+  // value in one step (v = 0 + x is x, so chi2 + v is chi2 + x).  A term after the first that adds in several steps
+  // would break this; tests/pyazr/objective_test.py section 6 compares the two totals bit for bit.  (Until
+  // 2026-11-17 the data were walked three times here: EvaluateFilledChi2's DataChi2, the plain sum, the breakdown.)
   context.termsOut = &out.terms;
   context.segmentPriorsOut = &out.segments;
-  Objective::Engine().Chi2(context);
+  out.total = Objective::Engine().Chi2(context);
   out.excluded = OutsideSamplerSupport(params) || Objective::Engine().ExcludesForSampler(context);
   return out;
 }
@@ -66,11 +68,11 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
     if (const PriorCovariance *pc = data()->Data().GetPriorCovariance())
       pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   }
-  // The rows the program's least-squares drivers add (AZURECalc::ResidualJacobian, PrepareFreeParams): Park's wall,
-  // the gamma_decay priors and wall, the abundance sums; then every diagonal prior and every nuisance prior.
+  // The rows the program's least-squares drivers add (AZURECalc::ResidualJacobian, PrepareFreeParams): the terms' own
+  // (Objective::AppendModelRows); then every diagonal prior and every nuisance prior.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
-  AppendModelRows(compound(), state(), *data(), configure(), jacobianOut ? &pmap : nullptr, nCols, residuals,
-                  jacobianOut ? &jacobian : nullptr);
+  Objective::Engine().AppendModelRows(ObjectiveContext{compound(), state(), inputs(), data(), results(), full, configure()},
+                                      jacobianOut ? &pmap : nullptr, nCols, residuals, jacobianOut ? &jacobian : nullptr);
   auto priorRow = [&](int f, double nominal, double sigma) {
     residuals.push_back((full[f] - nominal) / sigma);
     if (!jacobianOut) return;

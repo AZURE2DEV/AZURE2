@@ -28,6 +28,22 @@ merge of the eleven port branches, each of which was first merged with `b8ee2219
   and this file: the union.
 - Sizes: `src/AMatrixFunc.cpp` 1960 lines and `src/WorkingCopy.cpp` 1246, both under their records.
 
+**Caught up with `feature/upgrade` `1be25e91` (2026-11-17, 54 commits after `b8ee2219`).** The splits of
+`AMatrixFunc.cpp`, `WorkingCopy.cpp` and `AZUREGrad.cpp` moved code the ports had changed; each of the ports' hunks
+was put where its code went (`AMatrixFuncTBar.cpp`, `AMatrixFuncAdjoint.cpp`, `WorkingCopyFill.cpp`,
+`AZUREGradThm.cpp`), none dropped. By hand:
+- the isospin term (T12) is written as a term in one place (`IsospinTerm` in `src/Objective.cpp`: value, gradient,
+  rows, `Total-Isospin-Chi-Squared` through its slot), in the walks directly after the gamma-decay term, as before;
+  `Results::objective.isospin` is gone. `tests/consistency/repo_consistency_test.py` check 11b names
+  `IsospinTies.{h,cpp}` among the files that define a term's arithmetic (as `GammaDecayMap.{h,cpp}`).
+- `src/LineWindow.cpp`: the refusal of `--use-gradient` asks `FitterOfConfig(configure).name == "migrad-gradient"`
+  (the bit is retired).
+- `src/ThmFormFactor.cpp` (new on the base): `PPair::GetChRad` is `GetPairRadius` here, and `ShiftAtLevelEnergy`
+  takes a radius; the form factor's well and its boundary shift both use the pair's radius. **For the THM's author:**
+  with a `channel_radius` record on a THM entrance channel the form factor still matches at the pair's radius.
+- `docs/upgrade/fit.md`: the base's new section 5 (the fitter as a row's name) stays 5; the seed of MIGRAD is 6.
+The size records no longer bind any file the ports touch (all under 1000 lines after the splits).
+
 **Open.**
 - dev moved after the `-rmfit` port was cut: `50fc6cd5` (2026-11-17, `rmfit/campaign.py`, `rmfit/enginepin.py`, its
   test: `rmfit init` rewrites the md5 guard of a campaign's job scripts on an allowed engine change) is not here.
@@ -699,6 +715,585 @@ unit tests 307 of 310, failing the base's two (`pyazr_park_dsde`, `pyazr_units_s
 which lists every project under `tests/`: the seven new models are added to `tests/upgrade/predictions.txt` in a
 follow-up commit (19 lines added, none changed) and the test passes; physics suites 172 pass, the base's two fail
 (`capture_ay_coupling`, the ancai06 warning); the pages build. **Not run:** CI.
+
+## 2026-11-17 (analysis machine, almalinux) — `feature/upgrade-5-thm-ff`: the full form factor, THM clean-up
+
+Branch `feature/upgrade-5-thm-ff`, cut from `feature/upgrade` 76875f72, pushed, **not merged** (the director's).
+- de95311a `vertexModel=ff`: the full transfer form factor of each level (La Cognata et al. ApJ 708 Eqs. 20-22), the
+  item the review of M. La Cognata calls central (T4).  Design: `thm_form_factor.md`.  The physics in
+  `physics/transfer/FormFactor.h` (bound to `pyazr.physics.thm_full_form_factor`), a constant per-experiment table
+  built at set-up (`src/ThmFormFactor.cpp`), one level-vertex function for the model and the adjoint
+  (`ThmLevelVertex`, `src/THMMatrixFunc.cpp`).  Needs `vertex=perlevel`, the Brune basis and fixed energies of its
+  levels.  Checks: `physics_transfer_form_factor`, `pyazr_physics_table`, `tests/thm_full_form_factor/check.sh`
+  (pw limit, refusals, threads, AZURE_GRAD_CHECK 1e-10).
+- The clean-up commit: the `kinematics` key's text (the data are divided by the Monte Carlo KF; lacognata the default,
+  triple K = 1, kf3body and lambda32 for old projects); a set-up warning for a THM data set with an energy shift; a
+  run warning when the profiled background is negative in the experiment's range; `thm_implementation.rst` no longer
+  says a negative background is acceptable.  Results unchanged: warnings only (a refusal would change existing
+  projects, e.g. the 19F evaluation's −9.17 keV shift: the PI's decision).
+- Machine: one core, 3 GB.  Verified there: build without warnings in the touched files; the THM pyazr tests
+  (thm_keys, thm_dw_vertex, thm_experiment, thm_adjoint, thm_profiled, thm_vertex_reach, thm_spectator_window,
+  physics_table); `tests/run_tests.sh`: 172 passed, 1 failed (`capture_ay_coupling`: its `verify.py` imports
+  `make_models`, which eaadf220 deleted with the other model generators; not this branch's, not fixed here);
+  consistency.  Not run:
+  the full `ctest -LE slow` (the build was configured without tests), the slow tests, sphinx, macOS, Windows.
+- Open: port `backgroundPositive=on` (thm-review 073fe48) onto `inference/`'s LinearProfile; the double-ratio
+  normalization (C3); the questions for Catania (their well, node counts, normalization inside a).
+
+## 2026-11-17 (director, 10:20) — merged: a lab angle no elastic scattering reaches is refused; T3's `x8`
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 110 (rehearsal 109 plus four commits of mine). The
+PI's decision of 2026-11-17 on the question of e110's morning list: "I agree, make it point (a)" (refuse such a
+point and regenerate that golden file). The base build is `work/b-trial110`; the reference tag stays
+`tab-trial103-1`.
+
+- `experiment::ElasticLabToCM` refused a lab angle only where (m1/m2) sin theta_lab > 1: never for equal masses,
+  and not for a heavier projectile at a backward angle. It now also refuses every lab angle above 90 degrees
+  when the projectile is no lighter than the target. Angles up to 90 degrees keep their bits.
+- Seen on the unchanged T3: `AZURE2 extrapolate` stops at set-up, exit 1, "ERROR: test segment #8: lab angle 100
+  deg at E_lab = 4 MeV: beyond the kinematic maximum 90 deg of elastic scattering with a projectile as heavy as
+  the target (give the point as c.m., code 4 / 5, or drop it)." `AZURE2 --validate` still calls such a project
+  valid: it checks no kinematics of any point (the same holds for every other unreachable lab angle).
+- T3 and T3_start: `x8` asks 10 to 80 degrees lab. The golden file `T3/extrap/AZUREOut_aa=1_R=1.extrap` lost its
+  nine rows at 90 to 170 degrees (each 3.6873994268e+62 b/sr at 180 degrees c.m.); the 103 others are byte for
+  byte the old ones. `golden.py --write` also rewrote three files of `T3/calc` and `ENGINE` (differences within
+  its tolerance, older than this change); those were put back and are not part of this.
+- `experiment_frames` compares the map with a copy of the old engine's on random cases, and failed on the angles
+  now refused (so did `experiment_standalone`, which runs it). In that region it now asks for the refusal;
+  elsewhere the old map must be met bit for bit. Three new checks by hand (equal masses at 100 and 80 degrees,
+  m1 = 3 m2 at 170 degrees). User guide: `segments.rst`, the paragraph on the kinematic maximum.
+
+**Verified by me** (`work/director/verify_l110.out`, then `ctest_110.out` after the test's update): build with 0
+warnings; every project in three bases against `tab-trial103-1`: 887, 851 and 887 files, all identical (no project
+of the tree used an angle now refused); eight fits identical; 172 of 172 regression scripts; quick tests 336 of
+338 in the full check (the two above), 338 of 338 after the update, on a rebuild; `pyazr_ui_sampler_bands`
+passes. Not run: the slow tests, macOS (whose one failing unit test this answers: inferred, for its next run).
+
+Also on 2026-11-17, by the PI's "Clean the work project": scratch removed (`work/director/clean_2026-11-17.sh`,
+its log beside it): 268 GB -> 15 GB. Kept: `AZURE2`, `wt-data`, rehearsals 109 and 110 with their builds, the
+build and reference outputs of rehearsal 103, the director's records, and three worktrees with uncommitted files
+(`wt-devres`, `wt-radii`, `wt-spin`). All branches are still in the repository.
+
+The CI, read the same morning: the wheels workflow of `8c24fe35` passes on its four platforms (the first run
+since the call guard's repair for clang); the build run of `88e84675` passes on Linux.
+
+## 2026-11-17 (director, 08:00) — merged: the last long file split, the data term once per call
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 109: rehearsal 108 plus
+`feature/upgrade-7-azuregrad-split` (one commit), `feature/upgrade-7-efficiency` (two commits), and three commits
+of mine (the recipe's text, one test, the owner's page). The agents' entries follow. The base build is
+`work/b-trial109`; the reference tag stays `tab-trial103-1`.
+
+**Verified by me** (`work/director/verify_l109.out`, full check of the merged state before my last two commits,
+which change one test and text): build with 0 warnings; every project in three bases against `tab-trial103-1`:
+887, 851 and 887 files, all identical; eight fits identical to `work/b-trial103`; 338 of 338 quick tests; 172 of
+172 regression scripts; and of the slow tests `pyazr_objective`, `pyazr_fit_with_engine` and the two
+`pyazr_objective_*` (4 of 4, `ctest_109_slow.out`). The split is verbatim: the sorted non-blank lines of the two
+new files are those of the old file plus the includes, a head comment and one `namespace { }`. Both branches
+changed `api/src/AZUREAPIChi2.cpp` and `AZUREAPIObjective.cpp` with the objective-term work; git merged them
+without a conflict, I read the merged functions, and the check above is of that merged state.
+
+What each is:
+- *Large files.* `src/AZUREGrad.cpp` 1059 -> 746 lines, the THM rows in `AZUREGradThm.cpp` (357). No file of
+  the engine or the binding is above 1,000 lines now (`file_sizes.tsv`: the Coulomb code's two `cwfcomp.cpp` and
+  `pyazr/sources/nds.py` remain).
+- *Efficiency.* `evaluate()` and `objective()` walk the data once; bit for bit the same numbers on 15 sessions.
+  **My reading of the T2 gradient fit's +-0.4 % between builds (inlining) was wrong**: it is glibc's `malloc`,
+  whose slow path is entered more or less often with the state of the heap (same calls, same outputs; with
+  `tcache_count=65535` a step of 725 M instructions became 5.5 M). One real cost was found, the precision scope
+  per loop body since rehearsal 103 (0.037 %), and removed from the two per-unit loops of `EnergyTasks` (once per
+  thread; on Windows, the one platform where the scope does anything, inferred correct and not run).
+  `FOR_THE_OWNER.md` section 4 now says how to compare two builds.
+- *The recipe "A term of the objective", third trial.* A fresh sonnet agent with the recipe alone wrote a toy
+  term (lambda * sum (n_s - 1)^2 over the free norms) in one code file, `src/Objective.cpp`, with value, gradient,
+  rows, total and field right at lambda = 1 (0.1525 by hand; analytic against finite differences to 5e-11;
+  rows against the adjoint 7.5e-14; fits by gradient and by LM at the same chi-squared). The recipe misled in one
+  place: "a row of 0 where the term is inactive", taken literally, added rows for a term switched off and broke
+  four row-counting tests. Corrected, with four omissions (where a norm is read, the condition of the field for a
+  constant strength, the tests that fail by design, the header comment before the first build). The trial's
+  branch `trial/recipes-3` is thrown away; its report is `work/director/entries/recipes3_report.md`.
+- *The Windows job* of `88e84675` failed in one unit test, `pyazr_units_scales` (mpmath on gmpy2: an mpz handed
+  to `Decimal`); the helper converts with `int()` now. Not run on Windows.
+
+Left for the owner and the PI, not done: pyazr's `value_and_grad` computes the objective once more after the
+gradient (about 14 % of a call on 13N); the 155.6 M allocations of a T2 gradient fit (12.6 % of its instructions).
+
+## 2026-11-17 (long-files agent 2) — src/AZUREGrad.cpp split
+**Merged.**
+
+Branch `feature/upgrade-7-azuregrad-split` (worktree wt-gradsplit, from rehearsal/trial108 06e6ce93), one commit,
+not pushed:
+- c4809219 engine: AZUREGrad.cpp 1059 -> 746 lines. New src/AZUREGradThm.cpp (358 lines): ComputeTHMRows and the
+  anonymous-namespace ThmPointModelGradient (only ComputeTHMRows calls it), each with its comment, moved verbatim.
+  AZUREGrad.cpp keeps BuildShiftDerivTable, the GradAccum members, BuildParamIndexMap, the adjoint orchestration
+  (PointCotangents, AccumulateEGammaGradient, ComputeResidualJacobian, ComputeModelGradients) and
+  ThmFiniteDifferencesRequested. ComputeTHMRows reaches everything else through AZUREGrad.h, so no helper is
+  shared between the two files and there is no internal header.
+- The new file has the old file's include list and a 3-line header comment. It is in AZURE2_CORE_SOURCES next to
+  AZUREGrad.cpp (one target, same flags). Sorted non-blank lines of the two files = the old file's, plus the
+  includes, the header comment and the new file's `namespace {` / `}  // namespace`.
+- file_sizes.tsv: entry removed with --tighten-sizes (3 files left). CLAUDE.md Layout (AZUREGrad row) and
+  docs/source/developer/state_and_ownership.rst (gradient files) name the new file.
+- Not changed: the historical tables in docs/upgrade/evaluation.md (line 52, the `reusable` row, a variable that
+  no longer exists), evaluation.md line 147, apparatus_parameters.md and edata_split.md still say AZUREGrad.cpp.
+  thm_implementation.rst names AZUREGrad.h, which is still correct.
+
+Checks, on the clean tree at c4809219:
+- repo_consistency_test.py: "repository consistent". Check 60 counts only git-tracked files, so it passes only
+  after `git add` of the new file.
+- verify_branch.sh wt-gradsplit gradsplit tab-trial103-1 trial103 6 (work/director/verify_gradsplit.out):
+  0 warnings. brune 887/887, no-brune 851/851, use-park 887/887 files identical. 0 files differ, 0 new files.
+  All eight fits identical. ctest -LE slow: 338/338 passed. run_tests.sh: 172 passed, 0 failed.
+  The line "fatal: not a git repository" in the run_tests section also appears in verify_l108.out and
+  verify_term.out, so this branch did not cause it.
+Not run: ctest -L slow, sphinx-build (the .rst edit is one bullet re-wrapped), performance measurements.
+
+## 2026-11-17 (efficiency agent) — the data term once per API call; the T2 gradient fit's +0.3 to 0.6 % is malloc
+**Merged.**
+
+Worktree wt-eff, branch feature/upgrade-7-efficiency, cut from rehearsal/trial107 (1b786ee2); two commits, not pushed:
+- 13b9c687 perf(api): the data term once per evaluate() and objective() call.
+- f25802d1 perf(engine): the precision scope of EnergyTasks's two per-unit loops once per thread.
+Files: api/src/AZUREAPIChi2.cpp, api/src/AZUREAPIObjective.cpp, api/include/AZUREAPI.h, src/CalculationPlan.cpp,
+tests/pyazr/objective_test.py.  None of src/Objective.cpp, src/AZUREGrad.cpp, src/AZURECalcGradient.cpp,
+api/src/AZUREAPIGradient.cpp touched.  Scratch (not tracked): work/eff-scratch/ (scripts, dumps, perf and callgrind
+data).  Build work/b-eff, 0 warnings.
+
+### Job A: walks of the data per API call
+
+Counted with gdb breakpoints on the module's functions (work/eff-scratch/gdbcount.sh), T2, one call, rehearsal 107:
+
+| call | model pass | Objective::DataChi2 | Objective::Chi2 | CovarianceChi2Correction | ProfileThmGroup |
+|---|---|---|---|---|---|
+| evaluate(x) | 1 | 1 (sum discarded) | 2 | 3 | 3 |
+| objective()(x), log_prob(x) | 1 | 1 (sum discarded) | 1 | 2 | 2 |
+| calculate_chi2_rwa(x) | 1 | 1 | 0 | 1 | 1 |
+| residuals(x) | 1 | 1 (+ the row loop) | 0 | 1 | 1 |
+| value_and_grad(x) | adjoint + 13 | 13 | 1 | 16 | 15 |
+| residuals_and_jacobian(x) | adjoint + 11 | 11 | 0 | 11 | 12 |
+
+(T2 has 6 energy-shift columns, differenced with the forward pass: 12 of the 13 forward passes of value_and_grad, 10
+of the 11 of the Jacobian.)  After 13b9c687: evaluate and objective each 1 model pass, 0 DataChi2, 1 Objective::Chi2,
+1 CovarianceChi2Correction, 1 ProfileThmGroup.  The earlier repair (fix3) made EvaluateFilledChi2 ask
+Objective::DataChi2, but CalculateObjectiveRWA and EvaluateObjectiveRWA still called it before Objective::Chi2 and
+threw its sum away; evaluate also summed the terms twice (plain sum, then the breakdown).
+
+The change: EvaluateFilledModel is the model pass alone (EvaluateFilledChi2 = it + DataChi2 + rows, as before);
+CalculateObjectiveRWA and EvaluateObjectiveRWA call it, then one Objective::Chi2.  evaluate's total is now the
+breakdown's sum (TermList::SumWithParts): the same additions as the running sum, because the first term starts from 0
+in both and every later term adds its value in one step (0 + x = x).  Nothing DataChi2 writes is read by
+Objective::Chi2 before it writes it again (segment chi^2, profiled norms, THM profiles, covariance seeds; the data
+covariance's first-call freeze sees the same pulls, checked with objective()(x) as a session's first call).
+
+Bit for bit: every number returned by evaluate (objective, chi2, every term, every data set's arrays: model, rows,
+norms, priors), objective, value_and_grad (value and gradient), residuals, residuals_and_jacobian, log_prob,
+calculate_chi2_rwa and objective_terms_rwa, at x0, at x0 with every free energy and width x(1 + 1e-4), and at x0 again,
+on T1, T2, T3, 13N and thm_coherent_background/toy, in the bases Brune, formal and Park (15 sessions), written as hex
+floats by work/eff-scratch/calls.py: identical between rehearsal 107's module and both commits (cmp of 15 files).
+
+User-space instructions per call, one thread, (count of N calls - count of 0 calls)/N, N = 200 (20 for
+value_and_grad and the Jacobian), rehearsal 107 -> 13b9c687:
+
+| call | T2 before | T2 after | change | 13N before | 13N after | change |
+|---|---|---|---|---|---|---|
+| evaluate | 367,121,127 | 364,915,852 | -2,205,275 (-0.60 %) | 158,797,231 | 157,353,069 | -1,444,162 (-0.91 %) |
+| objective | 363,254,009 | 363,112,411 | -141,598 (-0.04 %) | 153,119,951 | 153,066,743 | -53,207 (-0.03 %) |
+| log_prob | 363,290,979 | 363,153,313 | -137,666 | 153,165,863 | 153,117,022 | -48,841 |
+| calculate_chi2_rwa | 362,997,253 | 362,998,844 | +1,590 | 152,877,526 | 152,875,063 | -2,463 |
+| residuals | 363,272,892 | 363,236,753 | -36,139 | 153,178,272 | 153,225,451 | +47,179 |
+| value_and_grad | 14,533,840,902 | 14,534,403,709 | +562,807 | 1,104,877,609 | 1,104,794,841 | -82,768 |
+| residuals_and_jacobian | 14,225,500,297 | 14,225,655,570 | +155,272 | 3,107,167,355 | 3,107,180,764 | +13,409 |
+
+Run-to-run spread (three runs): about 1,000,000 per value_and_grad call on T2 and 30,000 per residuals call on 13N;
+the unchanged paths move inside it.  The data walk is cheap (about 0.14 M instructions on T2 against a 363 M model
+pass); the 2.2 M saved by evaluate are mostly the second Objective::Chi2 (nuisance priors, Park, model data).
+
+Not changed, for the director (all in api/src/AZUREAPIGradient.cpp, the other agent's file):
+- value_and_grad runs the model pass once more than it needs: CalculateObjectiveGradRWA ends with
+  out[0] = CalculateObjectiveRWA(params), a re-fill and a full forward pass after the adjoint (which has the model
+  values) and after the energy-shift differences (which leave the model at a shifted point).  13N: about 153 M of
+  1,105 M instructions per call (14 %); T2: one of 13 forward passes plus the adjoint.  Dropping it needs the model
+  values of the adjoint's forward part to equal the forward pass's bit for bit, and the shift columns run before
+  the adjoint or followed by a model pass at x: not checked.
+- residuals(x) (EvaluateFilledChi2 with rows) still walks the data once for DataChi2, whose sum it discards; the walk
+  sets the profiled norms and THM profiles the rows read, so it is needed as it is.
+- The Jacobian of a THM project ends with EvaluateFilledChi2(nullptr) "to leave the model at x"; one forward pass.
+
+### Job B: the T2 gradient fit across builds
+
+AZURE2 fit --use-gradient on a copy of tests/upgrade/T2 (work/eff-scratch/fitB/), OMP_NUM_THREADS=1, Coulomb table
+work/coulomb_table_v2.bin, perf stat -e instructions:u.
+
+(1) One binary, three runs: 102: 169,536,679,017 to 169,536,683,577; 103: 169,599,303,239 to 169,599,307,868;
+106: 168,874,480,103 to 168,874,508,391; 107: 168,874,479,967 to 168,874,481,271.  Spread at most 28,288 (2e-7).
+
+(2) The outputs: the 14 files of output/ (param.sav, parameters.out, chiSquared.out, ...) and run.log identical
+across 102, 103, 106, 107 and both commits here (diff -r).  MIGRAD: 117 calls in every build.
+
+(3) Where the difference sits.  Callgrind (exact counts, one run per build; under valgrind the totals are 173.4 G):
+the same number of calls of every engine function looked at in every build (exp 742,568,667;
+AMatrixFunc::PointTBar 2,007,628; CalculateBareCrossSection 3,963,584; AZURECalc::operator() 118, Gradient 19);
+malloc 155,570,017 (102, 103) and 155,571,884 (106), free the same +1,867.  103 -> 106 under callgrind: -66.3 M, of
+which _int_malloc -42.4 M, malloc_consolidate -9.7 M, _int_free -4.8 M, unlink_chunk -4.0 M (glibc's slow path:
+_int_malloc entered 8,208,415 times in 103, 7,986,771 in 106, for the same number of malloc calls) and
+PointTBar -4.9 M (the same calls: its code after 1652f875 moved it to AMatrixFuncTBar.cpp).  Natively, perf record
+(one sample per 2 M instructions): the malloc family 21,208 M in 103, 20,310 M in 106 (-898 M, +-290 M), the rest
++234 M +- 760 M.  (Under valgrind 9 of the 14 output files differ from the native run, in every build alike:
+valgrind computes long double at 64 bits; the four builds agree with each other there.)
+
+The test of "heap state, not work": the same binaries with glibc's malloc tuned (GLIBC_TUNABLES), which changes no
+output (diff -r: identical) and no call of the program:
+
+| build | default (run 1 of 3) | tcache_count=65535 | trim_threshold=4294967295:top_pad=268435456 |
+|---|---|---|---|
+| 102 | 169,536,683,577 | 167,268,745,331 | 169,075,634,893 |
+| 103 | 169,599,303,239 | 167,331,366,642 | 169,138,257,332 |
+| 106 | 168,874,480,296 | 167,325,822,178 | 170,597,550,481 |
+| 107 | 168,874,481,271 | 167,325,819,846 | not run |
+| f25802d1 (this branch) | 169,344,230,377 | 167,274,144,348 | not run |
+
+103 -> 106: -724.8 M by default, -5.5 M with the large thread cache, +1,459.3 M with the other setting: the sign
+follows glibc's heap, not the program.  With the large thread cache (malloc rarely leaves its cache) the code
+differences alone remain: 102 -> 103 +62.6 M (as in every setting), 103 -> 106 -5.5 M, 106 -> f25802d1 -51.7 M.
+
+Conclusion.  The build-to-build changes of 0.2 to 0.6 % are not added work and not inlining: they are the internal
+work of glibc's malloc (155.6 M allocations per fit, 12.6 % of the instructions natively), which depends on the
+heap's state, which a commit that moves allocations or a library's own allocations can shift.  Same calls, same
+outputs.  One real piece of work was found: 9d7ec793 (rehearsal 103) put the x87 precision scope at the head of every
+loop body; in CalculationPlan::EnergyTasks two loops run over every unit at every evaluation, +51.8 M (callgrind),
+and WorkingCopy::CalculatePointsInParallel +10.3 M: 62.6 M, 0.037 % of the fit.  f25802d1 opens the scope once per
+thread in the two EnergyTasks loops: -51.7 M with the cache setting, -51,771,911 in EnergyTasks under callgrind
+(malloc calls 155,571,884, as in 106).  In the default setting the same commit counts +469.7 M against 107, the heap
+again: a default count compared between two builds says nothing below 0.9 % (the largest heap swing seen).
+Proposal: compare builds with GLIBC_TUNABLES=glibc.malloc.tcache_count=65535 (or callgrind) and quote the default
+count only with that caveat.  Not done: the 10.3 M of CalculatePointsInParallel (its loops are per energy task with
+a dynamic schedule; the scope is a small part there).
+
+The PI's figures before rehearsal 102 (168,626,591,786; 169,075,377,914; 169,559,125,470) are of builds not
+measured here; that they are heap shifts too is inferred, not seen.
+
+### Checks
+
+- python3 tests/consistency/repo_consistency_test.py: consistent (before each commit).
+- ctest on work/b-eff at 13b9c687, -j2: sampler_objective, pyazr_objective (slow label; section 6 now 24 more
+  checks, all ok), pyazr_azr_parse_cache, pyazr_model_data, pyazr_objective_terms, pyazr_objective_object,
+  pyazr_evaluation, repo_consistency: 8 of 8 passed.
+- The bit comparison of job A (15 sessions, every call kind, hex floats): identical at 13b9c687 and at f25802d1;
+  objective()(x) as a session's first call: identical (T2).
+- work/director/verify_branch.sh wt-eff eff tab-trial103-1 trial103 5 at f25802d1, clean tree, nothing else of mine
+  running (work/director/verify_eff.out): warnings 0; brune 887 of 887, no-brune 851 of 851, use-park 887 of 887
+  identical, 0 differ, 0 new; the eight fits identical to trial103; ctest -LE slow 338 of 338 passed;
+  tests/run_tests.sh passed 172, failed 0; the worktree clean after it.
+
+Not run: ctest -L slow other than pyazr_objective, sanitizers, a thread comparison (the hoist keeps the static
+schedule; not measured at more than one thread), other compilers and platforms (Windows is where the x87 scope
+acts: the hoisted scope still opens before any arithmetic of the thread; inferred, not run), the CI.  The
+evaluate/objective identity was not shown to fail by an injected error (it would need a term adding in two steps).
+
+Merge note: the term agent's branch (wt-term) also edits api/src/AZUREAPIChi2.cpp (the prior covariance's record);
+expect a small textual conflict there, none in the four files named.
+
+For the director or the PI: (a) the extra model pass of value_and_grad (above; 14 % of a 13N call), in the other
+agent's file; (b) whether to keep f25802d1 (0.03 %, a pattern check 60 accepts) or drop it; (c) the proposal to
+compare builds' instruction counts with GLIBC_TUNABLES=glibc.malloc.tcache_count=65535; (d) 155.6 M allocations per
+T2 fit cost 12.6 % of its instructions natively: a target for later work, not touched here.
+
+## 2026-11-17 (director, 05:30) — merged: a term of the objective stated in one place
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 108 (rehearsal 107 plus
+`feature/upgrade-7-objective-term-row`, five commits of the objective agent; its entry follows). The base build
+is `work/b-trial108`; the reference tag stays `tab-trial103-1`.
+
+One conflict, in `tests/consistency/file_sizes.tsv` (the long-files work and this one both changed records);
+resolved by hand to: the two `cwfcomp.cpp`, `pyazr/sources/nds.py` 1450, `src/AZUREGrad.cpp` 1059.
+
+**Verified by me** (`work/director/verify_l108.out`, full check of the merged state): build with 0 warnings;
+every project in three bases against `tab-trial103-1`: 887, 851 and 887 files, all identical; eight fits
+identical to `work/b-trial103`; 338 of 338 quick tests; 172 of 172 regression scripts. Not run: the slow
+tests, sanitizers, other compilers.
+
+The agent's three questions, my reading (the PI may overrule):
+1. The slot of a term, set once by the `Objective` constructor and only read afterwards, is not the state the
+   rules forbid (no `mutable`, no static, nothing written during an evaluation).
+2. The nuisance total kept stale through pyazr's `write_outputs` is today's behaviour, kept and recorded.
+3. A future term outside the model whose gradient is unavailable makes pyazr's objective gradient throw, while
+   the program falls back to finite differences. No such term exists; recorded for whoever adds one.
+
+`src/AZUREGrad.cpp` is at 1059 lines, still above the 1,000 of the closing plan; its split is the next step.
+
+## 2026-11-17 (objective agent, B4) — a term of the objective in one place
+**Merged.**
+
+Worktree wt-term, branch feature/upgrade-7-objective-term-row, cut from rehearsal/trial105 (f5ec24a7); five commits,
+not pushed:
+- 598daee8 docs: objective_arrays.md section 8, the design (the one place, each walk, what stays outside and why).
+- 5dc3c7b3 slice 1: a term's total in Results::objective by slot (ObjectiveTerm::Slot, StoreTotal) instead of eight
+  named members; each term writes its own chiSquared.out field(s) (WriteTotal, TotalLabel); the writer keeps the
+  segment table and Total-Chi-Squared/Norm/N and calls Objective::WriteTotals; the API records T10's total through
+  the term (RecordPriorCovariance); evaluation_rwa gives term_labels, evaluation_test.py builds TOTAL_TERMS from them.
+- 04bc041f slice 2: AddGradient in the classes of T6, T7, T9, T11; Objective::AddGradient replaces
+  ModelDataGradient, AddParkPenaltyGradient, AddAbundancePenaltyGradient at both callers (CLI all terms, API
+  chi2_and_grad model-only terms, API objective gradient the others); the two norm loops ("=") moved before the
+  scatter so a term's direct part on a norm is not overwritten.  src/AZUREGrad.cpp 1083 -> 1059 (file_sizes.tsv).
+- 1be1063a slice 3: AppendRows in the classes of T6, T11, T7; Objective::AppendModelRows replaces the free function
+  at its 4 callers.
+- 2d715215 docs and test: the recipe "A term of the objective" in CLAUDE.md and extending.rst; pointers in
+  objective.md section 4, inference.md section 9; repo_consistency_test.py check 11b.
+
+How order is kept.  Every walk has its own order today (gradient T11, T9, T6, T7; rows T6, T11, T7; chiSquared.out
+fields 12 terms in an order unlike the value's).  The Objective constructor states each walk's order of the terms
+that take part, then completes it with all other terms in the value's order (their default function does nothing).
+So every emitted order is today's by construction, no walk names a term, and a new term is visited last by every
+walk with no edit of a walk list.  The only change of an order of additions is the norm loop of slice 2.
+
+Places for a new term (counted with the trial's toy lambda * sum (n_s - 1)^2 over the fitted norms):
+- before (trial report, recipe 3): 9 files of code (Objective.cpp, Objective.h, Results.h, AZUREGrad.h,
+  AZURECalcGradient.cpp, AZUREAPIGradient.cpp, DataOutputFiles.cpp, src/CMakeLists.txt, a new gradient file), and
+  still missing the LM rows and the pyazr side;
+- after: 1 file, src/Objective.cpp: one class (48 lines: Add with its total, AddGradient through accum.direct,
+  AppendRows, TotalLabel, WriteTotal) and one Append line.  Docs by the recipe: output_files.rst, the list in
+  Objective.h, objective.md.  The toy was a scratch commit, dropped (branch head 2d715215 has no trace of it).
+
+Toy checks (scratch builds work/b-termToy; project work/term-scr/toy13N: tests/13N with the first five norms fit,
+starts 1.1, 0.9, 1.1, 0.9, 1.1):
+- lambda 0: fits --use-gradient and --use-lm, outputs identical to slice 3 (work/b-termC), file by file.
+- lambda 1: chiSquared.out Total-Norm-Deviation-Chi-Squared 0.05 = 5 x 0.1^2 by hand; AZURE_GRAD_CHECK=exit fit
+  --use-gradient: 19 components, analytic, finite differences and the rows' (Jacobian-path) gradient agree to
+  <= 2.4e-7 relative, and the norm components differ from the build without the term by exactly +-0.2 = 2 lambda
+  (n - 1) in both analytic and rows' gradient; pyazr: evaluate().terms["norm deviation"] 0.05, objective gradient
+  vs central differences on the 5 norms 5.8e-9 relative, sum of the rows' squares = objective (-5.8e-11 absolute
+  on 4.0e5), 2 J^T r = gradient on the norms 2.8e-16; fits by gradient and by LM end at the same norms (7e-6) with
+  the term 0.0267655 and 0.0267673; ctest pyazr_evaluation, sampler_objective, park_chi2_fallback,
+  pyazr_objective_terms, pyazr_objective_object, pyazr_output_penalties pass; pyazr_objective fails at section 4
+  ("objective = chi-squared + penalty") by design, as the recipe now says.
+
+Checks run on the slices (numbers):
+- slice 1 (scratch copy of the build): every project x 3 bases against tab-trial103-1: 887, 851, 887 identical
+  (tag tab-termA-1); all 318 chiSquared.out byte for byte (cmp); 15 objective-related ctests pass.
+- slice 2 (scratch build that also formed the old order of the norm loop and scatter beside the new and compared
+  every component bit for bit): 0 differences in 38 (eight fits) + 2 + 63 (40 ctests) + 155 (run_tests) program and
+  pyazr gradient calls; eight fits identical to work/b-trial103; 40 ctests pass; run_tests 172 passed, 0 failed.
+- slice 3: build 0 warnings; ctest park_chi2_fallback, pyazr_objective_object, pyazr_objective_terms,
+  pyazr_evaluation 4 of 4.
+- check 11b shown to fail on three injected lines (removed).
+
+Full check on the clean head 2d715215 (verify_branch.sh wt-term term tab-trial103-1 trial103 5;
+work/director/verify_term.out, 04:23): build 0 warnings; brune 887 files, no-brune 851, use-park 887, all
+identical (tag tab-term-1), 0 differ, 0 new; all 318 chiSquared.out byte for byte (cmp); eight fits identical to
+work/b-trial103; ctest -LE slow 338 of 338; run_tests 172 passed, 0 failed.  Tree clean at 2d715215.
+
+What stays outside the one place, and why (objective_arrays.md section 8): the data terms T1-T4 and T2 (their
+gradient is the model pass's adjoint with the norm and covariance seeds); the diagonal priors T3, T4, T8 (one
+gather already, DiagonalPriorsOf); T5 and T10 gradients and rows (on the full vector, at their own places in the
+row order); T9's rows (with the data rows, before T10's; in the walk they would move).  These state value, total
+and field in their classes.  The API's calculate_chi2 still records T10's total by a named call
+(RecordPriorCovariance), as before by a named member.
+
+Not run: ctest -L slow, sanitizers, the thread comparison, other compilers, AZURE_SHIFT_GRAD_CHECK, the instruction
+counts of infer_speed.sh, sphinx-build by hand (only the ctest docs_build inside ctest -LE slow, if Sphinx is in the
+env).  Inferred, not seen: that the walk's per-term virtual calls cost nothing measurable (not measured); that the
+norm-loop move cannot change a bit outside the tested runs (argued by reading: the scatter, the nuisance priors and
+the screening/Doppler/thickness priors never write a norm index).
+
+For the director or the PI: (1) ObjectiveTerm holds an int slot set once by the Objective constructor (friend), not
+mutable and read-only afterwards; say if that counts as state.  (2) The stale-total behaviour is kept as it was
+(nuisance total through pyazr's write_outputs).  (3) A term outside the model alone whose gradient is unavailable
+makes pyazr's objective gradient throw (the program falls back to finite differences); no such term exists.
+
+## 2026-11-17 (director, 04:25) — merged: the binding's call guard compiles under clang (macOS wheels)
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 107 (one commit of mine). The base build is
+`work/b-trial107`; the reference tag stays `tab-trial103-1`.
+
+The wheels' macOS jobs of `b8ee2219` and `47238208` (arm64 and x86_64) failed in `pip wheel`; the Linux wheels
+passed. The log is not readable without a login, so the cause is **inferred, not seen**: pybind11 makes a call
+guard as `Guard{}`; `EngineCallScope` (rehearsal 103) was an aggregate, and list-initialising it from `{}`
+copy-initialises its member `pybind11::gil_scoped_release`, whose default constructor is explicit. That is
+ill-formed (CWG 1518): clang refuses it, GCC accepts it. `EngineCallScope` now has a constructor, so `Guard{}`
+calls it; the members and their order are unchanged. The build workflow's macOS job never compiled rehearsal
+103 (its runs were replaced by later pushes), so the wheels were the first to show it.
+
+**Verified** on Linux: build with 0 warnings, 338 of 338 quick tests (`work/director/ctest_107.out`). No full
+run: only the binding's guard changed. Whether macOS now compiles is shown by the next CI run alone.
+
+## 2026-11-17 (director, 04:10) — merged: objective slices 4-7, the extension traps, the long files, CI repairs
+
+**Merged into `feature/upgrade-4-data`** through rehearsals 104, 105 and 106: `feature/upgrade-7-objective-arrays-2`
+(T7, T6, T1a/T1b on arrays), `feature/upgrade-6-extension-traps` (a fitter without a bit of `Config.h`; a datum
+quantity declared once), `feature/upgrade-0-long-files` (three files under 1,000 lines) and
+`feature/upgrade-0-ci-866` (mine); the agents' entries follow. The base build is `work/b-trial106`, **the
+reference tag stays `tab-trial103-1`** (no output moved), the quick set is 338 tests.
+
+**What is left over 1,000 lines:** `src/AZUREGrad.cpp` (1083; after the objective's last step), the two
+`cwfcomp.cpp` and `pyazr/sources/nds.py` (left, as said to the PI).
+
+**Accepted by me, one printed line:** on a THM project given `--use-gradient` together with an earlier fitter's
+switch (`--use-lm --use-gradient`), "THM segments present: enabling the analytic gradient" is now printed; the
+same fitter runs and no number moves. No test or project gives two fitter switches.
+
+**The CI's build of `866e0d3c`** (annotations: `work/director/ci_866e0d3c_build.txt`). Linux: `repo_consistency`
+did not parse under Python 3.10 (a backslash inside an f-string's braces, in check 46's message since rehearsal
+101); here Python is 3.12, so it passed. Repaired; every tracked `.py` now parses with a 3.10 interpreter.
+Windows, 170 of 172 scripts: `gamma_decay` ("7 of 7 output files differ": inferred, MSYS's `sed` drops the CR of
+each line; now `sed -b`) and `cli_commands` (`--schema-out`'s LF file compared with the CR LF text of `--schema`'s
+standard output; the CR is removed from the captured output). Windows, unit tests: the three of entry e106
+(answered by rehearsal 103, first tested by the run of `b8ee2219`) and the same `cli_commands`. macOS: not
+finished when read.
+
+**Verified.** Rehearsal 104 (`verify_l104.out`) and 105 (`verify_l105.out`), each against `tab-trial103-1`: 0
+warnings; 887, 851 and 887 files identical; the eight fits identical; 337 and 338 quick tests; 172 of 172
+scripts. The long-files branch on top of 105 by its agent with the same script (`verify_long.out`): the same,
+338 tests. Rehearsal 106 (105 + long files + the three test-script repairs) by me: build with 0 warnings,
+`repo_consistency`, the quick tests, `tests/gamma_decay` and `tests/cli_commands`; no full run of its own, since
+its engine is the long-files branch's. Not run: the slow tests, sanitizers, other platforms.
+
+**Found, not changed:** `git describe --dirty` is a compile definition of every target, so every commit
+recompiles all 524 objects (the extension agent's measurement).
+
+## 2026-11-17 (objective agent, slices 4-6) — T7, T6, T1a/T1b on arrays; the documents
+
+Worktree wt-obj2, branch feature/upgrade-7-objective-arrays-2, four commits on f89c5dae, not pushed:
+8a05d9cf (slice 4, T7 abundances), e3ab17cb (slice 5, T6 Park's wall), 3cf11573 (slice 6, T1a/T1b), 68d48d92
+(slice 7, documents).  Tree clean at 68d48d92; work/b-obj2b built there by verify_branch (0 warnings).
+
+What exists now
+- inference/: AbundancePriors.h (AbundanceBlock, AbundanceSum, AbundanceChi2, AbundanceGradient, AbundanceSumRows),
+  ParkWall.h (ParkLevel, OnParkWall, ParkWallChi2, ParkWallGradient = the gradient's form, ParkWallRow = the row's
+  form, kept side by side: they round differently), LinearProfile.h/.cpp (ProfiledNormChi2; ThmProfile,
+  SolveThmProfile, ThmProfileDerivative moved byte for byte from src/ThmExperiment.cpp).  Tests
+  inference_abundance_priors, inference_park_wall, inference_linear_profile, each shown to fail once on an
+  injected error (scratch edit, reverted).
+- Engine gathers: AbundanceBlockOf (src/DiagonalPriors.cpp; AppendAbundancePriors reads it), ParkLevelsOf
+  (src/Objective.cpp, declared in Objective.h), Segment::ProfileNormChiSquared (now gather + one call).
+- Gone: AbundanceTerm::Penalty, ParkTerm::Wall, the old bodies of AddParkPenaltyGradient /
+  AddAbundancePenaltyGradient and of the two blocks of AppendModelRows, AbundanceSamples::Sum, include/ThmProfile.h.
+  src/AZUREGrad.cpp 1108 -> 1083 (file_sizes.tsv lowered; it also lowered api/src/pybind_api.cpp 1017 -> 1015).
+
+Scratch comparison (before the switch; scratch build, not committed; counts in work/obj2scr/summary.txt): old walks
+verbatim beside the arrays, bit for bit, at every call; runall of every project x 3 bases, 24 regression scripts,
+25 ctests, ten fits (468 processes).  T7: 5288 evaluations each of value, sampler's part, gradient, rows, prior list,
+0 differences (81 processes; 2316 with a sum term).  T6: value 2767, gradient 62, rows 111, 0 differences (233
+levels on the wall in 21 processes).  ProfiledNormChi2 8629, SolveThmProfile 4066, ThmProfileDerivative 89, 0
+differences; the degenerate profiled norm is reached by no project (only by the new test).  The scratch runall
+(T6/T7 already switched) against tab-trial102-1: 887, 851, 887 identical.
+
+Full check (verify_branch.sh wt-obj2 obj2b tab-trial101-1 trial101 6, head 68d48d92; work/director/verify_obj2b.out):
+0 warnings; brune 887 files, 859 identical; no-brune 851, 823; use-park 887, 857; 86 differ, 0 new: the same 86
+files, line for line with the same measures, as the reviewer's check of the base (cls-tab-trial102-1.tsv): per basis
+23 intEC.dat.sig, ec_threshold ng intEC.dat, sum_lab_frame sum_data/sum_free chiSquared.out and run.log, and in the
+Park basis 6Li_d AZUREOut_aa=1_R=4.out and run.log: all the neutral-Coulomb merge.  tab-obj2b-1 against the base's
+own run tab-trial102-1: 887, 851, 887 identical (work/obj2scr/cls-obj2b-vs-trial102.tsv).  Fits: 6 of 8 identical to
+trial101, 13N-grad and 13N-lm differ in intEC.dat.sig only; all 8 identical to the base's fits (fits-trial102-1).
+ctest -LE slow 336 of 336 (333 + the three new tests).  run_tests 172 passed, 0 failed.
+
+Instructions at one thread, base work/b-trial102 against work/b-obj2b (work/obj2_speed.sh, work/obj2speed.out):
+T2 calculation 1,242,399,744 -> 1,242,414,140 (+0.001 %); T2 gradient fit 169,536,680,729 -> 169,123,694,409
+(-0.24 %, not traced); 13N gradient fit 184,438,702,840 -> 184,438,686,442 (-0.00001 %); T2 Park LM fit
+356,384,249,812 -> 356,396,511,424 (+0.003 %); no output file differs.
+
+Not run: ctest -L slow, sanitizers, the thread comparison, other compilers, AZURE_SHIFT_GRAD_CHECK, AZURE_GRAD_CHECK
+beyond the scripts that set it (natural_target on the abundances, park_formalism on the wall: both passed).
+
+For the next job (a term in one place): the gathers now exist (AbundanceBlockOf, ParkLevelsOf), so a term's value,
+gradient and rows can each be one line in its class.  Harder: AppendModelRows emits the rows in the order Park,
+gamma_decay, abundances, not the term order (T6, T7, T11): rows taken from the terms in list order change the order
+of the least-squares sums and can move bits; the gradient walks are called from two places with different guards
+(the API tests the Park flag before AddParkPenaltyGradient, the CLI inside it); the per-nucleus abundance prior's
+gradient is in AddAbundancePenaltyGradient on the working copy's value, its rows/G2/sampler in DiagonalPriorsOf on p.
+
+## 2026-11-17 (extension agent) — a fitter without a Config.h bit; a datum quantity declared once
+
+**Merged.** Branch `feature/upgrade-6-extension-traps` in `wt-ext`, from 995cc325, four commits: cb8a903f (design,
+`fit.md` section 5), c3dfa794 (job 1 code), 5663ee51 (design, `data_model.md` section 11), f2625ad7 (job 2 code).
+Build `work/b-ext`. Not pushed. The two toys of the recipes trial were applied in scratch commits and dropped.
+
+**Job 1: the chosen fitter is a row's name.** `Config::fitter` (std::string) names a row of `Fitters()`, empty for
+none, which means the row without a switch (migrad). A key, not an index: the rows differ by build (nlopt), and the
+name is already the key of `fit_with_engine(method=)`, `kinds()["fitters"]`, `fitStatus.out` and the web UI.
+`ApplyFitterSwitch` calls `ChooseFitter`, which keeps the earliest row of the table among the switches given. That is
+the old rule of `FitterOfConfig` (the first row whose bit is set, whatever the order), applied at the parse. The THM
+rule of `src/AZURE2.cpp` is `ChooseFitter(configure, "migrad-gradient")` under the same precedence.
+Retired: `FitterRow::configBit` and the bits 17, 19, 20, 23 (`USE_NLOPT_MINIMIZER`, `USE_ANALYTIC_GRADIENT`,
+`USE_LM_MINIMIZER`, `USE_GSL_LM_MINIMIZER`). The positions stay unused, with a comment. `paramMask` is never printed or
+saved (grep: no `<<` of it, no file, no `--describe` line, no options-file line, no `<lastRun>` writer).
+Readers switched, from a grep of src/ api/ include/ tests/ pyazr/: 4 rows, `FitterOfConfig`, `ApplyFitterSwitch`, the
+THM rule (test and set, 2), check 46 (2). Nothing in api/ or pyazr/.
+Check 46: no fitter bit may be declared in `Config.h`, and `Config::fitter` may be set only in `src/Fitters.cpp` and
+`Config::Reset` (both clauses shown to fail). New test `upgrade_fit_choice`: 141 checks over every set and order of
+switches; 16 fail when the last switch wins.
+One printed line can differ: on a THM project given `--use-gradient` and a switch of an earlier row (e.g.
+`--use-lm --use-gradient`), "THM segments present: enabling the analytic gradient ..." is now printed (before: not).
+The same fitter runs and no number moves. No test gives two fitter switches. For the PI to accept or refuse.
+Toy (trial's `coordinate`, c6a23446, without its `Config.h` change), measured from a dirty tree to a dirty tree at
+one HEAD:
+- before (with its `Config.h` bit): 177 objects recompiled (src 119, api 19, tests 39), 5 code files.
+- after: 10 objects (the includers of `Fitters.h` and the new file), 4 code files (`FitCoordinate.cpp`, `Fitters.h`,
+  `Fitters.cpp`, `src/CMakeLists.txt`).
+It built with 0 warnings, `--help` lists `--use-coordinate`, and `fit --use-coordinate --max-calls=600` on T1 gave
+8239.04535156 in 469 calls, as in the trial.
+**Found on the way, for the director:** the top `CMakeLists.txt` makes `git describe --tags --always --dirty` a compile
+definition of every target (`AZURE2_GIT_VERSION`), and `work/build.sh` reruns cmake. So every commit, and every
+clean/dirty flip of the tree, recompiles all 524 objects, whatever the change. The trial's "nearly everything" was
+partly this. Not changed here.
+
+**Job 2: a datum quantity declared once.** The enum `ModelQuantity` moves to its own header,
+`experiment/include/azure2/experiment/ModelQuantity.h`, and stays the key of the engine's value. The table row carries
+the rest as data: `q.datum = Datum(ModelQuantity::X, DatumCheck::<rule>, "<its words>")`. `ModelQuantities()` is
+gone. `BuildModelData` resolves what the record's fields name, then applies the row's `DatumCheck`
+(kNone, kResonance, kClosedChannel, kOpenChannel, kSWavePair) in one switch. `LevelValue` (`src/ModelData.cpp`) and
+`ModelDatum.cpp` compile with `-Werror=switch`.
+A forgotten place is refused:
+- an enum value without its engine case: the compiler (shown);
+- a DatumCheck value without its case: the compiler (shown);
+- a datum row without `q.datum`: `experiment_quantities` (shown) and check 27;
+- an enumerator no row names: check 27 (shown).
+The build's messages are unchanged: 55 `<modelData>` variants on T2 with every refusal and warning code, identical
+before and after.
+Toy (trial's `reduced_width_ratio`, 7d9366e9) in the new design: 14 files (11 by hand, 3 generated; the trial had 15).
+In the model-datum code it touches 3 places in 3 files: the enum, the row, the `LevelValue` case. The trial needed 5
+places in 4 files (`SetupSpecs.h`, `ModelDatum.cpp` twice, `Quantities.cpp`, `ModelData.cpp`). It reads P, mu and a
+from the record. Its hand value is 0.029021327330 in three bases, and its open-channel refusal reads as in the trial.
+
+**Checks.** Per job: build 0 warnings; ctest selection 34 of 34; config_options, cli_help, cli_commands, fit_modes,
+model_data check.sh all passed; consistency script consistent.
+`verify_branch.sh wt-ext ext tab-trial102-1 trial102 6` at f2625ad7, clean tree (`work/director/verify_ext.out`):
+0 warnings; 887, 851, 887 files identical (0 differ, 0 new); the eight fits identical (T2-lm, T2-grad, T2-migrad,
+13N-grad, 13N-lm, layer-grad, stop-grad, stop-lm: by name three fitters, lm, migrad-gradient, migrad); ctest -LE slow
+334 of 334; run_tests.sh passed 172, failed 0. Not run: nlopt and gsl-lm fits (this build has no NLopt), the slow
+ctests other than pyazr_fit_with_engine and pyazr_fit_recipes.
+Recipes "A fitter" and "A model-only datum" (`CLAUDE.md`, `extending.rst`) updated.
+
+## 2026-11-17 (long-files agent) — AMatrixFunc.cpp, WorkingCopy.cpp, pybind_api.cpp split under 1,000 lines
+**Merged.**
+
+Branch `feature/upgrade-0-long-files` (worktree wt-long, from rehearsal/trial105 f5ec24a7), three commits, not pushed:
+- 1652f875 engine: AMatrixFunc.cpp 1966 -> 786 lines. New src/AMatrixFuncTBar.cpp (543: PointTBar with the
+  cotangent-convention comment and its file-local UnreachableGate, TBarProducts) and src/AMatrixFuncAdjoint.cpp
+  (705: TBarAdjoint, LevelMatrixAdjoint, LevelMatrixABarAdjoint, CollectBilinearTerms, both BilinearAdjoint,
+  FormalBilinearAdjoint, ResolveFormalCotangents, LevelAdjoint, LevelBasis, and the file-local LevelSink, which
+  only these use). AMatrixFunc.cpp keeps the forward solve, the channel-space route, CalculateTMatrix, InEnergy.
+- 9c03eee8 engine: WorkingCopy.cpp 1273 -> 753 lines. New src/WorkingCopyFill.cpp (571: Fill, MakePoints, the
+  eight static segment gates, ThmWeightFor, CheckThmWeights; only Fill and MakePoints call them).
+- f3e7b7e6 api: pybind_api.cpp 1015 -> 846 lines. New api/src/pybind_thm_reports.cpp (188: the dict-building of
+  Session::thm_experiments, thm_lineshape, thm_vertex, thm_distortion as free functions; the Session methods keep
+  the engine call, EngineCallScope and the AZURE2Error refusal, the .defs stay in pybind_api.cpp, check 60 sees
+  159 binding functions as before). to_array/to_vector moved to the private header api/src/pybind_arrays.h
+  (inline functions, no state).
+
+Code moved verbatim (sorted non-blank lines of old file = new files minus includes and header comments; the
+pybind bodies lost two spaces of indent and `api_->` became `api.` in one line). Same compile flags (one target,
+-fopenmp -O3 -DNDEBUG -fPIC). The four entries left file_sizes.tsv by --tighten-sizes (AZUREGrad.cpp untouched).
+Docs: CLAUDE.md Layout (AMatrixFunc and WorkingCopy files), architecture.rst (WorkingCopy::Fill file),
+level_matrix.rst (key files), api.rst (two rows). No helper shared between files except to_array/to_vector.
+
+Checks, on the clean tree at f3e7b7e6: verify_branch.sh wt-long long tab-trial103-1 trial103 5:
+0 warnings; brune 887/887, no-brune 851/851, use-park 887/887 files identical; eight fits identical;
+ctest -LE slow 338/338 passed; run_tests 172 passed, 0 failed. repo_consistency_test passes.
+Speed, instructions:u at 1 thread, b-trial103 -> b-long (work/long_speed.sh, outputs identical):
+T2 calculate 1,243,070,341 -> 1,243,067,473 (-0.0002 %); T2 gradient fit 169,599,300,552 -> 168,874,479,253
+(-0.43 %); 13N_capture_ay gradient fit 25,112,391,478 -> 25,113,292,699 (+0.004 %); identical_pp_res gradient fit
+1,552,589,749 -> 1,552,627,459 (+0.002 %).
+Not run: ctest -L slow. Not changed: docs/upgrade/FOR_THE_OWNER.md item 5 still gives the old line counts.
 
 ## 2026-11-17 (director, 01:10) — merged: 64-bit x87 precision in every thread (the Windows unit tests)
 

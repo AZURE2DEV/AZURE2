@@ -102,12 +102,6 @@ double AbundanceSamples::Value(const std::vector<double> &values, int sample, in
   return values[Ordinal(sample, nucleus) - 1];
 }
 
-double AbundanceSamples::Sum(const std::vector<double> &values, int sample) const {
-  double sum = 0.0;
-  for (int i = 1; i <= numNuclei_; i++) sum += values[Ordinal(sample, i) - 1];
-  return sum;
-}
-
 void AbundanceSamples::AddParameters(const std::vector<double> &values, AZUREParams &params) const {
   if (!present_) return;
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();

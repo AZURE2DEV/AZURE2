@@ -251,8 +251,17 @@ void TestBitForBit() {
       double cm = angle;
       AngleLimit lim;
       const bool okNew = ElasticLabToCM(in, angle, cm, lim);
-      elastic = elastic && okOld == okNew && (!okOld || same(cm, q.cmAngle)) &&
-                (lim.maxSet ? same(lim.max, q.labAngleMax) : q.labAngleMax == -1.0);
+      // The old map is the new one except where the new one refuses what the old one let pass (2026-11-17, the
+      // PI's decision): a projectile no lighter than the target at a lab angle above 90 deg, which no elastic
+      // scattering reaches (the old map gave theta_lab + asin((m1/m2) sin theta_lab) there); and for equal masses
+      // the old map set no maximum, the new one 90 deg.
+      const double ratio = in.m1 / in.m2;
+      if (ratio >= 1.0 && angle > 90.0) {
+        elastic = elastic && !okNew && lim.maxSet && !lim.why.empty();
+      } else {
+        elastic = elastic && okOld == okNew && (!okOld || same(cm, q.cmAngle)) &&
+                  (lim.maxSet ? (ratio == 1.0 ? lim.max == 90.0 : same(lim.max, q.labAngleMax)) : q.labAngleMax == -1.0);
+      }
     }
     {
       OldPoint q = pt;
@@ -333,6 +342,16 @@ void TestClosedForms() {
     AngleLimit lim;
     const bool ok = ElasticLabToCM(heavy, 30.0, cm, lim);
     check("elastic, m1 > m2: refused beyond asin(m2/m1)", !ok && lim.maxSet && std::fabs(lim.max - asin(1.0 / 3.0) * 180 / pi) < 1e-12 && !lim.why.empty());
+    // A backward lab angle is beyond the maximum too, although (m1/m2) sin theta_lab < 1 there (170 deg: 0.52).
+    AngleLimit back;
+    check("elastic, m1 > m2: a lab angle above 90 deg is refused", !ElasticLabToCM(heavy, 170.0, cm, back) && back.maxSet && !back.why.empty());
+    // Equal masses: theta_cm = 2 theta_lab reaches 180 deg at 90 deg lab; nothing is scattered beyond.
+    Partition equal{4.0, 4.0, 0, 0};
+    AngleLimit eq, at;
+    double cmEq = -1, cmAt = -1;
+    check("elastic, equal masses: a lab angle above 90 deg is refused, the maximum is 90 deg",
+          !ElasticLabToCM(equal, 100.0, cmEq, eq) && eq.maxSet && std::fabs(eq.max - 90.0) < 1e-12 && !eq.why.empty());
+    check("elastic, equal masses: 80 deg lab is 160 deg c.m.", ElasticLabToCM(equal, 80.0, cmAt, at) && std::fabs(cmAt - 160.0) < 1e-12);
   }
   // photon aberration, beta from four-momenta
   {

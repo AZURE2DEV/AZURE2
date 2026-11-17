@@ -388,6 +388,8 @@ by the SAMMY self-shielded neutron yield (§1.5): the folded kind is `target_yie
 `Config::SectionStream`; one `ModelDataTerm` in `src/Objective.cpp`, `ModelOnly() = true`, sums ((q_k(θ) − d_k)/δ_k)²
 over the rows; the measured scattering lengths become rows of the same term with their section unchanged (decision
 M10). A new model quantity is then a physics function and a selector, not a new term.
+Where a model quantity is declared (the enum, its table row, the engine's value) and what refuses a forgotten
+place: section 11.
 
 ## 5. Decisions
 
@@ -658,3 +660,77 @@ members; a new datum reads `level.P[ch - 1]`, `level.mu_u[ch - 1]`, `level.a_fm[
 `ObservedOfFitValues` at the project's values: P against `ParticleChannelValues(pair, l, SpinOrbitTwoJ(J), E - S - e)`
 at the record's E, mu and a against the pair; and W = s 2 gamma^2 P / N with N from the record's amplitudes, so that
 a P not used for W fails. The output files of every project are compared before and after (`verify_branch.sh`).
+
+## 11. A datum quantity declared once (design, 2026-11-17)
+
+The closing plan the PI approved: "a datum quantity declared once".
+
+**What was.** One model-datum quantity was declared in five places that had to agree by hand (recipes trial of
+2026-11-16, items R1-2 and C-1):
+1. the value of `enum class ModelQuantity` (`experiment/include/azure2/experiment/SetupSpecs.h`);
+2. the name map `ModelQuantities()` (`experiment/src/ModelDatum.cpp`);
+3. the row of the quantity table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`);
+4. the case of `Builder::LevelPairs` (`ModelDatum.cpp`): what the build must find in `<levels>`;
+5. the case of `LevelValue` (`src/ModelData.cpp`): the engine's value.
+
+The name map repeated the table. Only check 27 saw a missing map row. Neither switch had a `default`, and the engine is
+compiled without `-Wall`, so nothing saw a missing case: `LevelValue` returned NaN.
+
+**The design.** The enum stays as the key between `experiment/` and the engine. A switch on it is what lets the
+compiler name a forgotten engine case. A function pointer in the row cannot do that: `experiment/` may not include
+engine headers. Everything else that is data comes from the one table row:
+
+- The enum moves to a header of its own, `experiment/include/azure2/experiment/ModelQuantity.h`, which `SetupSpecs.h`
+  (the `ModelDatum` record) and `Quantities.h` (the row) include.
+- The row of a datum quantity carries a `DatumRule` (`Quantity::datum`, `Quantities.h`):
+  `quantity` (the enum value: the engine's key), `check` (what the build checks against `<levels>` beyond what the
+  record's fields name, below), and `what` (the quantity's name in the build's refusals, e.g. "an ANC"). A helper,
+  `Datum(ModelQuantity::Anc, DatumCheck::kClosedChannel, "an ANC")`, sets it in one line of the row's function.
+- `ModelQuantities()` goes. The build finds a record's row with `FindQuantity`, the same lookup the validator uses,
+  and takes the key and the rule from it.
+- `Builder::LevelPairs` stops being a switch on the quantity. The build resolves what the record's fields name, and
+  the row's fields (`Requires(...)`) already decide which those are. The validator refuses a field the row does not
+  allow for the record ("a value the engine would not use is refused"), and only validated records are built. So a
+  record's fields are exactly what the row allows:
+  `level` and `J`, the level (as before); `frame`, kept in the datum; `reaction`, one entrance and one exit pair, each
+  a channel of the level; `pair` with `l` and `s`, one channel of the level (not `coherent`); `pair` alone, a pair
+  with a channel of the level.
+  What no field says is the rule `check`, one value of `enum class DatumCheck`:
+  `kNone`; `kResonance` (the level lies above the entrance pair's threshold, else E_OUT_OF_RANGE, then the warnings
+  W_BROAD_LEVEL and W_NEARBY_LEVEL: resonance_strength); `kClosedChannel` (below the pair's threshold, else
+  E_FIELD_NOT_APPLICABLE: anc); `kOpenChannel` (above it, else E_FIELD_NOT_APPLICABLE); `kSWavePair` (no level: an
+  s-wave channel spin of a particle pair: scattering_length).
+  The rules are in a switch of `ModelDatum.cpp` on `DatumCheck` that the compiler checks. A new quantity picks a
+  rule. It adds one only when no rule fits, and that is new build logic, not a declaration.
+  The messages are the same text as before. Each refusal is built from the row's `what` and the rule:
+  "an ANC belongs to one channel spin, not 'coherent'" and "... an ANC belongs to a closed channel (give a
+  partial_width)". For strength, "a subthreshold level has no strength; use an anc" is the text of the rule
+  kResonance, which only resonance_strength uses. The order of the checks is that of the old cases.
+- The engine's value stays one case of the switch of `LevelValue` (`src/ModelData.cpp`). The file is compiled with
+  `-Werror=switch` (GCC and Clang, one source property in `src/CMakeLists.txt`), so a value of the enum without a case
+  does not compile. `ModelDatum.cpp` (the switch on `DatumCheck`) is compiled with `-Wall` in `experiment/`, and the
+  same property there makes that switch strict too.
+
+**Where a forgotten place is refused.**
+
+| Forgotten | Refused by |
+|---|---|
+| the enum value (a row names `ModelQuantity::X`) | the compiler (no such enumerator) |
+| the engine's case in `LevelValue` | the compiler (`-Werror=switch`) |
+| the row's `datum` (a `kDatum` row without it) | `experiment_quantities` (every datum row has a rule, no two rows the same key) and check 27 |
+| the row (an enum value no row names) | check 27 (every enumerator of `ModelQuantity.h` is named by exactly one row of `Quantities.cpp`) |
+| the test `test_<quantity>` | check 27, as before |
+
+**Adding a datum quantity then touches** the enum once (`ModelQuantity.h`), the table row once (its function in
+`Quantities.cpp` with `q.datum = Datum(...)`, and its entry in `Quantities()`), and the engine's value once (its case
+in `LevelValue`). Beside these: the physics function, the tests and the docs, as before.
+
+**What does not change.** No printed number: the build makes the same `ModelDatum` and the same refusals and
+warnings, in the same order and with the same text. The schema does not change: `datum` is not written by
+`SchemaJson.cpp`, so `schema_v3.json` and `format3.rst` stay as they are. `ModelDatum::quantity` keeps its type.
+
+**Test.** `experiment_diagnostics` (every refusal of the build, one at a time, as before) and `experiment_quantities`
+(the new row checks). The validator's messages for each refusal of the build, on a project of each, before and
+after the change: identical (a scratch run, reported in the commit). Check 27 extended as in the table.
+`tests/model_data/check.sh` and `pyazr_model_data` (the values in three bases) and `verify_branch.sh` (every output
+file) unchanged.

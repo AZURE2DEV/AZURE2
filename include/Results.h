@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "TaskScratch.h"
-#include "ThmProfile.h"
+#include "azure2/inference/LinearProfile.h"
 #include "azure2/support/Environment.h"
 
 namespace azure2 {
@@ -45,7 +45,8 @@ namespace azure2 {
  * WorkingCopy::FillEnergyShiftsFromParams, the last step of the hand-over (WorkingCopy::BeginEvaluation), which sizes it for the
  * data set's layout and, under AZURE_POISON_RESULTS=1, fills it with NaN.
  *
- * The struct is plain (no engine headers; ThmProfile.h is plain too), so it can move to the experiment library.
+ * The struct is plain (no engine headers; inference/'s LinearProfile.h is plain too), so it can move to the experiment
+ * library.
  */
 struct Results {
   enum Quantity : std::size_t { kSigma = 0, kSigmaE1 = 1, kSigmaE2 = 2, kAy = 3, kA0 = 4, kNumFixed = 5 };
@@ -71,7 +72,7 @@ struct Results {
    * What the objective (Objective.h) writes, index = segment number (1-based; [0] unused): the normalization the
    * segment's data were compared with (the parameter's, or the profiled n* of a THM segment), its data chi^2 (a THM
    * experiment's segments: each one's share of the profile), the profile of each THM experiment (WorkingCopy::thmGroups_
-   * order), and the totals of the terms that are not per segment.  The writers and the API read them from here.
+   * order), and the totals of the terms that are not per segment, by slot.  The writers and the API read them here.
    */
   struct ObjectiveValues {
     std::vector<double> norm, segmentChi2;
@@ -79,19 +80,26 @@ struct Results {
     /// the point's share of d(chi^2)/d(r_i) / 2, which the gradient reads.  Indexed as Results::model (the point's
     /// model record, Unit::SetModelRecord); sized only when the data set has a covariance group.
     std::vector<double> covarianceSeed;
-    std::vector<ThmProfile> thmProfiles;
-    double nuisance = 0.0, park = 0.0, abundance = 0.0, priorCovariance = 0.0;
-    /// The <modelData> section's part of the model-data term, and whether the project has the section (the total is
-    /// written to chiSquared.out whenever it has).
-    double modelData = 0.0;
-    bool hasModelData = false;
-    /// The gamma_decay records' priors and the wall on a negative remainder (T11), and whether the project has a
-    /// record (the total is written to chiSquared.out whenever it has).
-    double gammaDecay = 0.0;
-    bool hasGammaDecay = false;
-    /// The priors of the isospin shifts and mixes and the soft ties (IsospinTies.h), when the project has any.
-    double isospin = 0.0;
-    bool hasIsospin = false;
+    std::vector<inference::ThmProfile> thmProfiles;
+    /*!
+     * The total of each term that keeps one, index = the term's slot (its place in Objective::Terms(),
+     * ObjectiveTerm::Slot), and whether it was stored: written by the term's Add when its condition holds, read by
+     * its field of chiSquared.out (ObjectiveTerm::WriteTotal).  Grown on the first store and never cleared: a total
+     * keeps the value of the last evaluation that stored it.  0 and false for a slot never stored.
+     */
+    std::vector<double> totals;
+    std::vector<char> stored;
+    void StoreTotal(int slot, double value) {
+      if (slot < 0) return;
+      if ((std::size_t)slot >= totals.size()) {
+        totals.resize((std::size_t)slot + 1, 0.0);
+        stored.resize((std::size_t)slot + 1, 0);
+      }
+      totals[(std::size_t)slot] = value;
+      stored[(std::size_t)slot] = 1;
+    }
+    double Total(int slot) const { return slot >= 0 && (std::size_t)slot < totals.size() ? totals[(std::size_t)slot] : 0.0; }
+    bool Stored(int slot) const { return slot >= 0 && (std::size_t)slot < stored.size() && stored[(std::size_t)slot]; }
   } objective;
 
   /// The scratch of the energy tasks that write this buffer, one per thread (TaskScratch.h): solvers and their

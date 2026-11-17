@@ -15,6 +15,10 @@
  * The precision is set before the GIL is released and put back after it is taken again.
  */
 struct EngineCallScope {
+  // A constructor of its own, so that the struct is no aggregate: pybind11 makes a call guard as `Guard{}`, and
+  // list-initialising an aggregate from {} copy-initialises each member from {}, which the explicit constructor of
+  // gil_scoped_release does not allow (CWG 1518; clang refuses it, GCC accepts it).
+  EngineCallScope() : precision(), release() {}
   azure2::support::ExtendedPrecisionScope precision;
   pybind11::gil_scoped_release release;
 };

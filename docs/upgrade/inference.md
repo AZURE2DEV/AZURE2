@@ -196,4 +196,44 @@ Slices 1, 2 and 3 of `objective_arrays.md` section 5 are built, one commit each.
   of `tests/` with data, and the runs of 26 regression scripts): equal in all, element by element (the commit message
   of slice 2 has the counts).
 
-Not moved: T7's value and gradient, T6, T1a and T1b (slices 4-6 of the note).
+Not moved then: T7's value and gradient, T6, T1a and T1b (slices 4-6 of the note; section 9).
+
+## 9. The abundances, Park's wall and the profiled norms on arrays (2026-11-17, `objective_arrays.md` slices 4-6)
+
+Slices 4, 5 and 6 of `objective_arrays.md` section 5 are built, one commit each.  Each term keeps its class in
+`src/Objective.cpp`; its walk of the engine's objects is one gather in the engine, its arithmetic one header of
+`inference/`, called by every path.
+
+| term | `inference/` | engine gather | callers |
+|---|---|---|---|
+| T7, abundances | `AbundancePriors.h`: `AbundanceBlock` (w, prior centre, width, active per ordinal; sum centre and width per sample), `AbundanceChi2` (with or without the priors: the value, the sampler's part), `AbundanceGradient`, `AbundanceSumRows` | `AbundanceBlockOf` (`src/DiagonalPriors.cpp`) | `AbundanceTerm`, `AddAbundancePenaltyGradient`, `AppendModelRows`, `AppendAbundancePriors` |
+| T6, Park's wall | `ParkWall.h`: `ParkLevel` (J; the particle channels' γ, S', S''), `OnParkWall` (J < 0; false for NaN), `ParkWallChi2`, `ParkWallGradient` (the gradient's form), `ParkWallRow` (the row's form) | `ParkLevelsOf` (`src/Objective.cpp`) | `ParkTerm` (value, sampler's support), `AddParkPenaltyGradient`, `AppendModelRows` |
+| T1a, T1b | `LinearProfile.h`, `src/LinearProfile.cpp`: `ProfiledNormChi2`, `ThmProfile`, `SolveThmProfile`, `ThmProfileDerivative` (moved unchanged from `src/ThmExperiment.cpp` and `include/ThmProfile.h`, which goes) | `Segment::ProfileNormChiSquared`, `GatherThmGroup` (`src/ThmNorm.cpp`) | as before |
+
+- The gradient and the rows of Park's wall round differently (factor 2J/s² times dJ against J/s and dJ/s); both forms
+  stay, side by side in `ParkWall.h`, each the expression of its path.  The rule "on the wall" is one function for
+  the value, the gradient and the rows.
+- `AbundanceSamples::Sum` went (its loop is `AbundanceSum`); `src/AZUREGrad.cpp` 1108 → 1083 lines.
+- New tests: `inference_abundance_priors`, `inference_park_wall`, `inference_linear_profile` (the first unit test of
+  `SolveThmProfile`); each shown to fail once on an injected arithmetic error.
+- Before the walks were switched, a scratch build (not committed) computed the old walks verbatim beside the arrays
+  at every call and compared bit for bit, over every project of `tests/` in the three bases, 24 regression scripts,
+  25 ctests and ten fits (468 processes): T7 5288 evaluations (value, sampler's part, gradient, rows, prior list),
+  T6 value 2767, gradient 62, rows 111 (233 levels on the wall), `ProfiledNormChi2` 8629, `SolveThmProfile` 4066,
+  `ThmProfileDerivative` 89; no difference.
+
+**Where the note was wrong in detail.** `ParkLevelsOf`'s flag says whether the channels are gathered (the value
+reads J only), and they are gathered for the levels on the wall only (`OnParkWall`), so no walk reads γ, S' or S''
+of a level off the wall, as before.  The note's `AbundanceSumRows` signature
+(a vector of rows and one of sparse derivatives) became a list of `AbundanceSumRow` (sample, r, 1/s); the engine maps
+the sample's ordinals to the vector.  `SolveThmProfile`'s names were kept (`ThmProfile` in a header called
+`LinearProfile.h`), as the note says "move unchanged".
+
+**What was run** is in the three commit messages and the hand-over entry; the full check of the three slices is
+`work/director/verify_obj2b.out`.
+
+**After (B4, 2026-11-17).** The gradients and rows of T6, T7, T9 and T11 and every total and field of
+`chiSquared.out` are now members of the terms' classes (`AddGradient`, `AppendRows`, `WriteTotal`), walked by
+`Objective::AddGradient`, `AppendModelRows`, `WriteTotals`; `AddParkPenaltyGradient`,
+`AddAbundancePenaltyGradient`, `Objective::ModelDataGradient` and the free `AppendModelRows` went
+(`objective_arrays.md` section 8).

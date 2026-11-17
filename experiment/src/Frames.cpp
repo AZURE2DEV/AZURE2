@@ -70,13 +70,18 @@ double DecayToCM(const Partition &p, double eLab, bool relativistic) {
 
 bool ElasticLabToCM(const Partition &p, double thetaLab, double &thetaCM, AngleLimit &lim) {
   const double ratio = p.m1 / p.m2;
-  if (ratio > 1.0) {
+  // A projectile no lighter than the target is scattered into the forward hemisphere only: sin theta_max = m2/m1,
+  // 90 deg for equal masses (theta_cm = 2 theta_lab).  A lab angle above 90 deg is beyond it too, although
+  // (m1/m2) sin theta_lab may be below 1 there; until 2026-11-17 such an angle passed and the formula below gave
+  // an angle no scattering has (180 deg c.m. at every lab angle above 90 deg for equal masses).
+  if (ratio >= 1.0) {
     lim.maxSet = true;
     lim.max = 180. / pi * asin(1.0 / ratio);
-    if (ratio * sin(pi / 180. * thetaLab) > 1.0) {
+    if (ratio * sin(pi / 180. * thetaLab) > 1.0 || thetaLab > 90.0) {
       std::ostringstream why;
-      why << "beyond the kinematic maximum " << lim.max << " deg of elastic scattering with a projectile heavier than "
-          << "the target (only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
+      why << "beyond the kinematic maximum " << lim.max << " deg of elastic scattering with a projectile "
+          << (ratio > 1.0 ? "heavier than the target (only the forward branch is modelled; " : "as heavy as the target (")
+          << "give the point as c.m., code 4 / 5, or drop it)";
       lim.why = why.str();
       return false;
     }

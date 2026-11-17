@@ -203,6 +203,18 @@ own, ten energies) took 10.99 GB here until a compound energy's
 channel rows were held once (`data_model.md` section 9). The gain: one level-matrix solve per compound energy
 instead of one per point or sub-point, one calculation site per mesh node, no copy of the compound per thread.
 
+**Comparing two builds by instruction counts (2026-11-17).** The count of user-space instructions of one run
+repeats to 2e-7, but between two builds of the same work it moves by up to 0.9 % (T2, fit with the analytic
+gradient, 1.7e11 instructions) with the state of glibc's heap: the builds make the same calls and write the same
+files, and the difference sits in `malloc`'s slow path. With `GLIBC_TUNABLES=glibc.malloc.tcache_count=65535`
+(no output changes) a step of 725 M between two builds became 5.5 M. Compare builds with that setting or with
+callgrind's per-function counts, and read a default count below 1 % as no evidence. Known and not done: that fit
+makes 155.6 M allocations (12.6 % of its instructions, by sampling); pyazr's `value_and_grad` computes the whole
+objective once more after the gradient (on 13N about 14 % of a call), which could go only with a proof that the
+gradient pass's model values are the plain pass's bit for bit. Done on 2026-11-17: `evaluate()` and `objective()`
+walk the data once (they did two or three times; every returned number bit for bit the same; 0.04 to 0.9 % of a
+call, the model pass being 99 % of it). The measurements: `HANDOFF.md`, the efficiency agent's entry of that day.
+
 ## 5. The structure on one page
 
 The libraries and what each owns: `docs/source/developer/architecture.rst` and its figure `figures/libraries.svg`;
@@ -633,7 +645,23 @@ re-read against its design at the hand-over.
      the Windows job does not install: two report skipped there, one skips its one emcee check. The macOS job
      of that run had not ended when this was written.
 
-   **The CI is green on Linux and for the sanitizers, not on Windows and macOS.** Linux passes since the
+   - *The runs of 2026-11-17* (read from the annotations; the upgrade's last pushes). macOS, run of `866e0d3c`:
+     172 of 172 regression checks for the first time, and 331 of 332 unit tests; the one is
+     `pyazr_ui_sampler_bands`, a band of T3 whose bound at the extrapolation `x8` is not a number there. `x8` asks
+     4He(a,a)4He at a lab angle above 90 degrees, which equal masses cannot reach; the engine maps it to 180 degrees
+     c.m. without a word and Linux held 3.69e+62 at that point (the golden file too). Since the next push such an
+     angle is refused at set-up (the PI's decision), `x8` asks 10 to 80 degrees and the golden file lost its nine
+     rows from 90 degrees; whether macOS then passes is for its next run to show. Windows, run of `88e84675` (the first
+     with the x87 precision scope at every binding call and parallel region): 172 of 172 regression checks for
+     the first time, and one unit test failing of 337 (25 skipped: the page's tests and others that need packages
+     the job does not install), `pyazr_units_scales`, a fault of the test (mpmath's numbers are gmpy2's there);
+     repaired in the next push, not run on Windows. The wheels of macOS did not compile for two pushes (the
+     binding's call guard was an aggregate, which clang refuses to make from `{}`); repaired, and the build
+     workflow's macOS job compiles it; the wheels workflow itself has not run since (it starts on a push that
+     changes a packaging file).
+
+   **The CI is green on Linux and for the sanitizers; Windows and macOS are each one unit test away (2026-11-17,
+   see the last bullet). The older summary follows.** Linux passes since the
    eleventh push (every regression check and every unit test; `docs_build` is skipped, no Sphinx there). The
    one failure of the ninth push was `tests/shared_point_tables` (d), a bound on the peak memory of a fit
    against a calculation, measured by sampling `/proc` every half second while the calculation ends in less
@@ -670,16 +698,23 @@ re-read against its design at the hand-over.
    target values); what copy-on-write could share is the sites of a project without energy shifts and without
    fitted target parameters (`evaluation.md` section 7.8, the last part). The cost today is memory, not
    correctness. The locks are as they were.
-5. **Large classes.** `src/AMatrixFunc.cpp` (1,966 lines; 2,766 before the moves below). The three other files this
-   item named were split by job on 2026-11-16, every function moved as it was and no number moved:
+5. **Large classes.** **Since 2026-11-17 no hand-written file of the engine or the binding is above 1,000 lines**
+   (`tests/consistency/file_sizes.tsv` lists the two copies of the Coulomb code's `cwfcomp.cpp` and
+   `pyazr/sources/nds.py` only; check 26 refuses a new one). Split on 2026-11-17, every function moved as it was and
+   every output identical: `src/AMatrixFunc.cpp` (1,966 lines) into the forward solve (786), `AMatrixFuncTBar.cpp`
+   (543) and `AMatrixFuncAdjoint.cpp` (705); `src/WorkingCopy.cpp` into itself (753) and `WorkingCopyFill.cpp` (571);
+   `api/src/pybind_api.cpp` into itself (846), `pybind_thm_reports.cpp` and `pybind_arrays.h`; `src/AZUREGrad.cpp`
+   into itself (746) and `AZUREGradThm.cpp` (357). The long functions are as long as they were: `PointTBar` is
+   about 450 lines and `AZURECalc::GradientBy` 447; shortening them is a rewrite, not a move, and was not done.
+   The three other files this item named were split by job on 2026-11-16, every function moved as it was and no
+   number moved:
    `src/AZURECalc.cpp` (1,395 lines) into seven files (the evaluation, the gradient, the residual Jacobian, the limits
    manager's priors, the pool, the intermediate files, the dump), `src/AZURECalcMCMC.cpp` (1,309) into five (a walker's
    posterior, the priors, the run of the chain, the chain's files, the pool), `api/src/AZUREAPI.cpp` (1,532) into
    five beside the class's four other files (the session's model, what a calculation reports, the objective's value, its
    derivatives, the diagnostics), each with a head comment that says what it holds. The largest is
    `src/AZURECalcGradient.cpp` (593 lines), of which 447 are one function, `AZURECalc::GradientBy`: shortening it is
-   a rewrite, not a move, and was not done. Still above 1,000 lines in the engine and the binding:
-   `AMatrixFunc.cpp`, `src/WorkingCopy.cpp` (1,273), `src/AZUREGrad.cpp` (1,108), `api/src/pybind_api.cpp` (1,017).
+   a rewrite, not a move, and was not done.
    The arithmetic of the collision matrix
    (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
    sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
