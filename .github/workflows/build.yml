@@ -402,7 +402,9 @@ jobs:
           # The web page's tests need pytest, fastapi, httpx and uvicorn, which the Windows job does not install:
           # there they are skipped and listed in the warning above, and do not fail the job.
           MUST_RUN="$(echo "$SKIPPED" | grep '^pyazr_' || true)"
-          if [ "${{ matrix.name }}" = "windows" ]; then MUST_RUN="$(echo "$MUST_RUN" | grep -v '^pyazr_ui_' || true)"; fi
+          # Windows also skips, by design, the two ENDF tests: pyazr_endf_covariance needs iminuit, which the job does
+          # not install, and pyazr_endf_check runs shell stand-ins of the processing codes.
+          if [ "${{ matrix.name }}" = "windows" ]; then MUST_RUN="$(echo "$MUST_RUN" | grep -v -e '^pyazr_ui_' -e '^pyazr_endf_covariance$' -e '^pyazr_endf_check$' || true)"; fi
           if [ "${{ matrix.pyazr_engine }}" = "ON" ] && [ -n "$MUST_RUN" ]; then
             # Why: the import every engine test starts with, run here so the
             # reason reaches the annotation rather than only the test's output.

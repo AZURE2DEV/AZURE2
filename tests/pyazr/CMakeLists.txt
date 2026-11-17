@@ -577,7 +577,8 @@ set_tests_properties(pyazr_extrap_layout PROPERTIES ENVIRONMENT "OMP_NUM_THREADS
 add_test(NAME pyazr_thm_adjoint
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thm_adjoint_test.py)
-set_tests_properties(pyazr_thm_adjoint PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+# Its own limit: 1081 s on the Windows CI machine, past ctest's 2400 s on the macOS one (76875f72).
+set_tests_properties(pyazr_thm_adjoint PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 5400)
 
 # fetch_exfor / reference: the local EXFOR master files (IAEA-NDS/exfor_master) when the
 # Web-API is unreachable or answers with a challenge page.  Offline: a synthetic entry in
