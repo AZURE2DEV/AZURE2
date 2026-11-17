@@ -206,6 +206,7 @@ py::dict EvaluationDict(AZUREAPI &api, const vector_r &free) {
   py::dict d;
   d["objective"] = b.total;
   d["term_names"] = api.ObjectiveTermNames();
+  d["term_labels"] = api.ObjectiveTermLabels();  // each term's field of chiSquared.out ("" when no field is the term)
   d["term_values"] = Array(b.terms);
   d["excluded"] = b.excluded;
   d["log_prob"] = b.excluded ? -std::numeric_limits<double>::infinity() : -0.5 * b.total;

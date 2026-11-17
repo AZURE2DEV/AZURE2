@@ -542,6 +542,41 @@ for top in ("src", "api/src"):
                                 "(Objective::Engine().Chi2 / ModelChi2 / DataChi2) or add a term there "
                                 "(docs/upgrade/objective.md)")
 
+# 11b. A term in one place (docs/upgrade/objective_arrays.md section 8): a term's gradient, rows, total and field of
+#      chiSquared.out are stated in its class in src/Objective.cpp, and the walks (Objective::AddGradient,
+#      AppendModelRows, WriteTotals) loop over the terms.  So outside src/Objective.cpp: no total of a term by name in
+#      Results::objective (they are slots, ObjectiveTerm::Slot); no field "Total-<x>-Chi-Squared" written other than the
+#      data's own (the writer's Total-Chi-Squared, Total-Norm-Chi-Squared) and the apparatus rows' helper; and the
+#      arithmetic of the model terms (Park's wall, the abundances, the gamma_decay records) is called by the term only.
+TERM_ARITHMETIC = ("ParkWallChi2", "ParkWallGradient", "ParkWallRow", "AbundanceChi2", "AbundanceGradient",
+                   "AbundanceSumRows", "PenaltyRows", "AddPenaltyGradient", "GetGammaDecays().Penalty")
+TERM_ARITHMETIC_DEFINERS = {"src/Objective.cpp", "src/GammaDecayMap.cpp", "include/GammaDecayMap.h"}
+NAMED_TOTAL = re.compile(r"\bobjective\.(park|abundance|nuisance|priorCovariance|modelData|hasModelData|gammaDecay|"
+                         r"hasGammaDecay)\b")
+TOTAL_FIELD = re.compile(r'"\s*(Total-[A-Za-z-]+-Chi-Squared)\b')
+TOTAL_FIELD_ALLOWED = {("src/DataOutputFiles.cpp", "Total-Norm-Chi-Squared")}
+for top in ("src", "include", "api/src", "api/include"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith((".cpp", ".h")) or rel == "src/Objective.cpp":
+            continue
+        text = read(rel)
+        for m in NAMED_TOTAL.finditer(text):
+            problems.append(f"{rel}: reads or writes the total objective.{m.group(1)}; a term's total is its slot "
+                            "(ObjectiveTerm::StoreTotal, Results::ObjectiveValues::Total), stated in its class")
+        for m in TOTAL_FIELD.finditer(text):
+            if (rel, m.group(1)) not in TOTAL_FIELD_ALLOWED:
+                problems.append(f"{rel}: writes the field {m.group(1)} of chiSquared.out; a term's field is its "
+                                "WriteTotal in src/Objective.cpp (Objective::WriteTotals)")
+        if rel in TERM_ARITHMETIC_DEFINERS:
+            continue
+        for fn in TERM_ARITHMETIC:
+            for m in re.finditer(r"(?<![\w])" + re.escape(fn) + r"\(", text):
+                line = text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.start())]
+                if not line.lstrip().startswith(("//", "*", "///")):
+                    problems.append(f"{rel}: calls {fn}() -- a model term's arithmetic outside its class in "
+                                    "src/Objective.cpp; ask the objective's walks (AddGradient, AppendModelRows)")
+
 
 # 12. One reading of the project file (docs/upgrade/project.md): the engine opens the .azr only in src/Config.cpp
 #     (InputFiles + io::Document); every reader takes its section from Config::SectionStream.  Opening the file

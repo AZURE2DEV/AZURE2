@@ -166,14 +166,6 @@ ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, const WorkingCo
  */
 vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const LevelState &state, const Config &configure);
 
-/*!
- * \brief Gradient of Park's J > 0 wall (the objective's term T6) with respect to the level energies and
- * reduced widths, added to `accum` in physics coordinates.  Zero unless a level
- * has J < 0; a no-op outside the Park formalism.
- */
-void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, GradAccum &accum);
-/// Gradient of the isotopic-abundance priors and sum-to-one penalty (the objective's term T7), into the accumulator.
-void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum);
 
 /*!
  * \brief Shared analytic gradient engine used by both AZUREAPI (log-likelihood)

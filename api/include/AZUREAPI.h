@@ -339,6 +339,8 @@ class AZUREAPI {
   vector_r CalculateObjectiveGradRWA(const vector_r &params);
   /// The names of the objective's terms, in the order of CalculateObjectiveRWA's `terms`.
   std::vector<std::string> ObjectiveTermNames() const;
+  /// Each term's label in chiSquared.out (ObjectiveTerm::TotalLabel; "" when no field holds the whole term), same order.
+  std::vector<std::string> ObjectiveTermLabels() const;
 
   /// What one evaluation of the objective gives (EvaluateObjectiveRWA; AZUREAPIObjective.cpp).
   struct ObjectiveBreakdown {

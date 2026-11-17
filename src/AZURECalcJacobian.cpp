@@ -274,8 +274,11 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
       pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
                      &jac);
-  // Park's J > 0 wall and the abundance sum-to-one term as rows (Objective.h AppendModelRows; objective.md D2, D7).
-  if (ok) AppendModelRows(lc, ls, *ld, configure(), &pmap, nCols, residuals, &jac);
+  // The terms' own rows (ObjectiveTerm::AppendRows: Park's J > 0 wall, the gamma_decay records, the abundance sums;
+  // objective.md D2, D7), last.
+  if (ok)
+    Objective::Engine().AppendModelRows(ObjectiveContext{lc, ls, inputs_, ld, results, full, configure()}, &pmap, nCols,
+                                        residuals, &jac);
 
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
@@ -317,8 +320,9 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Prior parameter covariance, as the last rows of ResidualJacobian.
   if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
     pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
-  // Park and abundance-sum rows, as the last rows of ResidualJacobian.
-  AppendModelRows(lc, ls, *ld, configure(), nullptr, 0, residuals, nullptr);
+  // The terms' own rows, as the last rows of ResidualJacobian.
+  Objective::Engine().AppendModelRows(ObjectiveContext{lc, ls, inputs_, ld, results, full, configure()}, nullptr, 0,
+                                      residuals, nullptr);
   ReturnPooledState(std::move(pooled));
   ReturnPooledData(working);
   return true;

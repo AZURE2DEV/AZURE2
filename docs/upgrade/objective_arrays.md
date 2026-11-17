@@ -503,3 +503,108 @@ About 330 lines of library code and 470 of tests are added; about 280 engine lin
   the latter names Park's wall and the abundance sums but not the `gamma_decay` rows the function also appends
   (`Objective.cpp` 452-454).
 - `api/src/AZUREAPIObjective.cpp` includes `InferenceTypes.h` twice (lines 13-14).
+
+## 8. A term in one place (B4, design, 2026-11-17)
+
+Status: design, branch `feature/upgrade-7-objective-term-row` at `f5ec24a7`. Line numbers are those of that commit.
+
+**Today** (read). A term of the objective is written in up to eight places: its class in `src/Objective.cpp` (value,
+the sampler's part); its gradient in `src/AZUREGrad.cpp` (`AddParkPenaltyGradient`, `AddAbundancePenaltyGradient`) or
+`Objective::ModelDataGradient` (T9 and, inside it, T11), each named by two callers, `AZURECalc::GradientBy`
+(`src/AZURECalcGradient.cpp` 200-204) and `AZUREAPI::Chi2GradEGammaNorm` (`api/src/AZUREAPIGradient.cpp` 129-132,
+with a guard of its own on the Park flag); its rows in the free function `AppendModelRows` (`src/Objective.cpp`
+407-455, the three blocks named); its member of `Results::ObjectiveValues` (`include/Results.h` 84-92: `nuisance`,
+`park`, `abundance`, `priorCovariance`, `modelData`/`hasModelData`, `gammaDecay`/`hasGammaDecay`); its line of
+`chiSquared.out` (`src/DataOutputFiles.cpp` 344-414, one hand-written `if` per field); the dictionary `TOTAL_TERMS`
+of `tests/pyazr/evaluation_test.py` (65-70; pyazr itself maps nothing: it reads the names from the engine). A
+fresh agent adding a toy term touched nine files (`work/director/entries/recipes1_report.md`, recipe 3).
+
+**The one place** is the term's class in `src/Objective.cpp` and its line in the `Objective` constructor. The engine's
+`ObjectiveTerm` becomes a class of its own deriving from `azure2::inference::Term<ObjectiveContext>` (`TermList.h`
+gets the term type as a second template parameter, default `Term<Context>`, so the library and its test are
+unchanged) with four more virtual functions, each with a default that does nothing:
+
+| member | what it states | default |
+|---|---|---|
+| `Add` (exists) | the value, and its total into the term's slot (`c.results.objective.StoreTotal(Slot(), v)`) | — |
+| `AddGradient(c, pmap, shiftDeriv, accum)` | d chi^2/d theta into the `GradAccum` (level E and gamma, abundances; any full index through `accum.direct`); returns `Unavailable` where the caller must take finite differences | `None` |
+| `AppendRows(c, rows)` | its least-squares rows through a `ModelRows` sink (residual, `GradAccum` and/or `direct` Jacobian row) | none |
+| `WriteTotal(data, config, results, out)` | its field(s) of `chiSquared.out`, with the condition under which it is printed | none |
+| `TotalLabel()` | the label of the field that holds the whole term (`Total-Park-Chi-Squared`), "" where no field does | "" |
+
+`Slot()` is the term's place in the value's list, given by the constructor (an `int` set once while the `const`
+objective is built, before anything can read it; not `mutable`, not a cache). `Results::ObjectiveValues` holds
+`totals` and `stored` indexed by slot (grown on the first store, never cleared, as the named members were never
+reset), so a new term needs no edit of `Results.h`.
+
+**The walks.** The order of the additions is part of the result (rule R1), and today each walk has its own order,
+none of them the value's:
+
+| walk | today's order | after |
+|---|---|---|
+| value (`Objective::Chi2`, `ModelChi2`, sampler) | the list: T1-4, T2, T5, T6, T8 (5), T7, T9, T10, T11 | unchanged |
+| gradient (`GradAccum`) | T11 (`direct`), T9, T6, T7 | `Objective::AddGradient`: a loop over `gradientWalk_` |
+| rows after T10 (`AppendModelRows`) | T6, T11, T7 | `Objective::AppendModelRows`: a loop over `rowWalk_` |
+| `chiSquared.out` fields after Total-N | T6, Shift (T3/T4), T7, T8 screening, density, apparatus, Doppler, thickness, T5, T9, T11, T10 | `Objective::WriteTotals`: a loop over `reportWalk_` |
+
+Each walk list is stated in the constructor as today's order of the terms that take part, and the constructor
+completes it with every other term in the value's order (whose function is the default, a no-op). So every walk
+loops over all terms, no walk names a term, the emitted order of every existing term is today's by construction (no
+argument about commuting additions is needed), and a new term is visited by every walk at the end, after the
+existing ones, with no edit of a walk list. The order T11, T9, T6, T7 of the gradient could not be the value's:
+T9 and T6 both add into the levels' E and gamma cotangents; nor could the rows' (T7 before T11 reorders the
+residuals of the least-squares sums), nor the writer's (the bytes of `chiSquared.out`).
+
+**What each walk becomes.**
+- *Gradient.* `AddGradient(c, pmap, sdp, accum, which)` replaces `ModelDataGradient` and the two penalty gradients at
+  both callers; `which` is all terms (the program's gradient of the whole objective), the terms of the model alone
+  (the API's `Chi2GradEGammaNorm`, the gradient of `calculate_chi2`, whose value is data + `ModelChi2`), or the others
+  (`CalculateObjectiveGradRWA`, after `CalculateObjectiveRWA` has filled the session at x; scattered only when a term
+  added something, which no term of today does). The API's own guard on the Park flag goes (the term tests it).
+  Two norm loops assign the data's norm gradient with `=` after the scatter (`AZURECalcGradient.cpp` 214-228,
+  `AZUREAPIGradient.cpp` 136-141), which would erase a term's `direct` part on a norm (the trial's defect 2). They
+  move before the scatter: the scatter adds only to level, record, abundance, screening, Doppler and thickness indices
+  and T11's `direct` entries (record numbers), the nuisance priors exclude the kinds with a prior of their own
+  (norms among them, `ParameterLimitsManager.cpp` 303-313), so no norm component changes (read; and checked by the
+  comparison below).
+- *Rows.* `Objective::AppendModelRows(c, pmap, nCols, residuals, jac)` replaces the free function at its four callers
+  (CLI `ResidualJacobian`, `ResidualsOnly`; API `ObjectiveRowsRWA`; the test `park_chi2_fallback`); the lambda
+  `appendRow` becomes the sink `ModelRows::Append`, code unchanged.
+- *Writer.* `WriteChiSquaredFile` keeps the per-segment table and Total-Chi-Squared, Total-Norm-Chi-Squared, Total-N
+  (the data's own lines) and then calls `Objective::Engine().WriteTotals(...)`. The Shift total moves into
+  `SegmentTerms::WriteTotal`, the five T8 totals into `TargetPriorTerm::WriteTotal`, each with its print condition
+  moved unchanged; the stored totals are read from the slot.
+- *API.* `pyazr`'s breakdown already loops (`ObjectiveTermNames`); `evaluation_rwa` gains `term_labels`
+  (`TotalLabel()` per term) and `TOTAL_TERMS` of `evaluation_test.py` is built from it.
+
+**What stays outside, and why.**
+- T1-T4 (data, norms, shifts) and T2: their gradient is the adjoint of the model pass with the norm and covariance
+  seeds (`FitBarFn`), their rows are the data rows; T3, T4 and T8 are diagonal priors, already one gather read by every
+  path (`DiagonalPriorsOf`, section 2.1). Forcing them into `AddGradient` would rewrite the adjoint.
+- T5 (nuisance) and T10 (prior covariance): their gradient and rows are on the full vector, outside the `GradAccum`,
+  at places of their own in the row order (T10 before the model rows; T5 last, in the API only). T10's total is also
+  recorded by the API's `calculate_chi2` (`AZUREAPIChi2.cpp` 129, 189), which leaves its value out: that becomes
+  `Objective::RecordPriorCovariance(c)`, the term's own `Add` on a scratch sum.
+- T9's rows: they sit with the data rows, before T10's (`AppendModelDataRows`, `ModelDataResiduals`, section 5); in
+  the model rows' walk they would move. Its value, gradient, total and label are in its class.
+- The sampler: unchanged (`AddForSampler`, `ExcludesForSampler`).
+
+So the "model terms with rows", T6, T7 and T11, are wholly in their classes; T9 is except for the place of its rows;
+T5 and T10 state value, total and label there; the data terms state value and their part of the writer.
+
+**A new term after this** (the recipe): one class in `src/Objective.cpp` (`Add` with its total, and `AddGradient`,
+`AppendRows`, `WriteTotal`, `TotalLabel` where it has them) and one `Add<...>()` line in the constructor; its
+arithmetic in `inference/` where it is more than a line (the pattern of section 9 of `inference.md`); a test. No edit
+of `AZUREGrad.cpp`, `AZURECalcGradient.cpp`, `AZUREAPIGradient.cpp`, `Results.h`, `DataOutputFiles.cpp` or the pyazr
+test.
+
+**Check.** Each slice is one commit with no number moved: the walks' sequences of additions are today's by
+construction; before the gradient slice a scratch build runs the old and the new gradient side by side in both
+callers (bit for bit on every component) on the gradient-fit projects; the gate of section 5 at the end
+(`verify_branch.sh`). The recipe is then tried with a toy term (scratch, dropped).
+
+**Consistency rules** (`repo_consistency_test.py`): no `Total-...-Chi-Squared` label written outside
+`src/Objective.cpp` other than the data's own three and the apparatus rows' helper; the arithmetic of T6, T7, T9 and
+T11 (`ParkWall*`, `Abundance{Chi2,Gradient,SumRows}`, the `gamma_decay` set's `Penalty`, `PenaltyRows`,
+`AddPenaltyGradient`) called only from `src/Objective.cpp` (and the files that define them); no named total member
+(`objective.park` and the like) anywhere.

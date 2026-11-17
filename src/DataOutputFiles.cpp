@@ -16,6 +16,7 @@
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "DiagonalPriors.h"
+#include "Objective.h"
 #include "WorkingCopy.h"
 
 /*!
@@ -341,77 +342,8 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
          << totalNormChiSquared
          << " Total-N: "
          << totalN;
-  // Park formalism: the J > 0 wall, when a level sits beyond it.
-  if (configure.paramMask & Config::USE_PARK_FORMALISM)
-    chiOut << " Total-Park-Chi-Squared: " << results.objective.park;
-  // The energy-shift priors the fit minimised (AppendShiftPriors), when any shift is a fit parameter.  Without this
-  // the file reported less than the minimiser's own total by exactly this amount.
-  bool anyShiftVaried = false;
-  DiagonalPriors shiftPriors;
-  for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
-    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
-    if (segment->OwnsShiftFn())
-      for (int q = 0; q < segment->NumShiftFnParams(); q++)
-        if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
-    AppendShiftPriors(*this, (int)(segment - Data().GetSegments().begin()) + 1, nullptr, shiftPriors);
-  }
-  if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << PriorsChi2(shiftPriors);
-  // Isotopic abundances: their priors and the sum-to-one term.
-  if (results.objective.abundance != 0.0)
-    chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
-  // The target-effect priors as the objective's T8 adds them (AppendTargetPriors, DiagonalPriors.h): the subtotal of
-  // one kind at the working copy's present values.
-  auto targetPriors = [this](PriorSource source) {
-    DiagonalPriors priors;
-    AppendTargetPriors(*this, source, nullptr, priors);
-    return PriorsChi2(priors);
-  };
-  // Electron-screening priors, when a screening potential has one.
-  {
-    bool anyPrior = false;
-    for (int k = 1; k <= Data().NumScreeningParams(); k++)
-      if (Data().GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << targetPriors(PriorSource::kScreening);
-  }
-  // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
-  if (Data().NumDensityParams() > 0) {
-    bool anyPrior = false;
-    for (int k = 1; k <= Data().NumDensityParams(); k++)
-      if (Data().GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << targetPriors(PriorSource::kDensity);
-  }
-  // Apparatus parameters (stopping scales, a kernel's width): one line per row with a fitted prior.
-  WriteApparatusChiSquared(*this, chiOut);
-  // Fitted Doppler temperatures: their priors.
-  if (Data().NumDopplerParams() > 0) {
-    bool anyPrior = false;
-    for (int k = 1; k <= Data().NumDopplerParams(); k++)
-      if (Data().GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << targetPriors(PriorSource::kDoppler);
-  }
-  // Fitted sample thicknesses: their priors.
-  if (Data().NumThicknessParams() > 0) {
-    bool anyPrior = false;
-    for (int k = 1; k <= Data().NumThicknessParams(); k++) {
-      const Segment *seg = &set_->segments_[Data().GetThicknessSegment(k) - 1];
-      if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
-    }
-    if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << targetPriors(PriorSource::kThickness);
-  }
-  // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
-  if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
-  // The model data (T9): the <modelData> data (modelData.out).
-  if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
-  // The gamma_decay records (T11): their priors and the wall on a negative remainder, whenever the project has a
-  // record.  Without this field the file's totals did not add up to the minimised chi-squared for such a project.
-  if (results.objective.hasGammaDecay) chiOut << " Total-Gamma-Decay-Chi-Squared: " << results.objective.gammaDecay;
-  // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
-  // Written with 15 significant digits (a new field: the older ones keep their 6).
-  if (!configure.priorCovariance.empty()) {
-    const std::streamsize prec = chiOut.precision(15);
-    chiOut << " Total-Prior-Covariance-Chi-Squared: " << results.objective.priorCovariance;
-    chiOut.precision(prec);
-  }
+  // Then each term's own fields (ObjectiveTerm::WriteTotal), in the file's order (Objective::WriteTotals).
+  Objective::Engine().WriteTotals(*this, configure, results, chiOut);
   chiOut << std::endl
          << std::endl;
   chiOut.flush();

@@ -66,11 +66,11 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
     if (const PriorCovariance *pc = data()->Data().GetPriorCovariance())
       pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   }
-  // The rows the program's least-squares drivers add (AZURECalc::ResidualJacobian, PrepareFreeParams): Park's wall,
-  // the gamma_decay priors and wall, the abundance sums; then every diagonal prior and every nuisance prior.
+  // The rows the program's least-squares drivers add (AZURECalc::ResidualJacobian, PrepareFreeParams): the terms' own
+  // (Objective::AppendModelRows); then every diagonal prior and every nuisance prior.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
-  AppendModelRows(compound(), state(), *data(), configure(), jacobianOut ? &pmap : nullptr, nCols, residuals,
-                  jacobianOut ? &jacobian : nullptr);
+  Objective::Engine().AppendModelRows(ObjectiveContext{compound(), state(), inputs(), data(), results(), full, configure()},
+                                      jacobianOut ? &pmap : nullptr, nCols, residuals, jacobianOut ? &jacobian : nullptr);
   auto priorRow = [&](int f, double nominal, double sigma) {
     residuals.push_back((full[f] - nominal) / sigma);
     if (!jacobianOut) return;
