@@ -2,6 +2,227 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (director, 08:00) — merged: the last long file split, the data term once per call
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 109: rehearsal 108 plus
+`feature/upgrade-7-azuregrad-split` (one commit), `feature/upgrade-7-efficiency` (two commits), and three commits
+of mine (the recipe's text, one test, the owner's page). The agents' entries follow. The base build is
+`work/b-trial109`; the reference tag stays `tab-trial103-1`.
+
+**Verified by me** (`work/director/verify_l109.out`, full check of the merged state before my last two commits,
+which change one test and text): build with 0 warnings; every project in three bases against `tab-trial103-1`:
+887, 851 and 887 files, all identical; eight fits identical to `work/b-trial103`; 338 of 338 quick tests; 172 of
+172 regression scripts; and of the slow tests `pyazr_objective`, `pyazr_fit_with_engine` and the two
+`pyazr_objective_*` (4 of 4, `ctest_109_slow.out`). The split is verbatim: the sorted non-blank lines of the two
+new files are those of the old file plus the includes, a head comment and one `namespace { }`. Both branches
+changed `api/src/AZUREAPIChi2.cpp` and `AZUREAPIObjective.cpp` with the objective-term work; git merged them
+without a conflict, I read the merged functions, and the check above is of that merged state.
+
+What each is:
+- *Large files.* `src/AZUREGrad.cpp` 1059 -> 746 lines, the THM rows in `AZUREGradThm.cpp` (357). No file of
+  the engine or the binding is above 1,000 lines now (`file_sizes.tsv`: the Coulomb code's two `cwfcomp.cpp` and
+  `pyazr/sources/nds.py` remain).
+- *Efficiency.* `evaluate()` and `objective()` walk the data once; bit for bit the same numbers on 15 sessions.
+  **My reading of the T2 gradient fit's +-0.4 % between builds (inlining) was wrong**: it is glibc's `malloc`,
+  whose slow path is entered more or less often with the state of the heap (same calls, same outputs; with
+  `tcache_count=65535` a step of 725 M instructions became 5.5 M). One real cost was found, the precision scope
+  per loop body since rehearsal 103 (0.037 %), and removed from the two per-unit loops of `EnergyTasks` (once per
+  thread; on Windows, the one platform where the scope does anything, inferred correct and not run).
+  `FOR_THE_OWNER.md` section 4 now says how to compare two builds.
+- *The recipe "A term of the objective", third trial.* A fresh sonnet agent with the recipe alone wrote a toy
+  term (lambda * sum (n_s - 1)^2 over the free norms) in one code file, `src/Objective.cpp`, with value, gradient,
+  rows, total and field right at lambda = 1 (0.1525 by hand; analytic against finite differences to 5e-11;
+  rows against the adjoint 7.5e-14; fits by gradient and by LM at the same chi-squared). The recipe misled in one
+  place: "a row of 0 where the term is inactive", taken literally, added rows for a term switched off and broke
+  four row-counting tests. Corrected, with four omissions (where a norm is read, the condition of the field for a
+  constant strength, the tests that fail by design, the header comment before the first build). The trial's
+  branch `trial/recipes-3` is thrown away; its report is `work/director/entries/recipes3_report.md`.
+- *The Windows job* of `88e84675` failed in one unit test, `pyazr_units_scales` (mpmath on gmpy2: an mpz handed
+  to `Decimal`); the helper converts with `int()` now. Not run on Windows.
+
+Left for the owner and the PI, not done: pyazr's `value_and_grad` computes the objective once more after the
+gradient (about 14 % of a call on 13N); the 155.6 M allocations of a T2 gradient fit (12.6 % of its instructions).
+
+## 2026-11-17 (long-files agent 2) — src/AZUREGrad.cpp split
+**Merged.**
+
+Branch `feature/upgrade-7-azuregrad-split` (worktree wt-gradsplit, from rehearsal/trial108 06e6ce93), one commit,
+not pushed:
+- c4809219 engine: AZUREGrad.cpp 1059 -> 746 lines. New src/AZUREGradThm.cpp (358 lines): ComputeTHMRows and the
+  anonymous-namespace ThmPointModelGradient (only ComputeTHMRows calls it), each with its comment, moved verbatim.
+  AZUREGrad.cpp keeps BuildShiftDerivTable, the GradAccum members, BuildParamIndexMap, the adjoint orchestration
+  (PointCotangents, AccumulateEGammaGradient, ComputeResidualJacobian, ComputeModelGradients) and
+  ThmFiniteDifferencesRequested. ComputeTHMRows reaches everything else through AZUREGrad.h, so no helper is
+  shared between the two files and there is no internal header.
+- The new file has the old file's include list and a 3-line header comment. It is in AZURE2_CORE_SOURCES next to
+  AZUREGrad.cpp (one target, same flags). Sorted non-blank lines of the two files = the old file's, plus the
+  includes, the header comment and the new file's `namespace {` / `}  // namespace`.
+- file_sizes.tsv: entry removed with --tighten-sizes (3 files left). CLAUDE.md Layout (AZUREGrad row) and
+  docs/source/developer/state_and_ownership.rst (gradient files) name the new file.
+- Not changed: the historical tables in docs/upgrade/evaluation.md (line 52, the `reusable` row, a variable that
+  no longer exists), evaluation.md line 147, apparatus_parameters.md and edata_split.md still say AZUREGrad.cpp.
+  thm_implementation.rst names AZUREGrad.h, which is still correct.
+
+Checks, on the clean tree at c4809219:
+- repo_consistency_test.py: "repository consistent". Check 60 counts only git-tracked files, so it passes only
+  after `git add` of the new file.
+- verify_branch.sh wt-gradsplit gradsplit tab-trial103-1 trial103 6 (work/director/verify_gradsplit.out):
+  0 warnings. brune 887/887, no-brune 851/851, use-park 887/887 files identical. 0 files differ, 0 new files.
+  All eight fits identical. ctest -LE slow: 338/338 passed. run_tests.sh: 172 passed, 0 failed.
+  The line "fatal: not a git repository" in the run_tests section also appears in verify_l108.out and
+  verify_term.out, so this branch did not cause it.
+Not run: ctest -L slow, sphinx-build (the .rst edit is one bullet re-wrapped), performance measurements.
+
+## 2026-11-17 (efficiency agent) — the data term once per API call; the T2 gradient fit's +0.3 to 0.6 % is malloc
+**Merged.**
+
+Worktree wt-eff, branch feature/upgrade-7-efficiency, cut from rehearsal/trial107 (1b786ee2); two commits, not pushed:
+- 13b9c687 perf(api): the data term once per evaluate() and objective() call.
+- f25802d1 perf(engine): the precision scope of EnergyTasks's two per-unit loops once per thread.
+Files: api/src/AZUREAPIChi2.cpp, api/src/AZUREAPIObjective.cpp, api/include/AZUREAPI.h, src/CalculationPlan.cpp,
+tests/pyazr/objective_test.py.  None of src/Objective.cpp, src/AZUREGrad.cpp, src/AZURECalcGradient.cpp,
+api/src/AZUREAPIGradient.cpp touched.  Scratch (not tracked): work/eff-scratch/ (scripts, dumps, perf and callgrind
+data).  Build work/b-eff, 0 warnings.
+
+### Job A: walks of the data per API call
+
+Counted with gdb breakpoints on the module's functions (work/eff-scratch/gdbcount.sh), T2, one call, rehearsal 107:
+
+| call | model pass | Objective::DataChi2 | Objective::Chi2 | CovarianceChi2Correction | ProfileThmGroup |
+|---|---|---|---|---|---|
+| evaluate(x) | 1 | 1 (sum discarded) | 2 | 3 | 3 |
+| objective()(x), log_prob(x) | 1 | 1 (sum discarded) | 1 | 2 | 2 |
+| calculate_chi2_rwa(x) | 1 | 1 | 0 | 1 | 1 |
+| residuals(x) | 1 | 1 (+ the row loop) | 0 | 1 | 1 |
+| value_and_grad(x) | adjoint + 13 | 13 | 1 | 16 | 15 |
+| residuals_and_jacobian(x) | adjoint + 11 | 11 | 0 | 11 | 12 |
+
+(T2 has 6 energy-shift columns, differenced with the forward pass: 12 of the 13 forward passes of value_and_grad, 10
+of the 11 of the Jacobian.)  After 13b9c687: evaluate and objective each 1 model pass, 0 DataChi2, 1 Objective::Chi2,
+1 CovarianceChi2Correction, 1 ProfileThmGroup.  The earlier repair (fix3) made EvaluateFilledChi2 ask
+Objective::DataChi2, but CalculateObjectiveRWA and EvaluateObjectiveRWA still called it before Objective::Chi2 and
+threw its sum away; evaluate also summed the terms twice (plain sum, then the breakdown).
+
+The change: EvaluateFilledModel is the model pass alone (EvaluateFilledChi2 = it + DataChi2 + rows, as before);
+CalculateObjectiveRWA and EvaluateObjectiveRWA call it, then one Objective::Chi2.  evaluate's total is now the
+breakdown's sum (TermList::SumWithParts): the same additions as the running sum, because the first term starts from 0
+in both and every later term adds its value in one step (0 + x = x).  Nothing DataChi2 writes is read by
+Objective::Chi2 before it writes it again (segment chi^2, profiled norms, THM profiles, covariance seeds; the data
+covariance's first-call freeze sees the same pulls, checked with objective()(x) as a session's first call).
+
+Bit for bit: every number returned by evaluate (objective, chi2, every term, every data set's arrays: model, rows,
+norms, priors), objective, value_and_grad (value and gradient), residuals, residuals_and_jacobian, log_prob,
+calculate_chi2_rwa and objective_terms_rwa, at x0, at x0 with every free energy and width x(1 + 1e-4), and at x0 again,
+on T1, T2, T3, 13N and thm_coherent_background/toy, in the bases Brune, formal and Park (15 sessions), written as hex
+floats by work/eff-scratch/calls.py: identical between rehearsal 107's module and both commits (cmp of 15 files).
+
+User-space instructions per call, one thread, (count of N calls - count of 0 calls)/N, N = 200 (20 for
+value_and_grad and the Jacobian), rehearsal 107 -> 13b9c687:
+
+| call | T2 before | T2 after | change | 13N before | 13N after | change |
+|---|---|---|---|---|---|---|
+| evaluate | 367,121,127 | 364,915,852 | -2,205,275 (-0.60 %) | 158,797,231 | 157,353,069 | -1,444,162 (-0.91 %) |
+| objective | 363,254,009 | 363,112,411 | -141,598 (-0.04 %) | 153,119,951 | 153,066,743 | -53,207 (-0.03 %) |
+| log_prob | 363,290,979 | 363,153,313 | -137,666 | 153,165,863 | 153,117,022 | -48,841 |
+| calculate_chi2_rwa | 362,997,253 | 362,998,844 | +1,590 | 152,877,526 | 152,875,063 | -2,463 |
+| residuals | 363,272,892 | 363,236,753 | -36,139 | 153,178,272 | 153,225,451 | +47,179 |
+| value_and_grad | 14,533,840,902 | 14,534,403,709 | +562,807 | 1,104,877,609 | 1,104,794,841 | -82,768 |
+| residuals_and_jacobian | 14,225,500,297 | 14,225,655,570 | +155,272 | 3,107,167,355 | 3,107,180,764 | +13,409 |
+
+Run-to-run spread (three runs): about 1,000,000 per value_and_grad call on T2 and 30,000 per residuals call on 13N;
+the unchanged paths move inside it.  The data walk is cheap (about 0.14 M instructions on T2 against a 363 M model
+pass); the 2.2 M saved by evaluate are mostly the second Objective::Chi2 (nuisance priors, Park, model data).
+
+Not changed, for the director (all in api/src/AZUREAPIGradient.cpp, the other agent's file):
+- value_and_grad runs the model pass once more than it needs: CalculateObjectiveGradRWA ends with
+  out[0] = CalculateObjectiveRWA(params), a re-fill and a full forward pass after the adjoint (which has the model
+  values) and after the energy-shift differences (which leave the model at a shifted point).  13N: about 153 M of
+  1,105 M instructions per call (14 %); T2: one of 13 forward passes plus the adjoint.  Dropping it needs the model
+  values of the adjoint's forward part to equal the forward pass's bit for bit, and the shift columns run before
+  the adjoint or followed by a model pass at x: not checked.
+- residuals(x) (EvaluateFilledChi2 with rows) still walks the data once for DataChi2, whose sum it discards; the walk
+  sets the profiled norms and THM profiles the rows read, so it is needed as it is.
+- The Jacobian of a THM project ends with EvaluateFilledChi2(nullptr) "to leave the model at x"; one forward pass.
+
+### Job B: the T2 gradient fit across builds
+
+AZURE2 fit --use-gradient on a copy of tests/upgrade/T2 (work/eff-scratch/fitB/), OMP_NUM_THREADS=1, Coulomb table
+work/coulomb_table_v2.bin, perf stat -e instructions:u.
+
+(1) One binary, three runs: 102: 169,536,679,017 to 169,536,683,577; 103: 169,599,303,239 to 169,599,307,868;
+106: 168,874,480,103 to 168,874,508,391; 107: 168,874,479,967 to 168,874,481,271.  Spread at most 28,288 (2e-7).
+
+(2) The outputs: the 14 files of output/ (param.sav, parameters.out, chiSquared.out, ...) and run.log identical
+across 102, 103, 106, 107 and both commits here (diff -r).  MIGRAD: 117 calls in every build.
+
+(3) Where the difference sits.  Callgrind (exact counts, one run per build; under valgrind the totals are 173.4 G):
+the same number of calls of every engine function looked at in every build (exp 742,568,667;
+AMatrixFunc::PointTBar 2,007,628; CalculateBareCrossSection 3,963,584; AZURECalc::operator() 118, Gradient 19);
+malloc 155,570,017 (102, 103) and 155,571,884 (106), free the same +1,867.  103 -> 106 under callgrind: -66.3 M, of
+which _int_malloc -42.4 M, malloc_consolidate -9.7 M, _int_free -4.8 M, unlink_chunk -4.0 M (glibc's slow path:
+_int_malloc entered 8,208,415 times in 103, 7,986,771 in 106, for the same number of malloc calls) and
+PointTBar -4.9 M (the same calls: its code after 1652f875 moved it to AMatrixFuncTBar.cpp).  Natively, perf record
+(one sample per 2 M instructions): the malloc family 21,208 M in 103, 20,310 M in 106 (-898 M, +-290 M), the rest
++234 M +- 760 M.  (Under valgrind 9 of the 14 output files differ from the native run, in every build alike:
+valgrind computes long double at 64 bits; the four builds agree with each other there.)
+
+The test of "heap state, not work": the same binaries with glibc's malloc tuned (GLIBC_TUNABLES), which changes no
+output (diff -r: identical) and no call of the program:
+
+| build | default (run 1 of 3) | tcache_count=65535 | trim_threshold=4294967295:top_pad=268435456 |
+|---|---|---|---|
+| 102 | 169,536,683,577 | 167,268,745,331 | 169,075,634,893 |
+| 103 | 169,599,303,239 | 167,331,366,642 | 169,138,257,332 |
+| 106 | 168,874,480,296 | 167,325,822,178 | 170,597,550,481 |
+| 107 | 168,874,481,271 | 167,325,819,846 | not run |
+| f25802d1 (this branch) | 169,344,230,377 | 167,274,144,348 | not run |
+
+103 -> 106: -724.8 M by default, -5.5 M with the large thread cache, +1,459.3 M with the other setting: the sign
+follows glibc's heap, not the program.  With the large thread cache (malloc rarely leaves its cache) the code
+differences alone remain: 102 -> 103 +62.6 M (as in every setting), 103 -> 106 -5.5 M, 106 -> f25802d1 -51.7 M.
+
+Conclusion.  The build-to-build changes of 0.2 to 0.6 % are not added work and not inlining: they are the internal
+work of glibc's malloc (155.6 M allocations per fit, 12.6 % of the instructions natively), which depends on the
+heap's state, which a commit that moves allocations or a library's own allocations can shift.  Same calls, same
+outputs.  One real piece of work was found: 9d7ec793 (rehearsal 103) put the x87 precision scope at the head of every
+loop body; in CalculationPlan::EnergyTasks two loops run over every unit at every evaluation, +51.8 M (callgrind),
+and WorkingCopy::CalculatePointsInParallel +10.3 M: 62.6 M, 0.037 % of the fit.  f25802d1 opens the scope once per
+thread in the two EnergyTasks loops: -51.7 M with the cache setting, -51,771,911 in EnergyTasks under callgrind
+(malloc calls 155,571,884, as in 106).  In the default setting the same commit counts +469.7 M against 107, the heap
+again: a default count compared between two builds says nothing below 0.9 % (the largest heap swing seen).
+Proposal: compare builds with GLIBC_TUNABLES=glibc.malloc.tcache_count=65535 (or callgrind) and quote the default
+count only with that caveat.  Not done: the 10.3 M of CalculatePointsInParallel (its loops are per energy task with
+a dynamic schedule; the scope is a small part there).
+
+The PI's figures before rehearsal 102 (168,626,591,786; 169,075,377,914; 169,559,125,470) are of builds not
+measured here; that they are heap shifts too is inferred, not seen.
+
+### Checks
+
+- python3 tests/consistency/repo_consistency_test.py: consistent (before each commit).
+- ctest on work/b-eff at 13b9c687, -j2: sampler_objective, pyazr_objective (slow label; section 6 now 24 more
+  checks, all ok), pyazr_azr_parse_cache, pyazr_model_data, pyazr_objective_terms, pyazr_objective_object,
+  pyazr_evaluation, repo_consistency: 8 of 8 passed.
+- The bit comparison of job A (15 sessions, every call kind, hex floats): identical at 13b9c687 and at f25802d1;
+  objective()(x) as a session's first call: identical (T2).
+- work/director/verify_branch.sh wt-eff eff tab-trial103-1 trial103 5 at f25802d1, clean tree, nothing else of mine
+  running (work/director/verify_eff.out): warnings 0; brune 887 of 887, no-brune 851 of 851, use-park 887 of 887
+  identical, 0 differ, 0 new; the eight fits identical to trial103; ctest -LE slow 338 of 338 passed;
+  tests/run_tests.sh passed 172, failed 0; the worktree clean after it.
+
+Not run: ctest -L slow other than pyazr_objective, sanitizers, a thread comparison (the hoist keeps the static
+schedule; not measured at more than one thread), other compilers and platforms (Windows is where the x87 scope
+acts: the hoisted scope still opens before any arithmetic of the thread; inferred, not run), the CI.  The
+evaluate/objective identity was not shown to fail by an injected error (it would need a term adding in two steps).
+
+Merge note: the term agent's branch (wt-term) also edits api/src/AZUREAPIChi2.cpp (the prior covariance's record);
+expect a small textual conflict there, none in the four files named.
+
+For the director or the PI: (a) the extra model pass of value_and_grad (above; 14 % of a 13N call), in the other
+agent's file; (b) whether to keep f25802d1 (0.03 %, a pattern check 60 accepts) or drop it; (c) the proposal to
+compare builds' instruction counts with GLIBC_TUNABLES=glibc.malloc.tcache_count=65535; (d) 155.6 M allocations per
+T2 fit cost 12.6 % of its instructions natively: a target for later work, not touched here.
+
 ## 2026-11-17 (director, 05:30) — merged: a term of the objective stated in one place
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 108 (rehearsal 107 plus

@@ -31,8 +31,10 @@ push: 165 of 172 regression checks, 27 unit tests failing; a path with a drive l
 project, and pyazr read text in the local code page (answered in the fourteenth push, not run on Windows). macOS
 in that push, the first with the GNU tools: 164 of 172 regression checks and 5 unit tests failing; four scripts
 were not written for bash 3.2, three compared a path through the temporary directory's link, and two failures are
-not understood. The gates' other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on
-one Linux machine only.
+not understood. **2026-11-17:** macOS passes every regression check and all unit tests but one (a band of T3 at
+an extrapolation point no kinematics reaches), Windows every regression check and all unit tests but one (a
+test's fault, repaired in the next push); `FOR_THE_OWNER.md` section 10, item 1, the last bullet. The gates'
+other parts (reference outputs, the T2 benchmark, the sanitizers at 8 threads) were run on one Linux machine only.
 
 Every box still open below, with what an audit by reading on 2026-11-15 found (not a re-run of the tests):
 

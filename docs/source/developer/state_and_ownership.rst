@@ -173,8 +173,9 @@ thread may write:
   only its own slots and that the shared solve of a task gives every unit the
   bits its own solve would give (``CalculationPlan::RunChecked``,
   ``CheckEnergyTasks``).
-- **The gradient** (``src/AZUREGrad.cpp``, ``src/GradEnergyTasks.cpp``): the
-  forward pass as above, then one adjoint pass per energy task.
+- **The gradient** (``src/AZUREGrad.cpp``, ``src/AZUREGradThm.cpp``,
+  ``src/GradEnergyTasks.cpp``): the forward pass as above, then one adjoint
+  pass per energy task.
 - **A fit's evaluations.** During a fit every evaluation of ``AZURECalc``
   takes its own ``LevelState`` and ``WorkingData`` from the pools
   (``AZURECalc::GetPooledState``, ``GetPooledData``) and returns them after

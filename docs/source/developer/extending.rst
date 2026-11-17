@@ -251,8 +251,10 @@ rows and the fields of ``chiSquared.out``) loop over the terms and name none
      ``GradAccum`` (``AddE``, ``AddGamma``, ``AddAbundance``, or
      ``accum.direct`` with a full index for any parameter), returning
      ``kAdded``, ``kNone`` or ``kUnavailable`` (finite differences);
-   - ``AppendRows``: its least-squares rows if it is a sum of squares, the
-     same number at every parameter vector;
+   - ``AppendRows``: its least-squares rows if it is a sum of squares. A term
+     the project does not use adds no rows; the number of rows may depend on
+     the project, never on the parameter vector (a row of 0 where a term in
+     use is inactive at this vector);
    - ``TotalLabel`` and ``WriteTotal``: its field, written only when the
      project uses the term, so that other projects' files do not change;
    - ``AddForSampler``, ``ExcludesForSampler``: only if the sampler should
