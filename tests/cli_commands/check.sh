@@ -221,7 +221,8 @@ refuses '7\n' "Exit"
 # ---- 5. --schema-out=FILE: all or nothing ------------------------------------------------------------------------
 S="$WORK/schema_out"
 mkdir -p "$S/ok" "$S/ro" "$S/taken" "$S/isdir/file"
-(cd "$S" && $RUN "$AZURE2_BIN" --schema > stdout.json 2> stdout.err; echo $? > stdout.status)
+# (tr: a Windows build's standard output is a text stream, CR LF; the file --schema-out writes is LF everywhere)
+(cd "$S" && $RUN "$AZURE2_BIN" --schema 2> stdout.err | tr -d '\r' > stdout.json; echo "${PIPESTATUS[0]}" > stdout.status)
 [ "$(cat "$S/stdout.status")" = 0 ] && [ -s "$S/stdout.json" ] && ok "--schema prints the table (exit 0)" ||
   bad "--schema: exit $(cat "$S/stdout.status"), $(wc -c < "$S/stdout.json") bytes"
 printf 'OLD CONTENT\n' > "$S/ok/schema.json"
