@@ -207,12 +207,17 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
   std::vector<double> keys(n);
   std::vector<long long> sources(n);
   // Each unit's key is its own (reads only), so they are formed in parallel: a fit that moves an energy shift
-  // rebuilds the tasks at every evaluation, and this serial section is what the other threads wait for.
-#pragma omp parallel for schedule(static) if (n > 4096)
-  for (int k = 0; k < n; k++) {
+  // rebuilds the tasks at every evaluation, and this serial section is what the other threads wait for.  The
+  // precision scope once per thread, not once per unit (these two loops run over every unit at every evaluation: the
+  // scope per unit was 0.03 % of the instructions of the T2 gradient fit).
+#pragma omp parallel if (n > 4096)
+  {
     const azure2::support::ExtendedPrecisionScope fpPrecision;
-    keys[k] = nodeList(nodes[k]).energy[at(nodes[k])];
-    sources[k] = ECAmplitudeSource(data.SiteAt(units[k]), configure);
+#pragma omp for schedule(static)
+    for (int k = 0; k < n; k++) {
+      keys[k] = nodeList(nodes[k]).energy[at(nodes[k])];
+      sources[k] = ECAmplitudeSource(data.SiteAt(units[k]), configure);
+    }
   }
   const bool same = work == energy_work_ && units == energy_units_ && sources == energy_sources_ &&
                     keys.size() == energy_keys_.size() &&
@@ -230,14 +235,17 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
     int ordinal;
   };
   std::vector<Key> order(n);
-#pragma omp parallel for schedule(static) if (n > 4096)
-  for (int k = 0; k < n; k++) {
+#pragma omp parallel if (n > 4096)
+  {
     const azure2::support::ExtendedPrecisionScope fpPrecision;
-    const Site &u = data.SiteAt(units[k]);
-    const NodeList &list = nodeList(nodes[k]);
-    const int i = at(nodes[k]);
-    order[k] = {list.nucleus[i], RouteOf(configure), keys[k], Bits(keys[k]), u.GetEntranceKey(),
-                u.GetExitKey(), sources[k], k};
+#pragma omp for schedule(static)
+    for (int k = 0; k < n; k++) {
+      const Site &u = data.SiteAt(units[k]);
+      const NodeList &list = nodeList(nodes[k]);
+      const int i = at(nodes[k]);
+      order[k] = {list.nucleus[i], RouteOf(configure), keys[k], Bits(keys[k]), u.GetEntranceKey(),
+                  u.GetExitKey(), sources[k], k};
+    }
   }
   // By task key (nucleus, route, E_x, bits), then by T-matrix group (entrance, exit, amplitude source), then in plan
   // order.  The order is total (the ordinal last), so sorting pieces in parallel and merging them gives the one serial
