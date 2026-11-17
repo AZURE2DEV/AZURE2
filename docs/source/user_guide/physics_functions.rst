@@ -723,6 +723,93 @@ Library: ``physics/transfer/ThmVertex.h: PlaneWaveSurfaceVertex``.  Plot axis: `
      - --
      - plane-wave surface vertex M_l(p)
 
+``thm_full_form_factor(l, nodes, z1, z2, m1_u, m2_u, radius, e_level, boundary, eps, r0, a0)``
+----------------------------------------------------------------------------------------------
+
+Full form factor of a Trojan-horse level relative to its surface term, R = W/[(hbar^2/2mu) u(a) M_l].  vertexModel=ff
+(docs/upgrade/thm_form_factor.md; La Cognata et al., ApJ 708 (2010) 796, Eqs. 20-21): W = int_0^a u V j_l(pr) r dr with
+u the Woods-Saxon (+ uniform-sphere Coulomb) level function of n_r interior nodes at the level energy e_level above the
+pair's threshold with a u'(a)/u(a) = B, normalised inside a; by Green's identity W = (hbar^2/2mu) u(a) [M_l + Delta],
+Delta the volume term.  eps = hbar^2 p^2/2mu = E + B_xs + T_s; R = 1 + Delta/M_l.  The well's radius is r0 A^(1/3), A
+the mass number of the heavier particle.
+
+Library: ``physics/transfer/FormFactor.h: SolveLevel, VolumeTerm, SurfaceM``.  Plot axis: ``eps``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - argument
+     - unit
+     - domain
+     - meaning
+   * - ``l``
+     - --
+     - integer in [0, 10000]
+     - orbital angular momentum
+   * - ``nodes``
+     - --
+     - integer in [0, 20]
+     - radial node count n_r of the level function
+   * - ``z1``
+     - --
+     - integer >= 0
+     - charge number of particle 1
+   * - ``z2``
+     - --
+     - integer >= 0
+     - charge number of particle 2
+   * - ``m1_u``
+     - u
+     - finite > 0
+     - atomic mass of particle 1
+   * - ``m2_u``
+     - u
+     - finite > 0
+     - atomic mass of particle 2
+   * - ``radius``
+     - fm
+     - finite > 0
+     - channel radius a
+   * - ``e_level``
+     - MeV
+     - finite
+     - level energy above the pair's threshold
+   * - ``boundary``
+     - --
+     - finite
+     - boundary value B = a u'(a)/u(a) of the level function
+   * - ``eps``
+     - MeV
+     - finite > 0
+     - E + B_xs + T_s: hbar^2 p^2/2mu of the transferred particle
+   * - ``r0``
+     - fm
+     - finite > 0
+     - Woods-Saxon radius parameter
+   * - ``a0``
+     - fm
+     - finite > 0
+     - Woods-Saxon diffuseness
+
+.. list-table::
+   :header-rows: 1
+
+   * - returns
+     - unit
+     - meaning
+   * - ``R``
+     - --
+     - W / surface term
+   * - ``delta``
+     - --
+     - volume term Delta
+   * - ``M``
+     - --
+     - surface term M_l(pa; B)
+   * - ``depth``
+     - MeV
+     - Woods-Saxon depth V0
+
 ``wigner_limit(m1_u, m2_u, radius)``
 ------------------------------------
 

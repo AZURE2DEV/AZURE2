@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as tmp:
             (dict(distortion="coulomb", spectatorAngle=10, ps="hulthen:0-30", vertexModel="dw"),
              "spectatorAngle= (one direction) and a ps window"),
             (dict(distortion="coulomb", theta="30-60", vertexModel="dw"), "not available with vertexModel=dw"),
-            (dict(distortion="coulomb", vertexModel="dwba"), "expected pw or dw")]:
+            (dict(distortion="coulomb", vertexModel="dwba"), "expected pw, dw or ff")]:
         msg = refusal(lambda: set_experiment(Project.open(src), "B", [1], **base, **kwargs), bad)
         check(f"refused like AZURE2: {frag}", msg is not None and frag in msg, msg and msg[-400:])
 

@@ -118,9 +118,21 @@ One THM experiment: the data sets that name it share one profiled norm and its b
      -
      - the c.m. angles of the exit pair relative to p_xA (degrees)
    * - ``vertexModel``
-     - ``pw`` | ``dw``
+     - ``pw`` | ``dw`` | ``ff``
      - ``pw``
-     - the entrance vertex: plane wave, or the surface term of the prior-form DWBA
+     - the transfer vertex: pw the plane-wave surface term M_l; dw the surface term of the prior-form DWBA; ff the full form factor <phi_lambda\|V\|j_l> of each level (La Cognata et al. ApJ 708 (2010) Eqs. 20-21: M_l plus the volume term of a Woods-Saxon level function with its node count; vertex=perlevel, fixed level energies)
+   * - ``ffWell``
+     - ``<r0>,<a0>``
+     - ``1.25,0.65``
+     - vertexModel=ff: the Woods-Saxon radius parameter r0 (R = r0 A^(1/3), A the core's mass number) and diffuseness a0 of the level functions, fm; applies when vertexModel is given
+   * - ``ffVolume``
+     - ``on`` | ``off``
+     - ``on``
+     - vertexModel=ff: off drops the volume term, so the vertex is exactly that of vertexModel=pw (a check of the limit); applies when vertexModel is given
+   * - ``ffNodes``
+     - ``<J><+|->[,k<k>][,l<l>]:<n>[;...]``
+     -
+     - vertexModel=ff: the radial node count n of the level functions of a J^pi group (its k-th level, its entrance channels of orbital momentum l); without a term, the Wildermuth rule of a nucleon on the core; applies when vertexModel is given
    * - ``spectatorAngles``
      - ``[cm:]thmin-thmax | [cm:]table:<file>``
      -

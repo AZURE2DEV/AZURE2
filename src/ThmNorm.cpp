@@ -21,6 +21,7 @@
 #include "ThmReports.h"
 #include "ThmDistortion.h"
 #include "ThmDwVertex.h"
+#include "ThmFormFactor.h"
 #include "ThmAngular.h"
 #include <algorithm>
 #include <gsl/gsl_sf_bessel.h>
@@ -522,6 +523,7 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CompoundSystem *c
     } else if (x.distortion != ThmExperiment::DIST_NONE) {
       if (!ThmBuildDistortion(*this, configure, x, group, where, reaction.dk)) return -1;
     }
+    if (x.vertexFF && !ThmBuildFormFactor(*this, configure, compound, x, group, where)) return -1;
     if (x.hasTheta && !ThmBuildAngleWindow(*this, configure, compound, x, group, where)) return -1;
     if (!x.cbackground.empty()) {
       // Coherent background (cbackground=, ThmCoherentBackground): one complex
