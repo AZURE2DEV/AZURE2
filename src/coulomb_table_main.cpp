@@ -33,6 +33,7 @@
 #include "Config.h"
 #include "CoulombTable.h"
 #include "ShftFunc.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -150,6 +151,7 @@ int Validate(const CoulombTable &t, long n, unsigned seed, int threads, double e
   double tTable = 0, tExact = 0;
 #pragma omp parallel num_threads(threads)
   {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     ErrorMap lP = mP, lS = mS, lPhi = mPhi, lB = mB;
 #ifdef _OPENMP
     std::mt19937_64 rng(seed + 7919 * omp_get_thread_num());

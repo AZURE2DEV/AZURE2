@@ -2,6 +2,147 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (director, 01:10) — merged: 64-bit x87 precision in every thread (the Windows unit tests)
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 103: `feature/upgrade-0-windows-tests-3` (the Windows
+agent's two entries follow). The base build is `work/b-trial103`, **the reference tag is `tab-trial103-1`**, the
+quick set is 334 tests.
+
+**What it answers.** The CI's Windows job of `3579fb87` failed three unit tests: one on the mpmath version's
+`format` of an `mpf` (now `g17` of a float, independent of the version), two that compare a worker thread's values
+with the main thread's bit for bit. `long double` keeps the x87 precision control of the thread, 53 bits in a
+Windows Python thread (inferred; shown on Linux by lowering the control word: T1's objective moves by 8e-16).
+Now every OpenMP parallel region, `main` and every computing function of the binding opens a scope that sets 64
+bits and restores the caller's word (`ExtendedPrecisionScope`, `EngineCallScope`, `PrecisionGuard`); check 60
+refuses a parallel region or a binding function without one unless it is listed as computing nothing the
+precision can change. At the merge `observed_levels_all_rwa` (rehearsal 102's) got the guard.
+
+**Verified** (`work/director/verify_l103.out`): 0 warnings; against `tab-trial102-1` 887, 851 and 887 of 887, 851
+and 887 files identical; the eight fits identical to `work/b-trial102`; 334 of 334 quick tests; 172 of 172
+regression scripts. On Linux a thread starts at 64 bits, so this shows only that nothing moved; Windows itself is
+tested by the CI's next run alone. Not run by me: the slow tests, sanitizers, other platforms.
+
+**Waiting for the PI:** T3's extrapolation `x8` (`4He(a,a)4He`) asks lab angles above 90 degrees, which equal
+masses cannot reach; the engine maps them to 180 degrees c.m. without a word and the golden file holds
+3.6873994268e+62 there. Refuse at validation (recommended), NaN with a warning, or leave: his word is needed,
+since a golden file changes.
+
+## 2026-11-16 (Windows agent) — the three Windows unit tests: an old mpmath, and a thread's x87 precision
+
+Worktree `wt-win3`, branch `feature/upgrade-0-windows-tests-3` (from `feature/upgrade-4-data`, e8b04682), two
+commits, not pushed. Build `work/b-win3` (0 warnings). No Windows machine: what follows separates what was run on
+Linux from what is inferred.
+
+### (A) pyazr_units_scales: `format(mpf, ".17g")`
+
+- Cause, shown: `mpf.__format__` exists in mpmath 1.4.x (1.4.1 here, `ctx_mp_python.py`) and not in 1.3.0 (three
+  copies on this machine). With mpmath 1.3.0 first on PYTHONPATH the old test fails here with the CI's exact
+  TypeError at line 185. That the Windows job has 1.3.x (MSYS2's package; Linux/macOS take pip's) is inferred: the
+  job does not print it. The test now prints `mpmath <version>`.
+- Repair (commit 46784682): `g17(x)` in the test, the mpf's exact binary value rounded once to 17 digits by the
+  decimal module, written in Python's ".17g" layout. Run: 228 strings written by the test, 0 differ from
+  `format(mpf, ".17g")` of 1.4.1; the test's output before/after identical (but the version line); the new test
+  passes with 1.3.0 with the same output. g17 = `format(float, ".17g")` for 400,000 random doubles (-0.0 aside).
+- Other tests: no other `format()`/f-string spec applied to an mpf found (grep); the non-slow ones ran on the CI.
+
+### (B) pyazr_session_lock (b), (C) pyazr_objective_object (d): a Python thread's x87 precision
+
+Both compare values computed in the MAIN thread ("alone") with values computed in two `threading.Thread`s at once,
+both at `OMP_NUM_THREADS=1`.
+
+- Cause 1, shown on Linux (trial-101 build, no Coulomb table; a 3-line C helper for fnstcw/fldcw via ctypes): T1's
+  objective value, gradient, rows, Jacobian and evaluate() in a worker thread are bit-identical to the main thread's;
+  with the worker's x87 control word lowered to 0x27F (53-bit precision) before the calls: value 8e-16 rel., 7/13
+  gradient components (1.3e-13), 27/442 rows (1.4e-12), 217/5746 Jacobian entries, 27/442 model values differ, at
+  OMP_NUM_THREADS 1 and 2. The main thread lowered gives the same at 1 thread; at 2 threads it differs from both
+  (its OpenMP workers, made earlier, stay at 64 bits: mixed precision).
+- Why Windows only (inferred, not shown here: no MinGW sources or headers on disk): MinGW-w64's start-up
+  (`_fpreset`, CRT_fp10) gives the process's main thread 64-bit precision (0x37F); a thread made by the UCRT's
+  `_beginthreadex` (Python's threading) starts with the Windows default 0x27F. Linux threads inherit the creator's
+  word (clone copies the FPU state), so the tests pass there. The engine's `long double` sites (src/AngCoeff.cpp,
+  AMatrixFunc.cpp, ECIntegral.cpp, ChannelSpace.cpp; physics/src/AngularCoupling.cpp, ChannelFunctions.cpp,
+  ChannelSolve.cpp and their headers) carry it; on MinGW its x87-based libm functions may too (not shown).
+- Cause 2 (a race on one session), not seen: tests (b) and (d) repeated 200 times in one process at
+  OMP_NUM_THREADS 1, 2, 4 (pinned to 4 cores, trial-101): 0 of 600 differ.
+- Repair (commit 9d7ec793): `azure2::support::ExtendedPrecisionScope` (support/include/azure2/support/
+  FloatingPointPrecision.h): sets the precision control to 64 bits, restores the word at scope end, holds only the
+  word it found. Compiled on x86/x86-64 with GCC/clang everywhere (not only MinGW: no number moves where threads
+  are at 64 bits already, and the test then runs on Linux and macOS-intel too); empty on arm64. Taken (i) by every
+  GIL release of the binding: `EngineCallScope` (api/src/pybind_engine_call.h) replaces all 31
+  `gil_scoped_release`; (ii) as the first statement of the body of each of the 39 OpenMP parallel regions of src/,
+  numcmc/ and the binding (OpenMP workers on Windows start with whatever winpthreads gives them: not shown);
+  (iii) at the top of AZURE2's main. Consistency check 60 keeps (i) and (ii). Diagnostics for the CI:
+  `_azure2._x87_control_words()` and the test hook `_azure2._set_x87_control_word()`.
+- Test: `pyazr_x87_precision` (OMP 2): prints the words of the main thread, a threading.Thread and their OpenMP
+  threads (found and in scope); requires 64 bits inside every scope and the word restored after; T1 in a thread
+  lowered to 53 bits, and in the main thread lowered, bit for bit the main thread's. Passes here at OMP 1 and 2.
+  On Linux the region scopes are not exercised (workers made inside the call scope inherit 64 bits); on Windows the
+  printed "OpenMP threads found" says what winpthreads gives, and the in-scope check exercises them.
+  session_lock (b) and objective_object (d) gained a check "one thread alone in a threading.Thread = the main
+  thread" before the two-at-once check, and print what differs and by how much.
+- Not covered: binding calls that keep the GIL (cheap ones: the nuclear-part edits, readers) compute in the
+  caller's precision; a Python callback during a fit runs inside the scope (Python's floats are SSE: no effect).
+
+### AZURE2.exe on Windows today (before the repair)
+
+Main thread at 64 bits (inferred from MinGW's start-up). Its OpenMP workers: not shown (from memory winpthreads'
+thread wrapper calls `_fpreset`; whether that is the 64-bit CRT_fp10 one or the C runtime's 53-bit one is not
+established). If they start at 53 bits, results depend on the thread count at the 1e-15..1e-12 relative level (the
+Linux experiment above, mixed precision at 2 threads). The CI's regression checks that compare 1 and 2-4 threads
+(angle_mapping gradients, thm_dw_vertex byte-identical, extrapolation_grids, stopping_yield, layer_yield,
+ratio_to_rutherford, modified_sfactor, format3_engine T2) pass on Windows; they compare printed numbers (11
+significant digits), so they bound the effect below the printed digits, not to zero. After the repair every region
+runs at 64 bits, so the question is moot for results; the next CI run's pyazr_x87_precision output answers it.
+
+### Run, and not run
+
+Run: the x87 experiment above; the 600 repetitions; units_scales old/new with mpmath 1.4.1 and 1.3.0; build
+work/b-win3 (0 warnings); x87_precision_test at OMP 1, 2; `ctest -j2 -R 'pyazr_session_lock|
+pyazr_objective_object|pyazr_units_scales|repo_consistency|pyazr_evaluation|upgrade|pyazr_x87_precision'`;
+`tests/upgrade/check.sh work/b-win3/src/AZURE2`: all 30 ctests pass (repo_consistency once the new files were
+staged: its scan reads `git ls-files`), check.sh "upgrade T1-T3: ok" (log work/b-win3.upgrade_check.log).
+Not run: the full regression (tests/run_tests.sh), `ctest -L slow`, any Windows run.
+
+## 2026-11-16 (Windows agent, part 2) — the binding functions that keep the GIL
+
+Commit 2d42d0e4 on `feature/upgrade-0-windows-tests-3` (not pushed); build `work/b-win3` (0 warnings).
+
+### Inventory (run: a scan of the `.def*(` calls of api/src/pybind_*.cpp, then each body read)
+
+158 functions exposed; 11 took EngineCallScope at the `.def` or in their lambda, 19 inside a named body (16 Session
+methods, physics_evaluate, stopping.evaluate, _x87_control_words); 128 took none. Per file (none / all):
+api 46/71, nuclear_part 23/23, project 16/16, stopping 9/10, convert 6/6, schema 6/6, fit 5/5, describe 4/6,
+thm 3/3, level_doors 2/2, physics 2/3, records 2/2, collision_matrix 1/1, optical 1/1, data_rows 1/1, precision 1/2.
+- (b) computes, 28: Session.__init__ (the set-up), calculate_objective_rwa, objective_terms_rwa, log_prob_rwa,
+  sampler_log_probability, scattering_lengths_rwa, park_norms, prior_covariance_residuals, thm_lineshape;
+  collision_matrix, formal_/observed_levels_of_block, optical_scattering; data_rows, predictions,
+  extrapolation_grid, refine_grid; convert_parameter_file, validate_/describe_/convert_format3_text; stopping's
+  material, stopping, areal_density_between, energy_after, range, straggling, provenance.
+- (a) nothing the precision changes, 100 (+ cache_stats and _x87_control_words, which have a body scope): Session
+  readers, module tables, RuntimeOptions (api 37), document edits and parsing
+  (nuclear_part 23, project 16), tables and texts (schema 3, convert 2, thm 3, describe 4, records 2, physics 2,
+  stopping 2, fit 5), the test hook _set_x87_control_word (a scope would undo it). Criterion: no long double, no
+  libm call; fabs/floor/lround and double +-*/ (SSE on x86-64) only.
+
+### Repair
+
+`PrecisionGuard` = `py::call_guard<ExtendedPrecisionScope>` (api/src/pybind_engine_call.h), written at 45 `.def`s:
+the 28 and the 17 with an inner GIL-released block (so their code outside the block is covered too). No GIL release
+added. pybind_api.cpp stays at 1016 lines. Check 60 (iii): a `.def` without a scope and not in
+BINDING_WITHOUT_ARITHMETIC (by file, grouped, with reasons; stale names fail) is refused; planted cases; seen to
+fail with the guard removed from optical_scattering. CLAUDE.md "Determinism" states the rule.
+
+### Test, and what failed before
+
+pyazr_x87_precision (c): 17 representatives, lowered thread vs main thread, bit for bit. Run against the build of
+9d7ec793: only the set-up failed (a Session made in a lowered thread: Objective(x) 4.1e-15 rel. with the Coulomb
+table, 2.1e-14 without). Against trial 101 (no scope, ctypes fldcw helper): also Objective(x), log_prob (8.2e-16).
+Physics rows, transform, channel_functions, scattering lengths, Park norms, from_session, collision_matrix,
+optical_scattering, extrapolation_grid, stopping: no difference in either build on Linux (inferred: double/SSE
+arithmetic here, or inside OpenMP region scopes; with MinGW's x87 libm they may differ: not shown).
+After: all pass at OMP 1, 2 and without the table; ctest selection of 59 tests passes.
+Not run: tests/run_tests.sh, ctest -L slow, Windows.
+
 ## 2026-11-16 (director, 23:40) — merged: F of a neutral pair repaired; the observed-level record; widths' table
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 102: `feature/upgrade-1-coulomb-neutral-f`,

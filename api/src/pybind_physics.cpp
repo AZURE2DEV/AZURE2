@@ -33,6 +33,7 @@
 #include "azure2/physics/coulomb/Whittaker.h"
 #include "azure2/physics/transfer/ThmVertex.h"
 #include "pybind_rows.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
@@ -490,7 +491,7 @@ py::tuple Evaluate(const std::string &name, const std::vector<Column> &columns) 
   double *v = values.mutable_data();
   int *st = status.mutable_data();
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     std::vector<double> a(na), o(no);
     for (py::ssize_t i = 0; i < n; i++) {
       for (std::size_t k = 0; k < na; k++) a[k] = in[k][i];
@@ -541,7 +542,7 @@ void BindPhysics(py::module_ &m) {
         "doc, kind real / integer / flag / choice, domain in words, lower and upper (None: unbounded), lower_open, "
         "upper_open, choices, default or None, example (a typical value) or None, sweep {lower, upper, spacing "
         "linear / log} (the range of a first plot over it) or None) and returns (name, unit, doc); plain JSON data.  pyazr.physics builds one Python function per row from it.");
-  m.def("physics_evaluate", &Evaluate, py::arg("name"), py::arg("arguments"),
+  m.def("physics_evaluate", &Evaluate, PrecisionGuard(), py::arg("name"), py::arg("arguments"),
         "Row `name` element-wise on equal-length 1-d float arrays, one per argument in the row's order (a choice as "
         "its index, a flag as 0 or 1): (values, status), values of shape (n_returns, n), NaN where status != 0; "
         "status 0 computed, k > 0 argument k (1-based) outside its domain, -2 the arguments together outside the "

@@ -15,6 +15,7 @@
 
 #include "azure2/physics/transfer/DistortedWaves.h"
 #include "azure2/physics/transfer/OpticalPotential.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace transfer = azure2::physics::transfer;
@@ -135,7 +136,7 @@ py::dict OpticalScattering(int z1, int z2, double m1_u, double m2_u, double e_cm
 }  // namespace
 
 void BindOptical(py::module_ &m) {
-  m.def("optical_scattering", &OpticalScattering, py::arg("z1"), py::arg("z2"), py::arg("m1_u"), py::arg("m2_u"),
+  m.def("optical_scattering", &OpticalScattering, PrecisionGuard(), py::arg("z1"), py::arg("z2"), py::arg("m1_u"), py::arg("m2_u"),
         py::arg("e_cm"), py::arg("potential"), py::arg("angles_deg"), py::arg("two_s") = 0, py::arg("l_max") = 20,
         py::arg("step_fm") = 0.02, py::arg("matching_radius_fm") = 20.0,
         "Elastic scattering of a projectile of spin two_s / 2 (0, 1/2 or 1) on a target whose spin is ignored, in "

@@ -11,6 +11,7 @@
 #include <gsl/gsl_eigen.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
+#include "azure2/support/FloatingPointPrecision.h"
 
 namespace DataCovariance {
 
@@ -32,6 +33,7 @@ int Cholesky(const std::vector<double> &A, int n, std::vector<double> &L) {
     L[(size_t)j * n + j] = ljj;
 #pragma omp parallel for schedule(static) if (n - j > 256)
     for (int i = j + 1; i < n; i++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       double *Li = &L[(size_t)i * n];
       double s = A[(size_t)i * n + j];
       for (int k = 0; k < j; k++) s -= Li[k] * Lj[k];
@@ -128,6 +130,7 @@ int Group::SetUp(const File &f) {
   int bad = -1;
 #pragma omp parallel for schedule(dynamic, 1)
   for (int c = 0; c < (int)comps_.size(); c++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     const int fail = Cholesky(A[c], (int)comps_[c].idx.size(), comps_[c].L);
     if (fail >= 0) {
 #pragma omp critical

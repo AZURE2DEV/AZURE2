@@ -19,6 +19,7 @@
 #include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/RecordReader.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -36,7 +37,7 @@ void BindSchema(py::module_ &m) {
         std::vector<std::string> lines = azure2::ProjectPredictions(path, messages);
         return py::make_tuple(lines, messages.str());
       },
-      py::arg("path"),
+      PrecisionGuard(), py::arg("path"),
       "The expression tree of every data set and extrapolation of the project at path, as the lines AZURE2 "
       "--print-predictions prints, and the set-up's messages: (lines, messages).");
   m.def(
@@ -75,7 +76,7 @@ void BindSchema(py::module_ &m) {
         ex::GridValues values = ex::ReadGridValues(grid, setting);
         return py::make_tuple(values.ok, values.values, values.error);
       },
-      py::arg("text"), py::arg("m1"), py::arg("m2"), py::arg("relativistic"), py::arg("project_dir"), py::arg("angles"),
+      PrecisionGuard(), py::arg("text"), py::arg("m1"), py::arg("m2"), py::arg("relativistic"), py::arg("project_dir"), py::arg("angles"),
       "The values of an extrapolation grid's text (MeV lab, or deg): (ok, values, message); pyazr.extrapolation_grid.");
   m.def(
       "refine_grid",
@@ -94,7 +95,7 @@ void BindSchema(py::module_ &m) {
         out["evaluations"] = r.evaluations;
         return out;
       },
-      py::arg("start"), py::arg("model"), py::arg("tolerance"), py::arg("max_points"),
+      PrecisionGuard(), py::arg("start"), py::arg("model"), py::arg("tolerance"), py::arg("max_points"),
       "The adaptive refinement of an extrapolation grid (experiment::RefineGrid) on a Python model; pyazr.refine_grid.");
   m.def(
       "covariance_file_names",
