@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-ec-tests`: dev's two capture tests of what is already here
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. No engine file
+changed: two tests, their models, two READMEs, two lines of `dev_features.md` section 1.
+
+- `tests/two_nuclei_ec` (dev `6e918ed1`): three models converted with `--convert`; six checks pass (default,
+  `--no-brune`, `--no-ec-table`); the merged project equals the standalone ones exactly.
+- `tests/formal_ec_final_state` (dev `081dddf9`, `630dff75`): four models converted; 45 of dev's 51 checks passed
+  as written, the six others were rewritten to this branch's rules (the test's README has the table); 50 pass.
+
+**What dev's checks found here (both open, neither a wrong number):**
+1. With every parameter of the final state's J^π group free, a formal fit has no analytic gradient
+   (`AZUREGrad.cpp`, `HasFormalECFinalBlocks`): finite differences and a numerical MIGRAD seed. dev differentiates
+   the final state's amplitude (`CNuc::FormalECFinalPullback`). The fit converges here all the same (220.515 to
+   0.00048).
+2. `--no-transform` with the final state's formal energy off its pair's energy: refused here, a WARNING on dev. For
+   the owner, with the level of the boundary condition.
+
+**Run here** (CRC, GCC 11.5): both scripts pass with the build of `feature/upgrade-5-dev-seed` (base `486d746e`);
+`repo_consistency_test.py` passes. **The gate of this branch itself** (queue job 1756600, base `7a1d96d0`): consistency, configure and build pass;
+unit tests 307 of 310, failing the base's two (`pyazr_park_dsde`, `pyazr_units_scales`) and `upgrade_predictions`,
+which lists every project under `tests/`: the seven new models are added to `tests/upgrade/predictions.txt` in a
+follow-up commit (19 lines added, none changed) and the test passes; physics suites 172 pass, the base's two fail
+(`capture_ay_coupling`, the ancai06 warning); the pages build. **Not run:** CI.
+
 ## 2026-11-17 (director, 01:10) — merged: 64-bit x87 precision in every thread (the Windows unit tests)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 103: `feature/upgrade-0-windows-tests-3` (the Windows

@@ -288,6 +288,18 @@ data xs_40_preshifted: dsdo_cm(1->1)
 data ay_60: ay(1->1)
 data ay_60_preshifted: ay(1->1)
 data xs_90: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/A_orig.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/A_swap.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/B_mid.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
+== tests/formal_ec_final_state/models/B_orig.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: dsdo_cm(1->1)
 == tests/gamma_decay/models/partial.azr
 data g0: sigma(1->2)
 data g6793: sigma(1->3)
@@ -940,6 +952,13 @@ extrapolation x1: sum(sigma(1->2))
 data: set-up failed
 extrapolation x1: sum(sigma(1->2))
 exit 1
+== tests/two_nuclei_ec/models/A.azr
+extrapolation x1: sigma(1->2)
+== tests/two_nuclei_ec/models/B.azr
+extrapolation x1: sigma(1->2)
+== tests/two_nuclei_ec/models/M.azr
+extrapolation x1: sigma(1->2)
+extrapolation x2: sigma(3->4)
 == tests/units_scales/models/yield_story.azr
 data Y_curve: 113595465155.1859*sigma(1->2)
 extrapolation Y_thick: sigma(1->2)
