@@ -2,6 +2,108 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (director, 05:30) — merged: a term of the objective stated in one place
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 108 (rehearsal 107 plus
+`feature/upgrade-7-objective-term-row`, five commits of the objective agent; its entry follows). The base build
+is `work/b-trial108`; the reference tag stays `tab-trial103-1`.
+
+One conflict, in `tests/consistency/file_sizes.tsv` (the long-files work and this one both changed records);
+resolved by hand to: the two `cwfcomp.cpp`, `pyazr/sources/nds.py` 1450, `src/AZUREGrad.cpp` 1059.
+
+**Verified by me** (`work/director/verify_l108.out`, full check of the merged state): build with 0 warnings;
+every project in three bases against `tab-trial103-1`: 887, 851 and 887 files, all identical; eight fits
+identical to `work/b-trial103`; 338 of 338 quick tests; 172 of 172 regression scripts. Not run: the slow
+tests, sanitizers, other compilers.
+
+The agent's three questions, my reading (the PI may overrule):
+1. The slot of a term, set once by the `Objective` constructor and only read afterwards, is not the state the
+   rules forbid (no `mutable`, no static, nothing written during an evaluation).
+2. The nuisance total kept stale through pyazr's `write_outputs` is today's behaviour, kept and recorded.
+3. A future term outside the model whose gradient is unavailable makes pyazr's objective gradient throw, while
+   the program falls back to finite differences. No such term exists; recorded for whoever adds one.
+
+`src/AZUREGrad.cpp` is at 1059 lines, still above the 1,000 of the closing plan; its split is the next step.
+
+## 2026-11-17 (objective agent, B4) — a term of the objective in one place
+**Merged.**
+
+Worktree wt-term, branch feature/upgrade-7-objective-term-row, cut from rehearsal/trial105 (f5ec24a7); five commits,
+not pushed:
+- 598daee8 docs: objective_arrays.md section 8, the design (the one place, each walk, what stays outside and why).
+- 5dc3c7b3 slice 1: a term's total in Results::objective by slot (ObjectiveTerm::Slot, StoreTotal) instead of eight
+  named members; each term writes its own chiSquared.out field(s) (WriteTotal, TotalLabel); the writer keeps the
+  segment table and Total-Chi-Squared/Norm/N and calls Objective::WriteTotals; the API records T10's total through
+  the term (RecordPriorCovariance); evaluation_rwa gives term_labels, evaluation_test.py builds TOTAL_TERMS from them.
+- 04bc041f slice 2: AddGradient in the classes of T6, T7, T9, T11; Objective::AddGradient replaces
+  ModelDataGradient, AddParkPenaltyGradient, AddAbundancePenaltyGradient at both callers (CLI all terms, API
+  chi2_and_grad model-only terms, API objective gradient the others); the two norm loops ("=") moved before the
+  scatter so a term's direct part on a norm is not overwritten.  src/AZUREGrad.cpp 1083 -> 1059 (file_sizes.tsv).
+- 1be1063a slice 3: AppendRows in the classes of T6, T11, T7; Objective::AppendModelRows replaces the free function
+  at its 4 callers.
+- 2d715215 docs and test: the recipe "A term of the objective" in CLAUDE.md and extending.rst; pointers in
+  objective.md section 4, inference.md section 9; repo_consistency_test.py check 11b.
+
+How order is kept.  Every walk has its own order today (gradient T11, T9, T6, T7; rows T6, T11, T7; chiSquared.out
+fields 12 terms in an order unlike the value's).  The Objective constructor states each walk's order of the terms
+that take part, then completes it with all other terms in the value's order (their default function does nothing).
+So every emitted order is today's by construction, no walk names a term, and a new term is visited last by every
+walk with no edit of a walk list.  The only change of an order of additions is the norm loop of slice 2.
+
+Places for a new term (counted with the trial's toy lambda * sum (n_s - 1)^2 over the fitted norms):
+- before (trial report, recipe 3): 9 files of code (Objective.cpp, Objective.h, Results.h, AZUREGrad.h,
+  AZURECalcGradient.cpp, AZUREAPIGradient.cpp, DataOutputFiles.cpp, src/CMakeLists.txt, a new gradient file), and
+  still missing the LM rows and the pyazr side;
+- after: 1 file, src/Objective.cpp: one class (48 lines: Add with its total, AddGradient through accum.direct,
+  AppendRows, TotalLabel, WriteTotal) and one Append line.  Docs by the recipe: output_files.rst, the list in
+  Objective.h, objective.md.  The toy was a scratch commit, dropped (branch head 2d715215 has no trace of it).
+
+Toy checks (scratch builds work/b-termToy; project work/term-scr/toy13N: tests/13N with the first five norms fit,
+starts 1.1, 0.9, 1.1, 0.9, 1.1):
+- lambda 0: fits --use-gradient and --use-lm, outputs identical to slice 3 (work/b-termC), file by file.
+- lambda 1: chiSquared.out Total-Norm-Deviation-Chi-Squared 0.05 = 5 x 0.1^2 by hand; AZURE_GRAD_CHECK=exit fit
+  --use-gradient: 19 components, analytic, finite differences and the rows' (Jacobian-path) gradient agree to
+  <= 2.4e-7 relative, and the norm components differ from the build without the term by exactly +-0.2 = 2 lambda
+  (n - 1) in both analytic and rows' gradient; pyazr: evaluate().terms["norm deviation"] 0.05, objective gradient
+  vs central differences on the 5 norms 5.8e-9 relative, sum of the rows' squares = objective (-5.8e-11 absolute
+  on 4.0e5), 2 J^T r = gradient on the norms 2.8e-16; fits by gradient and by LM end at the same norms (7e-6) with
+  the term 0.0267655 and 0.0267673; ctest pyazr_evaluation, sampler_objective, park_chi2_fallback,
+  pyazr_objective_terms, pyazr_objective_object, pyazr_output_penalties pass; pyazr_objective fails at section 4
+  ("objective = chi-squared + penalty") by design, as the recipe now says.
+
+Checks run on the slices (numbers):
+- slice 1 (scratch copy of the build): every project x 3 bases against tab-trial103-1: 887, 851, 887 identical
+  (tag tab-termA-1); all 318 chiSquared.out byte for byte (cmp); 15 objective-related ctests pass.
+- slice 2 (scratch build that also formed the old order of the norm loop and scatter beside the new and compared
+  every component bit for bit): 0 differences in 38 (eight fits) + 2 + 63 (40 ctests) + 155 (run_tests) program and
+  pyazr gradient calls; eight fits identical to work/b-trial103; 40 ctests pass; run_tests 172 passed, 0 failed.
+- slice 3: build 0 warnings; ctest park_chi2_fallback, pyazr_objective_object, pyazr_objective_terms,
+  pyazr_evaluation 4 of 4.
+- check 11b shown to fail on three injected lines (removed).
+
+Full check on the clean head 2d715215 (verify_branch.sh wt-term term tab-trial103-1 trial103 5;
+work/director/verify_term.out, 04:23): build 0 warnings; brune 887 files, no-brune 851, use-park 887, all
+identical (tag tab-term-1), 0 differ, 0 new; all 318 chiSquared.out byte for byte (cmp); eight fits identical to
+work/b-trial103; ctest -LE slow 338 of 338; run_tests 172 passed, 0 failed.  Tree clean at 2d715215.
+
+What stays outside the one place, and why (objective_arrays.md section 8): the data terms T1-T4 and T2 (their
+gradient is the model pass's adjoint with the norm and covariance seeds); the diagonal priors T3, T4, T8 (one
+gather already, DiagonalPriorsOf); T5 and T10 gradients and rows (on the full vector, at their own places in the
+row order); T9's rows (with the data rows, before T10's; in the walk they would move).  These state value, total
+and field in their classes.  The API's calculate_chi2 still records T10's total by a named call
+(RecordPriorCovariance), as before by a named member.
+
+Not run: ctest -L slow, sanitizers, the thread comparison, other compilers, AZURE_SHIFT_GRAD_CHECK, the instruction
+counts of infer_speed.sh, sphinx-build by hand (only the ctest docs_build inside ctest -LE slow, if Sphinx is in the
+env).  Inferred, not seen: that the walk's per-term virtual calls cost nothing measurable (not measured); that the
+norm-loop move cannot change a bit outside the tested runs (argued by reading: the scatter, the nuisance priors and
+the screening/Doppler/thickness priors never write a norm index).
+
+For the director or the PI: (1) ObjectiveTerm holds an int slot set once by the Objective constructor (friend), not
+mutable and read-only afterwards; say if that counts as state.  (2) The stale-total behaviour is kept as it was
+(nuisance total through pyazr's write_outputs).  (3) A term outside the model alone whose gradient is unavailable
+makes pyazr's objective gradient throw (the program falls back to finite differences); no such term exists.
+
 ## 2026-11-17 (director, 04:25) — merged: the binding's call guard compiles under clang (macOS wheels)
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 107 (one commit of mine). The base build is
