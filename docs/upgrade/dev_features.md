@@ -187,12 +187,20 @@ the recipes above:
 rmfit, capture into an unbound final state and fitted secondary γ transitions are traced through this structure in
 `FOR_THE_OWNER.md` section 6 (the second table). Two things were kept open for them:
 
-- **Capture into an unbound final state** is **refused** today with one diagnostic, `E_FINAL_STATE_UNBOUND` (the rule
-  is one function, `UnboundFinalStates` in `experiment/src/FinalStates.cpp`; its tests are
-  `tests/ec_final_state_unbound` and the cases of `experiment/tests/build_test.cpp`). The feature replaces that rule;
-  nothing else guards it. Where the engine takes a final state as bound is tabulated in the entry of 2026-11-15 of
-  `HANDOFF.md` ("a capture final state above a threshold is refused"): `src/ExternalCaptureFinalStates.cpp`,
-  `src/NFIntegral.cpp`, `src/ECIntegral.cpp`, `src/UnitExternalCapture.cpp`, `src/ChannelTables.cpp`.
+- **Capture into an unbound final state**: *stage 1 (dev 2026-11-13, the narrow resonance) is written* on
+  `feature/upgrade-5-dev-ec-unbound` (2026-11-16, the owner's session). The rule `UnboundFinalStates`
+  (`experiment/src/FinalStates.cpp`) no longer refuses a final state above a threshold: it refuses one at a
+  threshold, or too close above a charged pair's for its outgoing wave (eta > 100), with the same diagnostic
+  `E_FINAL_STATE_UNBOUND`. The places that took a final state as bound (the table of the 2026-11-15 entry of
+  `HANDOFF.md`) are changed as on dev: `src/ExternalCaptureFinalStates.cpp` (N_f and the ANC conversion),
+  `src/ECIntegral.cpp` (`IntegrateUnbound`), `src/ECTable.cpp` (direct integration), `src/UnitExternalCapture.cpp` and
+  `src/ChannelTables.cpp` (no photon below the final state: closed). `tests/ec_unbound_final` is dev's test.
+  *Stages 2 to 4 are written too* (2026-11-16): the field `line_window` of a capture data set or extrapolation (dev's
+  `linewindow W`; the converter reads the old keyword), the line-shape integration of a broad final state
+  (`src/LineWindow.cpp`, one routine called by the energy pass; the T-matrix builders read its node through
+  `GenMatrixFunc::ActiveLineNode`), its form for internal capture alone, and the line centre that follows the final
+  level's current energy. `tests/ec_unbound_broad` is dev's test. *Not written yet:* the capture cascade (UPOS after
+  a capture).
 - **rmfit** is a top-level package beside `pyazr/`, on pyazr 3.0's names only (branch
   `feature/upgrade-5-dev-rmfit`, `HANDOFF.md` entry of 2026-11-16 "rmfit beside pyazr"): `rmfit/azr3.py` is its one
   contact with a project, its rows are the engine's objective rows, its tests are ctests `rmfit_*`. Left to the

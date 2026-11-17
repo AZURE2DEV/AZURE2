@@ -30,6 +30,7 @@
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
+#include "LineWindow.h"
 #include "ProjectSetup.h"
 #include "azure2/experiment/FinalStates.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -470,6 +471,49 @@ int CompoundSystem::AddHardSphereGroups(const Config &configure, int maxL) {
  * contributions and coefficients.  A CompoundSystem object can only be initialized for use AFTER it is filled.
  */
 
+namespace {
+/*!
+ * The data sets (a run with data) or extrapolations of the project with a line window (capture into a broad unbound
+ * final state, LineWindow.h): checked once, after the pathways are built, so that a model the line-shape integration
+ * cannot serve stops (GSLException) instead of failing at its first point; noted in the run's log.
+ */
+template <class Items>
+void CheckLineWindowsOf(const CompoundSystem &compound, const Config &configure, const Items &items, const char *what) {
+  using azure2::experiment::Observable;
+  for (const auto &item : items) {
+    const auto &spec = item.spec;
+    const double window = spec.reaction.lineWindow_keV;
+    if (!spec.active || !(window > 0.0)) continue;
+    const Observable o = spec.reaction.observable;
+    const bool crossSection = o == Observable::CrossSection || o == Observable::CrossSectionE1 || o == Observable::CrossSectionE2 ||
+                              o == Observable::DifferentialLab || o == Observable::DifferentialCM;
+    std::string why;
+    if (spec.reaction.combination != azure2::experiment::ReactionSpec::Combination::None)
+      why = "a sum or a ratio is not integrated over a line shape";
+    else
+      why = azure2::LineWindowProblem(spec.reaction.entranceKey, spec.reaction.exitKey, !crossSection || spec.reaction.thm,
+                                      &compound, configure);
+    std::ostringstream out;
+    if (!why.empty()) {
+      out << "ERROR: " << what << " #" << spec.key << " (entrance " << spec.reaction.entranceKey << ", exit "
+          << spec.reaction.exitKey << ") has a line window of " << window << " keV, but " << why << ".";
+      throw GSLException(out.str());
+    }
+    if (!(configure.paramMask & Config::USE_API))
+      configure.outStream << "NOTE: " << what << " #" << spec.key << ": capture into a broad unbound final state, integrated "
+                          << "over its line shape for E_f within E_R +- " << window << " keV (line_window)." << std::endl;
+  }
+}
+
+void CheckLineWindows(const CompoundSystem &compound, const Config &configure) {
+  if (!configure.project || (configure.paramMask & Config::CALCULATE_REACTION_RATE)) return;
+  if (configure.paramMask & Config::CALCULATE_WITH_DATA)
+    CheckLineWindowsOf(compound, configure, configure.project->built.data.datasets.items, "segment");
+  else
+    CheckLineWindowsOf(compound, configure, configure.project->built.extrapolations.extrapolations.items, "test segment");
+}
+}  // namespace
+
 void CompoundSystem::Initialize(const Config &configure, LevelState &state, LevelInputs &inputs,
                                 const CompoundSetUpRequests &requests) {
   WarnForbiddenSpinlessChannels(*this, configure);
@@ -501,6 +545,7 @@ void CompoundSystem::Initialize(const Config &configure, LevelState &state, Leve
   finished_ = true;
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
     WritePathwaysCheck(*this, configure);
+  CheckLineWindows(*this, configure);
 
   // Calculate Angular Distribution Coefficients
   if (!(configure.paramMask & Config::USE_API))

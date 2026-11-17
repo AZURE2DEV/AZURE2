@@ -277,6 +277,7 @@ void Builder::BuildData() {
     if (!quantityNote.empty()) unit = Implicit(Construct::kDataCode, name, "unit", unit, quantityNote);
     Add(r, "unit", unit, TakeComment());
     for (const auto &x : extra) Add(r, x.first, x.second);
+    if (s.lineWindow() > 0.0) Add(r, "line_window", NumberText(s.lineWindow(), d.text) + " keV");
     if (code == 2) {
       Add(r, "J", SpinText(s.phaseJ()));
       Add(r, "l", std::to_string(s.phaseL()));
@@ -537,6 +538,7 @@ void Builder::BuildExtrapolations() {
     Add(r, "quantity", quantity, quantityComment);
     Add(r, "unit", unit);
     if (spin) Add(r, "operator", s.spinObservable());
+    if (s.lineWindow() > 0.0) Add(r, "line_window", NumberText(s.lineWindow(), t.text) + " keV");
     if (code == 3) {
       Add(r, "expansion", "a_over_a0");
       Add(r, "orders", "0 " + std::to_string(s.maxAngDistOrder()));

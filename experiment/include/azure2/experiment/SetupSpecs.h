@@ -89,6 +89,9 @@ struct ReactionSpec {
   /// AnalyzingPower: "" for A_y of a spin-1/2 projectile, else the operator token of a general spin observable
   /// (azure2/physics/SpinObservable.h: b:y, t:y, b:y*t:y, b:yy, b:iT11, e1:y, b:y>e1:y ...), computed on A_y's route.
   std::string spinObservable;
+  /// > 0: a capture into a broad unbound final state, integrated over the final state's line shape for E_f within
+  /// E_R +- this (keV; the field line_window, the engine's LineWindow.h)
+  double lineWindow_keV = 0.0;
   double phaseJ = 0.0;  ///< PhaseShift: total spin J of the partial wave
   int phaseL = 0;       ///< PhaseShift: orbital angular momentum l
   double phaseS = -1.0; ///< PhaseShift: channel spin s, < 0 when not given

@@ -49,6 +49,7 @@ void Segment::SetReaction(const azure2::experiment::ReactionSpec &r) {
       throw std::invalid_argument("spin observable \"" + r.spinObservable + "\": " + error);
     spinObservable_ = observable;
   }
+  lineWindow_ = r.lineWindow_keV;
   iscmdifferential_ = (r.observable == Observable::DifferentialCM || r.observable == Observable::AnalyzingPower);
   isdifferential_ = iscmdifferential_ || r.observable == Observable::DifferentialLab;
   isphase_ = (r.observable == Observable::PhaseShift);
@@ -787,6 +788,7 @@ std::shared_ptr<TermSettings> Segment::MakeOwnSettings() const {
   t->angularDist = IsAngularDist() || IsCoefficients();
   t->analyzingPower = IsAnalyzingPower();
   t->spinObservable = GetSpinObservable();
+  t->lineWindow = GetLineWindow();
   t->total = IsTotalTerm();
   t->upos = IsUPOS();
   t->coefficientAbsolute = IsCoefficientAbsolute();

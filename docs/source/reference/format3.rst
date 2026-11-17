@@ -222,6 +222,10 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``E1|E2``
      - by quantity
      - the photon multipole the cross section is filtered to (M8)
+   * - ``line_window``
+     - ``<number> <energy unit>``
+     - by quantity
+     - capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the cross section is integrated over the final state's line shape for E_f within E_R +- W
    * - ``shape``
      - ``<number> <inverse_energy unit>``
      - by quantity
@@ -404,6 +408,10 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``E1|E2``
      - by quantity
      - the photon multipole the cross section is filtered to (M8)
+   * - ``line_window``
+     - ``<number> <energy unit>``
+     - by quantity
+     - capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the cross section is integrated over the final state's line shape for E_f within E_R +- W
    * - ``shape``
      - ``<number> <inverse_energy unit>``
      - by quantity
@@ -991,6 +999,8 @@ Cross section (``dataset``, ``extrapolation``).  Angle-integrated cross section 
      - allowed
    * - ``multipole``
      - allowed when the reaction has a photon exit
+   * - ``line_window``
+     - allowed when the reaction has a photon exit
    * - ``secondary_gamma``
      - allowed
    * - ``thm``
@@ -1113,6 +1123,8 @@ Differential cross section (``dataset``, ``extrapolation``).  dsigma/dOmega at t
      - allowed
    * - ``thm``
      - allowed
+   * - ``line_window``
+     - allowed when the reaction has a photon exit
    * - target kinds
      - ``layer``, ``none``
    * - tree
@@ -1145,6 +1157,8 @@ Astrophysical S factor (``dataset``, ``extrapolation``).  S(E) = E sigma(E) exp(
      - charged entrance
    * - ``multipole``
      - allowed when the reaction has a photon exit
+   * - ``line_window``
+     - allowed when the reaction has a photon exit
    * - tree
      - ``Scale_SF(E) o Sigma(r)``
    * - EXFOR
@@ -1174,6 +1188,8 @@ Modified S factor of heavy-ion fusion (``dataset``, ``extrapolation``).  S\*(E) 
    * - ``shape``
      - required
    * - ``multipole``
+     - allowed when the reaction has a photon exit
+   * - ``line_window``
      - allowed when the reaction has a photon exit
    * - tree
      - ``Scale_SF*(E; g) o Sigma(r)``
@@ -2292,7 +2308,7 @@ Diagnostic codes
      - two photon pairs with external capture whose final states are the same level
    * - ``E_FINAL_STATE_UNBOUND``
      - error
-     - a capture final state above a particle threshold: with external capture, at or above the threshold of a pair with a channel in its J^pi group; or above the entrance threshold of a capture asked into it (not computed by this version)
+     - an external-capture final state at the threshold of a pair with a channel in its J^pi group, or too close above the threshold of a charged one (eta > 100) for its outgoing wave
    * - ``E_NOT_BUILT``
      - error
      - a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)

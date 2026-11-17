@@ -98,7 +98,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kCovarianceFile, E, "a covariance file that cannot be read, does not list the data set's file with its row count, or has a variance <= 0 on a row in the window"},
       {kFinalStateNotLevel, E, "the final state of a photon pair with external capture that a data set or extrapolation exits into is not one level of <levels> (none, or several within 1 keV)"},
       {kFinalStateShared, E, "two photon pairs with external capture whose final states are the same level"},
-      {kFinalStateUnbound, E, "a capture final state above a particle threshold: with external capture, at or above the threshold of a pair with a channel in its J^pi group; or above the entrance threshold of a capture asked into it (not computed by this version)"},
+      {kFinalStateUnbound, E, "an external-capture final state at the threshold of a pair with a channel in its J^pi group, or too close above the threshold of a charged one (eta > 100) for its outgoing wave"},
       {kNotBuilt, E, "a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)"},
       {kThmRelativistic, E, "a THM data set or extrapolation in a project with relativistic kinematics"},
       {kThmCovariance, E, "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"},

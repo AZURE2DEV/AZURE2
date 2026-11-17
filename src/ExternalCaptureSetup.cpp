@@ -153,6 +153,12 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const Compound
                   hash->Add(entranceRadius);
                 }
               }
+              // An unbound final state is a narrow resonance (ECIntegral::IntegrateUnbound): marked only then, so
+              // every other file keeps its signature.
+              {
+                const PPair *fp = compound->GetPair(finalChannel->GetPairNum());
+                if (ecLevel->GetECEnergy() > fp->GetSepE() + fp->GetExE()) hash->Add("unbound final state v1");
+              }
               hash->Add(pathway.channel_capture ? 1 : 0);
               if (pathway.channel_capture) {
                 const azure2::InternalRow &chanCap = P.internal[pathway.cc_row];

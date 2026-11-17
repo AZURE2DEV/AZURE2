@@ -36,6 +36,7 @@ struct TermSettings {
   int secondaryDecayL = 0;           ///< UPOS
   double ic = 0.0, delta = 0.0;      ///< UPOS: final spin, mixing ratio
   int crossSectionComponent = 0;     ///< 0 full, 1 E1, 2 E2
+  double lineWindow = 0.0;           ///< > 0: capture into a broad unbound final state, E_f in E_R +- this (keV; LineWindow.h)
   const ThmWeightTable *thmWeight = nullptr;  ///< THM attachments, owned by the segment's shared pointers
   const ThmLineshape *thmLineshape = nullptr;
   const ThmSpectatorWindow *thmWindow = nullptr;
@@ -70,7 +71,8 @@ inline bool SameObservable(const TermSettings &a, const TermSettings &b) {
          SameSpinObservable(a.spinObservable, b.spinObservable) &&
          a.total == b.total && a.upos == b.upos && a.j == b.j && a.l == b.l && a.phaseS == b.phaseS &&
          a.secondaryDecayL == b.secondaryDecayL && a.ic == b.ic && a.delta == b.delta &&
-         a.crossSectionComponent == b.crossSectionComponent && SameThmWeight(a.thmWeight, b.thmWeight) &&
+         a.crossSectionComponent == b.crossSectionComponent && a.lineWindow == b.lineWindow &&
+         SameThmWeight(a.thmWeight, b.thmWeight) &&
          a.thmLineshape == b.thmLineshape && a.thmWindow == b.thmWindow && a.thmDistortion == b.thmDistortion &&
          a.thmDw == b.thmDw && a.thmAngle == b.thmAngle && a.thmCoherent == b.thmCoherent;
 }

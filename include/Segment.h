@@ -114,6 +114,8 @@ class Segment {
   /// sides, and every particle its operator names with the spin the operator needs (physics/SpinObservable.h,
   /// Check); else false, with the reason on configure.outStream.
   bool SpinObservableAllowed(const CompoundSystem *compound, int number, bool isTest, const Config &configure) const;
+  /// Half-width (keV) of the final-state line window of a capture into a broad unbound final state; 0: none.
+  double GetLineWindow() const { return lineWindow_; };
   /// Unobserved-primary, observed-secondary reaction?
   bool IsUPOS() const;
   /// Number of segments summed for total capture; 0 if this is not a total-capture segment.
@@ -557,6 +559,7 @@ class Segment {
   bool isAngDist_;
   bool isAnalyzingPower_;
   std::shared_ptr<const azure2::physics::SpinObservable> spinObservable_;
+  double lineWindow_ = 0.0;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;

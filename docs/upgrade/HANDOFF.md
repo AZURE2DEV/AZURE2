@@ -2,6 +2,121 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — capture into a broad unbound final state: `line_window`
+
+**Branch** `feature/upgrade-5-dev-ec-unbound`, on the entry below (stage 1). dev's stages 2 to 4 (2026-11-15): the
+line-shape integration of a broad final state, its form for internal capture alone, and the line centre that follows
+a fitted final-level energy. Ported from dev's final code, not commit by commit.
+
+**The field.** `line_window <W> <energy unit>` on a `dataset` or `extrapolation` of quantity `sigma`, `sfactor`,
+`modified_sfactor` or `dsigma_domega`, allowed for a photon exit only (the table's condition, so the validator
+refuses it elsewhere with `E_FIELD_NOT_APPLICABLE`); `ReactionSpec::lineWindow_keV`; `TermSettings::lineWindow`,
+compared in `SameObservable` (two windows do not share sites). The converter reads dev's `linewindow W` (keV) on a
+data or extrapolation line.
+
+**The engine.** `src/LineWindow.cpp`, `include/LineWindow.h`. The energy pass (`src/EnergyPass.cpp`, both the
+evaluation and `AZURE_PLAN_CHECK`'s own solve) calls `azure2::LineWindowCrossSection` for a unit with a window in
+place of one T-matrix and one cross section: per node of the final-energy quadrature (48 Gauss-Legendre nodes in
+theta, E_f = E_R + (Gamma/2) tan theta, clipped to E_f > 1 keV and E_gamma > 1 keV) it sets the node on the matrix
+function (`GenMatrixFunc::SetActiveLineNode`), rebuilds the T-matrix from the solved level matrix and computes the
+unit's record; the unit's record is the weighted sum of the nodes' records (every value of a record is linear in the
+cross section; the count of an angular part is kept). `AMatrixFunc::CalculateTMatrix` and
+`RMatrixFunc::CalculateTMatrix` read the node: the photon channel's sqrt(P) becomes A(E_f) (E_gamma/hbar c)^(l+1/2)
+and an external element the node's (the final state's real scattering wave, cos d F + sin d G, from
+`ECIntegral::StandingParts` through `ExternalCapturePathwayParts`, `src/UnitExternalCapture.cpp`: direct integrals,
+never the table). The unit after a windowed one rebuilds its T-matrix.
+
+The nodes of a site (final-state functions and external integrals at each E_f) depend on the site's energy, the
+window and the line centre only: they are made once and kept in the run's scratch
+(`RunScratch::lineNodes`, a `LineNodeStore` behind its lock, as the external-capture terms are), the newest two
+centres of a site, so that a fit that moves the centre does not grow the table. dev keeps them in the point.
+
+The line centre is the final level's working energy (`LevelState::E`) in the Brune parametrizations, the energy of
+the set-up in the formal one. A final level with the external-capture link takes its observed amplitude from the
+state (`ECGamma` x `SqrtNF`) while the centre is the set-up's; once it has moved, and for a level without the link
+(internal capture alone: found by J^pi and its energy in `<levels>` within 1 keV of the pair's), N_f is formed from
+the level's channels at the centre. In the formal parametrization a level without the link is served only when it
+is the lowest level of its group (where this branch takes the boundary conditions, so that its formal parameters
+are its observed ones; dev's rule names the first level, where dev takes them).
+
+**Checked at set-up** (`CheckLineWindows`, `src/CompoundSystemBuild.cpp`, after the pathways are built; a refusal of
+the last part): the RMC formalism, `--use-gradient`, another observable than a cross section, a THM data set, a sum
+or ratio, an exit that is not a capture pair, a final state that is bound, above two thresholds, not a level, or
+with external capture through a closed channel. A NOTE per windowed data set in the run's log.
+
+**Tests.** `tests/ec_unbound_broad` (dev's 13 checks on dev's models, converted: the independent references of the
+windowed direct capture and of the internal line shape, the narrow limit, formal = Brune, external capture off, the
+moved centre through a parameter file); this engine's values equal dev's on all 18 models (0 to 7e-11).
+`experiment_build` and `experiment_quantities` cases of the field. `tests/upgrade/predictions.txt`,
+`tests/schema/schema_v3.json`, `docs/source/reference/format3.rst` regenerated.
+
+**Open.** No analytic gradient over the line shape (refused with `--use-gradient`, as on dev). One open particle
+channel of the final level only. The capture cascade (UPOS on a capture pair, dev 2026-11-15) is not ported. The
+web page shows `line_window` from the schema; nothing else of pyazr names it.
+
+**Run here** (CRC, GCC 11.5): build; the unit tests; `tests/ec_unbound_broad`, `tests/ec_unbound_final`,
+`tests/ec_final_state_unbound`. The full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; ctest all but the base's
+two (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 172 pass and 2 fail, the base's two
+(`capture_ay_coupling`, "a warning for ancai06 inside its range"), `tests/ec_unbound_broad` and
+`tests/ec_unbound_final` passing and every chi2 line equal to the base's.
+
+## 2026-11-16 (owner's session, dev port) — external capture into an unbound final state, stage 1 (a narrow resonance)
+
+**Branch** `feature/upgrade-5-dev-ec-unbound`, cut from `feature/upgrade` `0c6167c1`. dev's change of 2026-11-13
+(PR #8), on this branch's files. It replaces what the entry of 2026-11-15 ("a capture final state above a threshold
+is refused") refused: the table of that entry is the list of the places changed.
+
+**The physics.** A final state above the threshold of a particle pair with a channel in its J^pi group is unbound in
+that channel. It is treated as a narrow resonance: its exterior is the outgoing wave O_l(k_f r)/O_l(k_f a),
+O = G + iF (Mukhamedzhanov et al., PRC 96, 024623 (2017), eq. 16), its strength the level's observed width in the
+channel, and N_f = (hbar^2/2 mu a) dS/dE at E_f, which for a bound state is the integral of W^2/W(a)^2 and is smooth
+through the threshold. Valid while the width is small next to the photon energy and next to E_f - threshold; a broad
+final state needs dev's line-shape integration (stage 2, not written here).
+
+**Changed.**
+- `src/ECIntegral.cpp`, `include/ECIntegral.h`: `IntegrateUnbound` (Gauss-Legendre panels from a to R, the tail by
+  Abel-regularized integration by parts), the unbound branch of `CalculateDirect`, 0 where E <= E_f. The
+  Gauss-Legendre table is made and freed per call (dev holds it in a `static thread_local`, which check 38 refuses).
+- `src/ExternalCaptureFinalStates.cpp`: `ECFinalStateFactors` (N_f and the amplitude conversion, bound or unbound) and
+  `NoteUnboundFinalState` (a NOTE once per capture pair and particle pair; an ERROR and a refused set-up for
+  eta > 100, the engine's copy of the build's refusal for a set-up without the build).
+- `src/ECTable.cpp`: an unbound final state is integrated directly at every energy, also where the point's channel
+  table holds the entrance channel (the table's stencil cannot follow (k_i - k_f)^-2 towards E = E_f; with the table
+  the pure direct capture was 1.5e-3 off dev).
+- `src/UnitExternalCapture.cpp` (`ECPathwayAmplitude`) and `src/ChannelTables.cpp` (the photon channel's
+  penetrability): no photon below the final state, the pathway and the channel are closed (they were NaN).
+- `src/ExternalCaptureSetup.cpp`: the signature of the capture-integral file gains "unbound final state v1" for an
+  unbound final channel only; every other file keeps its signature.
+- `experiment/src/FinalStates.cpp`, `FinalStates.h`, `BuildFinalStates.cpp`, `Diagnostics.cpp`: `UnboundFinalStates`
+  now finds a final state with external capture at the threshold of a pair with a channel in its group, or above it
+  with eta > `kMaxOutgoingWaveEta` (100; non-relativistic eta from the `<levels>` masses), one finding per photon
+  pair; the kind `Entrance` is gone (a capture whose entrance opens below the final state is computed). The
+  diagnostic keeps its code, `E_FINAL_STATE_UNBOUND`, with a new message.
+
+**Tests.** `tests/ec_unbound_final` (dev's: the NOTE and no NaN; pure direct capture against an independent integral,
+0.18 %; continuity through the threshold; formal = Brune; the gradient), its ten models dev's, converted with 0
+notes; this engine's curves equal dev's on all of them (1e-10; compared in a scratch directory, not a test).
+`tests/ec_final_state_unbound` and `tests/pyazr/ec_final_state_unbound_test.py` rewritten for the new rule (0.05 keV
+above S_p refused; 2.5 MeV computed with and without external capture; 3.5 keV below: the start commit's chi^2).
+`experiment/tests/build_test.cpp`: the cases of the rule.
+
+**Open.** dev's stage 2 (`linewindow W`: the line shape of a broad final state), its internal-only form, the line
+centre that follows a fitted final level, and the capture cascade (UPOS on a capture pair) are not ported. The build's
+eta is non-relativistic and the engine's check uses the run's kinematics: they can disagree within 1e-3 of the limit.
+A THM data set exiting into an unbound photon pair is not covered (read only, as before).
+
+**Run here** (CRC, GCC 11.5): build; `experiment_build`; the two test directories; the pyazr test. The full gate: see
+the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots, on the commit of the entry above, which holds this one): consistency,
+configure, build and the docs clean; ctest all but the base's two (`pyazr_park_dsde`, `pyazr_units_scales`); the
+regression suites 172 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its
+range"), every chi2 line equal to the base's. A gate of this entry's commit alone had shown the same suites (171
+pass) and, in ctest, `upgrade_predictions` (the table had not been regenerated for the ten new models; done in the
+next commit) and `physics_standalone` at its 300 s limit while other jobs of the account built (it passes alone).
+
 ## 2026-11-16 (owner's session, dev port) — general spin observables: the quantity `spin_observable`
 
 **Branch** `feature/upgrade-5-dev-spin-observables`, cut from `feature/upgrade` `0c6167c1`. The port of

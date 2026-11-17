@@ -27,7 +27,7 @@
 
 static complex ECPathwayAmplitude(const CompoundSystem *, const Config &, int entrancePair, const azure2::EntrancePathways &,
                                   const azure2::SpinGroupRow &, const azure2::ExternalRow &, double levelEnergy,
-                                  double cmEnergy, const ChannelTable *table = nullptr);
+                                  double cmEnergy, const ChannelTable *table = nullptr, complex *parts = nullptr);
 
 /// Returns the external capture amplitude of external pathway m (1-based) of spin group k (1-based) of the point's
 /// exit, as stored at set-up.
@@ -107,11 +107,15 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const Comp
  * the photon-energy factor and the radial integral (from ECTable, or directly
  * with --no-ec-table).  CalculateECAmplitudes calls it at the point's energy;
  * GetECAmplitudeWithShift at a shifted one.
+ * With `parts` (two entries), also the amplitude split by the final-state exterior function of an unbound final
+ * state, F_f and G_f unnormalized (ECIntegral::StandingParts, the line-shape integration of a broad final state):
+ * they are integrated directly, never from ECTable.
  */
 static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &configure, int entrance,
                                   const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
                                   const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
-                                  const ChannelTable *table) {
+                                  const ChannelTable *table, complex *parts) {
+  if (parts) parts[0] = parts[1] = complex(0.0, 0.0);
   const PPair *entrancePair = compound->GetPair(entrance);
   const int j = pathway.final_group;
   const AChannel *theFinalChannel = compound->GetJGroup(j)->GetChannel(pathway.final_channel);
@@ -150,6 +154,8 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   complex expHSP = (row && row->P > 0.0) ? row->expHSP
                                          : theCoulombFunction.HardSpherePhase(pathway.l, entranceTwoJ, entranceRadius, cmEnergy);
 
+  // No photon below the final level (an unbound final state above the entrance energy): the pathway is closed.
+  if (!(inEnergy - levelEnergy > 0.0)) return complex(0.0, 0.0);
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, pathway.mult + 0.5);
 
   const PPair *theFinalPair = compound->GetPair(theFinalChannel->GetPairNum());
@@ -166,7 +172,7 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   }
 
   complex integrals;
-  if (configure.useECTable) {
+  if (configure.useECTable && !parts) {
     integrals = ECTable::Integral(theFinalPair, radius, configure, theInitialLValue, theFinalChannel->GetL(),
                                   theInitialSValue, theFinalChannel->GetS(),
                                   pathway.J, compound->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
@@ -178,6 +184,13 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
                               theInitialSValue, theFinalChannel->GetS(),
                               pathway.J, compound->GetJGroup(j)->GetJ(), pathway.mult, pathway.rad_type,
                               inEnergy, levelEnergy, pathway.channel_capture);
+    if (parts) {
+      complex withF, withG;
+      if (theECIntegral.StandingParts(withF, withG)) {
+        parts[0] = expCP * expHSP * sqrtGammaPene * withF;
+        parts[1] = expCP * expHSP * sqrtGammaPene * withG;
+      }
+    }
   }
 
   // calculate the total radial integral
@@ -272,4 +285,11 @@ void Site::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
   values_.ec_shifted.clear();
+}
+
+complex ExternalCapturePathwayParts(const CompoundSystem *compound, const Config &configure, int entrance,
+                                    const azure2::EntrancePathways &P, const azure2::SpinGroupRow &group,
+                                    const azure2::ExternalRow &pathway, double levelEnergy, double cmEnergy,
+                                    complex parts[2]) {
+  return ECPathwayAmplitude(compound, configure, entrance, P, group, pathway, levelEnergy, cmEnergy, nullptr, parts);
 }

@@ -389,6 +389,17 @@
      "values": ["E1", "E2"],
      "doc": "the photon multipole the cross section is filtered to (M8)"
     },
+    "line_window": {
+     "title": "Final-state line window",
+     "type": "number_with_unit",
+     "grammar": "<number> <energy unit>",
+     "by_quantity": true,
+     "rare": true,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "positive": true,
+     "doc": "capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the cross section is integrated over the final state's line shape for E_f within E_R +- W"
+    },
     "shape": {
      "title": "Shape constant g",
      "type": "number_with_unit",
@@ -875,6 +886,17 @@
      "rare": true,
      "values": ["E1", "E2"],
      "doc": "the photon multipole the cross section is filtered to (M8)"
+    },
+    "line_window": {
+     "title": "Final-state line window",
+     "type": "number_with_unit",
+     "grammar": "<number> <energy unit>",
+     "by_quantity": true,
+     "rare": true,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "positive": true,
+     "doc": "capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the cross section is integrated over the final state's line shape for E_f within E_R +- W"
     },
     "shape": {
      "title": "Shape constant g",
@@ -2563,6 +2585,13 @@
       "text": "the reaction has a photon exit"
      }
     },
+    "line_window": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
+    },
     "secondary_gamma": {
      "required": false
     },
@@ -2755,6 +2784,13 @@
     },
     "thm": {
      "required": false
+    },
+    "line_window": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
     }
    },
    "target_kinds": ["layer", "none"],
@@ -2803,6 +2839,13 @@
       "if": "gamma_exit",
       "text": "the reaction has a photon exit"
      }
+    },
+    "line_window": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
     }
    },
    "tree": "Scale_SF(E) o Sigma(r)",
@@ -2842,6 +2885,13 @@
      "required": true
     },
     "multipole": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
+    },
+    "line_window": {
      "required": false,
      "when": {
       "if": "gamma_exit",
@@ -4430,7 +4480,7 @@
   },
   "E_FINAL_STATE_UNBOUND": {
    "severity": "error",
-   "meaning": "a capture final state above a particle threshold: with external capture, at or above the threshold of a pair with a channel in its J^pi group; or above the entrance threshold of a capture asked into it (not computed by this version)"
+   "meaning": "an external-capture final state at the threshold of a pair with a channel in its J^pi group, or too close above the threshold of a charged one (eta > 100) for its outgoing wave"
   },
   "E_NOT_BUILT": {
    "severity": "error",

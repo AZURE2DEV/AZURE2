@@ -73,6 +73,7 @@ std::string ReadReaction(const Line &line, Observable observable, bool thm, Reac
   r.observable = observable;
   r.thm = thm;
   r.spinObservable = line.spinObservable();
+  r.lineWindow_keV = line.lineWindow();
   if (observable == Observable::PhaseShift) {
     r.phaseJ = line.phaseJ();
     r.phaseL = line.phaseL();

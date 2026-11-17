@@ -92,6 +92,12 @@ class ExtrapLine {
             stream.setstate(std::ios::failbit);
             break;
           }
+        } else if (keyword == "linewindow") {
+          // dev: capture into a broad unbound final state, the half-width W (keV) of the gamma-line window
+          if (!(advancedStream >> lineWindow_) || !(lineWindow_ > 0.0)) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
         } else if (keyword == "total") {
           if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
             stream.setstate(std::ios::failbit);
@@ -235,6 +241,8 @@ class ExtrapLine {
   const std::string &natural() const { return natural_; };
   /// 1 for "total 1" (SegLine::total).
   int total() const { return total_; };
+  /// dev's "linewindow W": the half-width (keV) of the final-state line window; 0 if absent.
+  double lineWindow() const { return lineWindow_; };
   /// "transmission <n>" / "yield <n>" (SegLine.h): 0 when absent.
   double transmission() const { return transmission_; };
   double yieldThickness() const { return yield_; };
@@ -294,6 +302,7 @@ class ExtrapLine {
   int operationType_;
   std::string natural_;
   int total_;
+  double lineWindow_ = 0.0;
   double transmission_;
   double yield_;
   bool thicknessFitIgnored_ = false;

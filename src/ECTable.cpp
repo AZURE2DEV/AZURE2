@@ -116,9 +116,14 @@ complex ECTable::Integral(const PPair *finalPair, double radius, const Config &c
   // the entrance channel's 2J key: its waves depend on J_i when the pair has a spin-orbit term
   const int twoJi = finalPair->SpinOrbitTwoJ(ji);
   const ChannelTable::Row *row = table ? table->Find({finalPairNum, li, twoJi, radius, outEnergy}) : nullptr;
-  if (row && row->P > 0.0)
+  // An unbound final state (levelEnergy above this pair's threshold, ECIntegral::IntegrateUnbound) is integrated
+  // directly: its integral grows like (k_i - k_f)^-2 towards the photon threshold E = levelEnergy and is zero below
+  // it, which a Lagrange stencil in ln(E_out) cannot follow.
+  const bool unboundFinal = levelEnergy > threshold;
+  if (!unboundFinal && row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
-  else if (!(outEnergy > 0.0) || !Reduction(radius, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
+  else if (unboundFinal || !(outEnergy > 0.0) ||
+           !Reduction(radius, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
     ++counts.direct;
     return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);

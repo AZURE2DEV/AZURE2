@@ -109,6 +109,13 @@ class Site {
   bool IsAnalyzingPower() const { return settings_->analyzingPower; };
   //! With IsAnalyzingPower: the general spin observable of the term, null for A_y.
   const azure2::physics::SpinObservable *GetSpinObservable() const { return settings_->spinObservable; };
+  //! Half-width (keV) of the final-state line window of a capture into a broad unbound final state; 0: none.
+  double GetLineWindow() const { return settings_->lineWindow; };
+  //! The unit's whole record and its length: the line-shape integration sums the records of its nodes.
+  double *Record(azure2::Results &r) const { return Rec(r); }
+  std::size_t RecordLength() const { return azure2::Results::RecordSize(num_ang_slots_, num_natural_slots_); }
+  //! Whether the record has an angular part (its count at Results::AngularOffset()).
+  bool HasAngularPart() const { return num_ang_slots_ != 0; }
   /// The total cross section of the entrance pair (optical theorem), Segment::IsTotalTerm.
   bool IsTotal() const { return settings_->total; };
   //! A_y is kept beside the cross section rather than replacing it, because

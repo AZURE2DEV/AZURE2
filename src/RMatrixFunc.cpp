@@ -341,6 +341,7 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   const int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
+  const azure2::LineNode *lineNode = this->ActiveLineNode();
   int irEnd;
   int irStart;
   bool isRMC = false;
@@ -363,9 +364,18 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
             point->GetExpHardSpherePhase(theMGroup.group, theMGroup.ch) *
             point->GetExpCoulombPhase(theMGroup.group, theMGroup.chp) *
             point->GetExpHardSpherePhase(theMGroup.group, theMGroup.chp);
+        complex sqrtPenEx = point->GetSqrtPenetrability(theMGroup.group, theMGroup.chp);
+        // a node of the line-shape integration (LineWindow.h), as in AMatrixFunc
+        if (lineNode) {
+          const AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
+          if (compound()->GetPair(exitChannel->GetPairNum())->GetPType() == 10)
+            sqrtPenEx = lineNode->photonEnergy > 0.0
+                            ? lineNode->amp * pow(lineNode->photonEnergy / hbarc, (double)exitChannel->GetL() + 0.5)
+                            : 0.0;
+        }
         complex umatrix = 2.0 * std::complex<double>(0.0, 1.0) *
             point->GetSqrtPenetrability(theMGroup.group, theMGroup.ch) *
-            point->GetSqrtPenetrability(theMGroup.group, theMGroup.chp) *
+            sqrtPenEx *
             this->GetRLInvRMatrixElement(theMGroup.group,
                                          theMGroup.chp,
                                          theMGroup.ch);
@@ -399,6 +409,8 @@ void RMatrixFunc::CalculateTMatrix(Site *point) {
           ecAmplitude = point->GetECAmplitude(k, m);
         }
         complex tmatrix = ecNormParam * ecAmplitude;
+        // a node of the line-shape integration: the external element of the scattering state at E_f
+        if (lineNode) tmatrix = lineNode->ec[k - 1][m - 1];
         if (theECMGroup.channel_capture) {
           const azure2::InternalRow &chanMGroup = P.internal[theECMGroup.cc_row];
           complex umatrix = 2.0 * std::complex<double>(0.0, 1.0) *

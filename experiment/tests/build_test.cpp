@@ -512,8 +512,8 @@ int main() {
     check("the rule: the earlier pair keeps the level, the later names it",
           finals.size() == 2 && finals[0].sharedWithPairKey == 0 && finals[1].sharedWithPairKey == 4);
   }
-  // a capture final state above a particle threshold (FinalStates.h, UnboundFinalStates): p+15N (pair 1, threshold
-  // 12.127 MeV) into g+16O (pair 4) whose final state, a 0+ level of 16O, is moved across that threshold
+  // an external-capture final state above a particle threshold (FinalStates.h, UnboundFinalStates): p+15N (pair 1,
+  // threshold 12.127 MeV) into g+16O (pair 4) whose final state, a 0+ level of 16O, is moved across that threshold
   {
     auto tables = [](double finalEnergy, bool externalCapture, bool protonChannel) {
       LevelTables t = Pairs();
@@ -539,51 +539,52 @@ int main() {
     };
     const std::string capture = Set(kDataset, "reaction", "    reaction 15N(p,g)16O[13.5]");
     const std::string below = Set(kDataset, "reaction", "    reaction 15N(p,g)16O[12.1]");
-    // external capture, the final state at 13.5 MeV with a p+15N channel: refused on the data set, as bound
-    const BuiltProject bound = BuildText(Data(capture), false, false, DataFiles::Required, tables(13.5, true, true));
-    ExpectOne("E_FINAL_STATE_UNBOUND", bound);
-    check("E_FINAL_STATE_UNBOUND, bound: on the data set, naming the level ID, both energies and what is not computed",
-          bound.diagnostics.size() == 1 && bound.diagnostics[0].record == "d1" &&
-              bound.diagnostics[0].message.find("level ID 7") != std::string::npos &&
-              bound.diagnostics[0].message.find("13.5 MeV") != std::string::npos &&
-              bound.diagnostics[0].message.find("12.127 MeV") != std::string::npos &&
-              bound.diagnostics[0].message.find("not computed by this version") != std::string::npos);
-    // no data set exits into the pair: still refused (a rate can), in <levels>
-    const BuiltProject unused = BuildText(Data(kDataset), false, false, DataFiles::Required, tables(13.5, true, true));
-    ExpectOne("E_FINAL_STATE_UNBOUND", unused);
-    check("E_FINAL_STATE_UNBOUND, bound, no data set exits into the pair: in <levels>",
-          unused.diagnostics.size() == 1 && unused.diagnostics[0].record.empty() &&
-              unused.diagnostics[0].section == "levels");
-    // internal capture only: refused on the data set whose entrance opens below the final state
-    const BuiltProject internal = BuildText(Data(capture), false, false, DataFiles::Required, tables(13.5, false, true));
-    ExpectOne("E_FINAL_STATE_UNBOUND", internal);
-    check("E_FINAL_STATE_UNBOUND, entrance: on the data set, the photon energy negative",
-          internal.diagnostics.size() == 1 && internal.diagnostics[0].record == "d1" &&
-              internal.diagnostics[0].message.find("photon energy is negative") != std::string::npos);
-    // external capture, but no channel of p+15N in the final state's group: the entrance rule
-    ExpectOne("E_FINAL_STATE_UNBOUND", BuildText(Data(capture), false, false, DataFiles::Required, tables(13.5, true, false)));
-    // internal capture only, nothing asked from p+15N into the pair: builds (no point has a negative photon energy)
-    check("internal capture, no capture asked into the pair: builds",
-          BuildText(Data(kDataset), false, false, DataFiles::Required, tables(13.5, false, true)).diagnostics.empty());
+    const std::string close = Set(kDataset, "reaction", "    reaction 15N(p,g)16O[12.1271]");
+    const std::string atThreshold = Set(kDataset, "reaction", "    reaction 15N(p,g)16O[12.127]");
+    // an unbound final state 1.373 MeV above the p+15N threshold (eta = 0.9): a narrow resonance, computed
+    check("final state 1.373 MeV above the threshold, external capture: builds (a narrow resonance)",
+          BuildText(Data(capture), false, false, DataFiles::Required, tables(13.5, true, true)).diagnostics.empty());
+    check("... and with no data set exiting into the pair",
+          BuildText(Data(kDataset), false, false, DataFiles::Required, tables(13.5, true, true)).diagnostics.empty());
+    // internal capture from an entrance that opens below the final state: the photon channel is closed below it
+    check("internal capture into a final state above the entrance threshold: builds",
+          BuildText(Data(capture), false, false, DataFiles::Required, tables(13.5, false, true)).diagnostics.empty());
+    check("external capture, no p+15N channel in the final state's group: builds",
+          BuildText(Data(capture), false, false, DataFiles::Required, tables(13.5, true, false)).diagnostics.empty());
     // just below the threshold: builds, with and without external capture
     check("final state 27 keV below the threshold, external capture: builds",
           BuildText(Data(below), false, false, DataFiles::Required, tables(12.1, true, true)).diagnostics.empty());
     check("final state 27 keV below the threshold, internal capture: builds",
           BuildText(Data(below), false, false, DataFiles::Required, tables(12.1, false, true)).diagnostics.empty());
-    // the rule itself: at the threshold (bound case, binding energy 0) refused; a total capture asks every photon pair
+    // 0.1 keV above the threshold of the charged pair (eta = 107): refused on the data set, with the level, the
+    // energies and eta
+    const BuiltProject near = BuildText(Data(close), false, false, DataFiles::Required, tables(12.1271, true, true));
+    ExpectOne("E_FINAL_STATE_UNBOUND", near);
+    check("E_FINAL_STATE_UNBOUND, 0.1 keV above: on the data set, naming the level ID, both energies and eta",
+          near.diagnostics.size() == 1 && near.diagnostics[0].record == "d1" &&
+              near.diagnostics[0].message.find("level ID 7") != std::string::npos &&
+              near.diagnostics[0].message.find("12.1271 MeV") != std::string::npos &&
+              near.diagnostics[0].message.find("12.127 MeV") != std::string::npos &&
+              near.diagnostics[0].message.find("keV above") != std::string::npos &&
+              near.diagnostics[0].message.find("eta = 10") != std::string::npos);
+    // no data set exits into the pair: still refused (a rate can), in <levels>
+    const BuiltProject unused = BuildText(Data(kDataset), false, false, DataFiles::Required, tables(12.1271, true, true));
+    ExpectOne("E_FINAL_STATE_UNBOUND", unused);
+    check("E_FINAL_STATE_UNBOUND, no data set exits into the pair: in <levels>",
+          unused.diagnostics.size() == 1 && unused.diagnostics[0].record.empty() && unused.diagnostics[0].section == "levels");
+    // internal capture only: nothing takes an outgoing wave
+    check("0.1 keV above, internal capture only: builds",
+          BuildText(Data(close), false, false, DataFiles::Required, tables(12.1271, false, true)).diagnostics.empty());
+    // the rule itself: at the threshold refused; the first capture asked into the pair carries the finding
     const std::vector<UnboundFinalState> at = UnboundFinalStates(tables(12.127, true, true), {});
-    check("UnboundFinalStates: a final state at the threshold, bound",
-          at.size() == 1 && at[0].kind == UnboundFinalState::Kind::Bound && at[0].photonPairKey == 4 &&
-              at[0].particlePairKey == 1 && at[0].finalEnergy == 12.127 && at[0].threshold == 12.127 && at[0].level == 0);
-    check("UnboundFinalStates: internal capture at the entrance threshold, none",
-          UnboundFinalStates(tables(12.127, false, true), {{1, 4, 0}}).empty());
-    const std::vector<UnboundFinalState> boundTotal = UnboundFinalStates(tables(13.5, true, true), {{1, 4, 0}, {1, -1, 5}});
-    check("UnboundFinalStates: one bound finding, on the first capture asked into the pair",
-          boundTotal.size() == 1 && boundTotal[0].kind == UnboundFinalState::Kind::Bound && boundTotal[0].request == 0);
-    const std::vector<UnboundFinalState> total = UnboundFinalStates(tables(13.5, false, true), {{1, -1, 3}});
-    check("UnboundFinalStates: a total capture asks into every photon pair of the compound nucleus",
-          total.size() == 1 && total[0].kind == UnboundFinalState::Kind::Entrance && total[0].photonPairKey == 4 &&
-              total[0].particlePairKey == 1 && total[0].request == 3);
+    check("UnboundFinalStates: a final state at the threshold",
+          at.size() == 1 && at[0].photonPairKey == 4 && at[0].particlePairKey == 1 && at[0].finalEnergy == 12.127 &&
+              at[0].threshold == 12.127 && at[0].eta == 0.0 && at[0].level == 0 && at[0].request == -1);
+    ExpectOne("E_FINAL_STATE_UNBOUND", BuildText(Data(atThreshold), false, false, DataFiles::Required, tables(12.127, true, true)));
+    const std::vector<UnboundFinalState> asked = UnboundFinalStates(tables(12.1271, true, true), {{1, 4, 0}, {1, -1, 5}});
+    check("UnboundFinalStates: one finding, on the first capture asked into the pair, with its eta",
+          asked.size() == 1 && asked[0].request == 0 && asked[0].eta > 100.0 && asked[0].eta < 115.0);
+    check("UnboundFinalStates: 1.373 MeV above, none", UnboundFinalStates(tables(13.5, true, true), {{1, 4, 0}}).empty());
   }
   UnitCases(targets);
   {
@@ -1021,6 +1022,17 @@ int main() {
     // the operator is required, and its grammar is the validator's
     ExpectOne("E_FIELD_REQUIRED", BuildText(Data(spin)));
     ExpectOne("E_SPIN_OPERATOR", BuildText(Data(spin + "    operator b:y*b:x\n")));
+  }
+
+  // ---- line_window: capture into a broad unbound final state; keV in the spec; a photon exit only
+  {
+    auto data = [](const BuiltProject &b) -> const DatasetSpec & { return b.data.datasets.items.at(0).spec; };
+    const std::string capture = Set(kDataset, "reaction", "    reaction 15N(p,g)16O");
+    const BuiltProject w = BuildText(Data(capture + "    line_window 0.039 MeV\n"));
+    check("line_window 0.039 MeV on a capture: 39 keV in the reaction's spec",
+          w.Ok() && std::fabs(data(w).reaction.lineWindow_keV - 39.0) < 1e-12);
+    check("no line_window: 0", BuildText(Data(capture)).Ok() && data(BuildText(Data(capture))).reaction.lineWindow_keV == 0.0);
+    ExpectOne("E_FIELD_NOT_APPLICABLE", BuildText(Data(kDataset + "    line_window 39 keV\n")));
   }
 
   std::printf("experiment_build: %d checks, %d failed\n", checks, failures);

@@ -327,6 +327,9 @@ std::vector<FieldDef> QuantityFields() {
               "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"),
           Rare(ByQ("multipole", "Multipole", Words({"E1", "E2"}),
                    "the photon multipole the cross section is filtered to (M8)")),
+          Rare(ByQ("line_window", "Final-state line window", PositiveWithUnit("energy"),
+                   "capture into a broad unbound final state: the half-width W of the gamma-line window of the analysis; the "
+                   "cross section is integrated over the final state's line shape for E_f within E_R +- W")),
           Rare(ByQ("shape", "Shape constant g", WithUnit("inverse_energy"),
                    "g of the modified S factor E sigma exp(2 pi eta + g E), e.g. 0.46 1/MeV for 12C + 12C")),
           Rare(ByQ("secondary_gamma", "Secondary gamma", Structured(f.secondaryGamma), "UPOS: L, Ic, delta")),

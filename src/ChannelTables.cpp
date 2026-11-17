@@ -325,7 +325,9 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
         } else if (thePair->GetPType() == 10) {
           complex loElement = complex(0.0, 0.0);
           this->AddLoElement(j, ch, loElement);
-          double sqrtPene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1. : pow(localEnergy / hbarc, (double)lValue + 0.5);
+          // A photon channel into a final level above this energy (an unbound final state, E < E_x) is closed.
+          double sqrtPene = !(localEnergy > 0.0) ? 0.
+                            : (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1. : pow(localEnergy / hbarc, (double)lValue + 0.5);
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
