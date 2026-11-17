@@ -12,9 +12,9 @@
 
 namespace phys = azure2::physics;
 
-phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec, bool gsl) {
+phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double Ec) {
   phys::ChannelValues v;
-  ChannelFunc cf(&pair, gsl);
+  ChannelFunc cf(&pair);
   v.S = cf.Shift(l, twoJ, Ec);
   if (Ec > 0.0) {
     v.P = cf.Penetrability(l, twoJ, Ec);
@@ -31,14 +31,13 @@ phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, do
 
 phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map,
                                                 const Config &configure) {
-  return EngineChannelFunctions(compound, map, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC),
-                                  !!(configure.paramMask & Config::USE_RMC_FORMALISM));
+  return EngineChannelFunctions(compound, map, !!(configure.paramMask & Config::USE_RMC_FORMALISM));
 }
 
-phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map, bool gsl, bool rmc) {
+phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, const SystemOfCompoundMap &map, bool rmc) {
   const CompoundSystem *cn = &compound;
   const SystemOfCompoundMap m = map;
-  return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
+  return [cn, rmc, m](std::size_t b, std::size_t k, double E) {
     const JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
     const AChannel *channel = group->GetChannel(m.channelOfBlockChannel.at(b).at(k));
     const PPair *pair = cn->GetPair(channel->GetPairNum());
@@ -48,7 +47,7 @@ phys::ChannelFunctions EngineChannelFunctions(const CompoundSystem &compound, co
     phys::ChannelValues v;
     const char type = channel->GetRadType();
     if (type == 'P') {
-      v = ParticleChannelValues(*pair, l, twoJ, Ec, gsl);
+      v = ParticleChannelValues(*pair, l, twoJ, Ec);
     } else if (type == 'E' || type == 'M') {
       if (std::fabs(E - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2)) {
         // A static moment (LevelTransforms.cpp TransformIn, "Static moments" in conventions.rst).

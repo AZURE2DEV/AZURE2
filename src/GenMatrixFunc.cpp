@@ -57,9 +57,9 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
         const azure2::InternalRow &theMGroup = P.Internal(g, m);
         if (theMGroup.ch == theMGroup.chp) {
           double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
-          sum += 2. * point->GetGeometricalFactor() *
-              (2. * jValue + 1.) * compound()->GetPair(aa)->GetI1I2Factor() *
-              imag(this->GetTMatrixElement(k, m, decayNum));
+          sum += azure2::physics::rmc_elastic_term(point->GetGeometricalFactor(), jValue,
+                                                   compound()->GetPair(aa)->GetI1I2Factor(),
+                                                   this->GetTMatrixElement(k, m, decayNum));
         }
       }
     }
@@ -69,31 +69,23 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
           const azure2::SpinGroupRow &g = P.Group(P.exits[dp - 1], k);
           // A cross-spin UPOS group repeats pathways of the equal-spin groups.
           if (g.CrossSpin()) continue;
-          this->ClearTempTMatrices();
+          partial_sums_.clear();
           for (int m = 1; m <= g.num_internal; m++) {
             const azure2::InternalRow &theMGroup = P.Internal(g, m);
             int lValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch)->GetL();
             int lpValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL();
             double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
-            int tempTNum = this->IsTempTMatrix(jValue, lValue, lpValue);
-            if (!tempTNum) {
-              TempTMatrix temptmatrix = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m, dp)};
-              this->NewTempTMatrix(temptmatrix);
-            } else
-              this->AddToTempTMatrix(tempTNum, this->GetTMatrixElement(k, m, dp));
+            partial_sums_.add(jValue, lValue, lpValue, this->GetTMatrixElement(k, m, dp));
           }
-          for (int temp = 1; temp <= this->NumTempTMatrices(); temp++) {
-            sum -= point->GetGeometricalFactor() *
-                (2. * this->GetTempTMatrix(temp)->jValue + 1.) *
-                compound()->GetPair(aa)->GetI1I2Factor() *
-                (this->GetTempTMatrix(temp)->TMatrix) * conj(this->GetTempTMatrix(temp)->TMatrix);
-          }
+          azure2::physics::subtract_partial_wave_cross_section(partial_sums_, point->GetGeometricalFactor(),
+                                                               compound()->GetPair(aa)->GetI1I2Factor(), sum);
         }
       }
     }
     // (1+delta_12) of an identical entrance pair: see the angle-integrated
     // branch below.
-    point->SetFitCrossSection(results, real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
+    point->SetFitCrossSection(results, azure2::physics::cross_section_barns(sum) *
+                                           compound()->GetPair(aa)->GetEntranceSymmetryFactor());
     // This formalism has no angular dependence: a site holding Legendre coefficients holds the value as B_0.
     if (point->AngleFree()) point->SetIsotropicObservable(results, point->GetFitCrossSection(results));
   } else {
@@ -114,10 +106,12 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
           const azure2::InternalRow &theMGroup = P.Internal(g, m);
           if (theMGroup.ch != theMGroup.chp) continue;
           const double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
-          total += (2. * jValue + 1.) * 2. * real(this->GetTMatrixElement(k, m));
+          azure2::physics::add_optical_theorem_term(jValue, this->GetTMatrixElement(k, m), total);
         }
       }
-      point->SetFitCrossSection(results, point->GetGeometricalFactor() * compound()->GetPair(aa)->GetI1I2Factor() * total / 100.);
+      point->SetFitCrossSection(results, azure2::physics::total_cross_section(
+                                             point->GetGeometricalFactor(), compound()->GetPair(aa)->GetI1I2Factor(),
+                                             total));
       point->SetFitE1CrossSection(results, 0.);
       point->SetFitE2CrossSection(results, 0.);
       return;
@@ -134,41 +128,24 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
           if (aa != exitPairNum && compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType() == 0) {
             if (g.sp != g.sp2) continue;
           }
-          this->ClearTempTMatrices();
-          this->ClearTempTMatricesE1();
-          this->ClearTempTMatricesE2();
+          partial_sums_.clear();
+          partial_sums_E1_.clear();
+          partial_sums_E2_.clear();
           for (int m = 1; m <= g.num_internal; m++) {
             const azure2::InternalRow &theMGroup = P.Internal(g, m);
             if (compound()->GetPair(aa)->GetPType() == 20) {
-              sum += 25. * this->GetTMatrixElement(k, m) * conj(this->GetTMatrixElement(k, m));
+              azure2::physics::add_beta_delayed_term(this->GetTMatrixElement(k, m), sum);
             } else {
               int lValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch)->GetL();
               int lpValue = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL();
               double jValue = compound()->GetJGroup(theMGroup.group)->GetJ();
-              int tempTNum = this->IsTempTMatrix(jValue, lValue, lpValue);
-              if (!tempTNum) {
-                TempTMatrix temptmatrix = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m)};
-                this->NewTempTMatrix(temptmatrix);
-              } else
-                this->AddToTempTMatrix(tempTNum, this->GetTMatrixElement(k, m));
+              partial_sums_.add(jValue, lValue, lpValue, this->GetTMatrixElement(k, m));
               if (compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetRadType() == 'E' &&
-                  compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL() == 1) {
-                int tempTNumE1 = this->IsTempTMatrixE1(jValue, lValue, lpValue);
-                if (!tempTNumE1) {
-                  TempTMatrix temptmatrixE1 = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m)};
-                  this->NewTempTMatrixE1(temptmatrixE1);
-                } else
-                  this->AddToTempTMatrixE1(tempTNumE1, this->GetTMatrixElement(k, m));
-              }
+                  compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL() == 1)
+                partial_sums_E1_.add(jValue, lValue, lpValue, this->GetTMatrixElement(k, m));
               if (compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetRadType() == 'E' &&
-                  compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL() == 2) {
-                int tempTNumE2 = this->IsTempTMatrixE2(jValue, lValue, lpValue);
-                if (!tempTNumE2) {
-                  TempTMatrix temptmatrixE2 = {jValue, lValue, lpValue, this->GetTMatrixElement(k, m)};
-                  this->NewTempTMatrixE2(temptmatrixE2);
-                } else
-                  this->AddToTempTMatrixE2(tempTNumE2, this->GetTMatrixElement(k, m));
-              }
+                  compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp)->GetL() == 2)
+                partial_sums_E2_.add(jValue, lValue, lpValue, this->GetTMatrixElement(k, m));
             }
           }
           if (compound()->GetPair(aa)->GetPType() == 20) continue;
@@ -177,51 +154,20 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
             int lValue = theECMGroup.l;
             int lpValue = theECMGroup.mult;
             double jValue = theECMGroup.J;
-            int tempTNum = this->IsTempTMatrix(jValue, lValue, lpValue);
-            if (!tempTNum) {
-              TempTMatrix temptmatrix = {jValue, lValue, lpValue, this->GetECTMatrixElement(k, m)};
-              this->NewTempTMatrix(temptmatrix);
-            } else
-              this->AddToTempTMatrix(tempTNum, this->GetECTMatrixElement(k, m));
-            if (theECMGroup.rad_type == 'E' && theECMGroup.mult == 1) {
-              int tempTNumE1 = this->IsTempTMatrixE1(jValue, lValue, lpValue);
-              if (!tempTNumE1) {
-                TempTMatrix temptmatrixE1 = {jValue, lValue, lpValue, this->GetECTMatrixElement(k, m)};
-                this->NewTempTMatrixE1(temptmatrixE1);
-              } else
-                this->AddToTempTMatrixE1(tempTNumE1, this->GetECTMatrixElement(k, m));
-            }
-            if (theECMGroup.rad_type == 'E' && theECMGroup.mult == 2) {
-              int tempTNumE2 = this->IsTempTMatrixE2(jValue, lValue, lpValue);
-              if (!tempTNumE2) {
-                TempTMatrix temptmatrixE2 = {jValue, lValue, lpValue, this->GetECTMatrixElement(k, m)};
-                this->NewTempTMatrixE2(temptmatrixE2);
-              } else
-                this->AddToTempTMatrixE2(tempTNumE2, this->GetECTMatrixElement(k, m));
-            }
+            partial_sums_.add(jValue, lValue, lpValue, this->GetECTMatrixElement(k, m));
+            if (theECMGroup.rad_type == 'E' && theECMGroup.mult == 1)
+              partial_sums_E1_.add(jValue, lValue, lpValue, this->GetECTMatrixElement(k, m));
+            if (theECMGroup.rad_type == 'E' && theECMGroup.mult == 2)
+              partial_sums_E2_.add(jValue, lValue, lpValue, this->GetECTMatrixElement(k, m));
           }
-          for (int temp = 1; temp <= this->NumTempTMatrices(); temp++) {
-            sum += point->GetGeometricalFactor() *
-                (2. * this->GetTempTMatrix(temp)->jValue + 1.) *
-                compound()->GetPair(aa)->GetI1I2Factor() *
-                (this->GetTempTMatrix(temp)->TMatrix) * conj(this->GetTempTMatrix(temp)->TMatrix);
-          }
-          for (int temp = 1; temp <= this->NumTempTMatricesE1(); temp++) {
-            sumE1 += point->GetGeometricalFactor() *
-                (2. * this->GetTempTMatrixE1(temp)->jValue + 1.) *
-                compound()->GetPair(aa)->GetI1I2Factor() *
-                (this->GetTempTMatrixE1(temp)->TMatrix) * conj(this->GetTempTMatrixE1(temp)->TMatrix);
-          }
-          for (int temp = 1; temp <= this->NumTempTMatricesE2(); temp++) {
-            sumE2 += point->GetGeometricalFactor() *
-                (2. * this->GetTempTMatrixE2(temp)->jValue + 1.) *
-                compound()->GetPair(aa)->GetI1I2Factor() *
-                (this->GetTempTMatrixE2(temp)->TMatrix) * conj(this->GetTempTMatrixE2(temp)->TMatrix);
-          }
+          const double geom = point->GetGeometricalFactor(), i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
+          azure2::physics::add_partial_wave_cross_section(partial_sums_, geom, i1i2, sum);
+          azure2::physics::add_partial_wave_cross_section(partial_sums_E1_, geom, i1i2, sumE1);
+          azure2::physics::add_partial_wave_cross_section(partial_sums_E2_, geom, i1i2, sumE2);
         }
-        angleIntegratedXS = real(sum) / 100.;
-        angleIntegratedE1XS = real(sumE1) / 100.;
-        angleIntegratedE2XS = real(sumE2) / 100.;
+        angleIntegratedXS = azure2::physics::cross_section_barns(sum);
+        angleIntegratedE1XS = azure2::physics::cross_section_barns(sumE1);
+        angleIntegratedE2XS = azure2::physics::cross_section_barns(sumE2);
         if (!point->IsAngularDist()) {
           // Identical particles in the ENTRANCE channel: the reported total
           // is sigma = (pi/k^2) sum_J g_J (1+delta_12) sum |T|^2 over the
@@ -301,7 +247,7 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
       // the U-matrix elements of two channel spins (as happened up to 2026-10-27) is not a phase.
       const double segmentS = point->GetPhaseS();
       const PPair *entrancePair = compound()->GetPair(aa);
-      this->ClearTempTMatrices();
+      partial_sums_.clear();
       for (int k = 1; k <= theDecay.num_groups; k++) {
         const azure2::SpinGroupRow &g = P.Group(theDecay, k);
         for (int m = 1; m <= g.num_internal; m++) {
@@ -312,37 +258,27 @@ void GenMatrixFunc::CalculateBareCrossSection(Site *point, azure2::Results &resu
           const AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
           if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel &&
               (segmentS < 0.0 || std::fabs(entranceChannel->GetS() - segmentS) < 1.0e-6)) {
-            complex expCoulPhaseSquared = point->GetExpCoulombPhase(theMGroup.group, theMGroup.ch) *
-                point->GetExpCoulombPhase(theMGroup.group, theMGroup.ch);
-            complex theUMatrix = (expCoulPhaseSquared - this->GetTMatrixElement(k, m)) / expCoulPhaseSquared;
-            int tempTNum = this->IsTempTMatrix(jValue, lValue, lValue);
-            if (!tempTNum) {
-              TempTMatrix temptmatrix = {jValue, lValue, lValue, theUMatrix};
-              this->NewTempTMatrix(temptmatrix);
-            } else
-              this->AddToTempTMatrix(tempTNum, theUMatrix);
+            complex theUMatrix = azure2::physics::collision_from_t_matrix(
+                point->GetExpCoulombPhase(theMGroup.group, theMGroup.ch), this->GetTMatrixElement(k, m));
+            partial_sums_.add(jValue, lValue, lValue, theUMatrix);
           }
         }
       }
-      assert(this->NumTempTMatrices() <= 1);
+      assert(partial_sums_.rows.size() <= 1);
       // The U-matrix accumulated above is S_L = exp(2 i delta_L); the nuclear
       // phase shift delta_L is half its argument. For identical particles the
       // physical partial-wave amplitude is symmetrised by [1 + eps (-1)^(L+S)],
       // which doubles allowed waves and removes forbidden ones, but delta_L
       // per allowed wave has the same meaning as in the distinguishable case.
       double phase = 0.0;
-      if (this->NumTempTMatrices() == 1) {
-        phase = 180.0 / pi / 2.0 *
-            atan2(imag(this->GetTempTMatrix(1)->TMatrix),
-                  real(this->GetTempTMatrix(1)->TMatrix));
-        // atan2 returns (-pi, pi], so phase lives in (-90, 90]. For
-        // identical-particle pairs we wrap to [0, 180), the standard
-        // convention in partial-wave phase-shift analyses (e^{2 i delta}
-        // is pi-periodic, and delta_L grows monotonically through a
-        // resonance in this range). Left untouched for distinguishable
-        // pairs to preserve existing fit conventions.
-        if (entrancePair->IsIdentical() && phase < 0.0) phase += 180.0;
-      }
+      // atan2 returns (-pi, pi], so phase lives in (-90, 90]. For
+      // identical-particle pairs we wrap to [0, 180), the standard
+      // convention in partial-wave phase-shift analyses (e^{2 i delta}
+      // is pi-periodic, and delta_L grows monotonically through a
+      // resonance in this range). Left untouched for distinguishable
+      // pairs to preserve existing fit conventions.
+      if (partial_sums_.rows.size() == 1)
+        phase = azure2::physics::phase_shift_degrees(partial_sums_.rows[0].T, entrancePair->IsIdentical());
       point->SetFitCrossSection(results, phase);
     }
   }
@@ -362,7 +298,7 @@ void GenMatrixFunc::BuildOrderProducts(const azure2::EntrancePathways &P, const 
     if (!f.r1) continue;  // unknown type: no contribution
     const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
     const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
-    rt_wl_[f.l] += f.z * T1 * conj(T2);
+    azure2::physics::add_interference_product(f.z, T1, T2, rt_wl_[f.l]);
   }
   this->BuildCoulombInterference(P, theDecay, elastic);
   rt_decay_ = &theDecay;
@@ -396,7 +332,7 @@ std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, con
         const double finalLp = finalL + 1.;
         const double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
         const double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-        R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
+        R_L = azure2::physics::upos_mixed_rk(R_L, R_LLp, R_LpLp, delta);
       }
       rL[lOrder] = R_L;
     }
@@ -408,7 +344,7 @@ std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, con
       if (compound()->GetJGroup(a.group)->GetChannel(a.chp)->GetL() != compound()->GetJGroup(b.group)->GetChannel(b.chp)->GetL())
         continue;
       const complex T1 = this->GetTMatrixElement(f.k, f.m1), T2 = this->GetTMatrixElement(f.k, f.m2);
-      c[f.l] += real(f.z_upos * T1 * conj(T2)) * pow(2. * f.l + 1., 0.5) / (4.) * rL[f.l];
+      c[f.l] += azure2::physics::upos_term(f.z_upos, T1, T2, f.l, rL[f.l]);
     }
   } else {
     this->BuildOrderProducts(P, theDecay, particleExit, aa == exitPairNum);
@@ -417,7 +353,7 @@ std::vector<double> GenMatrixFunc::LegendreCoefficientsOf(const Site *point, con
   }
   const double geom = point->GetGeometricalFactor(), i1i2 = compound()->GetPair(aa)->GetI1I2Factor();
   const double symmetry = LegendreSymmetryFactor(*compound()->GetPair(aa), aa == exitPairNum);
-  for (double &b : c) b = b / pi * geom * i1i2 * symmetry / 100.;
+  azure2::physics::scale_legendre_coefficients(c, geom, i1i2, symmetry);
   return c;
 }
 
@@ -441,76 +377,21 @@ Site::ElasticCoefficients GenMatrixFunc::ElasticCoefficientsOf(const Site *point
   Site::ElasticCoefficients e;
   e.nuclear = this->LegendreCoefficientsOf(point, P, theDecay, aa, aa);  // builds rt_it_ too (BuildOrderProducts)
   const PPair *pair = compound()->GetPair(aa);
-  const double geom = point->GetGeometricalFactor();
-  e.coulomb = geom / 100.;
   const bool spinDependent = pair->IsIdentical() && pair->HasSpinDependentExchange();
-  if (spinDependent) {
-    const double j = pair->GetJ(1);
-    e.cross = 2.0 * e.coulomb * ((std::lround(2.0 * j) % 2 == 0) ? 1.0 : -1.0) / (2.0 * j + 1.0);
-  }
-  const double itFactor = pair->IsIdentical() ? 2.0 : 1.0;
-  const complex cI = complex(0., 1.) / sqrt(pi) * geom * itFactor / 100.;
-  for (const CoulombTerm &t : rt_it_) {
-    if (t.l > Config::maxLOrder)
-      throw std::runtime_error("elastic scattering of pair " + std::to_string(aa) + ": a channel with l = " +
-                               std::to_string(t.l) + " above the highest Legendre order " +
-                               std::to_string(Config::maxLOrder));
-    if ((int)e.direct.size() <= t.l) e.direct.resize(t.l + 1, complex(0.0, 0.0));
-    e.direct[t.l] += cI * t.c;
-    if (!spinDependent) continue;
-    if ((int)e.exchange.size() <= t.l) e.exchange.resize(t.l + 1, complex(0.0, 0.0));
-    // channel spins of two identical particles are integers (GetCoulombAmplitude(s))
-    e.exchange[t.l] += (((std::lround(2.0 * t.s) / 2) % 2 == 0) ? 1.0 : -1.0) * cI * t.c;
-  }
+  azure2::physics::ElasticInterference x;
+  // channel spins of two identical particles are integers (GetCoulombAmplitude(s))
+  const int above = azure2::physics::elastic_interference(rt_it_, point->GetGeometricalFactor(), pair->IsIdentical(),
+                                                          spinDependent, spinDependent ? pair->GetJ(1) : 0.0,
+                                                          Config::maxLOrder, x);
+  if (above >= 0)
+    throw std::runtime_error("elastic scattering of pair " + std::to_string(aa) + ": a channel with l = " +
+                             std::to_string(above) + " above the highest Legendre order " +
+                             std::to_string(Config::maxLOrder));
+  e.coulomb = x.coulomb;
+  e.cross = x.cross;
+  e.direct = std::move(x.direct);
+  e.exchange = std::move(x.exchange);
   return e;
-}
-
-/*!
- * Creates a new temporary T-Matrix element.
- */
-
-void GenMatrixFunc::NewTempTMatrix(TempTMatrix tempTMatrix) {
-  temp_t_matrices_.push_back(tempTMatrix);
-}
-
-void GenMatrixFunc::NewTempTMatrixE1(TempTMatrix tempTMatrix) {
-  temp_t_matrices_E1_.push_back(tempTMatrix);
-}
-
-void GenMatrixFunc::NewTempTMatrixE2(TempTMatrix tempTMatrix) {
-  temp_t_matrices_E2_.push_back(tempTMatrix);
-}
-
-/*!
- * Adds a value to the temporary T-Matrix element specified by its position in the TempTMatrix vector.
- */
-
-void GenMatrixFunc::AddToTempTMatrix(int tempTMatrixNum, complex tempValue) {
-  this->GetTempTMatrix(tempTMatrixNum)->TMatrix += tempValue;
-}
-
-void GenMatrixFunc::AddToTempTMatrixE1(int tempTMatrixNum, complex tempValue) {
-  this->GetTempTMatrixE1(tempTMatrixNum)->TMatrix += tempValue;
-}
-
-void GenMatrixFunc::AddToTempTMatrixE2(int tempTMatrixNum, complex tempValue) {
-  this->GetTempTMatrixE2(tempTMatrixNum)->TMatrix += tempValue;
-}
-
-/*!
- * Clears the temporary T-Matrices.
- */
-
-void GenMatrixFunc::ClearTempTMatrices() {
-  temp_t_matrices_.clear();
-}
-
-void GenMatrixFunc::ClearTempTMatricesE1() {
-  temp_t_matrices_E1_.clear();
-}
-
-void GenMatrixFunc::ClearTempTMatricesE2() {
-  temp_t_matrices_E2_.clear();
 }
 
 /*!
@@ -540,91 +421,6 @@ void GenMatrixFunc::AddECTMatrixElement(int kGroupNum, int mGroupNum, complex tM
   while (kGroupNum > ec_tmatrix_.size()) ec_tmatrix_.push_back(d);
   ec_tmatrix_[kGroupNum - 1].push_back(tMatrixElement);
   assert(mGroupNum == ec_tmatrix_[kGroupNum - 1].size());
-}
-
-/*!
- * Tests if a temporary T-Matrix element already exists for a given \f$ J,l,l' \f$ combination.
- * If the element exists, returns the position in the TempTMatrix vector, otherwise returns 0.
- */
-
-int GenMatrixFunc::IsTempTMatrix(double jValue, int lValue, int lPrimeValue) {
-  int d = 0;
-  bool e = false;
-  while (!e && d < this->NumTempTMatrices()) {
-    if (jValue == this->GetTempTMatrix(d + 1)->jValue &&
-        lValue == this->GetTempTMatrix(d + 1)->lValue &&
-        lPrimeValue == this->GetTempTMatrix(d + 1)->lpValue) e = true;
-    d++;
-  }
-  if (!e)
-    return 0;
-  else
-    return d;
-}
-
-int GenMatrixFunc::IsTempTMatrixE1(double jValue, int lValue, int lPrimeValue) {
-  int d = 0;
-  bool e = false;
-  while (!e && d < this->NumTempTMatricesE1()) {
-    if (jValue == this->GetTempTMatrixE1(d + 1)->jValue &&
-        lValue == this->GetTempTMatrixE1(d + 1)->lValue &&
-        lPrimeValue == this->GetTempTMatrixE1(d + 1)->lpValue) e = true;
-    d++;
-  }
-  if (!e)
-    return 0;
-  else
-    return d;
-}
-
-int GenMatrixFunc::IsTempTMatrixE2(double jValue, int lValue, int lPrimeValue) {
-  int d = 0;
-  bool e = false;
-  while (!e && d < this->NumTempTMatricesE2()) {
-    if (jValue == this->GetTempTMatrixE2(d + 1)->jValue &&
-        lValue == this->GetTempTMatrixE2(d + 1)->lValue &&
-        lPrimeValue == this->GetTempTMatrixE2(d + 1)->lpValue) e = true;
-    d++;
-  }
-  if (!e)
-    return 0;
-  else
-    return d;
-}
-
-/*!
- * Returns the number of temporary T-Matrix elements in the TempTMatrix vector.
- */
-
-int GenMatrixFunc::NumTempTMatrices() const {
-  return temp_t_matrices_.size();
-}
-
-int GenMatrixFunc::NumTempTMatricesE1() const {
-  return temp_t_matrices_E1_.size();
-}
-
-int GenMatrixFunc::NumTempTMatricesE2() const {
-  return temp_t_matrices_E2_.size();
-}
-
-/*!
- * Returns a pointer to the temporary T-Matrix element specified by a position in the TempTMatrix vector.
- */
-
-TempTMatrix *GenMatrixFunc::GetTempTMatrix(int tempTMatrixNum) {
-  TempTMatrix *b = &temp_t_matrices_[tempTMatrixNum - 1];
-  return b;
-}
-
-TempTMatrix *GenMatrixFunc::GetTempTMatrixE1(int tempTMatrixNum) {
-  TempTMatrix *b = &temp_t_matrices_E1_[tempTMatrixNum - 1];
-  return b;
-}
-
-TempTMatrix *GenMatrixFunc::GetTempTMatrixE2(int tempTMatrixNum) {
-  TempTMatrix *b = &temp_t_matrices_E2_[tempTMatrixNum - 1];
-  return b;
 }
 
 /*!
@@ -701,9 +497,9 @@ Site::AnalyzingPowerCoefficients GenMatrixFunc::AnalyzingPowerCoefficientsOf(con
                                : this->GetTMatrixElement(term->kGroup1, term->path1);
       complex T2 = term->isEC2 ? this->GetECTMatrixElement(term->kGroup2, term->path2)
                                : this->GetTMatrixElement(term->kGroup2, term->path2);
-      const complex prod = T1 * conj(T2);
-      if (term->ak != 0.0) a.denominator[term->kOrder] += term->ak * real(prod);
-      if (term->bk != 0.0) a.numerator[term->kOrder] += term->bk * (-imag(prod));  // Re(i T T'*)
+      // a_k Re(T T'*) and b_k Re(i T T'*)
+      azure2::physics::add_capture_ay_term(term->ak, term->bk, T1, T2, a.denominator[term->kOrder],
+                                           a.numerator[term->kOrder]);
     }
     return a;
   }
@@ -748,9 +544,6 @@ void GenMatrixFunc::BuildCoulombInterference(const azure2::EntrancePathways &P, 
   // and is never elastic.
   for (int n = 0; n < exit.num_diagonal; n++) {
     const azure2::DiagonalPathway &d = P.diagonal[exit.first_diagonal + n];
-    size_t i = 0;
-    while (i < rt_it_.size() && !(rt_it_[i].s == d.s && rt_it_[i].l == d.l)) i++;
-    if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{d.s, d.l, complex(0.0, 0.0)});
-    rt_it_[i].c += d.statSpin * conj(this->GetTMatrixElement(d.k, d.m));
+    rt_it_.add(d.s, d.l, d.statSpin, this->GetTMatrixElement(d.k, d.m));
   }
 }

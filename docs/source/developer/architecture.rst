@@ -69,6 +69,20 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    whole project (``ReadFormat3Project``, ``ProjectReader.h``). It must not
    know the engine.
 
+``inference/`` (``azure2_inference``)
+   The fit's parameter vector as plain data and the arithmetic of the
+   objective that needs no engine object: the kinds of parameter and the
+   record of one parameter (``ParameterKind.h``), the layout of the level
+   block (``LevelParameterLayout.h``), the place of every parameter in the
+   full and the packed vector (``ParameterIndexMap.h``), the limits as the
+   posterior's support (``PosteriorSupport.h``), one Gaussian prior
+   (``GaussianPrior.h``), the prior covariance with its file grammar
+   (``PriorCovariance.h``) and the sums of an ordered list of terms
+   (``TermList.h``). It links nothing and builds as a project of its own. The
+   engine names its types through ``include/InferenceTypes.h``; the values of
+   the vector (``AZUREParams``, on Minuit2's parameters), the terms of the
+   objective and the fitters are engine code.
+
 ``convert/`` (``azure2_convert``, ``azure2_convert_specs``, ``azure2_convert_lines``)
    Everything that knows the old project formats: their line parsers
    (header-only ``azure2_convert_lines``), the converter to format 3
@@ -80,7 +94,7 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    The engine: the compound system (``CompoundSystem``), the data set and its working
    copies (``DataSet``, ``WorkingCopy``), the set-up of meshes and target
    effects, the point pass and the level-matrix routes, the model pass, the
-   objective (``src/Objective.cpp``), the gradients, the fitters' adapters,
+   objective's terms (``src/Objective.cpp``), the gradients, the fitters' adapters,
    the output files. It links every library above, Minuit2, GSL and BLAS.
    ``src/AZURE2.cpp`` (``main``) and ``src/ProjectCommands.cpp`` (the project
    commands ``--convert``, ``--validate``, ``--describe``, ``--schema``) make
@@ -119,8 +133,9 @@ and every test imports pyazr from the checkout. A user's ``pip install .`` (or
 ``pip wheel .``) goes through ``pyproject.toml``: scikit-build-core runs the
 same CMake files with the option set of a wheel (``BUILD_TESTING`` off, the
 vendored sampler on; targets ``_azure2`` and ``AZURE2``),
-installs the module into the package and the program into the wheel's scripts
-(the install rules of component ``python``, keyed on ``SKBUILD``), and copies
+installs the module into the package and the program into ``pyazr/bin``
+(the install rules of component ``python``, keyed on ``SKBUILD``; the console
+script ``AZURE2`` of ``pyazr/program.py`` runs it), and copies
 the package directory as it is, less ``wheel.exclude``. The package finds its
 data files next to its own modules; ``pyazr/datafiles.py`` lists them. The
 workflow ``.github/workflows/wheels.yml`` builds and tests wheels for Linux
@@ -236,7 +251,8 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    (``src/EnergyPass.cpp``): ``CalculationPlan::EnergyTasks`` groups every
    unit (a point, or a slot of a folded point) by compound nucleus, route and
    energy; each energy task runs ``SolveAtOneEnergy``: the level matrix is
-   filled and factored once (``AMatrixFunc``, ``LevelMatrixSolver``; the
+   filled and factored once (``AMatrixFunc`` calling ``physics/``'s
+   ``CollisionMatrix.h``, ``LevelMatrixSolver.h`` and ``ChannelSolve.h``; the
    channel-matrix route ``RMatrixFunc`` when the A-matrix is off), a T-matrix
    is built once per (entrance, exit) group and every unit's observable is
    written into its record of ``Results``. Then each folded point is folded
@@ -250,7 +266,9 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``Results::model``.
 
 6. **Objective.** ``Objective::Engine().Chi2`` (``src/Objective.cpp``) sums
-   the ordered list of terms over an ``ObjectiveContext``: the data
+   the ordered list of terms (``azure2::inference::TermList``, whose order
+   is the order of the floating-point additions) over an
+   ``ObjectiveContext``: the data
    :math:`\chi^2` with each segment's priors, the data covariance, the
    nuisance priors, Park's :math:`J > 0` wall, the apparatus and abundance
    priors, the model data, the prior covariance.
@@ -258,7 +276,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    *Program*: steps 3 to 6 are ``AZURECalc::operator()``
    (``src/AZURECalc.cpp``), Minuit2's function; during a fit each evaluation
    takes a pooled copy of the run's ``LevelState`` and of the working copy with its own
-   ``Results`` (``AZURECalc::GetPooledState``, ``GetPooledData``). *pyazr*:
+   ``Results`` (``AZURECalc::GetPooledState``, ``GetPooledData``; ``src/AZURECalcPool.cpp``). *pyazr*:
    ``Session.objective()`` is ``AZUREAPI::CalculateObjectiveRWA`` as an object for a fitter or sampler
    (``pyazr.Objective``), which runs the same hand-over, point pass, model pass and ``Objective::Engine()`` on
    the session's own objects, and
@@ -272,7 +290,7 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    function, ``FitResult run(AZURECalc &, AZUREParams &, const FitControl &)``:
    ``FitMigrad`` and ``FitMigradGradient`` (``src/FitMigrad.cpp``: Minuit2's
    ``MnMigrad``, the second with the analytic gradient
-   ``AZURECalc::Gradient``, the reverse-mode adjoint of ``src/AZUREGrad.cpp``
+   ``AZURECalc::Gradient`` (``src/AZURECalcGradient.cpp``), the reverse-mode adjoint of ``src/AZUREGrad.cpp``
    and ``src/GradEnergyTasks.cpp``, and the rerun with a re-frozen relvector
    data covariance), ``FitLevenbergMarquardt`` (``src/FitLeastSquares.cpp``)
    and ``FitGslTrustRegion`` (``src/FitGslTrustRegion.cpp``) on the residual
@@ -291,8 +309,12 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    intermediate files through ``ProgramProgress``, then HESSE for the band,
    MINOS, ``fitStatus.out``, ``covariance_matrix.out`` and ``param.sav``.
    The sampler is ``runMCMC`` (``src/AZURE2.cpp``), which sets up its own
-   ``CompoundSystem`` and ``WorkingCopy`` and runs ``AZURECalcMCMC::RunMCMCSampling`` on
-   ``nu::Mcmc``. *pyazr*: ``Session.fit_with_engine`` runs a row on the
+   ``CompoundSystem`` and ``WorkingCopy`` and calls ``RunSampler``
+   (``src/SamplerRun.cpp``: the start vector, the priors of ``<mcmc>``,
+   ``AZURECalcMCMC::RunMCMCSampling``, ``src/AZURECalcMCMCRun.cpp``, on
+   ``nu::Mcmc``); a session calls the same function
+   (``Session.sample_with_engine``, ``api/src/AZUREAPISampler.cpp``). *pyazr*:
+   ``Session.fit_with_engine`` runs a row on the
    session (``AZUREAPI::FitWithEngine``, ``api/src/AZUREAPIFit.cpp``; the
    binding releases the GIL), or the fit is Python's (SciPy or iminuit on
    ``Session.objective().value_and_grad``), with the same gradient through

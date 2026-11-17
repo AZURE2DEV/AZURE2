@@ -477,9 +477,10 @@ def main():
     ap.add_argument("--binary", default=os.environ.get("AZURE2_BINARY", ""), help="AZURE2 (default $AZURE2_BINARY)")
     ap.add_argument("--asimov", metavar="OUTDIR", help="write noiseless data to OUTDIR instead")
     args = ap.parse_args()
-    if not args.binary or not os.access(args.binary, os.X_OK):
+    found = shutil.which(args.binary) if args.binary else None  # which(): on Windows the path may lack its .exe
+    if not found:
         sys.exit("set AZURE2_BINARY or pass --binary path/to/AZURE2")
-    binary = os.path.abspath(args.binary)
+    binary = os.path.abspath(found)
     rng = np.random.default_rng(SEED)
     tmp = tempfile.mkdtemp(prefix="t2gen.")
     try:

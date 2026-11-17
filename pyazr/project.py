@@ -755,7 +755,7 @@ def records_from_csv(path, kind="dataset", project=None):
     """
     import csv
     engine = _engine_module()
-    with open(path, newline="") as f:
+    with open(path, newline="", encoding="utf-8") as f:
         lines = [(n, row) for n, row in enumerate(csv.reader(f), start=1)
                  if any(c.strip() for c in row) and not row[0].lstrip().startswith("#")]
     if not lines:

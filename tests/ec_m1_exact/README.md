@@ -39,6 +39,7 @@ in Canton and Levchuk, arXiv:0805.2667, Eqs. 33 and 39-41. The script writes `ex
 | (m) | an `intEC.dat` from before the M1 spin-term fix (`models/stale_v2`, case (k) by dev 823369d) is not reused | identical to fresh |
 | (n), (o) | p+14N M1 from p-waves into a p-wave state: orbital + spin terms; orbital term alone (g = 0) | 2e-5 |
 | (p) | an `intEC.dat` from before the M1 orbital-term fix (`models/stale_v3`, case (n) by dev c23a2d3) is not reused | identical to fresh |
+| (u) | an `intEC.dat` of signature v7 (`models/stale_v7`, p14n_s1 by feature/upgrade 01a701ad, before the neutral F of `coulomb.md` section 10) is not reused | identical to fresh |
 
 AZURE2 agrees with the truth to about 1e-8.
 

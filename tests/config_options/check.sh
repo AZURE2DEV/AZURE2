@@ -11,6 +11,7 @@
 #      --use-rmc on a project with use_brune=1 (a flag against a key: refused by the run, the sources named).
 #      Contradicting flags without a key (--use-rmc alone, --use-park with --no-brune in either order,
 #      --no-ec-convection-current alone): refused by the run with what, allowed and the fix in flags.
+#      The removed option use_gsl_coul: the key (either value) by --validate and the run, the flag by the run.
 #   4. --describe: each option's value and source (default, project, command line), for every project, text and --json.
 #
 #   ./tests/config_options/check.sh path/to/AZURE2
@@ -93,8 +94,6 @@ ec_convection_current 1 --ec-convection-current 0 -
 ec_convection_current 0 --no-ec-convection-current 1 use_long_wavelength=0:--no-long-wavelength
 use_rmc 0 - 0 -
 use_rmc 1 --use-rmc 1 use_brune=0:--no-brune
-use_gsl_coul 0 - 0 -
-use_gsl_coul 1 --gsl-coul 0 -
 use_coulomb_table 1 --coulomb-table 0 -
 use_coulomb_table 0 --no-coulomb-table 0 -
 use_ec_table 1 --ec-table 0 -
@@ -102,7 +101,7 @@ use_ec_table 0 --no-ec-table 1 -
 replace_grids 1 --grid-replacement 0 -
 replace_grids 0 --no-grid-replacement 0 -
 ROWS
-[ "$n" = 22 ] && ok "22 cases: every option, both values" || bad "$n cases, expected 22"
+[ "$n" = 20 ] && ok "20 cases: every option, both values" || bad "$n cases, expected 20"
 
 # 2. a flag wins over the key
 with_keys "$WORK/brune0.azr" "use_brune=0"
@@ -129,6 +128,23 @@ with_keys "$WORK/badvalue.azr" "use_brune=yes" && refused badvalue E_CONFIG_OPTI
 with_keys "$WORK/parkbrune.azr" "use_park=1" "use_brune=0" && \
   refused parkbrune E_CONFIG_OPTIONS_CONTRADICT "use_park=1 (this file)" "use_brune=0 (this file)"
 with_keys "$WORK/rmc.azr" "use_rmc=1" && refused rmc E_CONFIG_OPTIONS_CONTRADICT "use_rmc=1 (this file)" "use_brune=1 (the default)"
+# The removed option use_gsl_coul (2026-11-16; until then two rows of the table above, key = flag for both values): the
+# key with either value, and the flag, are refused with the one message that says why and what to do.
+GSL_WHY="wrong by up to 5 % in the penetrability inside the outer turning point"
+for value in 0 1; do
+  with_keys "$WORK/gslkey$value.azr" "use_gsl_coul=$value" && \
+    refused "gslkey$value" E_CONFIG_KEY_REMOVED "use_gsl_coul is no longer a key of <config>: delete the line." "$GSL_WHY"
+done
+run gslflag "$T1/T1.azr" --gsl-coul
+if [ "$rc" = 2 ] && [ ! -s "$WORK/gslflag/output/chiSquared.out" ] \
+   && grep -qF -- "--gsl-coul is no longer an option of AZURE2: leave it out." "$WORK/gslflag/run.log" \
+   && grep -qF -- "$GSL_WHY" "$WORK/gslflag/run.log"; then
+  ok "--gsl-coul: refused (exit 2, no output), saying why and to leave it out"
+else
+  bad "--gsl-coul: exit $rc, $(sed -n 1,3p "$WORK/gslflag/run.log")"
+fi
+described="$("$AZURE2_BIN" --describe "$T1/T1.azr" 2>&1)"
+grep -q "use_gsl_coul" <<< "$described" && bad "--describe still lists use_gsl_coul" || ok "--describe does not list use_gsl_coul"
 with_keys "$WORK/brune1.azr" "use_brune=1"
 v="$(cd "$WORK" && "$AZURE2_BIN" --validate brune1.azr 2>&1)"; vrc=$?
 run flagkey "$WORK/brune1.azr" --use-rmc
@@ -170,13 +186,13 @@ else
   bad "--describe: $(printf '%s' "$d" | grep -A12 'options of the calculation')"
 fi
 d0="$(cd "$WORK/base" && "$AZURE2_BIN" --describe T1.azr 2>&1)"
-if [ "$(printf '%s\n' "$d0" | grep -A11 -F "options of the calculation (value, source):" | grep -c ' (default)$')" = 11 ]; then
-  ok "--describe of T1 alone: the options block, all eleven at their default"
+if [ "$(printf '%s\n' "$d0" | grep -A10 -F "options of the calculation (value, source):" | grep -c ' (default)$')" = 10 ]; then
+  ok "--describe of T1 alone: the options block, all ten at their default"
 else
-  bad "--describe of T1 alone: no options block with the eleven defaults"
+  bad "--describe of T1 alone: no options block with the ten defaults"
 fi
 dj="$(cd "$WORK/k2" && "$AZURE2_BIN" --describe T1.azr --json 2>/dev/null)"
-printf '%s' "$dj" | python3 -c 'import json,sys; d=json.load(sys.stdin); o=d["options"]; sys.exit(0 if o["use_brune"]=={"value": False, "source": "project"} and len(o)==11 else 1)' \
+printf '%s' "$dj" | python3 -c 'import json,sys; d=json.load(sys.stdin); o=d["options"]; sys.exit(0 if o["use_brune"]=={"value": False, "source": "project"} and len(o)==10 else 1)' \
   && ok "--describe --json: options with value and source" || bad "--describe --json: no options member"
 
 echo

@@ -70,7 +70,7 @@ Session options
 ---------------
 
 ``Session(file, *, cwd=None, extrapolations=False, use_brune=True, ignore_externals=True, transform=True,
-use_long_wavelength=True, use_gsl_coul=False, use_rmc=False, use_park=False, ...)`` takes the runtime options of the
+use_long_wavelength=True, use_rmc=False, use_park=False, ...)`` takes the runtime options of the
 CLI (:doc:`../reference/command_line`) as keywords.  All but ``cwd``, ``extrapolations`` and ``coulomb_table`` are also
 keys of the project's ``<config>`` under the same name (:ref:`options-as-config-keys`): a keyword given wins over the
 key, the key over the default the signature shows, and a keyword left out is not given.  ``session.options`` holds the
@@ -546,6 +546,53 @@ the recipes above for a minimiser of your choice, for bounds as walls, for the s
 larger Python computation.  The program's MIGRAD stops at its EDM goal (on T2 9e-4 above the minimum that scipy's
 least squares finds); ``lm`` or the scipy recipes go further.
 
+The engine's own sampler
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``s.sample_with_engine(walkers, steps, sampler_threads=1, basis="rwa", parameter_spread=5.0, energy_spread=1.0,
+overwrite_samples=False, x0=None, progress=None, stop=None)`` runs the program's ensemble sampler (``AZURE2 mcmc``,
+:doc:`mcmc`) on the session, in the process, through the engine function the command calls. The keywords are the
+command's options with its ranges (``--walkers`` 2 to 1000, ``--steps`` 100 to 10\ :sup:`7`, ``--sampler-threads``,
+``--basis=rwa|physical``, ``--parameter-spread`` in percent, ``--energy-spread`` in keV, ``--overwrite-samples``;
+:doc:`../reference/command_line`); a value outside its range is refused with the command line's words. The command
+has no seed, burn-in or thinning option and the call has none: the sampler's seed is fixed in the engine, so the
+same call gives the same chain, and every step is kept (cut the burn-in from the array). ``x0`` (a fit vector,
+default ``parameters.x0``) is the start, what ``--parameter-file`` is to the command; a session made with
+``parameter_file=`` starts from that file, its fixed values included. The Gaussian priors are the engine's and the
+rows of the project's ``<mcmc>`` section.
+
+It returns an ``EngineSampleResult``: ``chain`` with the shape (steps, walkers, parameters), the last axis in the
+order of ``names`` and in the units of ``basis``; ``log_prob``, ``log_likelihood`` and ``log_prior`` with the shape
+(steps, walkers); ``status`` (``"completed"`` or ``"stopped"``); ``samples_file``, ``walkers_file``,
+``output_dir``; ``log`` (the sampler's lines: its table of parameters and priors, the acceptance fraction, its
+warnings). The arrays are ``samples.mcmc`` read back by the engine: the file has 17 digits, so they are the numbers
+the sampler held, every step of the file (those of an earlier run that this one continued included). As the
+command, the call writes into the session's output directory: ``samples.mcmc``, ``walkers.mcmc`` and, every 10
+steps, the best walker's output files and ``param.mcmc``; with ``overwrite_samples=False`` (the command's default)
+an existing ``samples.mcmc`` is continued. The session's parameter values are not changed. ``progress`` is called
+after every step with ``step``, ``steps``, ``log_prob``, ``log_likelihood`` and ``log_prior`` of the step's best
+walker; ``stop`` (a ``pyazr.session_fit.StopRequest`` or a ``threading.Event``) is looked at after every step and
+ends the run there with status ``"stopped"``, the files complete to that step. A run the sampler refuses (no walker
+of the start ensemble with a finite probability, a row of ``<mcmc>`` that names no parameter) raises
+``pyazr.EngineError`` with the sampler's words.
+
+.. code-block:: python
+
+   s = pyazr.Session("T3.azr")
+   r = s.sample_with_engine(walkers=20, steps=500, sampler_threads=2, overwrite_samples=True)
+   draws = r.chain[200:].reshape(-1, len(r.names))       # after a burn-in of 200 steps
+   print(dict(zip(r.names, draws.mean(axis=0))), r.log_prob.max())
+
+On the test projects T1 and T3 the files and the arrays are the command's, byte for byte and number for number, at
+one and at two sampler threads, in both bases and under Park, from a parameter file and from ``x0``, with a prior of
+``<mcmc>`` and for a continued chain (``tests/pyazr/sample_with_engine_test.py``). Not offered: the command's
+``--capture-amplitudes`` (a session computes its external-capture amplitudes), and two cases the sampler cannot be
+given a session's values for, each refused with the reason: a project with ``gamma_decay`` records started from
+values that are not the project's, and a parameter file whose fixed normalizations or energy shifts are not the
+project's. Which to use: ``sample_with_engine`` for the program's chain without a subprocess; ``objective().log_prob``
+with emcee or a gradient sampler (``fit_emcee.py``, the skill ``azure2-uncertainty``) for a sampler of your choice,
+its diagnostics and a seed.
+
 Editing the model
 -----------------
 
@@ -1006,18 +1053,46 @@ Dimensionless widths
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf units are the corresponding sanity
 check for capture. AZURE2's Wigner limit (``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
 Teichmann-Wigner sum-rule unit 3ħ²/(2μa²) (``pyazr.physics.wigner_limit``); a θ² quoted against the other common
-unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``) is pyazr's one physics
-formula of its own (the engine has none); every other number of the table is the engine's.
+unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``, in eV) is the engine's
+too, the row ``weisskopf_width`` of :doc:`physics_functions` (two-digit textbook coefficients for
+:math:`R = 1.2\,A^{1/3}` fm): every number of the table is the engine's.
 
-The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, the denominator of θ²) is the
-engine's transformation of a probe vector: ``x`` with every free particle amplitude set to a small ``eps`` and every
-free photon amplitude to 0, transformed by ``azr.transform``, each channel's :math:`|\Gamma_c|/\epsilon^2` times
-:math:`\gamma_W^2`.  It is the single-channel :math:`2P_l(E_\lambda)\gamma_W^2` (P from ``channel_functions`` at the
-level energy) when the probe makes the level's shift denominator 1 and leaves the levels of a J-group unmixed: in the
-Brune basis, for a level whose particle widths are all free (T1, 13N: equal to :math:`5\cdot10^{-9}`).  It is not where a
-level has fixed nonzero widths (their shift terms stay: T2, 0.80--0.99 of :math:`2P\gamma_W^2`) or where the levels
-of a J-group mix through the probe (the formal basis, closed channels: T2 formal up to :math:`8\cdot10^3`, 17O from
-0.05 to :math:`10^4`).
+The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
+denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the
+channel's Wigner limit, :math:`P_l` the penetrability the engine formed the observed width with (the session's own
+channel functions, as ``channel_functions`` gives them: its Coulomb table, or the hybrid model's solution for a pair
+with a nuclear potential) at the channel radius, and :math:`E_r` the pair's c.m. energy at the level's physical
+energy (the level's row of ``azr.transform(x)``, the observed energy written into ``<levels>``).  It is the same
+number in Brune's, the formal and Park's parametrization of one level scheme.  Free particle channels that are open
+at :math:`E_r` have an entry; a closed channel (an ANC, not a width), a photon channel and a fixed channel have none.
+``dimensionless_widths`` gives ``wigner_width`` and ``theta2`` (with the row's ``value`` as Γ) of free and fixed open
+particle channels alike, and its ``level_energy``, ``is_open`` and a photon's ``e_gamma`` (with the W.u. that follow)
+are taken at the level's physical energy in every parametrization; a closed channel has ``theta2`` ``None``, a fixed
+one ``theta2_formal`` ``None``.  Every row's ``value``, free and fixed, is the physical value at ``x``, the row of
+``azr.transform(x)``: a fixed channel holds its reduced-width amplitude, so under Brune's and the formal
+parametrization its observed width moves with the level's other widths, and in every parametrization with the
+level's energy (through :math:`P_l`); its ``theta2`` (and a photon's ``wu``) are formed with that value.
+
+.. note::
+
+   Before pyazr 3.0.0.dev5 ``wigner_widths`` was a probe of the engine's transformation (every free amplitude set to
+   a small ``eps``).  It was :math:`2P\gamma_W^2` under Park and for a Brune level whose particle widths are all
+   free; for a Brune level with fixed widths it was smaller by :math:`1/(1+\sum_c\gamma_c^2\,dS_c/dE)` of them
+   (0.80--0.99 on the test project T2), so θ² came out larger by that factor; in the formal basis it was not a
+   property of the channel (up to :math:`8\cdot10^3` times :math:`2P\gamma_W^2` on T2).  A θ² of a level with fixed
+   widths, or of a formal-basis session, from an older build should be recomputed.  ``eps`` is still accepted and
+   is ignored.
+
+.. note::
+
+   Before pyazr 3.0.0.dev6 ``dimensionless_widths`` left ``wigner_width`` and ``theta2`` of a fixed open particle
+   channel ``None``, and in the formal basis (``use_brune=False``) it reported ``level_energy`` as the formal pole
+   energy of the fit vector and took ``is_open`` and a photon's ``e_gamma`` (and so ``weisskopf`` and ``wu``) there,
+   not at the physical level energy.  A fixed channel's ``value`` (and so its ``theta2`` and a photon's ``wu``) was
+   its value as the session was made (``Parameter.value``), not at ``x``: equal at ``parameters.x0``, off by up to
+   21 % on the test project T2 for a vector away from it (Brune; in the formal basis a fixed zero amplitude read 0
+   where its observed width is not).  A formal-basis table, or a table at a vector other than ``parameters.x0``
+   (a fit result), from an older build should be recomputed.
 
 The external region, and the caches
 -----------------------------------
@@ -1049,6 +1124,74 @@ the domain raises ``pyazr.DomainError``, or with ``errors="mask"`` gives NaN and
 :doc:`physics_functions` lists them; ``pyazr.kinds()["physics"]`` gives the same rows as data.  Where the session's
 own setting matters (its Coulomb table, GSL, a nuclear potential), ``azr.channel_functions(pair, e_cm, l)`` gives F,
 G, their derivatives, P, S and the hard-sphere phase shift of one of its pairs.
+
+The collision matrix needs no session either.  ``pyazr.physics.collision_matrix`` takes the levels of one
+:math:`J^\pi` block (energies, reduced-width amplitudes of shape levels x channels) and the channel functions at one
+energy, and returns the level matrix ``A`` and the collision and T-matrices ``U``, ``T`` as complex arrays: the
+engine's own arithmetic (``physics/CollisionMatrix.h``), one factorization and one solve per channel.  It is not a
+row of the table, because its arguments are matrices; ``help(pyazr.physics.collision_matrix)`` has the formulae.
+
+.. code-block:: python
+
+   from pyazr import physics as ph
+   pair = dict(z1=1, z2=6, m1_u=1.00782503, m2_u=12.0)       # p + 12C, l = 0, a = 3.4 fm
+   P = ph.penetrability(0, radius=3.4, e_cm=0.4, **pair)
+   S = ph.shift(0, radius=3.4, e_cm=0.4, **pair)
+   phi = ph.hard_sphere_phase(0, radius=3.4, e_cm=0.4, **pair)
+   m = ph.collision_matrix([2.37], [[0.61]], 2.35,           # one level at 2.37 MeV, gamma = 0.61 MeV^1/2
+                           penetrability=[P], shift=[S], boundary=[S], hard_sphere_phase=[phi])
+   delta = np.angle(m["U"][0, 0]) / 2                        # the nuclear phase shift (rad)
+
+``parametrization`` says what the levels are, and each choice names the arrays its level matrix reads:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 46
+
+   * - ``parametrization``
+     - Levels
+     - Arrays besides the channel functions at the energy
+   * - ``"formal"`` (default)
+     - formal energies :math:`E_\lambda` (MeV) and amplitudes :math:`\gamma_{\lambda c}` (MeV\ :sup:`1/2`)
+     - ``boundary``: :math:`B_c`, one per channel
+   * - ``"brune"``
+     - observed energies and Brune's amplitudes (Brune, Phys. Rev. C 66, 044611 (2002))
+     - ``shift_at_levels``: :math:`S_c(E_\lambda)`, levels x channels, dimensionless
+   * - ``"park"``
+     - observed energies and the amplitudes of the observed widths,
+       :math:`\Gamma_{\lambda c} = 2 P_c \gamma_{\lambda c}^2` (Park, Phys. Rev. C 104, 064612 (2021))
+     - ``shift_at_levels`` and ``park_norms``:
+       :math:`J_\lambda = 1 - \sum_c \gamma_{\lambda c}^2\, dS_c/dE` at :math:`E_\lambda`, one per level
+
+``boundary`` belongs to the formal levels only; the other two matrices do not contain it and the call refuses it.
+Two levels closer than :math:`10^{-6}` MeV also need ``shift_derivative_at_levels_per_MeV``
+(:math:`dS_c/dE` at each level energy, MeV\ :sup:`-1`).  ``photon_channels`` marks the photon channels of the
+block (True per channel): a photon channel has no shift function, boundary value or phase (each must be 0 there),
+its widths are not in the level matrix, and its ``penetrability`` is the factor between :math:`\gamma^2` and the
+width, for which the engine takes :math:`(E_\gamma/\hbar c)^{2L+1}` (the row ``photon_penetrability``).
+``use_rmc`` adds the Reich-Moore term of each photon channel (formal levels only).  The three parametrizations of
+one block give the same ``U``.  For the levels of a session, ``describe()["parameters"]`` holds the energies and
+amplitudes of its parametrization (``start``), ``channel_functions`` the shift function at any energy and
+``park_norms()`` Park's :math:`J_\lambda`; ``tests/pyazr/collision_matrix_session_test.py`` rebuilds phase shifts
+and cross sections of T1, T2 and T3 this way and finds the session's values to at least 11 digits.
+
+Elastic scattering in an optical potential needs no session either: ``pyazr.physics.optical_scattering`` solves
+the distorted waves of ``physics/transfer`` (the waves of the THM distortion) for a projectile of spin 0, 1/2 or 1
+and returns the nuclear S-matrix element of each partial wave, the Coulomb phases, the elastic cross section over
+Rutherford's at the c.m. angles asked for (mb/sr for a neutral pair) and the reaction cross section in mb.  The
+potential is a dict of Woods-Saxon terms ``(depth in MeV, r0 in fm, diffuseness in fm)`` with one radius
+convention; ``help(pyazr.physics.optical_scattering)`` has the formula and the members.  The numbers agree with
+FRESCO 3.5 to :math:`10^{-5}` in S and :math:`5 \times 10^{-5}` in the ratio on three cases
+(``tests/pyazr/optical_scattering_test.py``).
+
+.. code-block:: python
+
+   potential = dict(radius_convention="target_mass", target_mass_number=15, coulomb_r0_fm=1.25,
+                    real_volume=(50.0, 1.2, 0.65), imaginary_surface=(6.0, 1.3, 0.5),
+                    real_spin_orbit=(6.0, 1.1, 0.6))
+   w = ph.optical_scattering(1, 7, 1.00782503, 15.0001089, 4.6875, potential,      # p + 15N, E_cm in MeV
+                             angles_deg=np.arange(10.0, 181.0, 5.0), projectile_spin=0.5)
+   w["ratio_to_rutherford"], w["reaction_mb"], w["S"]
 
 The bound-channel Whittaker function needs no session: ``pyazr.whittaker_wave(l, eta_b, rho)`` returns
 :math:`W_{-\eta_b,l+1/2}(2\rho)` (unit ANC, :math:`W \sim e^{-\rho}(2\rho)^{-\eta_b}`) on broadcast arrays of the
@@ -1096,8 +1239,8 @@ The sessions of one process share a cache of the input files: a new session (of 
 radius or potential, say) reads from disk only the files that changed (the ``input_files_*`` counters of
 ``cache_stats()``, for the whole process).
 
-The Coulomb functions follow the run's own configuration, so the same call returns the accurate routine's values,
-GSL's (``--gsl-coul``), or the Numerov solution through a nuclear potential (the hybrid model of the ``<potential>``
+The Coulomb functions follow the run's own configuration, so the same call returns the exact routine's values,
+the Coulomb table's, or the Numerov solution through a nuclear potential (the hybrid model of the ``<potential>``
 block). Comparing them is how one sees what those options do to the external region.
 
 The hybrid values come from a Numerov integration of H⁺ = G + iF inward from

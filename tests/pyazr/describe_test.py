@@ -143,7 +143,7 @@ check("options: one per field of the binding's RuntimeOptions that is not projec
 _, config_keys = _azure2.config_keys()
 check("options: the others are bool keys of <config>, under their keyword",
       all(o["key"] == kw and (kw, "bool") in [(n, t) for n, t, _ in config_keys]
-          for kw, o in k["options"].items() if o["key"]) and sum(1 for o in k["options"].values() if o["key"]) == 11)
+          for kw, o in k["options"].items() if o["key"]) and sum(1 for o in k["options"].values() if o["key"]) == 10)
 init = inspect.signature(pyazr.Session.__init__).parameters
 check("options: each is a keyword of pyazr.Session", all(kw in init for kw in k["options"]),
       [kw for kw in k["options"] if kw not in init])

@@ -11,6 +11,7 @@
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_spline.h>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -371,6 +372,7 @@ void RunPerTemperatureRateCalculation(const std::vector<double> &temps,
   time_t startTime = time(NULL);
 #pragma omp parallel
   {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     const LevelState localState(state);  // the thread's copy of the rate's levels
     const Config localConfigure = configure;
 #pragma omp for schedule(dynamic)
@@ -414,6 +416,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   time_t startTime = time(NULL);
 #pragma omp parallel
   {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     const LevelState localState(state);  // the thread's copy of the rate's levels
     const Config localConfigure = configure;
 #pragma omp for schedule(dynamic)
@@ -532,6 +535,7 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
   time_t startT2 = time(NULL);
 #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < nT; ++i) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     double T = temps[i];
     double integral = IntegrateSplineRate(spline, eMin, eMax, T, lnE);
     double rate = 1e-24 * avagadroNum * lightSpeedInCmPerS *

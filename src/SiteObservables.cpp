@@ -264,16 +264,16 @@ void Site::ValuesWith(const azure2::RowSet &set, int k, const azure2::Results &r
 }
 
 void Site::CoulombAt(int slot, complex &direct, complex &exchange) const {
-  if (slot > 0 && rowset_ && !rowset_->coulomb.empty()) {
-    rowset_->CoulombAt(rowset_at_ + slot - 1, direct, exchange);
+  if (slot > 0 && values_.rowset && !values_.rowset->coulomb.empty()) {
+    values_.rowset->CoulombAt(values_.rowset_at + slot - 1, direct, exchange);
     return;
   }
   if (slot > 0 && Observable() == SiteObservable::kElastic) {
       throw std::logic_error("Site::CoulombAt: a reader of elastic slots without their Coulomb amplitudes (segment " +
                              std::to_string(segment_key_) + "): it has no row set (WorkingCopy::BuildRowSets)");
   }
-  direct = coulombamplitude_;
-  exchange = spinDependentCoulomb_ ? coulombexchange_ : complex(0.0, 0.0);
+  direct = values_.coulombamplitude;
+  exchange = values_.spinDependentCoulomb ? values_.coulombexchange : complex(0.0, 0.0);
 }
 
 void Site::SetLegendreCoefficients(azure2::Results &results, const vector_r &coefficients) const {

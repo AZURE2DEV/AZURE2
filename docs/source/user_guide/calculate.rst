@@ -143,7 +143,7 @@ Minimizer Selection
    GSL's trust-region least squares with geodesic acceleration (CLI
    ``--use-gsl-lm``); falls back to MIGRAD likewise.
 
-**NLopt** (if built with ``USE_NLOPT``)
+**NLopt** (if built with ``USE_NLOPT``; CLI ``--use-nlopt``)
    Alternative minimizer with several algorithms:
    SBPLX, COBYLA, BOBYQA, NEWUOA, PRAXIS, Nelder-Mead.
 

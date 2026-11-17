@@ -43,7 +43,7 @@ except (ImportError, OSError, TypeError):  # pragma: no cover
     _LIBC = None
 
 
-def _flush_c_stdout():
+def flush_c_stdout():
     """Flush the C library's buffer of standard output (the engine's C++ stream writes through it)."""
     try:
         if _LIBC is not None:
@@ -143,7 +143,7 @@ def held():
     with _lock:
         if _depth == 0:
             _flush_python_stdout()
-            _flush_c_stdout()
+            flush_c_stdout()
             try:
                 saved = os.dup(1)
             except OSError:
@@ -154,7 +154,7 @@ def held():
                 _python = _python_stdout_to(saved)
             _saved = saved
         else:
-            _flush_c_stdout()
+            flush_c_stdout()
         start = os.lseek(_sink.fileno(), 0, os.SEEK_CUR) if _sink is not None else 0
         _depth += 1
     refused = False
@@ -168,7 +168,7 @@ def held():
         with _lock:
             _depth -= 1
             _flush_python_stdout()
-            _flush_c_stdout()
+            flush_c_stdout()
             if _sink is not None:
                 fd = _sink.fileno()
                 end = os.lseek(fd, 0, os.SEEK_CUR)

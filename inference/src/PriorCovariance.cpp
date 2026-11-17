@@ -1,13 +1,22 @@
-#include "PriorCovariance.h"
-#include "Config.h"
-#include "InputFiles.h"
+// The prior parameter covariance: the file's grammar, the set-up on a run's vector and the arithmetic
+// (azure2/inference/PriorCovariance.h).
+#include "azure2/inference/PriorCovariance.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <map>
 #include <sstream>
 
+namespace azure2 {
+namespace inference {
+
 namespace {
+
+using std::size_t;
+
+// pi to the digits of a double (the value of M_PI, which the C++ standard does not name).
+constexpr double kPi = 3.14159265358979323846;
 
 // strtod over the whole token ("nan" / "inf" are refused: a prior has finite numbers).
 bool Number(const std::string &token, double &v) {
@@ -48,22 +57,9 @@ std::string Trim(const std::string &s) {
 
 }  // namespace
 
-std::string PriorCovariance::ResolvePath(const Config &configure) {
-  const std::string &p = configure.priorCovariance;
-  if (p.empty() || p[0] == '/') return p;
-  const size_t slash = configure.configfile.find_last_of('/');
-  if (slash == std::string::npos) return p;
-  return configure.configfile.substr(0, slash + 1) + p;
-}
-
-bool PriorCovariance::Read(const std::string &path, File &out, std::string &err, bool cached) {
+bool PriorCovariance::Parse(std::istream &in, const std::string &path, File &out, std::string &err) {
   out = File();
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(path, cached);
-  std::istream &in = *inStream;
-  if (!in) {
-    err = "cannot open the prior covariance file " + path;
-    return false;
-  }
+  out.path = path;
   std::vector<std::vector<std::string>> rows;  // non-comment lines, as tokens
   std::vector<int> lineOf;
   std::string raw;
@@ -167,6 +163,7 @@ bool PriorCovariance::Setup(const File &file, const std::vector<std::string> &pa
                             const std::vector<bool> &fixed, int runBasis, std::string &err,
                             std::vector<std::string> &notes) {
   static const char *const basisName[] = {"0 (standard)", "1 (Brune)", "2 (Park)"};
+  path_ = file.path;
   if (file.basis >= 0 && file.basis != runBasis) {
     const std::string runName = (runBasis >= 0 && runBasis <= 2) ? basisName[runBasis] : "?";
     err = "the prior covariance file " + path_ + " holds parametrization " + basisName[file.basis] +
@@ -233,30 +230,8 @@ bool PriorCovariance::Setup(const File &file, const std::vector<std::string> &pa
       for (int k = std::max(a, b); k < n_; k++) s += linv_[(size_t)k * n_ + a] * linv_[(size_t)k * n_ + b];
       cinv_[(size_t)a * n_ + b] = s;
     }
-  logNorm_ = -0.5 * (n_ * std::log(2.0 * M_PI) + logDet);
+  logNorm_ = -0.5 * (n_ * std::log(2.0 * kPi) + logDet);
   return true;
-}
-
-int PriorCovariance::Load(const Config &configure, const std::vector<std::string> &paramNames,
-                          const std::vector<bool> &fixed, int runBasis, std::shared_ptr<const PriorCovariance> &out) {
-  out.reset();
-  if (configure.priorCovariance.empty()) return 0;
-  auto prior = std::make_shared<PriorCovariance>();
-  prior->path_ = ResolvePath(configure);
-  File file;
-  std::string err;
-  std::vector<std::string> notes;
-  if (!Read(prior->path_, file, err, configure.cacheInputFiles) ||
-      !prior->Setup(file, paramNames, fixed, runBasis, err, notes)) {
-    configure.outStream << "**ERROR: priorCovariance: " << err << "." << std::endl;
-    return -1;
-  }
-  for (const std::string &note : notes) configure.Note(note);
-  configure.Note("Note: prior covariance " + prior->path_ + ": a multivariate Gaussian prior on " +
-                 std::to_string(prior->Size()) + " parameter" + (prior->Size() == 1 ? "" : "s") +
-                 " (Total-Prior-Covariance-Chi-Squared in chiSquared.out).");
-  out = prior;
-  return 1;
 }
 
 void PriorCovariance::Residuals(const std::vector<double> &full, std::vector<double> &r) const {
@@ -293,3 +268,6 @@ void PriorCovariance::AddCurvature(std::vector<double> &g2) const {
   for (int a = 0; a < n_; a++)
     if (fullIndex_[a] < (int)g2.size()) g2[fullIndex_[a]] += 2.0 * cinv_[(size_t)a * n_ + a];
 }
+
+}  // namespace inference
+}  // namespace azure2

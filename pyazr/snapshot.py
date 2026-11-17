@@ -14,6 +14,7 @@ from . import session_checks
 from .described import _engine as _engine_module
 from .errors import ParameterError
 from .locking import session_lock
+from .paths import is_absolute
 
 
 def write_values(session, project, x=None, norms="fitted"):
@@ -326,7 +327,7 @@ def rebase_paths(project, path, base, home):
     refuse_moved_covariance(project, old, new)
 
     def moved(value):
-        return value if os.path.isabs(value) else os.path.relpath(os.path.join(old, value), new)
+        return value if is_absolute(value) else os.path.relpath(os.path.join(old, value), new)
 
     from .schema import schema
     fields = {k: {f for f, d in r["fields"].items() if d.get("type") == "path"} for k, r in schema()["records"].items()}
@@ -360,7 +361,7 @@ def refuse_moved_covariance(project, old, new):
         if not isinstance(file, str) or not file:
             continue
         names = _engine().covariance_file_names(file, old)
-        relative = [n for n in names if not os.path.isabs(n)]
+        relative = [n for n in names if not is_absolute(n)]
         if not relative:
             continue
         what = (f"save_fit to {new}: data set {record.record_name!r} has the covariance file {file}, which names its "

@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -362,8 +363,10 @@ int WorkingCopy::ReplaceSubPointGrids(const CompoundSystem *compound, const Leve
     for (size_t q = 0; q < work.size(); q++) replaceGroup(work[q], q);
   } else {
 #pragma omp parallel for schedule(dynamic, 4)
-    for (int q = 0; q < (int)work.size(); q++)
+    for (int q = 0; q < (int)work.size(); q++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       replaceGroup(work[q], (size_t)q);
+    }
   }
   if (changed > 0) {
     // Each sharing group laid its sites out on its own: sites of two groups at one new node computed a table each.

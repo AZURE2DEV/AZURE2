@@ -331,7 +331,7 @@ def _write_material(path, mat, sections, header_rows, tpid):
     out.append(line(zero, mat, 0, 0, 0))
     out.append(line(zero, 0, 0, 0, 0))
     out.append(line(zero, -1, 0, 0, 0))
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(out) + "\n")
 
 

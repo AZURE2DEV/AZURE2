@@ -59,20 +59,20 @@ Unit::Unit(const azure2::experiment::MeasurementRows &rows, int row, const Segme
 {
   settings_ = parent->TermSettingsOf(term).get();
   row_ = row;
-  cm_angle_ = rows.angle[row];
+  values_.cm_angle = rows.angle[row];
   lab_angle_ = rows.angle[row];
   nominal_energy_ = rows.energy[row];
   if (rows.angleIsLegendreOrder) legendre_order_ = (int)std::round(rows.angle[row]);
   bin_low_cm_ = rows.binLow[row];
   bin_high_cm_ = rows.binHigh[row];
-  cm_energy_ = rows.energy[row];
-  lab_energy_ = rows.energy[row];
-  excitation_energy_ = rows.energy[row];
+  values_.cm_energy = rows.energy[row];
+  values_.lab_energy = rows.energy[row];
+  values_.excitation_energy = rows.energy[row];
   segment_key_ = parent->GetSegmentKey();
-  geofactor_ = 0.;
-  sfactorconv_ = 0.;
+  values_.geofactor = 0.;
+  values_.sfactorconv = 0.;
   targetEffectNum_ = 0;
-  stoppingPower_ = 0.0;
+  values_.stoppingPower = 0.0;
 }
 
 /*!
@@ -82,15 +82,15 @@ Unit::Unit(const azure2::experiment::MeasurementRows &rows, int row, const Segme
 Site::Site(double angle, double energy, const Segment *parent, int term)
     : settings_(parent->TermSettingsOf(term).get()) {
   lab_angle_ = angle;
-  cm_angle_ = angle;
+  values_.cm_angle = angle;
   nominal_energy_ = energy;
-  lab_energy_ = energy;
-  cm_energy_ = energy;
-  excitation_energy_ = energy;
+  values_.lab_energy = energy;
+  values_.cm_energy = energy;
+  values_.excitation_energy = energy;
   segment_key_ = parent->TermKey(term);
-  geofactor_ = 0.;
-  sfactorconv_ = 0.;
-  stoppingPower_ = 0.0;
+  values_.geofactor = 0.;
+  values_.sfactorconv = 0.;
+  values_.stoppingPower = 0.0;
 }
 
 Unit::Unit(double angle, double energy, const Segment *parent, int term) : Site(angle, energy, parent, term) {
@@ -118,15 +118,15 @@ Unit::Unit(double angle, double energy, int entranceKey,
   own_settings_ = std::move(settings);
   settings_ = own_settings_.get();
   lab_angle_ = angle;
-  cm_angle_ = angle;
+  values_.cm_angle = angle;
   nominal_energy_ = energy;
-  lab_energy_ = energy;
-  cm_energy_ = energy;
-  excitation_energy_ = energy;
-  geofactor_ = 0.;
-  sfactorconv_ = 0.;
+  values_.lab_energy = energy;
+  values_.cm_energy = energy;
+  values_.excitation_energy = energy;
+  values_.geofactor = 0.;
+  values_.sfactorconv = 0.;
   targetEffectNum_ = 0;
-  stoppingPower_ = 0.0;
+  values_.stoppingPower = 0.0;
 }
 
 /*!
@@ -254,7 +254,7 @@ double Site::GetLabAngle() const {
  */
 
 double Site::GetCMAngle() const {
-  return cm_angle_;
+  return values_.cm_angle;
 }
 
 /*!
@@ -262,7 +262,7 @@ double Site::GetCMAngle() const {
  */
 
 double Site::GetLabEnergy() const {
-  return lab_energy_;
+  return values_.lab_energy;
 }
 
 /*!
@@ -270,7 +270,7 @@ double Site::GetLabEnergy() const {
  */
 
 double Site::GetCMEnergy() const {
-  return cm_energy_;
+  return values_.cm_energy;
 }
 
 /*!
@@ -278,7 +278,7 @@ double Site::GetCMEnergy() const {
  */
 
 double Site::GetExcitationEnergy() const {
-  return excitation_energy_;
+  return values_.excitation_energy;
 }
 
 double Site::GetOriginalEnergy() const {
@@ -315,7 +315,7 @@ double Site::GetJ() const {
  */
 
 double Site::GetStoppingPower() const {
-  return stoppingPower_;
+  return values_.stoppingPower;
 }
 
 /*!
@@ -323,7 +323,7 @@ double Site::GetStoppingPower() const {
  */
 
 double Site::GetTargetThickness() const {
-  return targetThickness_;
+  return values_.targetThickness;
 }
 
 /*!
@@ -356,11 +356,11 @@ void Unit::Initialize(WorkingCopy *data, const CompoundSystem *compound, const C
 // maximum lab angle and the reason of a failed map to its caller, for the message.
 
 void Unit::SetFrame(const azure2::experiment::FrameRow &row) {
-  cm_energy_ = row.eCM;
-  excitation_energy_ = row.eX;
+  values_.cm_energy = row.eCM;
+  values_.excitation_energy = row.eX;
   bin_low_cm_ = row.binLowCM;
   bin_high_cm_ = row.binHighCM;
-  cm_angle_ = row.thetaCM;
+  values_.cm_angle = row.thetaCM;
   frame_jacobian_ = row.jacobian;
 }
 
@@ -368,7 +368,7 @@ void Unit::SetFrame(const azure2::experiment::FrameRow &row) {
  * Calculates the excitation energy from the c.m. energy: E_x = E_cm + S + E* of the pair.
  */
 void Site::ConvertExcitationEnergy(const PPair *pPair) {
-  excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, PartitionOf(pPair));
+  values_.excitation_energy = azure2::experiment::ExcitationEnergy(values_.cm_energy, PartitionOf(pPair));
 }
 
 /*!
@@ -413,7 +413,7 @@ double Site::CalculateCrossSectionGammaConversionFactor(const PPair *entrancePai
  */
 
 void Site::SetLabEnergy(double energy) {
-  lab_energy_ = energy;
+  values_.lab_energy = energy;
 }
 
 /*!
@@ -421,7 +421,7 @@ void Site::SetLabEnergy(double energy) {
  */
 
 void Site::SetCMEnergy(double energy) {
-  cm_energy_ = energy;
+  values_.cm_energy = energy;
 }
 
 /*!
@@ -437,7 +437,7 @@ void Site::SetLabAngle(double angle) {
  */
 
 void Site::SetCMAngle(double angle) {
-  cm_angle_ = angle;
+  values_.cm_angle = angle;
 }
 
 /*!
@@ -472,7 +472,7 @@ void Unit::MakeSubPoint(Site &subPoint) const {
 
 void Site::TakeSlotSettingsOf(const Site &point) {
   is_sub_point_ = true;
-  screen_ue_ = point.screen_ue_;
+  values_.screen_ue = point.values_.screen_ue;
   screen_param_ = point.screen_param_;
 }
 
@@ -482,7 +482,7 @@ void Site::TakeSlotSettingsOf(const Site &point) {
  */
 
 void Site::SetStoppingPower(double stoppingPower) {
-  stoppingPower_ = stoppingPower;
+  values_.stoppingPower = stoppingPower;
 }
 
 /*!
@@ -490,7 +490,7 @@ void Site::SetStoppingPower(double stoppingPower) {
  */
 
 void Site::SetTargetThickness(double targetThickness) {
-  targetThickness_ = targetThickness;
+  values_.targetThickness = targetThickness;
 }
 
 void Unit::CopyAngularDistsToModel(azure2::Results &results) const {
@@ -551,7 +551,7 @@ void Site::UsePrivateRecord(azure2::Results &scratch) {
 void Site::NoResultRecord(const azure2::Results &r) const {
   throw std::logic_error(
       "Unit: a result was read or written on a point without a record in the buffer it was given (segment " +
-      std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) + " MeV, offset " +
+      std::to_string(segment_key_) + ", E_lab " + std::to_string(values_.lab_energy) + " MeV, offset " +
       (slot_ == kNoRecord ? std::string("none") : std::to_string(slot_)) + ", buffer of " +
       std::to_string(r.slot.size()) +
       " slots): the data set's layout (WorkingCopy::LayoutResults), its WorkingCopy::BeginEvaluation with this buffer, or the "
@@ -592,8 +592,8 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
     }
   }
   if (!set.perSlot) {
-    set.rowLength = legendreP_->size();
-    set.rows = *legendreP_;
+    set.rowLength = values_.legendreP->size();
+    set.rows = *values_.legendreP;
   } else {
     set.rowLength = (std::size_t)std::max(maxL + 1, 0);
     set.rows.resize(set.rowLength * (std::size_t)count);
