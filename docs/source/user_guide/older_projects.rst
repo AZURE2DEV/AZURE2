@@ -52,7 +52,15 @@ The report (``--json-report``, or the dict ``convert_azr`` returns) lists:
   per incident particle, a Gaussian convolution as a beam spread, an effect
   that also folded the extrapolation with the same line number), and values the
   old engine did not use, which are dropped (a group member's own norm or
-  shift);
+  shift).
+  One note is about a value that is dropped with ``<lastRun>`` (the Qt GUI's
+  run settings): when the old program's check box "use GSL Coulomb functions"
+  was ticked (bit 12 of the first number of ``<lastRun>``), the report says that
+  the old program computed the project with GSL's Coulomb functions, that this
+  program has its own only, and that results inside the Coulomb barrier can
+  differ from the old ones by up to about 5 % in a penetrability
+  (``docs/upgrade/coulomb.md``, sections 8.3 and 9.1).  The note is in the report
+  only; the converted project is the same with or without it;
 * **questions**: where the old meaning cannot be written without a choice (a
   fitted temperature shared by lines that become two targets).  Answer them with ``--answers A.json``
   (``{"<record>.<field>": value}``); without answers the conversion stops, or,

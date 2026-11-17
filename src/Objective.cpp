@@ -17,10 +17,12 @@
 #include "ModelPass.h"
 #include "InferenceTypes.h"
 #include "ModelData.h"
+#include "DiagonalPriors.h"
 
 namespace {
 
-// T1-T4: per segment its data chi^2, its normalization prior and its energy-shift priors.
+// T1-T4: per segment its data chi^2, its normalization prior and its energy-shift priors (the priors gathered by
+// AppendSegmentPriors, DiagonalPriors.h).
 class SegmentTerms : public ObjectiveTerm {
  public:
   std::string Name() const override { return "data, normalizations and energy shifts"; }
@@ -56,21 +58,20 @@ class SegmentTerms : public ObjectiveTerm {
       } else {
         for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++)
           segmentChiSquared += azure2::PointResidual(*c.data, *segment, pointIdx, c.results, c.data->State(*segment).norm).Chi2();
-        // Normalization prior (profiled norms have none; a fixed norm pays none, objective.md D5).
-        if (c.segmentPriors && segment->IsVaryNorm() && !segment->IsNormPriorReplaced()) {
-          double dataNorm = c.data->State(*segment).norm;
-          double dataNormNominal = segment->GetNominalNorm();
-          double dataNormError = dataNormNominal / 100. * segment->GetNormError();
-          if (dataNormError != 0.) {
-            const double term = GaussianPriorChi2(dataNorm, dataNormNominal, dataNormError);
-            chi2 += term;
-            if (out) out->norm[i] = term;
-          }
+      }
+      // The segment's priors (AppendSegmentPriors): its normalization prior (profiled norms have none; a fixed norm
+      // pays none, objective.md D5), then its energy-shift priors, each added to the running sum.
+      if (c.segmentPriors) {
+        DiagonalPriors priors;
+        AppendSegmentPriors(*c.data, i, nullptr, priors);
+        AddPriorsChi2(priors, chi2);
+        if (out) {
+          out->norm[i] = PriorsChi2(priors, PriorSource::kNorm);
+          out->shift[i] = PriorsChi2(priors, PriorSource::kShift);
+          out->shiftSqrt[i] = PriorsChi2(priors, PriorSource::kShiftSqrt);
+          out->shiftFn[i] = PriorsChi2(priors, PriorSource::kShiftFn);
         }
       }
-      // Energy-shift priors.
-      if (c.segmentPriors) segment->AddShiftPenalty(c.data->State(*segment), chi2);
-      if (out && c.segmentPriors) segment->ShiftPenaltyParts(c.data->State(*segment), out->shift[i], out->shiftSqrt[i], out->shiftFn[i]);
       if (thmGroup < 0) {
         c.results.objective.segmentChi2[i] = segmentChiSquared;
         if (c.segmentChi2) (*c.segmentChi2)[i] = segmentChiSquared;
@@ -140,12 +141,13 @@ class ParkTerm : public ObjectiveTerm {
   }
 };
 
-// T8: one term per kind of target-effect prior, in the engine's order.
+// T8: one term per kind of target-effect prior, in the engine's order: the subtotal from 0 of its priors
+// (AppendTargetPriors, DiagonalPriors.h), added to the running sum.
 class TargetPriorTerm : public ObjectiveTerm {
  public:
   enum Kind { Screening, Density, Doppler, Thickness, Apparatus };
   explicit TargetPriorTerm(Kind k) : kind_(k) {}
-  // The sampler: normalised Gaussian log-priors from ForEachDiagonalPrior.
+  // The sampler: normalised Gaussian log-priors from ForEachDiagonalPrior (DiagonalPriors.h).
   void AddForSampler(const ObjectiveContext &, double &) const override {}
   std::string Name() const override {
     static const char *names[] = {"screening priors", "density priors", "Doppler priors", "thickness priors",
@@ -153,16 +155,22 @@ class TargetPriorTerm : public ObjectiveTerm {
     return names[kind_];
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    switch (kind_) {
-      case Screening: chi2 += c.data->ScreeningPenalty(); break;
-      case Density: chi2 += c.data->DensityPenalty(); break;
-      case Doppler: chi2 += c.data->DopplerPenalty(); break;
-      case Thickness: chi2 += c.data->ThicknessPenalty(); break;
-      case Apparatus: chi2 += c.data->ApparatusPenalty(); break;
-    }
+    DiagonalPriors priors;
+    AppendTargetPriors(*c.data, Source(), nullptr, priors);
+    chi2 += PriorsChi2(priors);
   }
 
  private:
+  PriorSource Source() const {
+    switch (kind_) {
+      case Screening: return PriorSource::kScreening;
+      case Density: return PriorSource::kDensity;
+      case Doppler: return PriorSource::kDoppler;
+      case Thickness: return PriorSource::kThickness;
+      case Apparatus: break;
+    }
+    return PriorSource::kApparatus;
+  }
   Kind kind_;
 };
 
@@ -232,7 +240,10 @@ class GammaDecayTerm : public ObjectiveTerm {
   std::string Name() const override { return "gamma decay priors"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (c.compound->GetGammaDecays().Empty()) return;
-    chi2 += c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
+    const double v = c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
+    chi2 += v;
+    c.results.objective.gammaDecay = v;
+    c.results.objective.hasGammaDecay = true;
   }
 };
 

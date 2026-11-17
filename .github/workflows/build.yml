@@ -76,6 +76,11 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # The unit-test step ends itself before the job's six hours run out (see there); it needs the job's start.
+      - name: Note the job's start
+        shell: bash
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       # ---------------------------------------------------------------- linux
       - name: Install dependencies (linux)
         if: matrix.name == 'linux'
@@ -316,7 +321,34 @@ jobs:
           if [ "${{ matrix.name }}" = "windows" ]; then export TMPDIR="$(cygpath -m "$RUNNER_TEMP")"; fi
           # macOS: the GNU tools of the install step before Apple's (see there)
           if [ "${{ matrix.name }}" = "macos" ] && [ -n "${GNUBIN:-}" ]; then export PATH="$GNUBIN:$PATH"; fi
-          ctest --test-dir build --output-on-failure -LE "slow|browser" 2>&1 | tee unit-tests.log || rc=$?
+          # Every test is bounded, and so is the step.  The macOS job of 0c6167c1 reached GitHub's six-hour limit
+          # 3 h 20 min into this step and was cancelled: nothing of the step reached the annotations, so which test
+          # hung or crawled was not known.  --timeout bounds each test that has no TIMEOUT of its own (the longest
+          # unit test on Linux takes minutes); the step's own limit ends ctest 20 minutes before the job's, so the
+          # annotations below are still written and name the tests that had started and not ended.
+          TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
+          # GNU's only (Windows has a timeout.exe that waits for a key)
+          if [ -n "$TIMEOUT_CMD" ]; then
+            case "$("$TIMEOUT_CMD" --version 2>/dev/null || true)" in *GNU*) ;; *) TIMEOUT_CMD="" ;; esac
+          fi
+          LEFT=$(( ${JOB_START:-$(date +%s)} + 340 * 60 - $(date +%s) ))
+          [ "$LEFT" -ge 600 ] || LEFT=600
+          echo "unit tests: at most $((LEFT / 60)) min for the step, 40 min for a test without its own TIMEOUT"
+          LIMIT=()
+          [ -z "$TIMEOUT_CMD" ] || LIMIT=("$TIMEOUT_CMD" -k 60 "$LEFT")
+          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -LE "slow|browser" 2>&1 \
+            | tee unit-tests.log || rc=$?
+          # The slowest tests, always (a notice): which tests take the time on each platform.
+          awk '/^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { for (i = 1; i <= NF; i++) if ($i == "sec") print $(i - 1), $4 }' \
+            unit-tests.log | sort -rn \
+            | awk -v os="${{ matrix.name }}" 'NR <= 15 { s = s "%0A" $1 " s  " $2; t += $1 } END { if (NR) printf "::notice::%s: the 15 slowest unit tests (%d s together):%s\n", os, t, s }'
+          if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+            # ctest was stopped by the step's limit: the tests it had started and not ended
+            HUNG="$(awk '/^ *Start +[0-9]+: / { sub(/^ *Start +/, ""); n = $0; sub(/:.*/, "", n); sub(/^[0-9]+: /, ""); s[n] = $0 }
+                         /^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { n = $3; sub(/^#/, "", n); sub(/:$/, "", n); delete s[n] }
+                         END { for (n in s) print s[n] }' unit-tests.log | paste -sd ' ' -)"
+            echo "::error::${{ matrix.name }}: the unit tests were stopped after $((LEFT / 60)) min (the job's time limit); running then: ${HUNG:-none found}; $(grep -c ' Test  *#' unit-tests.log) test(s) had ended"
+          fi
           # ctest's closing "The following tests did not run:" block, one
           # "<n> - <name> (Skipped)" line per test.
           SKIPPED="$(awk '/ - .* \(Skipped\)/ { sub(/^[ \t]*[0-9]+ - /, ""); sub(/ \(Skipped\).*$/, ""); print }' unit-tests.log)"

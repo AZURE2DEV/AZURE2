@@ -152,6 +152,10 @@ struct ObservedLevels {
   std::vector<double> value;
   /// Per level: N_lambda = 1 + sum_c gamma_c^2 dS_c/dE (Brune), or Park's J_lambda = 1 - sum_c gamma_c^2 dS_c/dE.
   std::vector<double> norm;
+  /// The factor P each W was formed with (ChannelValues::P at E: a particle channel's penetrability above threshold,
+  /// mu a / (hbar^2 W_l^2) in MeV^-1 fm^-1 below it, 0 at it; a photon channel's factor); 0 for a beta column.
+  /// Handed on so that a reader of the observed values needs no second evaluation (data_model.md section 10).
+  std::vector<double> P;
 };
 
 /*!

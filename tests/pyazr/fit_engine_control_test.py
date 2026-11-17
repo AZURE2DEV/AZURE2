@@ -5,9 +5,10 @@
     method is refused with the list of fitters; MINOS after a least-squares row is refused.
 (b) Progress on T2 (MIGRAD, call limit 40): records arrive (count > 0), their best objective never increases, the calls
     count up, every record's best is the lowest objective seen so far; the fit ends with status call_limit.
-(c) A stop from the progress callable at the 15th record (MIGRAD and LM): status "stopped", no record after it (one
-    thread: the evaluation running when the request came is the last one computed), the end point is the best point
-    seen and its objective the best record's; evaluating the start afterwards gives the numbers of before, bit for bit.
+(c) A stop from the progress callable at the 15th record (2nd for a least-squares row), every fitter of the table:
+    status "stopped", no record after it (one thread: the evaluation running when the request came is the last one
+    computed), the end point is the best point seen and its objective the best record's; evaluating the start
+    afterwards gives the numbers of before, bit for bit.
 (d) A stop from a second thread (a StopRequest, and a threading.Event) ends the call: status "stopped", at most one
     more record after the request (the evaluation that was running), well before the fit would end on its own.
 (e) An exception in the progress callable stops the fit and is raised; the session evaluates as before.
@@ -113,14 +114,17 @@ def main():
               r.fell_back_to_migrad and r.status == "call_limit" and "falling back to MIGRAD" in r.notices[0] and
               not any("does not honour" in n for n in r.notices), f"{r.notices}")
 
-        # (c) a stop at the 15th record, MIGRAD and LM
-        for method in ("migrad", "lm"):
+        # (c) a stop from the progress callable, every fitter of the table (kinds above): at the 15th record of an
+        # evaluation fitter, at the 2nd of a least-squares row (residual_rows: on T2 it runs its fallback MIGRAD, whose
+        # first records come quickly).  No fitter needs an exception here.
+        for method in kinds:
+            at = 2 if kinds[method]["residual_rows"] else 15
             seen, after = [], []
             stop = StopRequest()
 
-            def progress(rec, seen=seen, after=after, stop=stop):
+            def progress(rec, seen=seen, after=after, stop=stop, at=at):
                 (after if stop.is_set() else seen).append(rec)
-                if len(seen) == (15 if method == "migrad" else 2) and not stop.is_set():
+                if len(seen) == at and not stop.is_set():
                     stop.set()
             r = s.fit_with_engine(method, progress=progress, stop=stop)
             best = min(rec["objective"] for rec in seen)

@@ -20,6 +20,7 @@
 
 #include "azure2/physics/CollisionMatrix.h"
 #include "azure2/physics/LevelPairShift.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
@@ -243,7 +244,7 @@ py::dict CollisionMatrixOf(const RealArray &level_energies, const RealArray &red
 }  // namespace
 
 void BindCollisionMatrix(py::module_ &m) {
-  m.def("collision_matrix", &CollisionMatrixOf, py::arg("level_energies"), py::arg("reduced_widths"),
+  m.def("collision_matrix", &CollisionMatrixOf, PrecisionGuard(), py::arg("level_energies"), py::arg("reduced_widths"),
         py::arg("energy"), py::arg("penetrability"), py::arg("shift"), py::arg("boundary"),
         py::arg("hard_sphere_phase"), py::arg("coulomb_phase"), py::arg("parametrization") = "formal",
         py::arg("shift_at_levels") = py::none(), py::arg("shift_derivative_at_levels_per_MeV") = py::none(),

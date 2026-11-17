@@ -59,7 +59,6 @@ struct ApparatusParam {
   std::vector<int> effects;     ///< every target effect (copy, 1-based) of the parameter
   bool priorReplaced = false;   ///< the prior covariance holds its prior (Objective, ReplacedPriors)
   const ApparatusRow &Row() const { return ApparatusRows()[row]; }
-  double Penalty(double value) const;
 };
 
 /// The rows' own declarations (their files): the stopping scale (StoppingScale.cpp), a table kernel's parameter.
@@ -76,7 +75,7 @@ void WriteApparatusChiSquared(const WorkingCopy &data, std::ostream &out);
 /// The covariance files' label of apparatus parameter k (ParameterLabel.cpp).
 std::string ApparatusLabel(const DataSet &data, int k);
 /// The apparatus block of the index map, appended to it (the vector's last block); no analytic derivative: the
-/// parameters are differenced on the whole chi^2, as a density (AZURECalc.cpp).
+/// parameters are differenced on the whole chi^2, as a density (AZURECalcGradient.cpp).
 void AppendApparatusParams(ParamIndexMap &map, const WorkingCopy *data);
 
 #endif

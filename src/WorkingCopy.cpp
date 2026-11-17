@@ -26,7 +26,6 @@
 #include <atomic>
 #include <chrono>
 #include <cinttypes>
-#include <cmath>
 #include <cstdlib>
 #include <string>
 #include <cstdio>
@@ -35,6 +34,7 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -824,7 +824,7 @@ void WorkingCopy::CalcLegendreP(int maxL, const CompoundSystem *compound) {
         ? Data().GetTargetEffect(segment->GetTargetEffectNum())
         : NULL;
 #pragma omp parallel for
-    for (int i = 1; i <= segment->NumPoints(); i++) {
+    for (int i = 1; i <= segment->NumPoints(); i++) { const azure2::support::ExtendedPrecisionScope fpPrecision;
       Unit *point = segment->GetPoint(*this, i);
       point->CalcLegendreP(this, maxL, compound, effect);
     }
@@ -842,7 +842,7 @@ void WorkingCopy::CalcLegendreP(int maxL, const CompoundSystem *compound) {
 void WorkingCopy::CalcCoulombAmplitude(const CompoundSystem *compound) {
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
 #pragma omp parallel for
-    for (int i = 1; i <= segment->NumPoints(); i++) {
+    for (int i = 1; i <= segment->NumPoints(); i++) { const azure2::support::ExtendedPrecisionScope fpPrecision;
       Unit *point = segment->GetPoint(*this, i);
       point->CalcCoulombAmplitude(this, compound);
     }

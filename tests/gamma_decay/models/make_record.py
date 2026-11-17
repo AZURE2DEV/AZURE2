@@ -15,7 +15,7 @@ import sys
 
 src, dst, level, remainder = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 mode = sys.argv[5] if len(sys.argv) > 5 else "fit"
-lines = open(src).read().split("\n")
+lines = open(src, encoding="utf-8", newline="").read().split("\n")
 widths = {}  # E_f text -> {L: width}
 jpi = None
 out = []
@@ -58,4 +58,4 @@ rec += mixing + signs + ["</gammaDecays>", ""]
 text = "\n".join(out)
 if not text.endswith("\n"):
     text += "\n"
-open(dst, "w").write(text + "\n".join(rec))
+open(dst, "w", encoding="utf-8", newline="\n").write(text + "\n".join(rec))  # LF on every platform

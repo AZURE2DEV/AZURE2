@@ -86,8 +86,8 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 | Path | What | Notes |
 |---|---|---|
-| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; made with the data by the one set-up `SetUpCompoundSystem`, `include/CompoundSystemSetUp.h`, and shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
-| `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
+| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; made with the data by the one set-up `SetUpCompoundSystem`, `include/CompoundSystemSetUp.h`, and shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²; one file per job, `src/AZURECalc.cpp` the evaluation, `AZURECalcGradient.cpp`, `AZURECalcJacobian.cpp`, `AZURECalcNuisance.cpp`, `AZURECalcPool.cpp`, `AZURECalcOutput.cpp`, `AZURECalcDiagnostics.cpp`), `AZUREGrad` (gradients), `AZURECalcMCMC` (`src/AZURECalcMCMC.cpp` the posterior, `AZURECalcMCMCPriors.cpp`, `AZURECalcMCMCRun.cpp`, `AZURECalcMCMCChain.cpp`, `AZURECalcMCMCPool.cpp`) |
+| `api/` | `AZUREAPI` (one file per job, `api/src/AZUREAPI.cpp` the session's model, `AZUREAPIReports.cpp`, `AZUREAPIChi2.cpp`, `AZUREAPIGradient.cpp`, `AZUREAPIObjective.cpp`, `AZUREAPIFit.cpp`, `AZUREAPIDiagnostics.cpp`) + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
@@ -190,6 +190,12 @@ how each was checked:
 - **Determinism.** Results must not depend on thread count, on which file a
   session started from, or on the order of levels and channels. Tests run with
   `OMP_NUM_THREADS=2`. Differences across GCC, Clang and MinGW stay near 1e-5.
+  Nor on the thread a call runs in: `long double` keeps the x87 precision of the thread (53 bits in a Windows
+  Python thread), so every OpenMP parallel region opens with `const azure2::support::ExtendedPrecisionScope`, the
+  binding releases the GIL only through `EngineCallScope`, and every `.def` of `api/src/pybind_*.cpp` takes a scope
+  (`py::call_guard<EngineCallScope>()`, `PrecisionGuard()` when it keeps the GIL, or `EngineCallScope` in its
+  lambda) unless it is listed in `BINDING_WITHOUT_ARITHMETIC` as computing nothing the precision can change (no
+  `long double`, no mathematical library function) [check 60; `tests/pyazr/x87_precision_test.py`].
 - **No hidden state.** Constant tables (masses, constants, the schema) are built
   once and reached through a function returning a `const` reference; nothing
   else is global. What a calculation writes belongs to the caller and is passed
@@ -214,7 +220,9 @@ The engine reads the `.azr` (format 3 only) once, through `io/` (`io::Document`,
 through the same code in the binding; the χ² is assembled in one place, `src/Objective.cpp` (its terms; the rule of
 their sums is `inference/`'s `TermList.h`). Each recipe below is
 the whole list of places to touch; `tests/consistency/repo_consistency_test.py` fails when the rule in brackets is
-bypassed. Run it first (under a second), then the build and the tests of "Definition of done".
+bypassed. Run it first (under a second), then the build and the tests of "Definition of done". It does not see a
+generated file that is stale against the built binary (`tests/schema/schema_v3.json`, `physics_functions.rst`): the
+ctests `experiment_schema`, `pyazr_schema` and `pyazr_physics_table` do.
 
 **A data-set or extrapolation keyword**: a field of the record, recipe "A format-3 field" below (and, when an old
 segment keyword means the same, its conversion in `convert/`, `convert_constructs`). No engine code reads an old
@@ -239,7 +247,8 @@ section (check 34).
    say how the sampler takes a term); its gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in
    `AppendModelRows` if the Levenberg-Marquardt path needs them. A Gaussian prior on one parameter is not a new
    formula: `GaussianPriorChi2` / `GaussianPriorGradient` / `GaussianPriorCurvature`
-   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in `ForEachDiagonalPrior` (`include/Objective.h`).
+   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients,
+   the rows, the sampler and the writer read.
    Arithmetic that needs no engine object goes in `inference/` with its test in `inference/tests/` [check 8b: only
    its own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
    [check 11: no term is added outside `src/Objective.cpp`].
@@ -251,7 +260,11 @@ section (check 34).
 **A physics function or an observable.**
 1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an
    independent value (closed form, mpmath `truth.py`, a published number).
-2. Exposed in the binding with array inputs (`api/src/pybind_physics.cpp`) so pyazr and the web UI call it.
+2. Exposed in the binding with array inputs so pyazr and the web UI call it: one row of `BuildTable()` in
+   `api/src/pybind_physics.cpp` (name, doc, `example` and `sweep` of each argument, outputs, the adapter), a
+   `row_test("<name>", ...)` in `tests/pyazr/physics_table_test.py` [check 41], and, after the build, the page
+   `docs/source/user_guide/physics_functions.rst`: `PYAZR_ENGINE_DIR=<build>/pyazr-out python3
+   tools/gen_physics_docs.py` (only the ctest `pyazr_physics_table` sees it stale).
 3. Constants come from `physics/include/azure2/physics/Constants.h` [check 10: no copy with another value], masses
    from `pyazr/data/mass_1.mas20` (`pyazr.sources.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
@@ -259,8 +272,11 @@ section (check 34).
 **An observable of a reaction at a mesh energy** (what a site's record holds; `include/SiteObservable.h`).
 1. A kind in `SiteObservable` and its row in `kSiteObservables` (`src/SiteObservables.cpp`: the record's slots and the
    contraction with a reader's row, `Site::ValueFor`); `ObservableOf` names the terms of that kind.
-2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection`; its adjoint in
-   `AMatrixFunc::PointTBar` (checked with `AZURE_GRAD_CHECK`).  A kind whose formula reads the level matrix's elements
+2. Its formula at E_n, one branch of `GenMatrixFunc::CalculateBareCrossSection` (the sum itself a function of
+   `physics/` `Observables.h`); its adjoint a function of `ObservablesAdjoint.h` (T-matrix cotangents from the
+   observable's; its test against finite differences of the forward function in
+   `physics/tests/observables_adjoint_test.cpp`), called from the branch of `AMatrixFunc::PointTBar` that walks the
+   same pathways (checked with `AZURE_GRAD_CHECK`).  A kind whose formula reads the level matrix's elements
    instead of a T-matrix (kHoes, THM's σ_HOES: `HoesCrossSection`) is a branch of `SolveAtOneEnergy` and of the
    gradient's task (`GradEnergyTasks.cpp`, `HoesTask`), asked by the kind.
 3. Anything a reader needs per slot (angular row, Coulomb amplitude, A_y factors) in its row set (`include/RowSet.h`,
@@ -294,25 +310,56 @@ section (check 34).
 **A model-only datum** (no beam energy: a resonance strength, a width, an ANC; `docs/upgrade/data_model.md` §4, M10).
 The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<modelData>`.
 1. Its formula in `physics/` (`ResonanceQuantities.h` is the pattern) with a unit test against numbers by hand and its
-   derivatives against central differences; the binding (`api/src/pybind_physics.cpp`).
-2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity")
-   and in `ModelQuantities()` (`experiment/src/ModelDatum.cpp`), with what `BuildModelData` must find in `<levels>`
-   (level, pairs, channel) and its refusals (a code each, recipe "A format-3 diagnostic code").
+   own derivatives against central differences (the datum's gradient is `LevelJacobian`'s central differences of the
+   whole value in `src/ModelData.cpp`: no code); the binding, recipe "A physics function or an observable" step 2
+   [check 41]. A hand value that needs Coulomb functions: mpmath `coulombf`, `coulombg` (`mp_waves`, `mp_channel` in
+   `tests/pyazr/physics_table_test.py`), the inputs and the result in the comment of the case.
+2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity",
+   whose `variants` record of a datum writes value and error with their unit, `0.03 1` when dimensionless), and in
+   three places of the model-datum code: a value of `enum class ModelQuantity` (`experiment/include/azure2/experiment/
+   SetupSpecs.h`), its name in `ModelQuantities()` and its case in `Builder::LevelPairs` (both
+   `experiment/src/ModelDatum.cpp`: what `BuildModelData` must find in `<levels>` (level, pairs, channel), its refusals,
+   a code each, recipe "A format-3 diagnostic code"). Only check 27 sees a missing `ModelQuantities()` row; the
+   `switch (d.quantity)` of `LevelPairs` and of `LevelValue` have no `default`: a missing case is seen by no check.
 3. Its case in `LevelValue` (`src/ModelData.cpp`), from the table `CompoundSystem::ObservedOfFitValues` returns (never
-   formal parameters); its gradient comes with it (central differences over the level's J^π group).
+   formal parameters). An `ObservedLevel` (`include/ObservedLevelTable.h`) holds the physical E, and per channel the
+   observed width W, the observed value and its kind, and the factor `P` W was formed with (an open particle channel's
+   penetrability at E), the pair's reduced mass `mu_u` (u) and channel radius `a_fm` (fm): read them there, never
+   through a second evaluation (`docs/upgrade/data_model.md` section 10). Only S or dS/dE at the level's energy still
+   need `ParticleChannelValues(pair, l, pair->SpinOrbitTwoJ(J), Ec)` (`include/EngineChannelFunctions.h`; E_c = E_x -
+   `GetSepE()` - `GetExE()` as in the `ResonanceEnergy` case).
 4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
-   quantity of the table has its `ModelQuantities()` row and a test named after it]; `reference/data_formats.rst`.
+   quantity of the table has its `ModelQuantities()` row and a function so named (that it is called is not checked:
+   add it to the list under "every quantity, three bases")]; `reference/data_formats.rst` (the list of datum
+   quantities) and `.claude/skills/azure2-setup/references/data-kinds.md` (the row of model data). `check.sh` is no
+   ctest: `bash tests/model_data/check.sh <build>/src/AZURE2`, or `tests/run_tests.sh`. A datum is a record of `t2.md`
+   when its value is the hand value plus one error (residual -1: the totals at the end of the file count the records
+   of `t2.md` from the file); one that needs a project of its own (as `test_anc`) is its own heredoc and project.
 
 **A fitter** (a minimiser the program and a pyazr session both run; `docs/upgrade/fit.md`).
-1. Its function `FitResult FitX(AZURECalc &, AZUREParams &, const FitControl &)` in `src/FitX.cpp`: start, limits and
-   fixed flags from the `AZUREParams`, its end point left there; lines to `control.log`; steps to `control.progress`
-   (an evaluation fitter keeps a `FitEvaluations` alive while it runs: count, best point, the stop request in force;
-   an iteration fitter sends a `FitProgress` per iteration and checks `control.stop`); a stopped fit returns the best
-   point seen with status `stopped`.
-2. Its row in `Fitters()` (`src/Fitters.cpp`; the row's place is its precedence in the program); the switch in
-   `src/AZURE2.cpp`, `reference/command_line.rst` and the table "The Engine's Fitters" of
-   `docs/source/user_guide/fitting.rst` [check 46].
-3. Its case in `tests/pyazr/fit_with_engine_test.py` (the session's fit ends where the program's ends).
+1. Its function `FitResult FitX(AZURECalc &, AZUREParams &, const FitControl &)` in `src/FitX.cpp`, declared with the
+   others at the end of `include/Fitters.h` and listed in `AZURE2_CORE_SOURCES` (`src/CMakeLists.txt`): start, limits
+   and fixed flags from the `AZUREParams`, its end point left there; lines to `control.log`; steps to
+   `control.progress` (an evaluation fitter keeps a `FitEvaluations` alive while it runs: count, best point, the stop
+   request in force; an iteration fitter sends a `FitProgress` per iteration and checks `control.stop`); a stopped fit
+   returns the best point seen with status `stopped`. Once the stop request is set the objective returns 0 at once
+   (`EvaluationObserver::stop`, `include/FitControl.h`): an evaluation fitter takes its end point from
+   `FitEvaluations::BestPoint()` (`HasBest()`, `Stopped()`; `src/FitNLopt.cpp` is the pattern), never from its own
+   last evaluation. A fitter that honours `control.maxCalls` ends by it (`FitEvaluations::Count()`).
+2. Its row in `Fitters()` (`src/Fitters.cpp`; the row's place is its precedence in the program). Columns (`FitterRow`,
+   `include/Fitters.h`): name, option, configBit, gradient, residualRows, bounds, covariance, minos, callLimit,
+   fallback, progressLabel, doc, run. `configBit` is a new enumerator `USE_<X>_MINIMIZER` of `Config::ParameterFlags`
+   (`include/Config.h`, the next bit above the highest in use; a change of that header rebuilds nearly everything). No
+   edit of `src/AZURE2.cpp`: the parser and `--help` read the row (`ApplyFitterSwitch`, `FitterSwitchesHelp`) [check 46
+   fails when it names the switch, or sets a `USE_*_MINIMIZER` bit that is no row's]. The switch's row in
+   `reference/command_line.rst` and the table "The Engine's Fitters" of `docs/source/user_guide/fitting.rst`, and the
+   fitter's name in the lists of `user_guide/pyazr.rst` ("The engine's own fitters"), `web_interface.rst`
+   (`engine_<name>`) and `calculate.rst` (its switch, "Minimizer Selection") [check 46].
+3. Its case in `tests/pyazr/fit_with_engine_test.py` (the session's fit ends where the program's ends; the `hesse=`
+   argument of `compare` at its call says whether the errors of `param.sav` are compared: a fitter that returns errors
+   the program does not write passes `False`; one case: `FIT_WITH_ENGINE_CASES=<word of the label> ctest -R
+   pyazr_fit_with_engine`, slow label). The test fails for a row of the table without a case (`no_case` names its
+   exception). The stop test (c) of `tests/pyazr/fit_engine_control_test.py` loops over the table: nothing to add.
    `fit_with_engine(method=)` and `pyazr.kinds()["fitters"]` read the table.
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
@@ -362,7 +409,8 @@ the variant equal to the base, and the check then compares a run with itself and
 A number that reaches the calculation some other way than a kernel's values (as the stopping scale re-sets the
 sub-points' stopping) is a new *row* of `ApparatusRows()`: one function file with its declare / write / read / follow
 functions (`src/StoppingScale.cpp`, `StoppingScaleRow`) and its line in the table; nothing else in the engine.
-Derivative: central differences of the whole chi^2 (`AZURECalc.cpp`, as a density); an analytic one is not wired.
+Derivative: central differences of the whole chi^2 (`AZURECalcGradient.cpp`, as a density); an analytic one is not
+wired.
 
 **A derived parametrisation of a level** (numbers a user writes and fits in place of some of a level's partial widths:
 Γ_γ and branchings, `gamma_decay`, `docs/upgrade/gamma_parametrisation.md`; a spectroscopic factor or an ANC in place
@@ -417,8 +465,10 @@ parameter name].
    `experiment/tests/quantities_test.cpp` (the test tries it on every quantity that does not list it).
 2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
    if the field brings a refusal of its own.
-3. `AZURE2 --schema > tests/schema/schema_v3.json`, bump `Schema::kVersion` if an existing project changes meaning
-   [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py` [check 18].
+3. After the build: `<build>/src/AZURE2 --schema-out=tests/schema/schema_v3.json` (it writes a temporary file and renames it, so a
+   wrong binary path or a failure leaves the file as it was; a shell redirect onto the file empties it first), bump `Schema::kVersion` if an existing
+   project changes meaning [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py`
+   [check 18: `format3.rst` against `schema_v3.json` only].
 
 **A format-3 quantity.** One function in `experiment/src/Quantities.cpp` that fills its `Quantity` member by member,
 and its entry in `Quantities()`; members it does not set keep the defaults of `Quantities.h`:
@@ -441,22 +491,29 @@ Quantity SFactor() {
   return q;
 }
 ```
-Then a record of it in the `variants` of `experiment/tests/quantities_test.cpp` (the test fails for a row without
-one), the schema and docs as above; later its tree builder (step 3).
+A dimensionless value is `q.units = {OneUnit("1")}`, not `AnyUnitOf(...)`. Then a record of it in the `variants` of
+`experiment/tests/quantities_test.cpp` (the test fails for a row without one; the value and the error of a datum
+carry a unit, `0.03 1` when dimensionless: without it `E_UNIT_MISSING`), made with `DS(reaction, quantity, unit,
+columns[, more fields])`:
+`{"sfactor", {{"dataset", DS("12C(p,g)13N", "sfactor", "keV*b", "E_cm[keV] value error")}}},`; the schema and docs as
+step 3 of "A format-3 field"; later its tree builder (step 3).
 
 **A new kind of data set** (a quantity the engine can fit, step 3b: the engine runs format 3).
 1. Its row in the table: the recipe "A format-3 quantity" [`experiment_quantities` fails without its variant; check 18
-   when `format3.rst` is not regenerated; check 24 for a new diagnostic code].
+   when `format3.rst` is not the output of `tools/gen_schema_docs.py` for `tests/schema/schema_v3.json`, a stale
+   `schema_v3.json` being seen by `experiment_schema` and `pyazr_schema` only; check 24 for a new diagnostic code].
 2. Its tree builder: the case in `Schema::Build` (`experiment/src/Build.cpp`, `ReadObservable`, called by `BuildDataset`) that
    turns the record into a `DatasetSpec` (`SetupSpecs.h`: the observable, the reaction's pair keys, the windows,
-   the nuisances with their `ParameterNames`); until it has one, `Build` refuses the quantity with `E_NOT_BUILT`, so
-   a file never runs with a quantity the engine does not compute.  What the engine computes for the spec is the
-   model pass (`include/ModelPass.h`; the expression tree, S10).  A spec member the old lines never set (as
-   `ReactionSpec::coulombReference`) goes into the comparison of `convert/tests/spec_equivalence_test.cpp` too; where an
-   old construct means the same thing (`absolute 1` is `ReactionSpec::legendre` Absolute), the old-line adaptor
-   `convert/src/SpecsFromOldLines.cpp` sets it, or `convert_spec_equivalence` fails.  A convention of the data (a
-   normalisation, an expansion) is one table of its own in `experiment/` (`LegendreExpansion.h`), read by Build and
-   the engine alike.
+   the nuisances with their `ParameterNames`); until it has one, `Build` refuses the quantity with `E_NOT_BUILT` (the
+   fall-through at the end of `ReadObservable`; no row lists it in its `refusals`), so a file never runs with a quantity
+   the engine does not compute.  `AZURE2 --validate` reads the project through `ReadFormat3Text`, which builds, and
+   reports it too; the table's own validation (`experiment_quantities`) accepts the row.  What the engine computes
+   for the spec is the model pass (`include/ModelPass.h`; the expression tree, S10).
+   A spec member the old lines never set (as `ReactionSpec::coulombReference`) goes into the comparison of
+   `convert/tests/spec_equivalence_test.cpp` too; where an old construct means the same thing (`absolute 1` is
+   `ReactionSpec::legendre` Absolute), the old-line adaptor `convert/src/SpecsFromOldLines.cpp` sets it, or
+   `convert_spec_equivalence` fails.  A convention of the data (a normalisation, an expansion) is one table of its own
+   in `experiment/` (`LegendreExpansion.h`), read by Build and the engine alike.
    A refusal that depends on the target, beam or detector the data set names is made where the effects are built
    (`experiment/src/BuildEffects.cpp`, `CoulombRatioFolds` is the pattern).
 3. If the spec needs a tree the existing kinds do not build: one row of `TreeKinds()` (`experiment/src/Prediction.cpp`,
@@ -488,7 +545,12 @@ one), the schema and docs as above; later its tree builder (step 3).
 **A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
 engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}` (a new dimension is also a row of `Dimensions()` there, its
 base unit with factor 1, as `inverse_energy`, 1/MeV); `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
-on every quantity; then the schema and docs as above.  A factor is applied only by `Units.h` `Rescale` (through
+on every quantity (a unit is offered to every quantity of its dimension); its place in the table is its place in every
+`units` list of the schema.  The row tests pass for any positive factor, so state the factor in one line of
+`experiment/tests/parsers_test.cpp` ("The unit table", beside `keV`) and use the unit once in a fixture of
+`experiment/tests/data/`.  Then build and regenerate: `AZURE2 --schema-out=tests/schema/schema_v3.json`, `python3
+tools/gen_schema_docs.py`, and run `ctest -R 'experiment_schema|pyazr_schema'` (the two tests that see a stale schema;
+the consistency script does not).  A factor is applied only by `Units.h` `Rescale` (through
 `ToBase`, `ToUnit`, `Context::InBase`; the columns of a data file through `experiment/DataRows.h`, where the points
 are made), never as a literal in `Build`.  A quantity that is a scale of an observable the engine computes (an S
 factor, a yield per unit charge) is `ReactionSpec::scale`, one tree kind `Scaled`: a constant factor is set in
@@ -504,7 +566,8 @@ that triggers it alone [check 24].
 **A new apparatus kernel** (a resolution or broadening of a folded point: `experiment/include/azure2/experiment/Kernels.h`,
 `docs/upgrade/energy_grid.md` section 3.3). A kernel is plain functions of the point's nodes, the point and the effect's
 parameters; the engine applies whatever the table holds.
-1. One file `experiment/src/Kernel<Name>.cpp` (`KernelGaussian.cpp` is the pattern): the fold as a template on V
+1. One file `experiment/src/Kernel<Name>.cpp` (`KernelRectangular.cpp` is the pattern of a kernel with parameters of
+   its own; `KernelGaussian.cpp` shows the fold template and the support only): the fold as a template on V
    (`double` gives the value, `LinearForm` the exact weights the gradient reads: the same arithmetic), its support (the
    c.m. interval the point's nodes must span; the set-up gives the point the shared mesh's nodes over it, whose two
    outer nodes lie up to one interval beyond it: the fold integrates over `nodes.Low()` .. `nodes.High()`, never over
@@ -512,16 +575,24 @@ parameters; the engine applies whatever the table holds.
    row member by member. Its own parameters are `KernelParameter` rows (name, dimension, engine unit, fittable) whose
    values arrive in `KernelParameters::values`; with `tableForm = true` and the keyword `detector.energy_resolution
    <form>` the format-3 form is generated from those rows (`Schema.cpp`) and read by `BuildEffects.cpp`: no parser
-   code. An analytic derivative in a parameter goes in `derivative`.
-2. Its line in `Kernels()` (`experiment/src/Kernels.cpp`) and the file in `experiment/CMakeLists.txt`.
+   code. An analytic derivative in a parameter goes in `derivative`. An energy parameter arrives in lab MeV as the
+   record gives it: multiply by `KernelPoint::cmFactor` (fold) and `SupportPoint::cmFactor` (support). The one
+   quadrature is `GridQuadrature` / `InterpolateNodes` (`experiment/include/azure2/experiment/KernelQuadrature.h`): a
+   weight with a kink or an edge is integrated over its own window, one call per piece on which it is smooth. A
+   normalised average sets `k.thinLimit = AverageThinLimit` (without it a one-node point is NaN). A kernel whose
+   parameters are all `fittable = false` takes `<parameter> <value> <unit>` with no `fixed|fit` tail.
+2. Two lines in `experiment/src/Kernels.cpp` (the declaration `Kernel <Name>Kernel();` and the entry in `Kernels()`)
+   and the file in `experiment/CMakeLists.txt`.
 3. Tests: cases in `experiment/tests/kernels_test.cpp` against closed forms (the table's own checks run on every row),
-   a derivative against central differences; a format-3 fixture that validates (`experiment/tests/data/`, listed in
-   `schema_test.cpp`); `AZURE2 --schema > tests/schema/schema_v3.json`, `python3 tools/gen_schema_docs.py` [check 18,
-   21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
+   a derivative against central differences (the node values are linear between nodes: a closed form for a curved σ
+   carries + σ'' h²/12, h the node spacing); a format-3 fixture that validates (a `detector` record with
+   `energy_resolution <form> <parameter> <value> <unit>` in `experiment/tests/data/section_examples.azr`, which
+   `schema_test.cpp` lists); after a build, `AZURE2 --schema-out=tests/schema/schema_v3.json`, `python3
+   tools/gen_schema_docs.py`, then `ctest -R 'experiment_schema|pyazr_schema'` [check 18, 21]. A test project of its own (`tests/rectangular_resolution/` is the pattern: the folded run against an average of
    the unfolded one) also adds its lines to `tests/upgrade/predictions.txt` (`python3 tests/upgrade/predictions_test.py
    --binary <AZURE2> --write`, lines added for the new project only) [`upgrade_predictions`].
-4. Docs: its row in `energy_grid.md` section 3.3, its form in `reference/data_formats.rst` (generated part) and a line in
-   `developer/edata_and_target_effects.rst`.
+4. Docs: its row in the table of `docs/upgrade/energy_grid.md` section 3.3, its line in the kernel table of
+   `docs/source/developer/data_model.rst`; its form in `docs/source/reference/format3.rst` is generated (step 3).
 The engine is not edited: the fold (`src/PointFold.cpp`), the grid's extent (`EffectSupport`, `src/TargetSetup.cpp`) and
 the gradient's weights (`FoldWeights`) read the table. Limits (2026-11): a table kernel cannot be combined with a
 target, a beam spread, a beam profile or a UDR on one data set (refused in `TargetEffect::SelectKernels`; kernels are

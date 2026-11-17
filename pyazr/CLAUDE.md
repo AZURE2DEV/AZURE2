@@ -105,6 +105,15 @@ path of the row, or a path of the row never appears.
   evaluated), `status` the fitter's word, `outcome` the shared word (`fitStatus.out`'s status), `notices` (fallback,
   a setting ignored, the best point kept), `minos` with `minos_valid` per side.  A new field is a member of
   `FitResult` (`include/FitControl.h`), a key of `FitWithEngineDict` and a field here.
+- The program's ensemble sampler on a session: `r = s.sample_with_engine(walkers, steps, sampler_threads=, basis=,
+  parameter_spread=, energy_spread=, overwrite_samples=, x0=, progress=, stop=)` (`session_sampler.py`;
+  `api/src/pybind_sampler.cpp`, `AZUREAPISampler.cpp`): the command `mcmc` from its set-up on is one engine
+  function, `RunSampler` (`src/SamplerRun.cpp`), called by the program and by the session; the keywords are read
+  by the command line's own reader (`ReadRunCommand`), so a new option of the command is a row of `RunQuestions()`,
+  an argument of `SamplerRequest` and a keyword here, and no range is typed in Python.  The arrays of
+  `EngineSampleResult` are `samples.mcmc` read back by the engine.  The sampler makes its own parameter vector from
+  the levels' inputs: `CarryValuesToInputs` puts the session's values there and refuses what it cannot carry.
+  Test: the program's chain, number for number (`tests/pyazr/sample_with_engine_test.py`).
 - The numbers at one x: `ev = s.evaluate(x)` (`evaluate.py`), one engine evaluation: `ev.objective`, `ev.chi2`
   (`Total-Chi-Squared`), `ev.terms` (by the engine's term names), `ev.data[i]` (model, residuals, chi2 as the row of
   `chiSquared.out`, `rows` its rows of `f.residuals(x)`, extra columns), `ev.table()`; of a session made with
@@ -131,7 +140,7 @@ path of the row, or a path of the row never appears.
 ## How it is built
 
 - `session.py` drives the engine **in-process** through the pybind11 module
-  `_azure2` (`api/src/pybind_api.cpp` → `api/src/AZUREAPI.cpp`). It runs no
+  `_azure2` (`api/src/pybind_api.cpp` → `api/src/AZUREAPI*.cpp`). It runs no
   subprocess and opens no socket. Rebuilding with CMake (`-DUSE_API=ON` and
   pybind11 found) writes `pyazr/_azure2*.so` here. That file is git-ignored;
   never commit it.
@@ -148,9 +157,10 @@ path of the row, or a path of the row never appears.
   `AZURE2 --convert OLD NEW`); `convert.py` is the converter's binding
   (`convert_azr`, `convert_params`).
 - No physics formula in Python: physical values are `Session.transform(x)` (the engine's `TransformOut`), the
-  functions the rows of `pyazr.physics` or `Session.channel_functions`.  The one formula of pyazr's own is the
-  Weisskopf estimate (`widths.weisskopf_width`, tested against its closed form by `tests/pyazr/weisskopf_test.py`:
-  the engine has none).  Never add another: a missing function is a row of the physics table.
+  functions the rows of `pyazr.physics` or `Session.channel_functions`.  pyazr has no formula of its own: the
+  Weisskopf estimate, once the exception, is the row `weisskopf_width` (`physics/Widths.h`; `widths.weisskopf_width`
+  calls it, `tests/pyazr/weisskopf_test.py` holds the numbers of the earlier formula).  Never add one: a missing
+  function is a row of the physics table.
 - `sources/nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
   Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 

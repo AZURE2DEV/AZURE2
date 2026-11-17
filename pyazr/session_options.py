@@ -20,9 +20,21 @@ def records_given(init):
 
     @functools.wraps(init)
     def wrapper(self, *args, **kwargs):
+        for name in kwargs:
+            if name not in signature.parameters:
+                removed = _removed_keyword(name)  # the engine's one text for an option that is gone
+                if removed:
+                    raise TypeError(removed)
         self._given_options = set(signature.bind(self, *args, **kwargs).arguments) - set(NOT_OPTIONS)
         return init(self, *args, **kwargs)
     return wrapper
+
+
+def _removed_keyword(name):
+    """The refusal of a keyword that was an option of the calculation and is one no more (the engine's table
+    ``io::RemovedConfigKeys()``), or "" for any other name."""
+    from . import _azure2
+    return _azure2.removed_option_text(name)
 
 
 def runtime_options(engine, given, data_mode, coulomb_table, cwd):

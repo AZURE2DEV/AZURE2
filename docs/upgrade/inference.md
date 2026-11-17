@@ -103,17 +103,19 @@ outputs (887, 851, 887 files identical); the eight fits identical to the base bu
 
 ## 6. The output writer (audit of `WorkingCopy::WriteChiSquaredFile`, `src/DataOutputFiles.cpp`)
 
-`chiSquared.out` takes its numbers from three places. (a) What the terms of the last evaluation stored in the
+`chiSquared.out` takes its numbers from two places. (a) What the terms of the last evaluation stored in the
 caller's `Results::objective`: each segment's χ² and the normalization used, Park's wall, the abundances, the
 nuisance priors, the model data, the prior covariance. (b) Sums the writer forms again from the working copy with
-the functions the terms call (`Segment::AddShiftPenalty`, `WorkingCopy::ScreeningPenalty`, `DensityPenalty`,
-`DopplerPenalty`, `ThicknessPenalty`, `ApparatusPenalty`): equal to the terms' while the working copy is the one
-the last evaluation filled. (c) The normalization prior of each segment, written out a second time in the writer.
-Found: T11 (the priors of the `gamma_decay` records) has no field, so for such a project the file's totals do not
-add up to the minimised χ²; a session's `write_outputs` refreshes the model-only terms and the prior covariance but
-not the nuisance total. A writer that asks the terms needs the compound, the level state and the nuisance function,
-which a `WorkingCopy` method does not have, and a new field changes an output file: not done here. Slice 2 removes
-(c): the writer and the term call the one `GaussianPrior`.
+the gathers and the arithmetic the terms use (since `objective_arrays.md` slices 1 and 2: `AppendNormPrior`,
+`AppendShiftPriors`, `AppendTargetPriors` of `include/DiagonalPriors.h` and `PriorsChi2`): each segment's
+normalization prior, the shift total and the target and apparatus totals, equal to the terms' while the working copy
+is the one the last evaluation filled.  (Until slice 2 the normalization prior was written out a second time in the
+writer, with its own rule.)
+Found: T11 (the priors of the `gamma_decay` records) had no field, so for such a project the file's totals did not
+add up to the minimised χ² (since 2026-11-16 the term stores its value in `Results::objective.gammaDecay` and the
+writer prints `Total-Gamma-Decay-Chi-Squared` whenever the project has a record; the PI's word); a session's `write_outputs` refreshes the model-only terms (`ModelChi2`: T6, T7, T9, T11)
+but neither the nuisance total nor the prior covariance's (that one is set by the session's last `CalculateChi2RWA`). A writer that asks the terms needs the compound, the level state and the nuisance function,
+which a `WorkingCopy` method does not have, and a new field changes an output file: not done here.
 
 ## 7. Done (2026-11-16)
 
@@ -170,6 +172,28 @@ injected error.
   Roadmap box "`inference/` target" stays open for them.
 - No class `ParameterVector` (section 4): the values are `AZUREParams` on Minuit2's parameters.
 - The fitters and the gradient are engine code.
-- The writer is audited (section 6) and unchanged apart from calling `GaussianPriorChi2`. T11 has no field in
-  `chiSquared.out`; adding one changes an output file and needs a decision.
+- The writer is audited (section 6) and unchanged apart from calling `GaussianPriorChi2`. T11's field in
+  `chiSquared.out` (`Total-Gamma-Decay-Chi-Squared`) was added afterwards, with the PI's word.
 - `ObjectiveContext` still holds the two flags of a request (`thmOnly`, `segmentPriors`) beside what a term reads.
+
+## 8. The diagonal priors on one list (2026-11-16, `objective_arrays.md` slices 1-3)
+
+Slices 1, 2 and 3 of `objective_arrays.md` section 5 are built, one commit each.
+
+- `inference/`'s `DiagonalPriors.h`: the list of diagonal priors (full index, the value the objective reads, centre,
+  width, the source of the prior, a group: the segment or the apparatus row) and its arithmetic, `AddPriorsChi2`
+  (into a running sum), `PriorsChi2` (a subtotal from 0, by source and group), `AddPriorsGradient` (on `p[index]`),
+  `AddPriorsCurvature`; test `inference_diagonal_priors`.
+- The engine's gathers, `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`): `AppendNormPrior`,
+  `AppendShiftPriors`, `AppendTargetPriors`, `AppendAbundancePriors`, `DiagonalPriorsOf` (every prior with its
+  index, in the order the API's rows expect) and, for T5, `NuisancePriorOf` / `NuisancePriorsOf`.  Each rule of
+  eligibility is written there once; the terms (T3, T4, T5, T8), the gradients, G2, the least-squares rows, the
+  sampler (`ForEachDiagonalPrior`, a loop over `DiagonalPriorsOf`) and the `chiSquared.out` writer read it.
+- Gone: the five `WorkingCopy::*Penalty` sums, the per-object penalties of `TargetEffect`, `Segment` and
+  `ApparatusParam`, `Segment::AddShiftPenalty` and `ShiftPenaltyParts`, the six `ForEach...Prior` helpers of
+  `Objective.h`, the two written-out copies of the nuisance rule (`AZURECalcNuisance.cpp`, `AZUREAPIChi2.cpp`).
+- Before slice 2, a scratch build compared the old enumeration's priors with the gather's on 343 runs (every project
+  of `tests/` with data, and the runs of 26 regression scripts): equal in all, element by element (the commit message
+  of slice 2 has the counts).
+
+Not moved: T7's value and gradient, T6, T1a and T1b (slices 4-6 of the note).

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <map>
 #include <tuple>
+#include "azure2/support/FloatingPointPrecision.h"
 // The points and slots of a working copy (WorkingCopy::UnitAt, SlotAt; docs/upgrade/data_structure.md section 1.4):
 // slots given to points during the set-up or a grid re-placement, and the layout of the two vectors.
 #include <stdexcept>
@@ -169,6 +170,7 @@ void WorkingCopy::ContractRowSets(azure2::Results &results) const {
                            " contracted values for " + std::to_string(contractedSize_) + " (BeginEvaluation is missing)");
 #pragma omp parallel for schedule(dynamic, 1)
   for (int s = 0; s < (int)rowSets_.size(); s++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     const azure2::RowSet &set = *rowSets_[s];
     for (int k = 0; k < set.count; k++)
       slots_[set.first + k].ValuesWith(set, k, results, results.contracted.data() + set.ValueIndex(k, 0));

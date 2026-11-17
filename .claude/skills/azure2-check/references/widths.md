@@ -27,12 +27,20 @@ larger. State the unit next to every θ² you report.
 
 ## How pyazr obtains Γ_W
 
-Γ_W needs P_l(E_r). `wigner_widths` obtains it from AZURE2's transformation: it transforms a probe vector with
-every free reduced-width amplitude set to a small ε, so the shift denominator is 1 and Γ_c(ε) = 2 P_c ε². This
-costs one extra transform at AZURE2's own radii and Coulomb functions, and reproduces Γ_W of the width form
-(³He+α, 7/2⁻ level at E_x = 4.57 MeV: Γ_W = 3.487 × 10⁵ eV, θ² = 0.494). The probe is not 2 P γ_W² for a level
-with fixed non-zero widths or in the formal basis (the docstring of `Session.wigner_widths` has the sizes); the
-penetrability itself is `Session.channel_functions(pair, e_cm, l)["P"]` or `pyazr.physics.penetrability`.
+`Session.wigner_widths(x)` is Γ_W = 2 P_l(E_r) γ²_W in eV for every free particle channel that is open at its
+level: P_l the penetrability the engine formed the observed width with (the session's own channel functions, as
+`Session.channel_functions(pair, e_cm, l)["P"]` gives them: AZURE2's radii and Coulomb functions, the hybrid model's
+solution for a pair with a nuclear potential) and E_r the pair's c.m. energy at the level's physical energy (the
+level's row of `Session.transform(x)`). The number is the same in Brune's, the formal and Park's parametrization.
+A closed, a photon or a fixed channel has no entry there; `dimensionless_widths` gives `wigner_width` and `theta2`
+of fixed open channels too, by the same definition, and its `level_energy`, `is_open` and `e_gamma` are taken at the
+physical energy in every basis (`widths_check.py` prints them). Every row's `value` (the Γ of θ²), fixed rows
+included, is the row of `Session.transform(x)` at the vector asked for: a fixed amplitude's observed width moves
+with the level's other parameters. Example (T2 of `tests/upgrade`, α + ¹²C, l = 1, the
+1⁻ level at E_x = 12.4258 MeV): Γ_W = 4.020 × 10⁶ eV.
+
+A θ² of a level with fixed widths, or of a formal-basis session, computed with an older build is not this number:
+`older-results.md`.
 
 ## γ-ray strengths
 
@@ -45,7 +53,8 @@ Strengths in Weisskopf units (W.u.) against the Weisskopf estimates, with E_γ i
 | M1 | 2.1 × 10⁻² E_γ³ |
 
 `Session.dimensionless_widths(x)` gives E1 to E4 and M1 to M4 (`ChannelWidth.weisskopf`, `.wu`; A is the compound
-nucleus's mass number). A γ width is not proportional to γ² for a capture channel: the external-capture term is
+nucleus's mass number); one estimate is `pyazr.physics.weisskopf_width(e_gamma, multipolarity, mass_number,
+radiation)`, in eV (two-digit coefficients for R = 1.2 A^{1/3} fm, within 3 % of the closed form, M4 7 %). A γ width is not proportional to γ² for a capture channel: the external-capture term is
 linear in the amplitude. Convert with `Session.transform(x)`, never by squaring.
 
 ## The level norm J: saturated levels

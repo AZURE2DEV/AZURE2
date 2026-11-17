@@ -51,6 +51,9 @@ check() {  # check LABEL VALUE REFERENCE TOL
   if close "$2" "$3" "$4"; then ok "$1: $2 (reference $3)"; else bad "$1: ${2:-missing}, reference $3 (rel. tol. $4)"; fi
 }
 
+# same_file PARTIAL RECORD: the record's output file is the partial widths', byte for byte, once the record's own
+# field of chiSquared.out, which must be 0 here (no prior), is taken out
+same_file() { sed 's/ Total-Gamma-Decay-Chi-Squared: 0\( \|$\)/\1/' "$2" | cmp -s "$1" -; }
 # project NAME FILE: $WORK/NAME/p.azr = FILE, with the data
 project() {
   mkdir -p "$WORK/$1/output" "$WORK/$1/checks"
@@ -85,7 +88,7 @@ for b in "" --use-park; do
     base="$(basename "$f")"
     case "$base" in param.par|parameters.out) continue ;; esac
     n=$((n + 1))
-    cmp -s "$f" "$WORK/record$b/output/$base" || { d=$((d + 1)); echo "        differs: $base"; }
+    same_file "$f" "$WORK/record$b/output/$base" || { d=$((d + 1)); echo "        differs: $base"; }
   done
   if [ "$n" -ge 6 ] && [ "$d" -eq 0 ]; then ok "${b:---use-brune}: $n output files identical (the five data sets, chi^2)"
   else bad "${b:---use-brune}: $d of $n output files differ"; fi
@@ -149,6 +152,16 @@ run fit_prior fit
 bp="$(sav fit_prior 'level5.branching.g+15O[6.7931]')"
 pull="$(awk -v b="$bp" -v c="$c" -v w="$s6" 'BEGIN { printf "%.6f", (b - c) / w }')"
 check "a prior (b + 2 sigma, sigma) on b(6.7931): the pull" "$pull" -1 0.02
+# chiSquared.out's field of the record's priors: the pull squared, from the branching param.sav holds (ten digits; the
+# field has six); without a prior the field is there and 0.
+gd() { sed -n 's/.*Total-Gamma-Decay-Chi-Squared: \([^ ]*\).*/\1/p' "$WORK/$1/output/chiSquared.out"; }
+want="$(awk -v b="$bp" -v c="$c" -v w="$s6" 'BEGIN { printf "%.8g", ((b - c) / w) ^ 2 }')"
+check "chiSquared.out: Total-Gamma-Decay-Chi-Squared is the prior's pull squared" "$(gd fit_prior)" "$want" 1e-4
+if [ "$(gd fit_record)" = 0 ]; then ok "chiSquared.out: Total-Gamma-Decay-Chi-Squared 0 for the record without a prior"
+else bad "chiSquared.out of the record without a prior: Total-Gamma-Decay-Chi-Squared '$(gd fit_record)', expected 0"; fi
+if ! grep -q 'Total-Gamma-Decay-Chi-Squared' "$WORK/fit_partial/output/chiSquared.out"; then
+  ok "chiSquared.out of the partial widths (no record): no Total-Gamma-Decay-Chi-Squared"
+else bad "chiSquared.out of a project without a record carries Total-Gamma-Decay-Chi-Squared"; fi
 
 echo "-- (d) the gradient against central differences (AZURE_GRAD_CHECK)"
 # level 5's energy and its first proton width free as well: their gradients take the photon amplitudes' share
@@ -254,7 +267,7 @@ same_outputs() {
     base="$(basename "$f")"
     case "$base" in param.par|parameters.out) continue ;; esac
     n=$((n + 1))
-    cmp -s "$f" "$WORK/$2/output/$base" || { d=$((d + 1)); echo "        differs: $base"; }
+    same_file "$f" "$WORK/$2/output/$base" || { d=$((d + 1)); echo "        differs: $base"; }
   done
   if [ "$n" -ge 6 ] && [ "$d" -eq 0 ] && [ "$(levelpart "$1" | md5sum)" = "$(levelpart "$2" | md5sum)" ]; then
     ok "$3: $n output files and parameters.out's level parameters identical"

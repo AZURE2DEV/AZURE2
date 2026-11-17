@@ -26,7 +26,6 @@ options of the calculation (value, source):
   use_long_wavelength = 1 (default)
   ec_convection_current = 1 (default)
   use_rmc = 0 (default)
-  use_gsl_coul = 0 (default)
   use_coulomb_table = 1 (default)
   use_ec_table = 1 (default)
   replace_grids = 1 (default)

@@ -11,6 +11,7 @@
 #endif
 #include "CoulombTable.h"
 #include "azure2/io/ConfigSection.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -90,7 +91,7 @@ void BindDescription(py::module_ &m) {
         const CoulombTable *table = nullptr;
         std::string identity;
         {
-          py::gil_scoped_release release;
+          EngineCallScope engine;
           table = CoulombTable::Shared(path);  // loaded once per process, as a session loads it
           if (table) identity = table->ContentIdentity();
         }
@@ -119,7 +120,7 @@ void BindDescription(py::module_ &m) {
         std::string error;
         bool built = false;
         {
-          py::gil_scoped_release release;
+          EngineCallScope engine;
           built = CoulombTable::BuildFile(file, spec, error);
         }
         if (!built) throw std::runtime_error("the Coulomb table " + file + " was not built: " + error);
@@ -132,6 +133,16 @@ void BindDescription(py::module_ &m) {
       "--build-coulomb-table does (CoulombTable::BuildFile: written as path.new, then renamed); returns the path. "
       "threads: OpenMP threads of the build; l_max and per_decade (nodes per decade of eta and rho): the table's "
       "extent and density (the defaults are the program's table).");
+  m.def(
+      "removed_option_text",
+      [](const std::string &name) {
+        const azure2::io::RemovedConfigKey *removed = azure2::io::RemovedConfigKeyNamed(name);
+        return removed && *removed->flag ? azure2::io::RemovedConfigKeyText(*removed, azure2::io::OptionSpelling::kKeyword)
+                                         : std::string();
+      },
+      py::arg("name"),
+      "The refusal of a keyword of pyazr.Session that was an option of the calculation and is one no more (a row of "
+      "io::RemovedConfigKeys() that had a flag: use_gsl_coul), saying why and what to do; \"\" for any other name.");
   m.def(
       "session_options",
       []() {

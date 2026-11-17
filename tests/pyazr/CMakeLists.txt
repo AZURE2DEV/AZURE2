@@ -77,7 +77,15 @@ add_test(NAME pyazr_wigner_convention
                  ${CMAKE_CURRENT_SOURCE_DIR}/wigner_convention_test.py)
 set_tests_properties(pyazr_wigner_convention PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# The Weisskopf estimate, pyazr's one physics formula without an engine counterpart, against its closed form.
+# Session.wigner_widths = 2 P_l(E_r) gamma_W^2 against mpmath's Coulomb functions and the closed form of a neutral
+# channel, T1, T2, T3 and 13N in the three parametrizations (docs/upgrade/pyazr3.md section 11); about 15 s.
+add_test(NAME pyazr_wigner_widths
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/wigner_widths_test.py)
+set_tests_properties(pyazr_wigner_widths PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# The Weisskopf estimate (physics/Widths.h through pyazr.weisskopf_width) against its closed form and against the
+# numbers of the Python formula it replaced.
 add_test(NAME pyazr_weisskopf
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/weisskopf_test.py)
@@ -1176,6 +1184,12 @@ set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 add_test(NAME pyazr_session_lock COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/session_lock_test.py)
 set_tests_properties(pyazr_session_lock PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# The x87 precision of a thread does not reach the results: T1 in a threading.Thread whose precision is lowered to 53
+# bits (as a Windows thread starts) and in the main thread lowered, bit for bit the main thread's; the control words
+# of the threads printed (support/include/azure2/support/FloatingPointPrecision.h).  Two threads: the regions' scopes.
+add_test(NAME pyazr_x87_precision COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/x87_precision_test.py)
+set_tests_properties(pyazr_x87_precision PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # pyazr's Evaluation (Session.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
 # per Evaluation, and the self-description of the objects.
 add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)
@@ -1211,6 +1225,13 @@ set_tests_properties(pyazr_wheel PROPERTIES LABELS slow PROCESSORS 2 TIMEOUT 720
 # (slow), and its controls -- the fitter table, progress records, the stop request.
 add_test(NAME pyazr_fit_with_engine COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_with_engine_test.py)
 set_tests_properties(pyazr_fit_with_engine PROPERTIES LABELS slow
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# The engine's ensemble sampler on a session (docs/upgrade/pyazr3.md section 12): sample_with_engine against the
+# program's command mcmc (the chain number for number at 1 and 2 sampler threads, both bases, Park, a parameter file
+# and x0, a prior of <mcmc>, a continued chain) and its controls; about 80 s.
+add_test(NAME pyazr_sample_with_engine
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/sample_with_engine_test.py)
+set_tests_properties(pyazr_sample_with_engine PROPERTIES PROCESSORS 2
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 add_test(NAME pyazr_fit_engine_control
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_engine_control_test.py)

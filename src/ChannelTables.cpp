@@ -376,8 +376,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
                 if (coulOfL) {
                   if (newL)
                     (*coulOfL)[k] = ThmCoulombTerm(thePair, lValue, localEnergy,
-                                                   ThmRho(muMeV, localEnergy, bindingE, 1.0),
-                                                   !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                                                   ThmRho(muMeV, localEnergy, bindingE, 1.0));
                   coul = (*coulOfL)[k];
                 }
               }
@@ -400,8 +399,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
                            thmJl, thmRhoDjl);
             if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
               thmCoul = ThmCoulombTerm(thePair, lValue, localEnergy,
-                                       ThmRho(muMeV, localEnergy, bindingE, 1.0),
-                                       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                                       ThmRho(muMeV, localEnergy, bindingE, 1.0));
           } else {
             WarnThmBelowB(configure, localEnergy, bindingE);
           }

@@ -110,12 +110,15 @@ add_test(NAME physics_system_unit COMMAND physics_system_unit_test)
 # The resonance strength, branching ratio and total width against numbers computed by hand and their derivatives
 # against central differences (docs/upgrade/data_kinds.md section 4.7).  The modified S factor's conversion against
 # mpmath (data_kinds.md section 4.1).  The width scales (Wigner limit, single-particle width, photon penetrability)
-# against closed forms (Widths.h).
+# against closed forms (Widths.h).  The adjoints of the collision matrix against central differences of their
+# forward functions (docs/upgrade/physics_functions.md, stage 6).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters_unit_test.cpp
              external_capture_unit_test.cpp observable_coupling_test.cpp pathways_unit_test.cpp
              resonance_quantities_test.cpp astrophysical_factor_test.cpp widths_test.cpp
-             collision_matrix_test.cpp channel_solve_test.cpp observables_test.cpp)
+             collision_matrix_test.cpp channel_solve_test.cpp observables_test.cpp
+             collision_matrix_adjoint_test.cpp channel_solve_adjoint_test.cpp
+             observables_adjoint_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)
@@ -134,6 +137,17 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_coulomb_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_coulomb COMMAND physics_coulomb_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
+
+# coulomb_neutral: F, F', G, G' of coulsm at eta = 0 (Riccati-Bessel functions) against mpmath for l = 0-8 and
+# rho = 1e-6-5e4 (tests/data/neutral_coulomb.csv, make_neutral_coulomb.py), 1e-13 and the Wronskian
+# (docs/upgrade/coulomb.md section 10).
+add_executable(physics_coulomb_neutral_test tests/coulomb_neutral_test.cpp)
+target_link_libraries(physics_coulomb_neutral_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_coulomb_neutral_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_coulomb_neutral COMMAND physics_coulomb_neutral_test
+         ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/neutral_coulomb.csv)
 
 # coulomb_threshold: the Coulomb functions' zero-energy fallback just above a heavy-ion threshold, S against its exact
 # limit S_l(0) within the slope the limit leaves out (physics/coulomb/README.md, local changes).

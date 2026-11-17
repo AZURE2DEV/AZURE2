@@ -3,7 +3,7 @@ set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTabl
 ALevel.cpp LevelInputs.cpp LevelState.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
-PPair.cpp AZURECalc.cpp Objective.cpp
+PPair.cpp AZURECalc.cpp AZURECalcGradient.cpp AZURECalcJacobian.cpp AZURECalcNuisance.cpp AZURECalcPool.cpp AZURECalcOutput.cpp AZURECalcDiagnostics.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
 Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
 WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
@@ -23,7 +23,7 @@ MeshPlanner.cpp
 MeshSlots.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
-HandOver.cpp
+HandOver.cpp DiagonalPriors.cpp
 TaskScratch.cpp
 RunScratch.cpp
 RunDiagnostics.cpp
@@ -40,11 +40,13 @@ ShiftedFold.cpp
 THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
 SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp UposChecks.cpp LevelReport.cpp CompoundSystemChecks.cpp
-LevelInputMessages.cpp ProjectSetup.cpp)
+LevelInputMessages.cpp ProjectSetup.cpp
+RunRequest.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
-    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp SamplerSupport.cpp)
+    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp AZURECalcMCMCPriors.cpp AZURECalcMCMCRun.cpp AZURECalcMCMCChain.cpp
+         AZURECalcMCMCPool.cpp SamplerSupport.cpp SamplerRun.cpp)
 endif()
 
 include_directories(${AZURE2_SOURCE_DIR}/include)
@@ -57,9 +59,10 @@ target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
 set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
-# two use convert/, linked below); RunRequest.cpp: the commands and the options of a run, the command line's reader;
-# RunPreparation.cpp: a run request into the Config
-set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunRequest.cpp RunPreparation.cpp)
+# two use convert/, linked below); RunPreparation.cpp: a run request into the Config.  RunRequest.cpp (the commands
+# and the options of a run, the command line's reader) is the engine library's: a session reads the answers of its
+# sampler run through it (api/src/AZUREAPISampler.cpp), so that no range of an option is typed twice.
+set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunPreparation.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)

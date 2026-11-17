@@ -19,7 +19,9 @@
 #      parameter, a term with no effect; two indistinguishable terms give a warning.  The refusals of the old block
 #      grammar (a follower with a function of its own, sqrtshift and shiftfn on one line, a short block) are the
 #      converter's: the old lines through AZURE2 --convert, refused with the old engine's reason;
-#   7. a .sav value does not free a fixed function parameter (design note D4).
+#   7. a .sav value does not free a fixed function parameter (design note D4);
+#   8. the function's own penalty in shifts.out (its last column) is the sum of the priors of the function's own
+#      parameters a_j, also when the prior covariance replaces the prior of the record's offset (by hand, below).
 #
 #   ./tests/shift_fn/check.sh path/to/AZURE2
 
@@ -33,6 +35,8 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/shift_fn.XXXXXX")"
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT
+
+. "$HERE/../lib/edit_guard.sh"
 
 failures=0
 ok() { echo "  ok    $1"; }
@@ -255,6 +259,42 @@ if run sav_fixed fit ""; then
     v="$(par "$WORK/sav_fixed" G.a0)"
     if absclose "$v" 0.002 1e-12; then ok "fixed a0 stays at the .sav value ($v)"; else bad "fixed a0 moved to $v (.sav 0.002)"; fi
   fi
+fi
+
+# ---- 8. the function's own penalty in shifts.out -----------------------------------
+# Record G: offset a = 0.002 MeV with a prior 0 +- 0.001 MeV, a0 = 0.003 with a prior 0 +- 0.001, every level fixed.
+# By hand: the offset's prior ((0.002 - 0)/0.001)^2 = 4, the function's ((0.003 - 0)/0.001)^2 = 9.
+#   nopcov: no prior covariance.  shifts.out's penalty of the function = 9; Total-Shift-Chi-Squared = 4 + 9 = 13.
+#   pcov:   a prior covariance file lists G.offset (mean 0, variance 1e-6 MeV^2) and so replaces the offset's own
+#           prior (objective.md D3): Total-Prior-Covariance-Chi-Squared = 0.002^2/1e-6 = 4, Total-Shift-Chi-Squared = 9
+#           (the a0 prior alone), and the function's penalty is still 9.  Until 2026-11-16 the line printed the
+#           owner's shift priors minus the offset's prior formed again without asking whether it was replaced:
+#           9 - 4 = 5.
+PCOV_RECORDS="$(scale G 'a0*(x-1)' '0.002 MeV fit prior 0 0.001' 'a0 0.003 fit prior 0 0.001'
+                ds xs_40_lin_mislabelled xs_40_lin_mislabelled.dat 40 'shift          G'
+                ds xs_90_lin_mislabelled xs_90_lin_mislabelled.dat 90 'shift          G')"
+fn_penalty() { awk -F, '/^# 1,1 2,a0\*\(x-1\),/ { print $NF }' "$1/output/shifts.out" 2>/dev/null; }
+mk nopcov 1 "$PCOV_RECORDS"
+if run nopcov calculate ""; then
+  pen="$(fn_penalty "$WORK/nopcov")"; tot="$(field "$WORK/nopcov" Total-Shift-Chi-Squared:)"
+  if relclose "$pen" 9 1e-5; then ok "8 nopcov: the function's penalty in shifts.out = 9 ($pen)"
+  else bad "8 nopcov: the function's penalty in shifts.out '$pen', by hand 9"; fi
+  if relclose "$tot" 13 1e-5; then ok "8 nopcov: Total-Shift-Chi-Squared = 4 + 9 = 13 ($tot)"
+  else bad "8 nopcov: Total-Shift-Chi-Squared '$tot', by hand 13"; fi
+fi
+mk pcov 1 "$PCOV_RECORDS"
+printf 'G.offset\n0\n1e-6\n' > "$WORK/pcov/pc.txt"
+if ! edited "$WORK/pcov/t.azr" "$WORK/pcov/t.azr" awk '/<\/config>/ { print "priorCovariance=pc.txt" } { print }'; then
+  bad "8 pcov: no </config> to add priorCovariance= before"
+elif run pcov calculate ""; then
+  pen="$(fn_penalty "$WORK/pcov")"; tot="$(field "$WORK/pcov" Total-Shift-Chi-Squared:)"
+  pc="$(field "$WORK/pcov" Total-Prior-Covariance-Chi-Squared:)"
+  if relclose "$pc" 4 1e-5; then ok "8 pcov: Total-Prior-Covariance-Chi-Squared = 0.002^2/1e-6 = 4 ($pc): the offset's prior is replaced"
+  else bad "8 pcov: Total-Prior-Covariance-Chi-Squared '$pc', by hand 4"; fi
+  if relclose "$tot" 9 1e-5; then ok "8 pcov: Total-Shift-Chi-Squared = 9 ($tot), the a0 prior alone"
+  else bad "8 pcov: Total-Shift-Chi-Squared '$tot', by hand 9"; fi
+  if relclose "$pen" 9 1e-5; then ok "8 pcov: the function's penalty in shifts.out = 9 ($pen)"
+  else bad "8 pcov: the function's penalty in shifts.out '$pen', by hand 9 (5 = 9 - the replaced offset prior)"; fi
 fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: shift functions"; else echo "FAIL: $failures check(s)"; exit 1; fi

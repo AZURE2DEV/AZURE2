@@ -33,22 +33,17 @@ number the GUI shows, one channel at a time.  Never divide by ``wigner_limit``
 twice: it is already a squared quantity (:func:`pyazr.physics.wigner_limit` gives the same unit; a
 ``hbar^2 / (mu a^2)`` unit is 2/3 of it).
 
-The Weisskopf estimate (:func:`weisskopf_width`) is the one formula of this module: the engine has no
-counterpart.  Every other number of the table is the engine's (``Session.transform``, the records).
+The Weisskopf estimate (:func:`weisskopf_width`) is the engine's too: the row ``weisskopf_width`` of
+:mod:`pyazr.physics` (``physics/Widths.h``).  No number of the table is computed in Python.
 
-Getting the penetrability without a Coulomb-function implementation
--------------------------------------------------------------------
-``Gamma_W`` needs ``P_l(E_r)``, which ``Session.channel_functions`` and ``pyazr.physics.penetrability`` also
-give (:meth:`pyazr.Session.wigner_widths` documents where the probe below differs from it).  Rather than
-re-implement Coulomb wave functions, this module asks AZURE2 itself: it
-transforms a *probe* vector in which every reduced-width amplitude is set to a
-tiny ``eps`` (so the level-shift denominator is 1 to O(eps^2), and the levels of
-a J-group no longer mix), and reads
-
-    2 P_c = Gamma_c(eps) / eps^2
-
-off the result.  One extra ``TRANSFORM_RWA`` call per model, at AZURE2's own
-channel radii, boundary conditions and Coulomb functions.
+Where the penetrability comes from
+----------------------------------
+``Gamma_W`` needs ``P_l(E_r)``: :meth:`pyazr.Session.wigner_widths` and :meth:`pyazr.Session.dimensionless_widths`
+take it from the engine's observed-level record, the penetrability the observed width was formed with (the session's
+own channel functions, as ``Session.channel_functions`` gives them: AZURE2's Coulomb functions, radii and options),
+at the level's physical energy, and multiply it by the row's ``wigner_limit``, for free and fixed channels alike.  (Before pyazr 3.0.0.dev5 it was read off the engine's
+transformation of a probe vector, which is that number only under Park and for a Brune level whose widths are all
+free.)
 
 Closed channels
 ---------------
@@ -61,32 +56,20 @@ from dataclasses import dataclass, fields
 from typing import Optional
 
 
-# Weisskopf single-particle estimates, Gamma in eV with E_gamma in MeV.
-# Bohr & Mottelson / Krane; A is the mass number of the emitting nucleus.
-_WEISSKOPF = {
-    ("E", 1): lambda A, e: 6.8e-2 * A ** (2 / 3) * e ** 3,
-    ("E", 2): lambda A, e: 4.9e-8 * A ** (4 / 3) * e ** 5,
-    ("E", 3): lambda A, e: 2.3e-14 * A ** 2 * e ** 7,
-    ("E", 4): lambda A, e: 6.8e-21 * A ** (8 / 3) * e ** 9,
-    ("M", 1): lambda A, e: 2.1e-2 * e ** 3,
-    ("M", 2): lambda A, e: 1.5e-8 * A ** (2 / 3) * e ** 5,
-    ("M", 3): lambda A, e: 6.8e-15 * A ** (4 / 3) * e ** 7,
-    ("M", 4): lambda A, e: 2.0e-21 * A ** 2 * e ** 9,
-}
-
-
 def weisskopf_width(radiation_type, L, e_gamma, mass_number):
-    """Weisskopf single-particle width in **eV**.
+    """Weisskopf single-particle width in **eV**: :func:`pyazr.physics.weisskopf_width` for one transition.
 
-    ``radiation_type`` is ``'E'`` or ``'M'``, ``L`` the multipolarity, and
-    ``e_gamma`` the transition energy in MeV.  Returns ``None`` for a
-    multipolarity outside the tabulated E1-E4 / M1-M4 range or for a
-    non-positive transition energy.
+    ``radiation_type`` is ``'E'`` or ``'M'``, ``L`` the multipolarity, ``e_gamma`` the transition energy in MeV and
+    ``mass_number`` the mass number A of the emitting nucleus.  The estimate is the engine's (``physics/Widths.h``:
+    the two-digit textbook coefficients for R = 1.2 A^(1/3) fm).  Returns ``None`` for a multipolarity outside the
+    tabulated E1-E4 / M1-M4 range or for a non-positive transition energy.
     """
-    f = _WEISSKOPF.get((radiation_type, int(L)))
-    if f is None or e_gamma is None or e_gamma <= 0:
+    from . import physics
+
+    if radiation_type not in ("E", "M") or e_gamma is None:
         return None
-    return f(float(mass_number), float(e_gamma))
+    width, status = physics.weisskopf_width(float(e_gamma), int(L), float(mass_number), radiation_type, errors="mask")
+    return width if status == 0 else None
 
 
 @dataclass
@@ -106,7 +89,8 @@ class ChannelWidth:
     jgroup: int
     level: int
     jpi: str                        # the level's J^pi as the engine writes it: "1/2+", "2-"
-    level_energy: float             # excitation energy of the level (MeV)
+    level_energy: float             # physical excitation energy of the level (MeV; the
+                                    # row of Session.transform, in every basis)
     pair: int
     L: int
     S: Optional[float]
@@ -114,8 +98,9 @@ class ChannelWidth:
 
     # values
     gamma: Optional[float]          # formal reduced-width amplitude (MeV^1/2)
-    value: Optional[float]          # AZURE2's physical value: Gamma in eV for an
-                                    # open channel, ANC in fm^-1/2 for a closed one
+    value: Optional[float]          # AZURE2's physical value at the vector asked for
+                                    # (Session.transform), fixed rows too: Gamma in eV
+                                    # for an open channel, ANC in fm^-1/2 for a closed one
 
     # particle channels
     is_photon: bool = False

@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
       char tag[96];
       std::snprintf(tag, sizeof tag, "%s l=%d", spec.name, l);
       const std::string t(tag);
-      ChannelFunc cf(&pair, false);
+      ChannelFunc cf(&pair);
 
       const double es[3] = {-1e-9, 0.0, 1e-9};
       double S[3], P[3], D[3];
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
       }
 
       // Bit for bit the old routines away from threshold.
-      CoulFunc coul(&pair, false);
+      CoulFunc coul(&pair);
       ShftFunc shft(&pair);
       check(cf.Shift(l, kNoSO, 1.0) == coul.PEShift(l, kNoSO, spec.a, 1.0), t + " S(+1) = CoulFunc::PEShift");
       check(cf.Penetrability(l, kNoSO, 1.0) == coul.Penetrability(l, kNoSO, spec.a, 1.0),

@@ -115,6 +115,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 | 16 | A MIGRAD fit stopped by its call limit ends at its lowest objective | see line | 2026-11-14 | owner |
 | 17 | Radiative widths are not in a level's total width (as on `dev`) | none | — | — |
 | 18 | Clebsch–Gordan and Racah coefficients computed here, not GSL's 3j and 6j | last digit | 2026-11-16 | PI |
+| 19 | `--gsl-coul` / `use_gsl_coul` (GSL's Coulomb functions) removed: refused | up to 5 % in P | 2026-11-16 | PI |
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
@@ -159,6 +160,14 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     same chi-squared and parameters with output numbers differing in the last printed digit (5e-11). An
     `intEC.dat` written before is recomputed once (signature v7). `cnuc_split.md` section 9;
     `physics_engine_coupling_gsl`.
+19. `dev` has the flag `--gsl-coul` (and the old setup program a box for it, kept in `<lastRun>`). GSL's Coulomb
+    functions are wrong by up to 5.2 % in the penetrability and 6.2 % in the shift function inside the outer
+    turning point (against mpmath on the arguments of the test projects; the program's own are good to 1e-9), so
+    a run with the flag differed from one without by percent: χ² of `tests/13N` 336479.96 → 335217.54. Here the
+    flag, the `<config>` key `use_gsl_coul` (either value) and the pyazr keyword are refused with that reason;
+    a converted old project is computed with the program's own functions, whatever its `<lastRun>` said. No
+    result of a run without the option changes. A capture calculation that used the flag for speed takes 4.5
+    times the instructions (`tests/13N`). `coulomb.md` sections 8 and 9; `coulomb_gsl_crosscheck`.
 
 Rows 9, 15 and the refusals that stop a project which ran on `dev` (two resolution kernels on one data set, a lab
 point at the kinematic limit, ...) are in the history page, "What users notice".
@@ -210,7 +219,8 @@ one calculation, in the program and in pyazr alike:
 3. **Working copy on the shared mesh.** The data as set up are one immutable `DataSet`; what an evaluation changes
    (norms, shifts, apparatus values) is a `WorkingCopy`. Each mesh node is one calculation site (`Site`).
 4. **Model pass.** One level-matrix solve per compound energy (`src/EnergyPass.cpp`; the arithmetic is in
-   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`) into the caller's `Results`,
+   `physics/`: `CollisionMatrix.h`, `ChannelSolve.h`, `Observables.h`, and for the analytic gradient their
+   adjoints `CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`) into the caller's `Results`,
    then each folded point over its sites (`src/PointFold.cpp`); each data set's value is an expression tree (sum,
    ratio, scale, yield) with one forward and one adjoint implementation (`src/ModelPass.cpp`).
 5. **Objective.** One ordered list of terms (`src/Objective.cpp`): data χ², nuisance priors, Park's wall, model
@@ -226,7 +236,7 @@ Coulomb tables, the cache of input files, output-stream locks, the level-state v
 engine, its libraries or the binding has a `mutable` member. What the evaluations of a fit or of the sampler keep
 between calls (idle copies of the levels and of the working copy, the copies the intermediate files are written
 from, the last gradient) is in a `FitterStates` or `SamplerStates` that the caller owns and lends. No source
-file may grow: the 10 hand-written files above 1,000 lines have a ceiling in `tests/consistency/file_sizes.tsv`.
+file may grow: the 7 hand-written files above 1,000 lines have a ceiling in `tests/consistency/file_sizes.tsv`.
 
 ## 6. How to add to it
 
@@ -236,7 +246,7 @@ Each kind of extension is a row of one table and a test (`docs/source/developer/
 | Kind | The named places | The test that fails |
 |---|---|---|
 | A data quantity | `experiment/src/Quantities.cpp` row; its tree in `Schema::Build` | `experiment_quantities` |
-| An observable at a mesh energy | `Observables.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
+| An observable at a mesh energy | `Observables.h`, `ObservablesAdjoint.h`; `SiteObservable`; `GenMatrixFunc`; `PointTBar` | gradient check |
 | An apparatus kernel | one `experiment/src/Kernel<Name>.cpp`; a line in `Kernels()` | `experiment_kernels` |
 | A parameter kind | `ParamKindTable()` row (`inference/`); a `FillMnParams`; `BuildParamIndexMap` | `pyazr_parameter_records`, `inference_parameter_kinds` |
 | A level parameter | a `LevelParameterLayout` slot (`inference/`); `LevelState`, `LevelInputs` | `upgrade_level_parameter_layout` |
@@ -333,6 +343,8 @@ estimate from the 65 commits read, not a measurement).
 
 - **The Coulomb repair's home**: a listed local change in `physics/coulomb/coulsm` (as now) or pycoulomb.
 - **The coincidence gap**: 1e-6 MeV with the mean S′ (section 3, row 4); proposed for `dev` too.
+- **`--gsl-coul` on `dev`**: retired here by the PI (2026-11-16; section 3, row 19): GSL's Coulomb functions are
+  wrong by up to 5 % in P below the barrier. Proposed for `dev` too.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
@@ -381,6 +393,10 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
+- Until 2026-11-16 the Coulomb routine's F and F′ alone were inaccurate for a neutral pair with l ≥ 2 at ρ ≪ 1
+  (relative error 4e-3 for l = 2, 3e5 for l = 3 at ρ = 7.5e-4: an upward recurrence in its unstable direction). They
+  are now the Riccati-Bessel function, within 6.1e-15 of mpmath for l = 0–8 and ρ = 1e-6–5e4 (R,
+  `physics_coulomb_neutral`); G, G′ and every charged pair are unchanged bit for bit. `coulomb.md` section 10.
 - The web page was tested in a headless Chrome and used by the PI; Firefox and Safari were not run.
 
 ## 10. What is not finished
@@ -606,6 +622,17 @@ re-read against its design at the hand-over.
      test now prints which and what the fit reported) and `tests/upgrade` (the golden comparison of T1 or T3;
      the failing line was not shown).
 
+   - *Windows with the fourteenth push's repairs* (run 43828542125 of `0c6167c1`, 2026-11-16): 170 of the 172
+     regression checks pass (`gamma_decay` and `upgrade` fail) and 12 unit tests fail (27 before); Linux passes
+     again. Read from the annotations, which now show every failing test's first lines, and answered in the
+     commit "test: the Windows job's failures ...", **again without a Windows machine**: nine are faults of the
+     tests there (CRLF from a program's standard output and from generated files, the code page, a path with
+     mixed separators, a path without `.exe`, the built module `.pyd` taken as a data file, a filter that looked
+     for forward slashes: the 186 failures of `physics_pathway_table`); `tools_runall` is answered with a guess
+     (the system directory's `bash.exe` is WSL's); three self-tests of skills need matplotlib or emcee, which
+     the Windows job does not install: two report skipped there, one skips its one emcee check. The macOS job
+     of that run had not ended when this was written.
+
    **The CI is green on Linux and for the sanitizers, not on Windows and macOS.** Linux passes since the
    eleventh push (every regression check and every unit test; `docs_build` is skipped, no Sphinx there). The
    one failure of the ninth push was `tests/shared_point_tables` (d), a bound on the peak memory of a fit
@@ -643,14 +670,27 @@ re-read against its design at the hand-over.
    target values); what copy-on-write could share is the sites of a project without energy shifts and without
    fitted target parameters (`evaluation.md` section 7.8, the last part). The cost today is memory, not
    correctness. The locks are as they were.
-5. **Large classes.** `src/AMatrixFunc.cpp` (2,380 lines; 2,766 before the move below), `api/src/AZUREAPI.cpp`
-   (1,532), `src/AZURECalc.cpp` (1,395), `src/AZURECalcMCMC.cpp` (1,309). The arithmetic of the collision matrix
+5. **Large classes.** `src/AMatrixFunc.cpp` (1,966 lines; 2,766 before the moves below). The three other files this
+   item named were split by job on 2026-11-16, every function moved as it was and no number moved:
+   `src/AZURECalc.cpp` (1,395 lines) into seven files (the evaluation, the gradient, the residual Jacobian, the limits
+   manager's priors, the pool, the intermediate files, the dump), `src/AZURECalcMCMC.cpp` (1,309) into five (a walker's
+   posterior, the priors, the run of the chain, the chain's files, the pool), `api/src/AZUREAPI.cpp` (1,532) into
+   five beside the class's four other files (the session's model, what a calculation reports, the objective's value, its
+   derivatives, the diagnostics), each with a head comment that says what it holds. The largest is
+   `src/AZURECalcGradient.cpp` (593 lines), of which 447 are one function, `AZURECalc::GradientBy`: shortening it is
+   a rewrite, not a move, and was not done. Still above 1,000 lines in the engine and the binding:
+   `AMatrixFunc.cpp`, `src/WorkingCopy.cpp` (1,273), `src/AZUREGrad.cpp` (1,108), `api/src/pybind_api.cpp` (1,017).
+   The arithmetic of the collision matrix
    (level-matrix fill, factorization, channel-space route, the elements of a pathway) and of the observables (the
    sums over pathways) is now functions of `physics/` on arrays (`CollisionMatrix.h`, `ChannelSolve.h`,
    `Observables.h`; `docs/upgrade/physics_functions.md`), which `ARCHITECTURE.md` drew; `AMatrixFunc` and
-   `GenMatrixFunc` collect the arrays of a site and call them. Still engine code: the analytic gradient (the
-   adjoints of those functions, most of what is left of `AMatrixFunc.cpp`), the R_k of a secondary decay, the
-   particle analysing power, the set-up of the formal levels (`ChannelSpace::Update`). From Python,
+   `GenMatrixFunc` collect the arrays of a site and call them. The arithmetic of the analytic gradient is there
+   too since 2026-11-16 (`CollisionMatrixAdjoint.h`, `ChannelSolveAdjoint.h`, `ObservablesAdjoint.h`, each
+   function tested against finite differences of its forward function; `physics_functions.md`, stage 6), with
+   every gradient output identical; `AMatrixFunc` keeps the walk, and `PointTBar` is still about 450 lines of
+   gates and of that walk. Still engine code: the R_k of a secondary decay, the particle analysing power and its
+   adjoint, the set-up of the formal levels (`ChannelSpace::Update`) and the arrays `ChannelSpace` keeps per
+   parameter set for the gradient. From Python,
    `pyazr.physics.collision_matrix` gives A, U and T of one block from arrays, without a session (formal, Brune's
    or Park's levels; particle and photon channels; the Reich-Moore term), checked against numpy and against a
    session's phase shifts and cross sections on T1-T3 in the three parametrizations (`physics_functions.md`,
@@ -660,8 +700,15 @@ re-read against its design at the hand-over.
    objective's terms are still `src/Objective.cpp` (each reads the working copy, the segments, the level state or
    the caller's `Results`), the vector's values are still `AZUREParams` on Minuit2's parameters, and the fitters
    are still `src/Fit*.cpp`: making those a library means giving the data χ² arrays, a change of the evaluation.
-6. **Two sets of Coulomb functions.** `physics/coulomb` is the one the channel tables use; GSL's
-   `gsl_sf_coulomb_wave_FG_e` is still called in `src/CoulFunc.cpp` and `gsl_sf_hyperg_U` in `src/ECIntegral.cpp`.
+6. **One set of Coulomb functions; what is left of it.** The engine calls `physics/coulomb` only: the option
+   `use_gsl_coul` (`--gsl-coul`) and its two calls of GSL's `gsl_sf_coulomb_wave_FG_e` are gone (the PI,
+   2026-11-16; section 3, row 19; `coulomb.md` sections 8 and 9). GSL's routine is called by the cross-check of
+   `azure2-coulomb-table validate` (beyond the outer turning point, where it is right) and by the test
+   `coulomb_gsl_crosscheck`; the engine links GSL for its quadratures, a fitter and special functions. Left:
+   `coulsm` is good to 1e-9 and takes 36–71 µs per call for a charged pair; `coulcc` is three times faster and
+   good to 6.5e-12 on the sampled arguments but fails at 11 of 2387 of them (η ≥ 48), so a faster default is
+   not a switch away. `coulsm`'s F and F′ at η = 0, wrong for l ≥ 2 and ρ ≪ 1 before, were repaired on
+   2026-11-16 (`coulomb.md` section 10).
 7. **Packaging.** `.github/workflows/wheels.yml` could not be started on this branch before 2026-11-16: it ran
    by hand or on a pull request only, and GitHub offers the hand start only for a workflow file of the default
    branch (`main` has none). It now also runs on a push to `feature/upgrade` that changes a packaging file (to
@@ -675,8 +722,9 @@ re-read against its design at the hand-over.
    - macOS: the installed program `AZURE2` did not start (the wheel's own libgsl not found): delocate gives the
      program a path relative to its place in the wheel, the scripts, and pip moves a script. The program is now
      inside the package (`pyazr/bin/AZURE2`) and the console script `AZURE2` runs it (`pyazr/program.py`).
-     **Not seen to work on macOS yet**: the run after this change shows it. On Linux the test's container has a
-     system libgsl, so the test there cannot show whether auditwheel repaired the program.
+     **The third run (43863727165) passes on all four platforms**: every wheel builds and its test passes, the
+     installed program on macOS included. On Linux the test's container has a system libgsl, so the test there
+     cannot show whether auditwheel repaired the program.
    No Windows wheel; the Coulomb table's address is empty (`pyazr/coulomb_table.py`); no wheel was installed on
    a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
@@ -686,10 +734,30 @@ re-read against its design at the hand-over.
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
    FRESCO's reference files). Not in the binding: the other functions of `physics/transfer` (bound states in a
    well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
-   of its own design), and the Weisskopf width (the engine has no such function: `pyazr.widths.weisskopf_width`
-   is a Python formula, the one of pyazr; a door needs the function in `physics/` first, which is new engine
-   code and the owner's decision).
-   Not renamed or removed as `pyazr3.md` planned: the `wigner_widths` probe of `pyazr/session_physics.py`,
+   of its own design). The Weisskopf width is a function of `physics/` since the PI's approval of 2026-11-16
+   (pyazr 3.0.0.dev5; `physics/Widths.h`, `weisskopf_width_eV`; the row `weisskopf_width` of `pyazr.physics`):
+   the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
+   A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
+   for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
+   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.).
+   `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2 since the same approval (it was a probe of the
+   transformation): P of the session's channel functions at the level's physical energy, gamma_W^2 the engine's
+   3 hbar^2 / (2 mu a^2); the name and the return shape are kept. theta^2 of `dimensionless_widths` changes
+   where the probe was not that number: for a Brune level with fixed widths it falls by the level's
+   1 / (1 + sum gamma^2 dS/dE) of them (T2: by up to 20 %; T3: 1.6 % in one channel), in the formal basis by up
+   to 8e3 on T2; unchanged under Park and for Brune levels with all widths free (T1, 13N). Against mpmath's
+   Coulomb functions: 2.5e-10 on T1, T2, T3 and 13N in the three parametrizations (`pyazr3.md`, section 11).
+   The engine's ensemble sampler runs on a session since the same approval: `Session.sample_with_engine(walkers,
+   steps, sampler_threads=, basis=, parameter_spread=, energy_spread=, overwrite_samples=, x0=, progress=, stop=)`,
+   the options of `AZURE2 mcmc` as keywords. What the command does after its set-up is one engine function now
+   (`RunSampler`, `src/SamplerRun.cpp`, moved out of `runMCMC` in `src/AZURE2.cpp`), called by the program and by
+   the session; `src/RunRequest.cpp` (the option table) moved into the engine library so that the session's
+   keywords are read by the command line's reader. The chain is the command's: `samples.mcmc`, `walkers.mcmc`,
+   `param.mcmc` and the best walker's output files byte for byte, the returned arrays number for number, on T1
+   and T3 at 1 and 2 sampler threads, in both bases, under Park, from a parameter file and from `x0`, with a
+   prior of `<mcmc>` and for a continued chain (`pyazr3.md`, section 12). The command has no seed, burn-in or
+   thinning option, so the call has none.
+   Not renamed or removed as `pyazr3.md` planned:
    `pyazr/tabulate.py` and `pyazr/angular.py`, `pyazr/modelavg.py` and `pyazr/priors.py` (meant to go into
    `pyazr/bands.py`); what each is, who uses it and a recommendation: `pyazr3.md`, section 10.3. The Physics tab of the
    page plots the rows of the physics table (one number per element); `collision_matrix` and

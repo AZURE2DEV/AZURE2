@@ -21,7 +21,11 @@ A data quantity (a kind of data set)
 2. Its tree builder: the case in ``Schema::Build`` (``experiment/src/Build.cpp``,
    ``ReadObservable``) that turns the record into a ``DatasetSpec``
    (``experiment/include/azure2/experiment/SetupSpecs.h``). Until it has one,
-   the build refuses the quantity with ``E_NOT_BUILT``.
+   the build refuses the quantity with ``E_NOT_BUILT`` (the fall-through at
+   the end of ``ReadObservable``; no row lists it in its ``refusals``).
+   ``AZURE2 --validate`` reads the project through ``ReadFormat3Text``, which
+   builds, and reports it too; the table's own validation
+   (``experiment_quantities``) accepts the row.
 3. If no existing tree fits: a row of ``TreeKinds()``
    (``experiment/src/Prediction.cpp``); a value the R-matrix does not compute
    is a leaf part whose value at a point is computed in ``PointInputs``
@@ -32,13 +36,17 @@ A data quantity (a kind of data set)
    the tree kind ``Scaled``.
 4. Tests: a record of it in the ``variants`` of
    ``experiment/tests/quantities_test.cpp`` (``experiment_quantities`` fails for
-   a row without one), a case in ``experiment/tests/build_test.cpp``, a test
+   a row without one; the value of a datum carries its unit, ``0.03 1`` when
+   dimensionless), a case in ``experiment/tests/build_test.cpp``, a test
    project with an independent answer (``tests/ratio_to_rutherford/`` is the
    pattern), its lines in ``tests/upgrade/predictions.txt``
    (``tests/upgrade/predictions_test.py --write``, ``upgrade_predictions``).
-5. ``AZURE2 --schema > tests/schema/schema_v3.json`` (``experiment_schema``,
-   ``pyazr_schema``) and ``python3 tools/gen_schema_docs.py`` (check 18: the
-   generated ``reference/format3.rst``); check 35 for a reference leaf.
+5. After the build, ``AZURE2 --schema-out=tests/schema/schema_v3.json`` (it
+   writes a temporary file and renames it, so a wrong binary path or a failure
+   leaves the file as it was; ``experiment_schema``, ``pyazr_schema``: the
+   only tests that see a stale schema) and ``python3 tools/gen_schema_docs.py``
+   (check 18: the generated ``reference/format3.rst`` against
+   ``schema_v3.json``); check 35 for a reference leaf.
 
 An observable of a reaction at a mesh energy
 --------------------------------------------
@@ -51,9 +59,12 @@ An observable of a reaction at a mesh energy
    its closed-form check in ``physics/tests/observables_test.cpp`` (no
    project file needed).
 3. One branch of ``GenMatrixFunc::CalculateBareCrossSection`` that walks the
-   pathways, calls the function and writes the record; its adjoint in
-   ``AMatrixFunc::PointTBar`` (the derivative is still written there, not in
-   ``physics/``).
+   pathways, calls the function and writes the record.  Its adjoint (the
+   cotangents of the T-matrix elements from the cotangent of the observable)
+   is a function of ``physics/include/azure2/physics/ObservablesAdjoint.h``,
+   checked against finite differences of the forward function in
+   ``physics/tests/observables_adjoint_test.cpp``; the branch of
+   ``AMatrixFunc::PointTBar`` that walks the same pathways calls it.
 4. What a reader needs per slot (angular row, Coulomb amplitude) in its row
    set (``include/RowSet.h``, built by ``WorkingCopy::BuildRowSets``).
 5. Tests: the analytic gradient against finite differences
@@ -66,7 +77,7 @@ The engine is not edited: the fold (``src/PointFold.cpp``), the extent of the
 mesh (``EffectSupport``, ``src/TargetSetup.cpp``) and the gradient's weights
 (``FoldWeights``) read the table.
 
-1. One file ``experiment/src/KernelGaussian.cpp``-like (``Kernel<Name>.cpp``):
+1. One file ``experiment/src/KernelRectangular.cpp``-like (``Kernel<Name>.cpp``):
    the fold as a template on the value type (``double`` gives the value,
    ``LinearForm`` the exact weights), its support, and a function returning
    its ``Kernel`` row; its parameters are ``KernelParameter`` rows (name,
@@ -219,9 +230,10 @@ A term of the objective
    ``ModelOnly``, ``AddForSampler`` and ``ExcludesForSampler`` have defaults
    (not of the model alone; the sampler takes the whole term; no point is
    excluded). A Gaussian prior on one parameter is ``GaussianPriorChi2`` of
-   ``GaussianPrior.h`` and a line of ``ForEachDiagonalPrior``
-   (``include/Objective.h``), which gives it its gradient, Minuit's
-   :math:`G_2` and its least-squares row. Its
+   ``GaussianPrior.h`` and a line of its gather in ``src/DiagonalPriors.cpp``
+   (``include/DiagonalPriors.h``), which gives the term its value and
+   ``ForEachDiagonalPrior`` its gradient, Minuit's :math:`G_2` and its
+   least-squares row. Its
    gradient beside the others in ``src/AZUREGrad.cpp``, and its residual rows
    in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. No term
    is added anywhere else (check 11).
@@ -348,6 +360,11 @@ A new option of a command (a question a run needs answered):
 4. Its row in the options table of ``reference/command_line.rst``
    (``tests/cli_help``, ``tests/cli_commands``) and, when it changes what a
    command writes, a case of ``tests/cli_commands/check.sh``.
+5. For an option of ``mcmc``: an argument of ``SamplerRequest``
+   (``api/src/AZUREAPISampler.cpp``, which writes the session's keywords as
+   a command line for ``ReadRunCommand``) and the keyword of
+   ``Session.sample_with_engine`` (``pyazr/session_sampler.py``), so that the
+   session's sampler takes what the command takes.
 
 A new command: a ``RunCommand`` value and its row of ``RunCommands()``
 (name, help), its bits in ``SelectCalculation``
@@ -362,7 +379,8 @@ A minimiser the program and a pyazr session can both run:
 
 1. Its function, ``FitResult FitX(AZURECalc &, AZUREParams &, const
    FitControl &)``, in a file of its own (``src/FitX.cpp``, in
-   ``AZURE2_CORE_SOURCES``): it starts from the values, limits and fixed flags
+   ``AZURE2_CORE_SOURCES`` of ``src/CMakeLists.txt``, declared with the others
+   at the end of ``include/Fitters.h``): it starts from the values, limits and fixed flags
    of the ``AZUREParams``, leaves its end point there, writes its lines to
    ``control.log``, hands its steps to ``control.progress`` (an evaluation
    fitter puts a ``FitEvaluations`` in place while it runs, which also keeps
@@ -372,25 +390,44 @@ A minimiser the program and a pyazr session can both run:
    to the shared words, ``converged``, calls, covariance where it has one,
    ``notices`` for what the caller should know; ``x`` and ``objective`` are
    the lowest objective it reached: a stopped fit, or one ended by its call
-   limit, returns the best point seen).
-2. Its row in ``Fitters()`` (``src/Fitters.cpp``): name, the program's switch,
-   the ``Config::paramMask`` bit the switch sets, gradient / residual rows /
+   limit, returns the best point seen). Once the stop request is set the
+   objective returns 0 at once (``EvaluationObserver::stop``,
+   ``include/FitControl.h``): an evaluation fitter takes its end point from
+   ``FitEvaluations::BestPoint()`` (``HasBest()``, ``Stopped()``;
+   ``src/FitNLopt.cpp`` is the pattern), never from its own last evaluation,
+   and one that honours ``control.maxCalls`` ends by it
+   (``FitEvaluations::Count()``).
+2. Its row in ``Fitters()`` (``src/Fitters.cpp``; the columns of ``FitterRow``,
+   ``include/Fitters.h``): name, the program's switch, the
+   ``Config::paramMask`` bit the switch sets (a new enumerator
+   ``USE_<X>_MINIMIZER`` of ``Config::ParameterFlags`` in ``include/Config.h``,
+   the next bit above the highest in use; a change of that header rebuilds
+   nearly everything), gradient / residual rows /
    bounds / covariance / MINOS, whether it honours a call limit
    (``callLimit``: ``RunFitter`` adds the notice for a fitter that does not),
    the row it falls back to without an analytic Jacobian (``fallback``), the
    progress label, one line of doc. Its place in the table is its precedence
    in the program. The program's parser and usage text take the switch and
-   the doc line from the row (``ApplyFitterSwitch``, ``FitterSwitchesHelp``);
+   the doc line from the row (``ApplyFitterSwitch``, ``FitterSwitchesHelp``:
+   ``src/AZURE2.cpp`` is not edited);
    a fitter behind a build option also gets a row in ``AbsentFitters()`` for
    the builds without it, so that its switch is refused with how to build it.
    ``fitStatus.out`` (one writer, ``WriteFitStatus``) needs no edit.
 3. The switch's row in ``reference/command_line.rst`` and the fitter's row
-   in the table "The Engine's Fitters" of ``user_guide/fitting.rst`` (check
-   46 fails for a row missing from either, for a switch named in
+   in the table "The Engine's Fitters" of ``user_guide/fitting.rst``, and its
+   name in the lists of ``user_guide/pyazr.rst`` ("The engine's own
+   fitters"), ``user_guide/web_interface.rst`` (``engine_<name>``) and
+   ``user_guide/calculate.rst`` (its switch, "Minimizer Selection") (check
+   46 fails for a row missing from any of them, for a switch named in
    ``src/AZURE2.cpp`` outside the table, and for a minimizer bit of the
    parser that is no row).
 4. Its case in ``tests/pyazr/fit_with_engine_test.py``: ``fit_with_engine``
-   ends where the program ends, with the program's covariance.
+   ends where the program ends, with the program's covariance (the ``hesse=``
+   argument of ``compare`` says whether the errors of ``param.sav`` are
+   compared); one case runs with ``FIT_WITH_ENGINE_CASES=<word of the label>
+   ctest -R pyazr_fit_with_engine`` (slow label). The test fails for a row of
+   the table without a case (``no_case`` names its exception). The stop test
+   of ``tests/pyazr/fit_engine_control_test.py`` loops over the table.
    ``pyazr.kinds()["fitters"]`` and ``fit_with_engine(method=)`` read the
    table and need no edit.
 
