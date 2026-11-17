@@ -75,53 +75,28 @@ vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const Level
   return tab;
 }
 
-/*!
- * d/dx of sum_lambda (J_lambda/s)^2 over J < 0, with J = 1 - sum_d g_d^2 S'_d:
- *   d/d g_d  = 2 J/s^2 (-2 g_d S'_d),    d/d E = 2 J/s^2 (-sum_d g_d^2 S''_d).
- */
+/// d/dx of sum_lambda (J_lambda/s)^2 over the levels on the wall (ParkWallGradient on the gather ParkLevelsOf).
 void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, GradAccum &accum) {
   if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
-  const double s2 = kParkNormScale * kParkNormScale;
-  for (int j = 1; j <= compound->NumJGroups(); j++) {
-    const JGroup *jg = compound->GetJGroup(j);
-    if (!jg->IsInRMatrix()) continue;
-    for (int la = 1; la <= jg->NumLevels(); la++) {
-      const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || !(state.ParkNorm(j, la) < 0.0)) continue;  // J >= 0 or NaN: off the wall (ParkTerm)
-      const double factor = 2.0 * state.ParkNorm(j, la) / s2;
-      double dE = 0.0;
-      for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-        const AChannel *channel = jg->GetChannel(ch);
-        if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
-        double g = state.Gamma(j, la, ch);
-        accum.AddGamma(j, la, ch, factor * (-2.0 * g * state.ShiftDerivative(j, la, ch)));
-        dE -= g * g * state.ShiftSecondDerivative(j, la, ch);
-      }
-      accum.AddE(j, la, factor * dE);
-    }
+  std::vector<double> dGamma;
+  double dE;
+  for (const ParkLevel &l : ParkLevelsOf(compound, state, true)) {
+    if (!ParkWallGradient(l, kParkNormScale, dGamma, dE)) continue;
+    for (size_t c = 0; c < l.channels.size(); c++) accum.AddGamma(l.group, l.level, l.channels[c], dGamma[c]);
+    accum.AddE(l.group, l.level, dE);
   }
 }
 
 /*!
- * Gradient of the abundance term of the objective (T7): the prior
- * ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
+ * Gradient of the abundance term of the objective (T7; AbundanceGradient of inference/'s AbundancePriors.h on the
+ * gather AbundanceBlockOf): the prior ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
  * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
  */
 void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum) {
-  const AbundanceSamples &samples = data.Data().Abundances();
-  if (!samples.Present()) return;
-  const std::vector<double> &values = data.AbundanceValues();
-  for (int k = 1; k <= samples.NumParams(); k++) {
-    int sample, nucleus;
-    samples.Of(k, sample, nucleus);
-    const double s = samples.SumSigma(sample, configure.abundanceSumSigma);
-    const double centre = samples.Sample(sample).sumCentre;
-    double g = (s > 0.0) ? GaussianPriorGradient(samples.Sum(values, sample), centre, s) : 0.0;
-    const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
-    const double w = values[k - 1];
-    if (e.sigma > 0.0 && !e.priorReplaced) g += GaussianPriorGradient(w, e.nominal, e.sigma);
-    accum.AddAbundance(k, g);
-  }
+  if (!data.Data().Abundances().Present()) return;
+  std::vector<double> dw;
+  AbundanceGradient(AbundanceBlockOf(data, configure.abundanceSumSigma), dw);
+  for (int k = 1; k <= (int)dw.size(); k++) accum.AddAbundance(k, dw[k - 1]);
 }
 
 /*!

@@ -160,10 +160,12 @@ per parameter, whose kind is a row of ``ParamKindTable()``; the gradient makes
 a ``ParamIndexMap`` and accumulates into a ``GradAccum``. The boxes named
 ``azure2::inference::`` are the library ``inference/``: plain data and
 arithmetic that include nothing of the engine (the records and kinds, the
-index map, the posterior's support, the prior covariance, and
-``TermList``, the sums of the objective's list, which ``Objective`` holds
-with the engine's context). The terms read the engine's objects and stay in
-``src/Objective.cpp``. ``AZURECalcMCMC``
+index map, the posterior's support, the prior covariance, the arithmetic of
+the diagonal priors, of the abundance term, of Park's wall and of the
+profiled norms and THM profiles, and ``TermList``, the sums of the
+objective's list, which ``Objective`` holds with the engine's context). The
+terms read the engine's objects and stay in ``src/Objective.cpp``: each is a
+gather that fills the library's arrays and a call of its arithmetic. ``AZURECalcMCMC``
 is the sampler's log-probability on pools of its own; it drives ``nu::Mcmc``,
 whose ``nu::Ensemble`` owns the walkers.
 

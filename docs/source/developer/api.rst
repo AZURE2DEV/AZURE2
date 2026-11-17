@@ -99,6 +99,11 @@ The pybind11 module (``api/src/CMakeLists.txt``, target ``_azure2``) links
    * - ``pybind_potentials.cpp``, ``pybind_model_data.cpp``, ``pybind_thm.cpp``
      - The view of a session's hybrid potentials, the model data, the THM
        tables and grammars.
+   * - ``pybind_thm_reports.cpp``
+     - The THM reports of a session as dicts (``Session.thm_experiments``,
+       ``thm_lineshape``, ``thm_vertex``, ``thm_distortion``).
+   * - ``pybind_arrays.h``
+     - The session's array conversions (``to_array``, ``to_vector``).
    * - ``pybind_notices.cpp``
      - The engine's standard output of a session as notices, which
        ``pyazr`` turns into warnings (``pyazr/session_checks.py``).

@@ -43,6 +43,14 @@
 /// on the scale of J but smooth.
 constexpr double kParkNormScale = 1.0e-3;
 
+/*!
+ * T6's gather (inference/'s ParkWall.h holds the arithmetic): one ParkLevel per level in the R matrix (of a J group in
+ * the R matrix), in group and level order, with its Park norm J from `state`.  With `channels`, a level on the wall
+ * (OnParkWall) also carries its particle channels ('P' channels of a particle pair) with gamma_c, S'_c and S''_c from
+ * `state` (the gradient and the rows; the value reads J only, and S'' is not filled for it).
+ */
+std::vector<ParkLevel> ParkLevelsOf(const CompoundSystem *compound, const LevelState &state, bool channels);
+
 struct ObjectiveContext {
   const CompoundSystem *compound;
   /// The levels at the evaluated vector (the model data's finite differences write and restore them) and the
