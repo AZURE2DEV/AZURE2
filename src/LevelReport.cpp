@@ -280,6 +280,19 @@ void WriteAngularDistributionsCheck(const CompoundSystem &compound, const Config
              });
 }
 
+ReportedWidth ReportWidth(double W_MeV) {
+  // The unit is chosen by the value as printed (six decimals), not by the exact value: a width entered as 1 keV
+  // comes back from the round trip Gamma -> gamma -> Gamma (TransformIn, TransformOut) one rounding step above or
+  // below 1e-3 MeV, by the last bits of the Coulomb functions, which differ between C libraries.  Compared exactly,
+  // the same width printed "1.000000 keV" on Linux and "1000.000000 eV" on macOS (CI run of 0c6167c1).  A value
+  // that prints as 1.000000 in the larger unit is printed in it; every other value prints as before.
+  const double a = std::fabs(W_MeV);
+  const double kPrinted = 1.0 - 0.5e-6;  // the smallest value that prints as 1.000000 with six decimals
+  if (a * 1e3 >= kPrinted) return {a * 1e3, "keV"};
+  if (a * 1e6 >= kPrinted) return {a * 1e6, "eV"};
+  return {a * 1e9, "meV"};
+}
+
 void WriteParametersOut(const CompoundSystem &compound, const LevelState &state, const ObservedLevelTable &table,
                         const Config &configure) {
   namespace phys = azure2::physics;
@@ -337,14 +350,12 @@ void WriteParametersOut(const CompoundSystem &compound, const LevelState &state,
             case phys::ObservedKind::Beta:
               out << "  B  = " << std::setw(12) << W << "          ";
               break;
-            case phys::ObservedKind::Width:
-              if (fabs(W) >= 1e-3)
-                out << "  G  = " << std::setw(12) << fabs(W) * 1e3 << " keV      ";
-              else if (fabs(W) >= 1e-6)
-                out << "  G  = " << std::setw(12) << fabs(W) * 1e6 << " eV       ";
-              else
-                out << "  G  = " << std::setw(12) << fabs(W) * 1e9 << " meV      ";
+            case phys::ObservedKind::Width: {
+              const ReportedWidth w = ReportWidth(W);
+              out << "  G  = " << std::setw(12) << w.value << " " << std::left << std::setw(9) << w.unit
+                  << std::right;
               break;
+            }
           }
           out << "  g_int = " << std::setw(12) << theLevel.gamma[ch - 1];
           if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F')

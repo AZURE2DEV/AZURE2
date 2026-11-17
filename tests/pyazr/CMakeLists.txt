@@ -77,7 +77,15 @@ add_test(NAME pyazr_wigner_convention
                  ${CMAKE_CURRENT_SOURCE_DIR}/wigner_convention_test.py)
 set_tests_properties(pyazr_wigner_convention PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# The Weisskopf estimate, pyazr's one physics formula without an engine counterpart, against its closed form.
+# Session.wigner_widths = 2 P_l(E_r) gamma_W^2 against mpmath's Coulomb functions and the closed form of a neutral
+# channel, T1, T2, T3 and 13N in the three parametrizations (docs/upgrade/pyazr3.md section 11); about 15 s.
+add_test(NAME pyazr_wigner_widths
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/wigner_widths_test.py)
+set_tests_properties(pyazr_wigner_widths PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+# The Weisskopf estimate (physics/Widths.h through pyazr.weisskopf_width) against its closed form and against the
+# numbers of the Python formula it replaced.
 add_test(NAME pyazr_weisskopf
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/weisskopf_test.py)
@@ -806,11 +814,27 @@ set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 
 # pyazr.physics.collision_matrix: the level matrix and the collision matrix of one J^pi block at one energy from
 # arrays, without a session (physics/CollisionMatrix.h through api/src/pybind_collision_matrix.cpp), against the
-# level matrix written in numpy, unitarity, the one-level phase shift and Breit-Wigner form, and the errors.
+# level matrix written in numpy (formal, Brune's and Park's parameters, photon channels), unitarity, the one-level
+# phase shift and Breit-Wigner form, the three parametrizations of one block giving one U, and the errors.
 add_test(NAME pyazr_collision_matrix
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/collision_matrix_test.py)
 set_tests_properties(pyazr_collision_matrix PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# The same function against a session's own numbers on T1, T2 and T3 in the three parametrizations: the arrays of
+# every block read off the session, phase shifts and cross sections formed from U and T in numpy, compared with
+# Session.evaluate (the capture cross sections on a copy of T1 without external capture).
+add_test(NAME pyazr_collision_matrix_session
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/collision_matrix_session_test.py)
+set_tests_properties(pyazr_collision_matrix_session PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
+# pyazr.physics.optical_scattering: elastic scattering in an optical potential (physics/transfer through
+# api/src/pybind_optical.cpp) against FRESCO's reference files of physics/tests/data/fresco, closed forms, the errors.
+add_test(NAME pyazr_optical_scattering
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/optical_scattering_test.py)
+set_tests_properties(pyazr_optical_scattering PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
 # pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against mpmath, the engine's
 # own use on 13N and the Python formula it replaces (the largest difference per formula is printed); broadcasting,
@@ -873,7 +897,8 @@ add_test(NAME pyazr_thickness
                  ${CMAKE_CURRENT_SOURCE_DIR}/thickness_test.py)
 set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
-# Parameter kinds (include/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's table of kinds, and on
+# Parameter kinds (inference/include/azure2/inference/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's
+# table of kinds, and on
 # projects holding every kind each parameter's name rebuilt from its record, the records' ordinals and keys, and
 # pyazr's Parameter.kind / sample / thm_* from the records.
 add_test(NAME pyazr_parameter_kinds
@@ -1159,6 +1184,12 @@ set_tests_properties(pyazr_objective_object PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 add_test(NAME pyazr_session_lock COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/session_lock_test.py)
 set_tests_properties(pyazr_session_lock PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# The x87 precision of a thread does not reach the results: T1 in a threading.Thread whose precision is lowered to 53
+# bits (as a Windows thread starts) and in the main thread lowered, bit for bit the main thread's; the control words
+# of the threads printed (support/include/azure2/support/FloatingPointPrecision.h).  Two threads: the regions' scopes.
+add_test(NAME pyazr_x87_precision COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/x87_precision_test.py)
+set_tests_properties(pyazr_x87_precision PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # pyazr's Evaluation (Session.evaluate(x)) against the program's chiSquared.out and AZUREOut_* on T1-T3, one evaluation
 # per Evaluation, and the self-description of the objects.
 add_test(NAME pyazr_evaluation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/evaluation_test.py)
@@ -1194,6 +1225,13 @@ set_tests_properties(pyazr_wheel PROPERTIES LABELS slow PROCESSORS 2 TIMEOUT 720
 # (slow), and its controls -- the fitter table, progress records, the stop request.
 add_test(NAME pyazr_fit_with_engine COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_with_engine_test.py)
 set_tests_properties(pyazr_fit_with_engine PROPERTIES LABELS slow
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# The engine's ensemble sampler on a session (docs/upgrade/pyazr3.md section 12): sample_with_engine against the
+# program's command mcmc (the chain number for number at 1 and 2 sampler threads, both bases, Park, a parameter file
+# and x0, a prior of <mcmc>, a continued chain) and its controls; about 80 s.
+add_test(NAME pyazr_sample_with_engine
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/sample_with_engine_test.py)
+set_tests_properties(pyazr_sample_with_engine PROPERTIES PROCESSORS 2
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 add_test(NAME pyazr_fit_engine_control
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_engine_control_test.py)

@@ -70,7 +70,9 @@ What it contains
        ``collision_matrix`` for a whole block (:math:`A`, :math:`U`,
        :math:`T`), which Python calls as
        ``pyazr.physics.collision_matrix``
-       (``api/src/pybind_collision_matrix.cpp``). :doc:`level_matrix`.
+       (``api/src/pybind_collision_matrix.cpp``: the three
+       parametrizations, photon channels and the Reich-Moore term as
+       arguments). :doc:`level_matrix`.
    * - ``ChannelSolve.h``
      - The channel route at one energy on the formal levels of a block
        (``channel_space::FormalBlock``, ``ChannelSolve``):
@@ -87,6 +89,24 @@ What it contains
        capture analysing power, the terms of an unobserved primary, of
        R-matrix capture and of a beta-delayed entrance.
        :doc:`level_matrix`, "Cross Section Calculation".
+   * - ``CollisionMatrixAdjoint.h``, ``ChannelSolveAdjoint.h``,
+       ``ObservablesAdjoint.h``
+     - The reverse mode of the three headers above, for the analytic
+       gradient (header only).  From the cotangent of an observable to those
+       of the T-matrix elements (``ObservablesAdjoint.h``); from a T-matrix
+       element to its bilinear form :math:`g_c^T A g_{c'}`
+       (``amplitude_cotangent``, ``bilinear_cotangent``) and on to the level
+       energies and reduced widths: ``level_matrix_adjoint`` (the structural
+       adjoint of the standard, Brune and Park matrices), ``inverse_adjoint``,
+       ``dense_bilinear_adjoint``, ``level_parameter_adjoint``, and on the
+       channel route ``formal_bilinear_adjoint`` and
+       ``resolve_formal_cotangents``.  A function adds its terms through a
+       *sink* the caller hands over (``energy(level, value)``,
+       ``width(level, channel, value)``), in a fixed order, so the engine's
+       gradients do not depend on who calls it; ``LevelCotangents`` is a sink
+       over two arrays.  Each is tested against finite differences of its
+       forward function (``physics/tests/*_adjoint_test.cpp``).
+       :doc:`level_matrix`, "Gradient".
    * - ``Coulomb.h``, ``Whittaker.h``
      - The Coulomb and Whittaker functions (``physics/coulomb/``, from
        pycoulomb, one directory per algorithm).
@@ -119,7 +139,11 @@ optical potentials and the global optical sets (``OpticalPotential.h``,
 continuum bins (``DistortedWaves.h``, ``Continuum.h``), the DWBA transfer
 amplitude (``Transfer.h``) and the THM vertex (``ThmVertex.h``,
 ``ZeroRangeWeight.h``). It is checked against FRESCO
-(``physics/tests/transfer_fresco_test.cpp``).
+(``physics/tests/transfer_fresco_test.cpp``). Python calls the distorted
+waves of one pair as ``pyazr.physics.optical_scattering``
+(``api/src/pybind_optical.cpp``: the S-matrix elements, the elastic angular
+distribution, the reaction cross section); bound states, the DWBA
+amplitude and the continuum bins have no call of their own in Python.
 
 How the engine uses it
 ----------------------
@@ -136,7 +160,9 @@ conversions of ``LevelParameters.h`` on it; ``CompoundSystem::BuildPathways`` bu
 the ``PathwayTable`` from it. ``AMatrixFunc`` gathers a group's arrays at each
 energy and calls ``CollisionMatrix.h``, ``LevelMatrixSolver.h`` and
 ``ChannelSolve.h`` (:doc:`level_matrix`); ``GenMatrixFunc`` hands the T-matrix
-elements of a point's pathways to ``Observables.h``. The channel functions reach the engine through
+elements of a point's pathways to ``Observables.h``; the gradient's walk in
+``AMatrixFunc`` (``PointTBar``, ``TBarAdjoint``, ``BilinearAdjoint``) calls the
+three adjoint headers. The channel functions reach the engine through
 ``ChannelFunc`` and the stage's ``ChannelTable``; the THM distortions
 (``src/ThmDistortion.cpp``, ``src/ThmDwVertex.cpp``) call
 ``physics/src/transfer``.

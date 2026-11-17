@@ -23,6 +23,7 @@
 #include "Segment.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -197,7 +198,7 @@ py::list PointOutputFields() {
 py::dict EvaluationDict(AZUREAPI &api, const vector_r &free) {
   AZUREAPI::ObjectiveBreakdown b;
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     b = api.EvaluateObjectiveRWA(free);
   }
   const WorkingCopy &wc = *api.data();
@@ -230,7 +231,7 @@ py::dict ObjectiveRowsDict(AZUREAPI &api, const vector_r &free, bool withJacobia
   vector_r rows, jac;
   bool ok;
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     ok = api.ObjectiveRowsRWA(free, rows, withJacobian ? &jac : nullptr, skip);
   }
   py::dict d;
@@ -245,7 +246,7 @@ py::dict ObjectiveRowsDict(AZUREAPI &api, const vector_r &free, bool withJacobia
 }
 
 double LogProbability(AZUREAPI &api, const vector_r &free) {
-  py::gil_scoped_release release;
+  EngineCallScope engine;
   return api.LogProbabilityRWA(free);
 }
 
@@ -255,7 +256,7 @@ double LogProbability(AZUREAPI &api, const vector_r &free) {
 py::tuple SamplerLogProbability(AZUREAPI &api, const vector_r &x0, const vector_r &x) {
   double lp, constant;
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     SamplerStates walkers;
     AZURECalcMCMC sampler(api.data(), api.compound(), api.state(), api.inputs(), walkers, api.configure());
     sampler.PrepareRun(x0, true);

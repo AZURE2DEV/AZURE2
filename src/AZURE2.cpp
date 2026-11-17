@@ -15,6 +15,7 @@
 #include "MeshPlanner.h"
 #include "Profile.h"
 #include "azure2/support/Environment.h"
+#include "azure2/support/FloatingPointPrecision.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CommandLineValues.h"
@@ -132,6 +133,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for a file that is not format 3." << std::endl
             << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
+            << std::setw(25) << std::left << "\t--schema-out=FILE:" << std::setw(0) << "As --schema, written to FILE: to a temporary file beside it, renamed over FILE when whole; on an error FILE is unchanged (exit 1)." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--refreeze-covariance[=N]:" << std::setw(0) << "Refit up to N times (default 5) with relvector covariance terms re-frozen at the fitted parameters." << std::endl
             << FitterSwitchesHelp()
@@ -215,6 +217,9 @@ void parseOptions(const std::vector<std::string> &arguments, Config &configure) 
                                   "nothing from standard input.\n       Drop --no-readline and give the command: "
                                   "AZURE2 <command> [options] FILE (AZURE2 --help lists them; "
                                   "tools/menu_to_command.py turns an old script's answers into the command).");
+    else if (const azure2::io::RemovedConfigKey *removed = azure2::io::RemovedConfigKeyOfFlag(*it))
+      throw std::invalid_argument("Unknown option " + *it + ".  " +  // the parser's words for a flag it does not take
+                                  azure2::io::RemovedConfigKeyText(*removed, azure2::io::OptionSpelling::kFlag));
     else if (ApplyOptionFlag(configure, *it))  // an option of the calculation: its row of io::ConfigKeys()
       continue;
     else if (it->compare(0, 16, "--coulomb-table=") == 0) {  // the option and the table file of this machine
@@ -279,7 +284,7 @@ void startMessage(const Config &configure) {
 #include "ProgramRun.h"
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
-#include "AZURECalcMCMC.h"
+#include "SamplerRun.h"
 #include <iomanip>
 #include <ctime>
 
@@ -310,74 +315,9 @@ static void PrintMcmcProgress(time_t start, int current_step, int total_steps, d
             << std::setfill(' ') << std::flush;
 }
 
-// The name the MCMC table prints for a parameter (the GUI's MCMC tab writes the same), from its record.
-static std::string PrettyParameterName(const ParameterRecord &r, const std::string &name) {
-  const std::string seg = "Segment " + std::to_string(r.segmentKey);
-  switch (r.kind) {
-    case ParamKind::LevelEnergy: return "Level " + std::to_string(r.levelNumber) + " Energy (MeV)";
-    case ParamKind::Gamma:
-      return "Level " + std::to_string(r.levelNumber) + " Channel " + std::to_string(r.channel) + " Width (eV)";
-    case ParamKind::Norm: return seg + " Normalization";
-    case ParamKind::Thickness: return seg + " Sample Thickness (atoms/b)";
-    case ParamKind::EnergyShift: return seg + " Energy Shift (keV)";
-    case ParamKind::EnergyShiftSqrt: return seg + " sqrt(E) Energy-Shift Coefficient (MeV^1/2)";
-    case ParamKind::EnergyShiftFn: return seg + " Energy-Shift Function a" + std::to_string(r.fnTerm);
-    case ParamKind::Screening: return "Screening U_e (eV), effect " + std::to_string(r.effect);
-    case ParamKind::Density: return "Target density (atoms/cm^2), effect " + std::to_string(r.effect);
-    case ParamKind::Doppler: return "Doppler temperature (K), effect " + std::to_string(r.effect);
-    case ParamKind::Abundance:
-      return "Abundance " + (r.sampleName.empty() ? std::string() : "sample " + r.sampleName + " ") +
-             "Z=" + std::to_string(r.nucleusZ) + " A=" + std::to_string(r.nucleusA);
-    case ParamKind::ThmCoherent: case ParamKind::Apparatus: case ParamKind::RadiativeDecay: break;  // their names say what they are
-  }
-  return name;
-}
-
-/*!
- * The parameter a row of the <mcmc> <parameters> block names, or -1.  The row gives the parameter's own name (whole,
- * not a prefix), or one of the GUI's short forms E<n> (energy of level n), G<n><c> (width of level n, one digit, in
- * channel c), N<k> (normalization of segment k), S<k> (constant energy shift of segment k), which are resolved through
- * the parameters' records.
- */
-static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &params) {
-  const int exact = params.IndexOfName(token);
-  if (exact >= 0) return exact;
-  if (token.size() < 2 || !std::isdigit((unsigned char)token[1])) return -1;
-  ParamKind kind = ParamKind::LevelEnergy;
-  int first = 0, second = -1;
-  try {
-    if (token[0] == 'E' || token[0] == 'N' || token[0] == 'S') {
-      kind = token[0] == 'E' ? ParamKind::LevelEnergy : token[0] == 'N' ? ParamKind::Norm : ParamKind::EnergyShift;
-      first = std::stoi(token.substr(1));
-    } else if (token[0] == 'G' && token.size() > 2) {
-      kind = ParamKind::Gamma;
-      first = std::stoi(token.substr(1, 1));
-      second = std::stoi(token.substr(2));
-      if (second <= 0) return -1;
-    } else {
-      return -1;
-    }
-  } catch (...) {
-    return -1;
-  }
-  if (first <= 0) return -1;
-  for (int i = 0; i < (int)params.Records().size(); i++) {
-    const ParameterRecord &r = params.Records()[i];
-    if (r.kind != kind) continue;
-    if ((kind == ParamKind::LevelEnergy && r.levelNumber == first) ||
-        (kind == ParamKind::Gamma && r.levelNumber == first && r.channel == second) ||
-        ((kind == ParamKind::Norm || kind == ParamKind::EnergyShift) && r.segmentKey == first))
-      return i;
-  }
-  return -1;
-}
-
 int runMCMC(Config &configure, const RunRequest &request) {
   try {
     WorkingCopy *data = new WorkingCopy();
-    // What the sampler's walkers are evaluated on (idle levels and working copies); the run's levels are made by
-    // the set-up below.
-    SamplerStates walkerPool;
 
     // The compound system from the <levels> rows, the data set up in the middle, then its last part: as the
     // program's run does it (SetUpProgramCompound), its check files and its words on a refusal included.
@@ -424,258 +364,27 @@ int runMCMC(Config &configure, const RunRequest &request) {
       compound->CalcShiftFunctions(configure, state);
     }
 
-    // Extract initial parameter values (only non-fixed parameters)
-    std::vector<double> initialParams;
-    if (request.reducedWidthAmplitudes) {
-      // Use RWA parameters directly
-      for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
-        if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
-          initialParams.push_back(params.GetMinuitParams().Parameter(i).Value());
-        }
-      }
-    } else {
-      // Use physical parameters
-      vector_r physicalParams = compound->GetTransformParams(state, compound->TransformOut(configure, state, inputs));
-      data->Data().Abundances().AppendTo(params.GetMinuitParams().Params(), physicalParams);
-
-      // Extend with data parameters if needed
-      for (size_t i = physicalParams.size(); i < params.GetMinuitParams().Params().size(); i++) {
-        physicalParams.push_back(params.GetMinuitParams().Parameter(i).Value());
-      }
-
-      // Extract non-fixed parameters
-      for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
-        if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
-          initialParams.push_back(physicalParams[i]);
-        }
-      }
-    }
-
-    if (initialParams.empty()) {
-      configure.outStream << "Error: No free parameters found for MCMC sampling." << std::endl;
-      configure.outStream << "Please ensure at least one parameter is not fixed." << std::endl;
+    // From here on the run is the engine's (SamplerRun.h), the same for a session of pyazr: the start vector, the
+    // priors of <mcmc>, the table of the free parameters, the sampler and its run.  The console's progress line, one
+    // per step.
+    const time_t mcmcStart = time(NULL);
+    int lastPrintedStep = -1;
+    SamplerHooks hooks;
+    hooks.afterStep = [mcmcStart, &lastPrintedStep](int step, int total, double logprob, double loglik,
+                                                    double logprior) {
+      if (step == lastPrintedStep) return false;
+      lastPrintedStep = step;
+      PrintMcmcProgress(mcmcStart, step, total, logprob, loglik, logprior);
+      return false;
+    };
+    std::vector<std::vector<double>> samples;
+    const SamplerOutcome outcome = RunSampler(configure, data, compound.get(), state, inputs, params, request, hooks,
+                                              samples);
+    if (outcome == SamplerOutcome::kRefused) {
       delete data;
       return -1;
     }
-
-    // Read priors from AZURE2 file if they exist
-    std::map<int, std::tuple<double, double, bool>> priorMap;  // parameter index -> (priorMean, priorStd, usePrior)
-    std::istringstream priorFile = SectionText(configure, "mcmc");
-    if (priorFile.good()) {
-      std::string line;
-      bool inMCMCSection = false;
-      bool inParametersSection = false;
-
-      while (std::getline(priorFile, line)) {
-        // Trim whitespace
-        size_t start = line.find_first_not_of(" \t\r\n");
-        if (start != std::string::npos) {
-          line = line.substr(start);
-          size_t end = line.find_last_not_of(" \t\r\n");
-          if (end != std::string::npos) line = line.substr(0, end + 1);
-        }
-
-        if (line == "<mcmc>") {
-          inMCMCSection = true;
-          continue;
-        } else if (line == "</mcmc>") {
-          inMCMCSection = false;
-          break;
-        }
-
-        if (inMCMCSection) {
-          if (line == "<parameters>") {
-            inParametersSection = true;
-            continue;
-          } else if (line == "</parameters>") {
-            inParametersSection = false;
-            continue;
-          }
-
-          if (inParametersSection && !line.empty()) {
-            // Parse: "Parameter (raw_param_name) currentValue priorMean priorStd useGaussianPrior"
-            std::istringstream iss(line);
-            std::vector<std::string> parts;
-            std::string part;
-            while (iss >> part) parts.push_back(part);
-
-            if (parts.size() >= 5) {
-              // Last 4 parts are: currentValue, priorMean, priorStd, useGaussianPrior
-              // Everything before that is the parameter name (possibly "Parameter (raw_name)")
-              std::string fileParamName;
-              for (size_t i = 0; i < parts.size() - 4; i++) {
-                if (i > 0) fileParamName += " ";
-                fileParamName += parts[i];
-              }
-
-              // Extract raw parameter name from "Parameter (raw_name)" format
-              std::string rawParamName;
-              size_t openParen = fileParamName.find('(');
-              size_t closeParen = fileParamName.find(')');
-              if (openParen != std::string::npos && closeParen != std::string::npos && closeParen > openParen) {
-                // Extract the raw name from inside parentheses
-                rawParamName = fileParamName.substr(openParen + 1, closeParen - openParen - 1);
-              } else {
-                // No parentheses - use the whole name
-                rawParamName = fileParamName;
-              }
-
-              const int paramOfRow = FindMcmcPriorParameter(rawParamName, params);
-
-              double priorMean = std::atof(parts[parts.size() - 3].c_str());
-              double priorStd = std::atof(parts[parts.size() - 2].c_str());
-              bool usePrior = (std::atoi(parts[parts.size() - 1].c_str()) == 1);
-
-              if (paramOfRow < 0) {
-                // A prior that is silently not applied is a wrong chain that looks right.
-                configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": \"" << rawParamName
-                                    << "\" names no parameter of this model.  A row names a parameter by its whole "
-                                    << "name as in param.sav (energy_1, width_1_2, segment_1_norm, ...), optionally "
-                                    << "as \"label (name)\", or by the short forms E<n>, G<n><c>, N<k>, S<k>, "
-                                    << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
-                delete data;
-                return -1;
-              }
-              priorMap[paramOfRow] = std::make_tuple(priorMean, priorStd, usePrior);
-            } else {
-              configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": expected a parameter name "
-                                  << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
-              delete data;
-              return -1;
-            }
-          }
-        }
-      }
-    }
-
-    // Build prior vectors for MCMC calculator (matching GUI approach)
-    std::vector<double> priorMeans;
-    std::vector<double> priorStds;
-    std::vector<bool> usePriors;
-
-    // Print parameter information
-    configure.outStream << std::endl;
-    configure.outStream << "Free Parameters for MCMC:" << std::endl;
-    configure.outStream << std::setw(40) << std::left << "Parameter Name"
-                        << std::setw(15) << "Current Value"
-                        << std::setw(15) << "Prior Mean"
-                        << std::setw(15) << "Prior Std"
-                        << std::setw(20) << "Use Prior" << std::endl;
-    configure.outStream << std::string(105, '-') << std::endl;
-
-    int paramIndex = 0;
-    int priorsFound = 0;
-    for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
-      if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
-        std::string paramName = PrettyParameterName(params.Record(i), params.GetMinuitParams().GetName(i));
-        double currentValue = initialParams[paramIndex];
-
-        // Check if prior exists for this parameter
-        std::string priorMeanStr = "N/A";
-        std::string priorStdStr = "N/A";
-        std::string usePriorStr = "No (uniform)";
-
-        double priorMean = 0.0;
-        double priorStd = 0.0;
-        bool usePrior = false;
-
-        if (priorMap.find(i) != priorMap.end()) {
-          priorMean = std::get<0>(priorMap[i]);
-          priorStd = std::get<1>(priorMap[i]);
-          usePrior = std::get<2>(priorMap[i]);
-
-          // Only mark as found if usePrior is true AND std is positive
-          if (usePrior && priorStd > 0.0) {
-            std::ostringstream meanStream, stdStream;
-            meanStream << std::scientific << std::setprecision(4) << priorMean;
-            stdStream << std::scientific << std::setprecision(4) << priorStd;
-            priorMeanStr = meanStream.str();
-            priorStdStr = stdStream.str();
-            usePriorStr = "Yes (Gaussian)";
-            priorsFound++;
-          } else {
-            // Found in map but usePrior is false or std is invalid - reset to defaults
-            priorMean = 0.0;
-            priorStd = 0.0;
-            usePrior = false;
-          }
-        }
-
-        // Add to prior vectors - these must be added for ALL parameters to maintain index alignment
-        priorMeans.push_back(priorMean);
-        priorStds.push_back(priorStd);
-        usePriors.push_back(usePrior);
-
-        configure.outStream << std::setw(40) << std::left << paramName
-                            << std::setw(15) << std::scientific << std::setprecision(6) << currentValue
-                            << std::setw(15) << priorMeanStr
-                            << std::setw(15) << priorStdStr
-                            << std::setw(20) << usePriorStr << std::endl;
-        paramIndex++;
-      }
-    }
-    configure.outStream << std::endl;
-    if (priorsFound > 0) {
-      configure.outStream << "Found " << priorsFound << " Gaussian prior(s) in AZURE2 file." << std::endl;
-      configure.outStream << "Priors will be applied during MCMC sampling." << std::endl;
-    } else {
-      configure.outStream << "No priors found in AZURE2 file. Using uniform priors for all parameters." << std::endl;
-      configure.outStream << "To use Gaussian priors, use the GUI to configure them and save the .azr file." << std::endl;
-    }
-    configure.outStream << std::endl;
-
-    // Handle overwriting existing samples.mcmc file if requested
-    if (request.overwriteSamples) {
-      std::string samplesFile = configure.outputdir + "samples.mcmc";
-      std::ifstream checkFile(configure.OpenPath(samplesFile).c_str());
-      if (checkFile.good()) {
-        checkFile.close();
-        if (std::remove(configure.OpenPath(samplesFile).c_str()) == 0) {
-          configure.outStream << "Removed existing samples.mcmc file." << std::endl;
-        } else {
-          configure.outStream << "Warning: Could not remove existing samples.mcmc file." << std::endl;
-        }
-      }
-    }
-
-    configure.outStream << std::endl;
-    configure.outStream << "MCMC Configuration:" << std::endl;
-    configure.outStream << "  Number of walkers: " << request.walkers << std::endl;
-    configure.outStream << "  Number of steps: " << request.steps << std::endl;
-    configure.outStream << "  Initial parameter spread: " << request.parameterSpread << "%" << std::endl;
-    configure.outStream << "  Level energy spread: " << request.energySpread << " keV" << std::endl;
-    configure.outStream << "  Number of threads: " << request.samplerThreads << std::endl;
-    configure.outStream << "  Parameter mode: " << (request.reducedWidthAmplitudes ? "RWA" : "Physical") << std::endl;
-    configure.outStream << "  Number of free parameters: " << initialParams.size() << std::endl;
-    configure.outStream << std::endl;
-
-    // Create MCMC calculator
-    AZURECalcMCMC mcmcCalc(data, compound.get(), state, inputs, walkerPool, configure);
-
-    // Set priors in MCMC calculator (same as GUI does in AZUREMCMCThread.cpp)
-    if (priorsFound > 0) {
-      mcmcCalc.SetPriors(priorMeans, priorStds, usePriors);
-      configure.outStream << "Applied " << priorsFound << " Gaussian prior(s) to MCMC calculator." << std::endl;
-      configure.outStream << std::endl;
-    }
-
-    // The console's progress line, one per step (the sampler calls the progress callback only when an iteration
-    // callback is set).
-    const time_t mcmcStart = time(NULL);
-    int lastPrintedStep = -1;
-    mcmcCalc.SetIterationCallback([](int, int) {});
-    mcmcCalc.SetProgressCallback([mcmcStart, &lastPrintedStep](int step, int total, double logprob, double loglik,
-                                                               double logprior) {
-      if (step == lastPrintedStep) return;
-      lastPrintedStep = step;
-      PrintMcmcProgress(mcmcStart, step, total, logprob, loglik, logprior);
-    });
-
-    // Run MCMC sampling
-    std::vector<std::vector<double>> samples;
-    const bool sampled = mcmcCalc.RunMCMCSampling(request.walkers, request.steps, initialParams,
-                                                  samples, request.parameterSpread, request.samplerThreads,
-                                                  request.reducedWidthAmplitudes, request.energySpread);
+    const bool sampled = outcome == SamplerOutcome::kSampled;
 
     if (!sampled) {
       if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache(configure);
@@ -715,6 +424,9 @@ int runMCMC(Config &configure, const RunRequest &request) {
  */
 
 int main(int argc, char *argv[]) {
+  // The main thread's x87 precision at 64 bits, whatever the C runtime's start-up set (the OpenMP regions take the
+  // same scope in each thread: azure2/support/FloatingPointPrecision.h).
+  const azure2::support::ExtendedPrecisionScope fpPrecision;
   // Check for --help option first.  If set, print help and exit.
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--help") == 0) {

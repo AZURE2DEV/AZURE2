@@ -15,6 +15,7 @@
 #include "AZUREOutput.h"
 #include "Config.h"
 #include "CovarianceBand.h"
+#include "DiagonalPriors.h"
 #include "WorkingCopy.h"
 
 /*!
@@ -312,18 +313,13 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   double totalN = 0.;
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     SegmentIterator thisSegment = segment;
-    // The normalization penalty as the fit sees it (AZURECalc::operator()):
-    // the deviation from the nominal normalization in units of its uncertainty,
-    // which the segment stores as a percentage.  This used to add a literal 1
-    // per segment, so the reported total was just the number of segments.
-    // A fixed norm pays no prior (docs/upgrade/objective.md D5), nor does a profiled THM norm, which is not a
-    // parameter: the fit adds no prior for it (D4).
-    double normChiSquared = 0.;
-    double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
-    if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
-        !thisSegment->IsNormPriorReplaced()) normChiSquared =
-                             pow((State(*thisSegment).norm - thisSegment->GetNominalNorm()) / normError, 2.0);
+    // The normalization prior as the objective adds it (AppendNormPrior): the deviation from the nominal
+    // normalization in units of its uncertainty, which the segment stores as a percentage; 0 for a fixed norm
+    // (docs/upgrade/objective.md D5) and a profiled THM norm, which is not a parameter (D4).
     const int thisIndex = (int)(thisSegment - Data().GetSegments().begin()) + 1;
+    DiagonalPriors normPrior;
+    AppendNormPrior(*this, thisIndex, nullptr, normPrior);
+    const double normChiSquared = PriorsChi2(normPrior, PriorSource::kNorm);
     totalChiSquared += results.objective.segmentChi2[thisIndex];
     totalNormChiSquared += normChiSquared;
     totalN += thisSegment->NumPoints();
@@ -348,35 +344,41 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
   // Park formalism: the J > 0 wall, when a level sits beyond it.
   if (configure.paramMask & Config::USE_PARK_FORMALISM)
     chiOut << " Total-Park-Chi-Squared: " << results.objective.park;
-  // The energy-shift penalties the fit minimised (Segment::AddShiftPenalty), when
-  // any shift is a fit parameter.  Without this the file reported less than the
-  // minimiser's own total by exactly this amount.
+  // The energy-shift priors the fit minimised (AppendShiftPriors), when any shift is a fit parameter.  Without this
+  // the file reported less than the minimiser's own total by exactly this amount.
   bool anyShiftVaried = false;
-  double totalShiftChiSquared = 0.;
+  DiagonalPriors shiftPriors;
   for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++) {
     if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
     if (segment->OwnsShiftFn())
       for (int q = 0; q < segment->NumShiftFnParams(); q++)
         if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
-    segment->AddShiftPenalty(State(*segment), totalShiftChiSquared);
+    AppendShiftPriors(*this, (int)(segment - Data().GetSegments().begin()) + 1, nullptr, shiftPriors);
   }
-  if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
+  if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << PriorsChi2(shiftPriors);
   // Isotopic abundances: their priors and the sum-to-one term.
   if (results.objective.abundance != 0.0)
     chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
+  // The target-effect priors as the objective's T8 adds them (AppendTargetPriors, DiagonalPriors.h): the subtotal of
+  // one kind at the working copy's present values.
+  auto targetPriors = [this](PriorSource source) {
+    DiagonalPriors priors;
+    AppendTargetPriors(*this, source, nullptr, priors);
+    return PriorsChi2(priors);
+  };
   // Electron-screening priors, when a screening potential has one.
   {
     bool anyPrior = false;
     for (int k = 1; k <= Data().NumScreeningParams(); k++)
       if (Data().GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
+    if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << targetPriors(PriorSource::kScreening);
   }
   // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
   if (Data().NumDensityParams() > 0) {
     bool anyPrior = false;
     for (int k = 1; k <= Data().NumDensityParams(); k++)
       if (Data().GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
+    if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << targetPriors(PriorSource::kDensity);
   }
   // Apparatus parameters (stopping scales, a kernel's width): one line per row with a fitted prior.
   WriteApparatusChiSquared(*this, chiOut);
@@ -385,7 +387,7 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
     bool anyPrior = false;
     for (int k = 1; k <= Data().NumDopplerParams(); k++)
       if (Data().GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
-    if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
+    if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << targetPriors(PriorSource::kDoppler);
   }
   // Fitted sample thicknesses: their priors.
   if (Data().NumThicknessParams() > 0) {
@@ -394,12 +396,15 @@ void WorkingCopy::WriteChiSquaredFile(const Config &configure, const azure2::Res
       const Segment *seg = &set_->segments_[Data().GetThicknessSegment(k) - 1];
       if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
     }
-    if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
+    if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << targetPriors(PriorSource::kThickness);
   }
   // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
   if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
   // The model data (T9): the <modelData> data (modelData.out).
   if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
+  // The gamma_decay records (T11): their priors and the wall on a negative remainder, whenever the project has a
+  // record.  Without this field the file's totals did not add up to the minimised chi-squared for such a project.
+  if (results.objective.hasGammaDecay) chiOut << " Total-Gamma-Decay-Chi-Squared: " << results.objective.gammaDecay;
   // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
   // Written with 15 significant digits (a new field: the older ones keep their 6).
   if (!configure.priorCovariance.empty()) {
@@ -500,9 +505,9 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
       // Shift functions: one line per function, after the per-segment rows.  The
       // lines start with '#' so that readers of the rows above skip them.
       bool header = false;
-      double totalShiftChi = 0.;
-      for (SegmentIterator segment = Data().GetSegments().begin(); segment < Data().GetSegments().end(); segment++)
-        segment->AddShiftPenalty(State(*segment), totalShiftChi);
+      DiagonalPriors shiftPriors;
+      for (int s = 1; s <= Data().NumSegments(); s++) AppendShiftPriors(*this, s, nullptr, shiftPriors);
+      const double totalShiftChi = PriorsChi2(shiftPriors);
       for (int pos = 0; pos < (int)set_->segments_.size(); pos++) {
         const Segment &owner = set_->segments_[pos];
         if (!owner.OwnsShiftFn() || !owner.HasShiftFn()) continue;
@@ -524,17 +529,17 @@ void WorkingCopy::WriteShiftsFile(const Config &configure, const azure2::Results
             hi = std::max(hi, x);
           }
         }
-        // The function's own penalty: the owner's shift penalties minus those of its
-        // constant and sqrt(E) terms.
-        double pen = 0.0, penOwn = 0.0;
-        owner.AddShiftPenalty(State(owner), pen);
-        if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = pow((State(owner).energyShift - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);  // as AddShiftPenalty
+        // The function's own penalty: the priors of its own parameters a_j as the objective holds them (the owner's
+        // entries of source kShiftFn, AppendShiftPriors), so that a prior the prior covariance replaced is absent by
+        // the objective's rule.
+        DiagonalPriors ownerPriors;
+        AppendShiftPriors(*this, pos + 1, nullptr, ownerPriors);
+        const double fnPenalty = PriorsChi2(ownerPriors, PriorSource::kShiftFn, pos + 1);
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << State(owner).energyShift << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << State(owner).shiftFnValues[q];
         out << "," << lo << "," << hi << "," << owner.TotalEnergyShift(State(owner), lo) << "," << owner.TotalEnergyShift(State(owner), hi) << ","
-            << pen - penOwn << std::endl;
+            << fnPenalty << std::endl;
       }
       if (header) out << "# Total-Shift-Chi-Squared: " << totalShiftChi << std::endl;
       out.flush();

@@ -61,7 +61,7 @@ int main() {
         check(std::string(k.name) + "=" + (value ? "1" : "0") + ": read back", OptionIsOn(c, k.name) == value);
       }
     }
-    check("eleven options", rows == 11);
+    check("ten options (eleven until use_gsl_coul was removed, 2026-11-16)", rows == 10);
     bool refused = false;
     try {
       OptionIsOn(fresh, "relativistic");

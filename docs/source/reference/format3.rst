@@ -2097,7 +2097,7 @@ Diagnostic codes
      - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
    * - ``E_CONFIG_KEY_REMOVED``
      - error
-     - a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh)
+     - a <config> key that format 3 no longer has (useAdaptiveGrid: every fold is on the shared mesh; use_gsl_coul: GSL's Coulomb functions are gone)
    * - ``E_UNKNOWN_SECTION``
      - error
      - a section format 3 does not have (a newer AZURE2's <channelRadii> or <isospin>, a misspelt name), or a section inside one that does not hold it: nothing would read it

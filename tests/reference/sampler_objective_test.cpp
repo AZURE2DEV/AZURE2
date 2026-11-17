@@ -55,9 +55,9 @@
 #include "CaptureAyRequests.h"
 #include "Config.h"
 #include "Objective.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "ParameterLimitsManager.h"
-#include "PriorCovariance.h"
+#include "PriorCovarianceFile.h"
 #include "WorkingCopy.h"
 
 namespace {
@@ -175,7 +175,7 @@ struct Fit {
         names.push_back(m.params.GetMinuitParams().GetName(i));
         fixed.push_back(m.Fixed(i));
       }
-      PriorCovariance::Load(m.cfg, names, fixed, AZUREParams::BasisForConfig(m.cfg), m.priorCov);
+      LoadPriorCovariance(m.cfg, names, fixed, AZUREParams::BasisForConfig(m.cfg), m.priorCov);
       m.data->SetPriorCovariance(m.priorCov);
       if (m.priorCov && m.priorCov->Size() > 0) ReplaceDiagonalPriors(m.compound, m.data, *m.priorCov);
     }

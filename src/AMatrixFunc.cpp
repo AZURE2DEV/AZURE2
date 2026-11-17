@@ -27,6 +27,26 @@
 #include <omp.h>
 #endif
 
+namespace {
+/// The sink of the adjoints of azure2/physics/CollisionMatrixAdjoint.h and ChannelSolveAdjoint.h over the cells of
+/// a gradient accumulator: level r and channel d of a J-group (from 0) are e[r] and gamma[r][d], or, where
+/// `levelNumber` is given, those of level number levelNumber[r] (1-based: a block that leaves levels out).
+struct LevelSink {
+  LevelSink(std::vector<double> &e, std::vector<std::vector<double>> &gamma, const int *levelNumber = nullptr)
+      : e(e), gamma(gamma), levelNumber(levelNumber) {}
+  /// The level energies and widths of J-group j; `levelOf` maps an active level (1-based) to its level number.
+  LevelSink(GradAccum &accum, int j, const std::vector<int> *levelOf = nullptr)
+      : LevelSink(accum.e[j - 1], accum.gamma[j - 1], levelOf ? levelOf->data() + 1 : nullptr) {}
+  int row(int r) const { return levelNumber ? levelNumber[r] - 1 : r; }
+  void energy(int r, double v) { e[row(r)] += v; }
+  void width(int r, int d, double v) { gamma[row(r)][d] += v; }
+  double *widths(int r) { return &gamma[row(r)][0]; }
+  std::vector<double> &e;
+  std::vector<std::vector<double>> &gamma;
+  const int *levelNumber;
+};
+}  // namespace
+
 /*!
  * The AMatrixFunc object is created with reference to a CompoundSystem object.
  */
@@ -582,7 +602,6 @@ void AMatrixFunc::CalculateTMatrix(Site *point) {
 bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                             int xsComponent, bool ayCrossSection, const Site &rows, int rowSlot) {
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradTBar);
-  const complex I(0.0, 1.0);
   const Site *angles = &rows;  // the angular row (Legendre rows, coefficient order) is the reader's; the rest the site's
 
   // --- Common gating. ---
@@ -711,8 +730,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       }
       std::vector<complex> tBarGroup(groups.size());
       for (int g = 0; g < (int)groups.size(); g++) {
-        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2 * symmetryFactor;
-        tBarGroup[g] = bar * (2.0 / 100.0) * w * groups[g].tsum;
+        tBarGroup[g] = azure2::physics::partial_wave_cotangent(bar, geom, groups[g].j, i1i2, symmetryFactor, groups[g].tsum);
       }
       // accumulate (not assign): a normalised Legendre coefficient adds this to its order-k cotangents
       for (int m = 1; m <= numM; m++)
@@ -734,7 +752,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
         if (mg->ch != mg->chp) continue;
         const double jValue = compound()->GetJGroup(mg->group)->GetJ();
-        tBar[k - 1][m - 1] += fitBar * geom * i1i2 / 100. * 2. * (2. * jValue + 1.);
+        tBar[k - 1][m - 1] += azure2::physics::optical_theorem_cotangent(fitBar, geom, i1i2, jValue);
       }
     }
   } else if (isBetaDelayed) {
@@ -746,7 +764,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     //      the cotangent convention used throughout this function. ----
     for (int k = 1; k <= nK; k++)
       for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++)
-        tBar[k - 1][m - 1] += fitBar * (2.0 * 25.0 / 100.0) * this->GetTMatrixElement(k, m);
+        tBar[k - 1][m - 1] += azure2::physics::beta_delayed_cotangent(fitBar, this->GetTMatrixElement(k, m));
   } else if (point->IsAnalyzingPower() && !ayCrossSection) {
     // ---- Vector analyzing power. A_y is built from the channel-spin amplitude
     //      matrix, which is linear in T(k,m) with the coefficients AddPathway
@@ -783,14 +801,13 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       for (int i = 0; i < nTerms; i++) {
         const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
-        complex prod = element(t->kGroup1, t->path1, t->isEC1) * conj(element(t->kGroup2, t->path2, t->isEC2));
-        if (t->ak != 0.0) den += t->ak * real(prod) * angles->RowP(rowSlot, t->kOrder);
-        if (t->bk != 0.0) num += t->bk * (-imag(prod)) * assocP[t->kOrder];
+        azure2::physics::add_capture_ay_sums(t->ak, t->bk, angles->RowP(rowSlot, t->kOrder), assocP[t->kOrder],
+                                             element(t->kGroup1, t->path1, t->isEC1),
+                                             element(t->kGroup2, t->path2, t->isEC2), den, num);
       }
       if (fabs(den) < 1.e-300) return false;
       const double ay = num / den;
 
-      const complex I2(0.0, 1.0);
       for (int i = 0; i < nTerms; i++) {
         const azure2::CaptureAyTerm *t = &P.capture_ay[theDecay.first_capture_ay + i];
         if (t->kOrder > maxL) continue;
@@ -798,8 +815,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const complex T2 = element(t->kGroup2, t->path2, t->isEC2);
         const double pk = angles->RowP(rowSlot, t->kOrder);
         const double pk1 = assocP[t->kOrder];
-        const complex d1 = (-I2 * t->bk * pk1 * T2 - ay * t->ak * pk * T2) / den;
-        const complex d2 = (I2 * t->bk * pk1 * T1 - ay * t->ak * pk * T1) / den;
+        complex d1, d2;
+        azure2::physics::capture_ay_cotangents(t->ak, t->bk, pk, pk1, ay, den, T1, T2, d1, d2);
         if (t->isEC1)
           ecBar[t->kGroup1 - 1][t->path1 - 1] += fitBar * d1;
         else
@@ -844,7 +861,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     struct PM {
       int k;
       int m;
-      complex invExpCP2;
+      complex expCP;
     };
     std::vector<PM> matches;
     complex U(0.0, 0.0);
@@ -856,20 +873,18 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         const AChannel *ex = jg->GetChannel(mg->chp);
         if (jg->GetJ() == segJ && en->GetL() == segL && en == ex) {
           complex expCP = point->GetExpCoulombPhase(mg->group, mg->ch);
-          complex expCP2 = expCP * expCP;
-          U += (expCP2 - this->GetTMatrixElement(k, m)) / expCP2;
-          matches.push_back(PM{k, m, 1.0 / expCP2});
+          U += azure2::physics::collision_from_t_matrix(expCP, this->GetTMatrixElement(k, m));
+          matches.push_back(PM{k, m, expCP});
         }
       }
     }
     double absU2 = std::norm(U);
     if (absU2 > 0.0) {
       // phase = (90/pi) arg(U) -> Ubar = fitBar (90/pi)(-Im U + i Re U)/|U|^2.
-      complex Ubar = fitBar * (90.0 / pi) *
-          complex(-std::imag(U), std::real(U)) / absU2;
+      const complex Ubar = azure2::physics::phase_shift_cotangent(fitBar, U);
       // U = sum [1 - T/expCP^2]  ->  dU/dT = -1/expCP^2.
       for (const PM &pm : matches)
-        tBar[pm.k - 1][pm.m - 1] += conj(-pm.invExpCP2) * Ubar;
+        tBar[pm.k - 1][pm.m - 1] += azure2::physics::collision_cotangent_to_t_matrix(pm.expCP, Ubar);
     }
   } else if (!isDiff && (!angles->IsCoefficient() || a0Mode)) {
     // The reported angle-integrated cross section carries (1+delta_12) of an identical entrance pair
@@ -895,7 +910,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
         rtFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
       }
     }
-    double cR = geom * i1i2 * rtFactor / (pi * 100.0);
+    double cR = azure2::physics::legendre_sum_factor(geom, i1i2, rtFactor);
     // An angular-coefficient point (Segment isDiff 9): the forward value is
     //   a_k = (4 geom i1i2 / (100 sigma_int)) sum_{L=k} z T1 T2*   (normalised)   or   A_k = a_k sigma_int / 4 pi,
     // i.e. the differential model's Legendre coefficient of order k, coeff_k = cR sum_{L=k} z T1 T2*, times
@@ -907,7 +922,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0(results) : 0.0;
     if (coef && point->IsUPOS()) UnreachableGate("UPOS coefficients: quantity legendre takes no secondary_gamma");
     if (coef && !(sigmaInt > 0.0)) return false;  // a vanishing integrated cross section (parameter values)
-    const double dfac = coef ? (angles->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
+    const double dfac =
+        coef ? azure2::physics::legendre_coefficient_factor(angles->GetCoefficientAbsolute(), rtFactor, sigmaInt) : 0.0;
     auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : angles->RowP(rowSlot, l); };
 
     // Fetch a T value (internal 'R' or external-capture 'E') and route a
@@ -925,8 +941,8 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     // model += W Re(T1 conj T2)  ->  T1bar += fitBar W T2 ;  T2bar += fitBar W T1.
     auto addQuad = [&](int K, int m1, char r1, int m2, char r2, double W) {
       complex T1 = Tval(K, m1, r1), T2 = Tval(K, m2, r2);
-      Tadd(K, m1, r1, fitBar * W * T2);
-      Tadd(K, m2, r2, fitBar * W * T1);
+      Tadd(K, m1, r1, azure2::physics::interference_pair_cotangent(fitBar, W, T2));
+      Tadd(K, m2, r2, azure2::physics::interference_pair_cotangent(fitBar, W, T1));
     };
 
     const bool inelasticParticle = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
@@ -942,9 +958,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
       const int nP = std::min(nl, angles->GetMaxLOrder() + 1);
       for (int l = 0; l < nP; l++) tbar_legendre_[l] = pl(l);
       for (size_t p = 0; p < numPaths; p++) {
-        const complex *q = &tbar_q_[p * nl];
-        complex s(0.0, 0.0);
-        for (int l = 0; l < nl; l++) s += q[l] * tbar_legendre_[l];
+        const complex s = azure2::physics::legendre_contraction(&tbar_q_[p * nl], tbar_legendre_.data(), nl);
         if (s != complex(0.0, 0.0)) Tadd(paths[p].k, paths[p].m, paths[p].rad, scale * s);
       }
     } else
@@ -965,7 +979,7 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
           int lp1 = compound()->GetJGroup(P.Internal(kg, m1).group)->GetChannel(P.Internal(kg, m1).chp)->GetL();
           int lp2 = compound()->GetJGroup(P.Internal(kg, m2).group)->GetChannel(P.Internal(kg, m2).chp)->GetL();
           if (sp1 == sp2 && !point->IsUPOS()) {
-            addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
+            addQuad(K, m1, rad1, m2, rad2, azure2::physics::interference_weight(cR, itf.z, legP));
           }
           if (lp1 == lp2 && point->IsUPOS() && type == "RR") {
             // R_L coefficient (constant w.r.t. parameters), even lOrder only.
@@ -981,15 +995,15 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
                 double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
                 double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
                 // unconditionally, as in GenMatrixFunc (checklist t3-24)
-                R_L = (R_L + 2.0 * delta * R_LLp + delta * delta * R_LpLp) / (1.0 + delta * delta);
+                R_L = azure2::physics::upos_mixed_rk(R_L, R_LLp, R_LpLp, delta);
               }
             }
-            double W = cR * itf.z_upos * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;
+            double W = azure2::physics::upos_interference_weight(cR, itf.z_upos, lOrder, R_L, legP);
             addQuad(K, m1, 'R', m2, 'R', W);
           }
         } else {
           // Standard case (entrance==exit pair, or gamma exit).
-          addQuad(K, m1, rad1, m2, rad2, cR * itf.z * legP);
+          addQuad(K, m1, rad1, m2, rad2, azure2::physics::interference_weight(cR, itf.z, legP));
         }
       }
     }
@@ -1002,16 +1016,16 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
     // f_C of channel spin s, the reader's at its slot (Site::CoulombAt): f_d + (-1)^s f_x (f_x = 0 but with spin exchange)
     complex fd(0.0, 0.0), fx(0.0, 0.0);
     if (!coef && aa == exitPairNum) angles->CoulombAt(rowSlot, fd, fx);
-    auto readerCoulomb = [&](double s) { return (((std::lround(2.0 * s) / 2) % 2 == 0) ? 1.0 : -1.0) * fx + fd; };
+    auto readerCoulomb = [&](double s) { return azure2::physics::channel_spin_coulomb_amplitude(s, fd, fx); };
     if (!coef && aa == exitPairNum && theDecay.has_interferences) {  // elastic Coulomb-nuclear interference
-      const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      const complex cI = azure2::physics::coulomb_interference_factor(geom, itFactor);
       for (int n = 0; n < theDecay.num_diagonal; n++) {
         const azure2::DiagonalPathway &d = P.diagonal[theDecay.first_diagonal + n];
-        const complex B = cI * d.statSpin * readerCoulomb(d.s) * angles->RowP(rowSlot, d.l);
-        tBar[d.k - 1][d.m - 1] += fitBar * B;
+        tBar[d.k - 1][d.m - 1] += azure2::physics::coulomb_interference_cotangent(fitBar, cI, d.statSpin, readerCoulomb(d.s),
+                                                                                 angles->RowP(rowSlot, d.l));
       }
     } else if (!coef && aa == exitPairNum) {  // elastic Coulomb-nuclear interference
-      complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
+      complex cI = azure2::physics::coulomb_interference_factor(geom, itFactor);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= P.Group(theDecay, k).num_internal; m++) {
           const azure2::InternalRow *mg = &P.Internal(P.Group(theDecay, k), m);
@@ -1019,9 +1033,9 @@ bool AMatrixFunc::PointTBar(Site *point, const azure2::Results &results, double 
           const AChannel *ex = compound()->GetJGroup(mg->group)->GetChannel(mg->chp);
           if (en == ex) {
             int l = en->GetL();
-            complex B = cI * mg->stat_spin_factor * readerCoulomb(en->GetS()) * angles->RowP(rowSlot, l);
             // model += Re(B conj T)  ->  Tbar += fitBar B.
-            tBar[k - 1][m - 1] += fitBar * B;
+            tBar[k - 1][m - 1] += azure2::physics::coulomb_interference_cotangent(
+                fitBar, cI, mg->stat_spin_factor, readerCoulomb(en->GetS()), angles->RowP(rowSlot, l));
           }
         }
       }
@@ -1077,9 +1091,9 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
       if (!terms[j - 1].empty()) this->BilinearAdjoint(point, j, terms[j - 1], accum, shiftDeriv);
     return;
   }
+  // The dense path takes the level index as the active one (PointTBar refuses anything else).
+  if (!all_levels_active_) throw std::logic_error("TBarAdjoint: a level outside the R matrix");
   const double inEnergy = this->InEnergy(point);
-  (void)exitPairNum;
-  (void)nK;
   // Per-JGroup A-matrix cotangent accumulators (active == original indexing).
   std::vector<matrix_c> aBar(compound()->NumJGroups());
   std::vector<bool> aBarUsed(compound()->NumJGroups(), false);
@@ -1121,7 +1135,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
         double gamma_fc = state().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
-        complex base = gamma_fc * sqrtNF * conv * ecAmp;
+        complex base = azure2::physics::external_capture_element(gamma_fc, sqrtNF, conv, ecAmp);
 
         // "effective amplitude" carrying the umatrix_cc factor for the
         // gamma_fc / sqrtNF derivatives (= ecAmp for direct capture).
@@ -1137,48 +1151,25 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
           int ccLevels = jgcc->NumLevels();
           complex sqrtPcc = point->GetSqrtPenetrability(jcc, ccChN);  // single sqrtP
 
-          // Forward umatrix_cc (mirrors the IGNORE_ZERO_WIDTHS skips).
-          complex umatrix_cc(0.0, 0.0);
-          for (int la = 1; la <= ccLevels; la++) {
-            if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
-            if (internalChannel && ignoreZero &&
-                state().ZeroInputWidth(jcc, la, internalChannel)) continue;
-            for (int lap = 1; lap <= ccLevels; lap++) {
-              if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
-              if (internalChannel && ignoreZero &&
-                  state().ZeroInputWidth(jcc, lap, internalChannel)) continue;
-              umatrix_cc += I2 * sqrtPcc *
-                  state().Gamma(jcc, la, ccChN) *
-                  state().Gamma(jcc, lap, ccChpN) *
-                  this->GetAMatrixElement(jcc, la, lap);
-            }
-          }
+          // Forward umatrix_cc on the level set of the forward pass (the IGNORE_ZERO_WIDTHS mask), and its adjoint:
+          // T_ec = base * umatrix_cc -> ubar = conj(base) * eb.
+          const complex factor = I2 * sqrtPcc;
+          const int maskChannel = (internalChannel && ignoreZero) ? internalChannel - 1 : -1;
+          const matrix_c &Acc = this->GetAMatrix(jcc);
+          const double *gcc = state().Gammas(jcc);
+          const unsigned char *zero = state().ZeroInputWidths(jcc);
+          const int nchcc = jgcc->NumChannels();
+          const complex umatrix_cc =
+              azure2::physics::masked_amplitude(factor, gcc, nchcc, ccChN - 1, ccChpN - 1, Acc, zero, maskChannel);
           effAmp = ecAmp * umatrix_cc;
-
-          // umatrix_cc cotangent:  T_ec = base * umatrix_cc -> ubar = conj(base)*eb.
           complex uBarcc = conj(base) * eb;
           ensureABar(jcc, ccLevels);
-          for (int la = 1; la <= ccLevels; la++) {
-            if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
-            if (internalChannel && ignoreZero &&
-                state().ZeroInputWidth(jcc, la, internalChannel)) continue;
-            double gEn = state().Gamma(jcc, la, ccChN);
-            for (int lap = 1; lap <= ccLevels; lap++) {
-              if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
-              if (internalChannel && ignoreZero &&
-                  state().ZeroInputWidth(jcc, lap, internalChannel)) continue;
-              double gEx = state().Gamma(jcc, lap, ccChpN);
-              complex Aval = this->GetAMatrixElement(jcc, la, lap);
-              complex w = I2 * sqrtPcc * gEn * gEx;  // weight of A[la][lap]
-              aBar[jcc - 1][la - 1][lap - 1] += conj(w) * uBarcc;
-              accum.AddGamma(jcc, la, ccChN, std::real(conj(uBarcc) * (I2 * sqrtPcc * gEx * Aval)));
-              accum.AddGamma(jcc, lap, ccChpN, std::real(conj(uBarcc) * (I2 * sqrtPcc * gEn * Aval)));
-            }
-          }
+          azure2::physics::dense_bilinear_adjoint(factor, gcc, nchcc, ccChN - 1, ccChpN - 1, Acc, zero, maskChannel,
+                                                  uBarcc, aBar[jcc - 1], LevelSink(accum, jcc));
         }
 
         // Explicit gamma_fc:  d T_ec / d gamma_fc = sqrtNF * conv * effAmp.
-        accum.AddGamma(jf, lf, fc, std::real(conj(eb) * (sqrtNF * conv * effAmp)));
+        accum.AddGamma(jf, lf, fc, azure2::physics::external_capture_width_cotangent(eb, sqrtNF, conv, effAmp));
 
         // sqrtNF couples to every NF channel d of the final level:
         //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d (physics/ExternalCapture.h),
@@ -1186,7 +1177,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
         // Park: sqrtNF = (J + sum_d A_d gamma_d^2)^{-1/2} with J = 1 - sum_d gamma_d^2 S'_d
         // over the particle channels (CompoundSystem::CalcShiftFunctions), so every particle
         // channel contributes  d sqrtNF / d gamma_d = (S'_d - A_d) gamma_d sqrtNF^3.
-        complex pre = gamma_fc * conv * effAmp;  // d T_ec / d sqrtNF
+        complex pre = azure2::physics::external_capture_norm_derivative(gamma_fc, conv, effAmp);  // d T_ec / d sqrtNF
         int numNF = finalLevel->NumNFIntegrals();
         double sqrtNF3 = sqrtNF * sqrtNF * sqrtNF;
         const bool parkFinal = park && finalLevel->IsInRMatrix();
@@ -1200,8 +1191,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
             Ad -= state().ShiftDerivative(jf, lf, d);
           if (Ad == 0.0) continue;
           double gd = state().ECGamma(jf, lf, d);
-          double dSqrtNF = -Ad * gd * sqrtNF3;
-          accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
+          accum.AddGamma(jf, lf, d, azure2::physics::bound_norm_width_cotangent(eb, pre, Ad, gd, sqrtNF3));
         }
       }
     }
@@ -1219,42 +1209,22 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
       int chpNum = mg->chp;
       const JGroup *jg = compound()->GetJGroup(jNum);
 
-      complex uphase = point->GetExpCoulombPhase(jNum, chNum) *
-          point->GetExpHardSpherePhase(jNum, chNum) *
-          point->GetExpCoulombPhase(jNum, chpNum) *
-          point->GetExpHardSpherePhase(jNum, chpNum);
+      const azure2::physics::ChannelPhases entrance{point->GetExpCoulombPhase(jNum, chNum),
+                                                    point->GetExpHardSpherePhase(jNum, chNum)};
+      const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
+                                                point->GetExpHardSpherePhase(jNum, chpNum)};
       complex sqrtPenEn = point->GetSqrtPenetrability(jNum, chNum);
       complex sqrtPenEx = point->GetSqrtPenetrability(jNum, chpNum);
 
       // d T / d umatrix = -uphase  ->  ubar = conj(-uphase) * tBar.
-      complex uBar = conj(-uphase) * tb;
+      const complex uBar = azure2::physics::amplitude_cotangent(entrance, exit, tb);
 
-      int numLevels = jg->NumLevels();
-      if (!aBarUsed[jNum - 1]) {
-        aBar[jNum - 1].assign(numLevels, vector_c(numLevels, complex(0.0, 0.0)));
-        aBarUsed[jNum - 1] = true;
-      }
-      complex pen2 = 2.0 * I * sqrtPenEn * sqrtPenEx;  // common factor of w_{l,l'}
-
-      for (int la = 1; la <= numLevels; la++) {
-        if (!jg->GetLevel(la)->IsInRMatrix()) continue;
-        double gammaEn = state().Gamma(jNum, la, chNum);
-        for (int lap = 1; lap <= numLevels; lap++) {
-          if (!jg->GetLevel(lap)->IsInRMatrix()) continue;
-          double gammaEx = state().Gamma(jNum, lap, chpNum);
-          complex Aval = this->GetAMatrixElement(jNum, la, lap);
-          complex w = pen2 * gammaEn * gammaEx;  // weight of A[la][lap]
-
-          // A cotangent:  Abar += conj(w) * ubar.
-          aBar[jNum - 1][la - 1][lap - 1] += conj(w) * uBar;
-
-          // Explicit gamma paths (umatrix depends on gamma_en and gamma_ex too):
-          //   d umatrix / d gamma_en,la += pen2 * gamma_ex * A
-          //   d umatrix / d gamma_ex,lap += pen2 * gamma_en * A
-          accum.AddGamma(jNum, la, chNum, std::real(conj(uBar) * (pen2 * gammaEx * Aval)));
-          accum.AddGamma(jNum, lap, chpNum, std::real(conj(uBar) * (pen2 * gammaEn * Aval)));
-        }
-      }
+      ensureABar(jNum, jg->NumLevels());
+      // A cotangent Abar += conj(w) ubar with w = pen2 gamma_en gamma_ex, and the widths as they stand in umatrix.
+      const complex pen2 = azure2::physics::penetrability_factor(sqrtPenEn, sqrtPenEx);
+      azure2::physics::dense_bilinear_adjoint(pen2, state().Gammas(jNum), jg->NumChannels(), chNum - 1, chpNum - 1,
+                                              this->GetAMatrix(jNum), nullptr, -1, uBar, aBar[jNum - 1],
+                                              LevelSink(accum, jNum));
     }
   }
 
@@ -1267,27 +1237,8 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
     int n = (int)A.size();
     if (n == 0) continue;
 
-    // Conjugate transpose A^H.
-    matrix_c Ah(n, vector_c(n, complex(0.0, 0.0)));
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++)
-        Ah[r][c] = conj(A[c][r]);
-
     // Mbar = -A^H * Abar * A^H.
-    matrix_c tmp(n, vector_c(n, complex(0.0, 0.0)));  // tmp = Abar * A^H
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++) {
-        complex s(0.0, 0.0);
-        for (int t = 0; t < n; t++) s += Ab[r][t] * Ah[t][c];
-        tmp[r][c] = s;
-      }
-    matrix_c Mbar(n, vector_c(n, complex(0.0, 0.0)));
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++) {
-        complex s(0.0, 0.0);
-        for (int t = 0; t < n; t++) s += Ah[r][t] * tmp[t][c];
-        Mbar[r][c] = -s;
-      }
+    const matrix_c Mbar = azure2::physics::inverse_adjoint(A, Ab);
     this->LevelMatrixAdjoint(point, jNum, Mbar, inEnergy, accum, shiftDeriv);
   }
 }
@@ -1314,267 +1265,101 @@ void AMatrixFunc::LevelMatrixAdjoint(Site *energyPoint, int jNum, const matrix_c
                                      GradAccum &accum, const vector_matrix_r *shiftDeriv, const complex *lambda,
                                      const std::vector<int> *levelOf) {
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kGradLevelMatrix);
-  Site *point = energyPoint;
-  // Active level r (1-based) -> its level number (THM blocks, levelOf), else r.
-  auto lev = [levelOf](int r) -> int { return levelOf ? (*levelOf)[r] : r; };
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   const JGroup *jg = compound()->GetJGroup(jNum);
   const int n = (int)Mbar.size();
   if (n == 0) return;
-  // Structural energy gradient.  The (E_r - inE) delta term gives
-  //   d M[a][a]/d E_a = 1  ->  dlnL/dE_a += Re(Mbar[a][a]).
-  for (int la = 1; la <= n; la++)
-    accum.AddE(jNum, lev(la), std::real(Mbar[la - 1][la - 1]));
-
-  // Brune adds explicit E_lambda dependence through the boundary/shift kernel
-  //   M[r][c] = ... - sum_{ch P} g_r,ch g_c,ch K_ch[r][c],
-  //   K_ch[r][c] = L + B - D_ch[r][c],  D diagonal = S_r,  off-diag = Q_{rc}.
-  // so dlnL/dE_nu += sum_{r,c} Re(conj(Mbar[r][c]) * sum_ch g_r g_c dD/dE_nu).
-  // dD/dE only couples to E_r and E_c; using S'(E) = shiftDeriv.
-  if (park) {
-    // Park:  M[r][c] = (E_r - inE) J[r][c] - sum_d g_r,d g_c,d K_d[r][c],
-    //   K_d[r][c] = L_d + B_d - S_r,d   (row-indexed shift; particle channels),
-    //   J[r][r]   = 1 - sum_d g_r,d^2 S'_r,d,
-    //   J[r][c]   = -sum_d g_r,d g_c,d (S_r,d - S_c,d)/(E_r - E_c).
-    // The delta term above already gave d M[r][r]/dE_r = 1; here it is J_rr
-    // instead, so the difference J_rr - 1 is added, plus the J and S_r,d
-    // derivatives.  M is real-coefficient in E, so only Re(Mbar) enters.
-    int numChannels = jg->NumChannels();
-    auto isParticle = [&](int d) {
-      return jg->GetChannel(d)->GetRadType() == 'P' &&
-             compound()->GetPair(jg->GetChannel(d)->GetPairNum())->GetPType() == 0;
-    };
-    const LevelState &state = this->state();
-    for (int r = 1; r <= n; r++) {
-      const int lr = lev(r);
-      double Er = state.E(jNum, lr);
-      for (int c = 1; c <= n; c++) {
-        double reM = std::real(Mbar[r - 1][c - 1]);
-        if (reM == 0.0) continue;
-        if (r == c) {
-          double dJ = 0.0, sumS1 = 0.0;
-          for (int d = 1; d <= numChannels; d++) {
-            if (!isParticle(d)) continue;
-            double g2 = state.Gamma(jNum, lr, d) * state.Gamma(jNum, lr, d);
-            if (g2 == 0.0) continue;
-            dJ -= g2 * state.ShiftSecondDerivative(jNum, lr, d);
-            sumS1 += g2 * state.ShiftDerivative(jNum, lr, d);
-          }
-          accum.AddE(jNum, lev(r), reM * ((state.ParkNorm(jNum, lr) - 1.0) + (Er - inEnergy) * dJ + sumS1));
-        } else {
-          const int lc = lev(c);
-          double Jrc = 0.0, dJdEr = 0.0, dJdEc = 0.0, sumS1 = 0.0;
-          for (int d = 1; d <= numChannels; d++) {
-            if (!isParticle(d)) continue;
-            double g = state.Gamma(jNum, lr, d) * state.Gamma(jNum, lc, d);
-            if (g == 0.0) continue;
-            const azure2::physics::LevelPairShift<double> chord = PairShift(state, jNum, lr, lc, d);
-            double q = chord.slope() / chord.gap;
-            Jrc -= g * q;
-            dJdEr -= g * chord.slope_by_Ea(q) / chord.gap;
-            dJdEc -= g * chord.slope_by_Eb(q) / chord.gap;
-            sumS1 += g * chord.a.dS;
-          }
-          accum.AddE(jNum, lev(r), reM * (Jrc + (Er - inEnergy) * dJdEr + sumS1));
-          accum.AddE(jNum, lev(c), reM * (Er - inEnergy) * dJdEc);
-        }
-      }
-    }
-
-    // Structural gamma gradient, Park.  For M[a][c] and M[c][a] (both carry
-    // Mbar) the kernel is row-indexed, K_d[a][c] = L_d + B_d - S_a,d and
-    // K_d[c][a] = L_d + B_d - S_c,d, and J contributes
-    //   d J[a][a]/d g_a,d = -2 g_a,d S'_a,d,
-    //   d J[a][c]/d g_a,d = d J[c][a]/d g_a,d = -g_c,d (S_a,d - S_c,d)/(E_a - E_c).
-    for (int d = 1; d <= numChannels; d++) {
-      const bool pd = isParticle(d);
-      // lambda[d-1] stands for L_d + B_d (particle) or L_d.
-      complex Ld = lambda ? lambda[d - 1] : point->GetLoElement(jNum, d);
-      double Bd = (pd && !lambda) ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
-      for (int a = 1; a <= n; a++) {
-        const int la_ = lev(a);
-        double Ea = state.E(jNum, la_);
-        double ga = state.Gamma(jNum, la_, d);
-        double Sa = pd ? state.Shift(jNum, la_, d) : 0.0;
-        double grad = 0.0;
-        for (int c = 1; c <= n; c++) {
-          const int lc_ = lev(c);
-          double gc = state.Gamma(jNum, lc_, d);
-          if (c == a) {
-            complex Kaa = pd ? (Ld + Bd - Sa) : Ld;
-            grad += -2.0 * ga * std::real(conj(Mbar[a - 1][a - 1]) * Kaa);
-            if (pd) grad += std::real(Mbar[a - 1][a - 1]) * (Ea - inEnergy) * (-2.0 * ga * state.ShiftDerivative(jNum, la_, d));
-          } else {
-            if (gc == 0.0) continue;
-            double Sc = pd ? state.Shift(jNum, lc_, d) : 0.0;
-            complex Kac = pd ? (Ld + Bd - Sa) : Ld;
-            complex Kca = pd ? (Ld + Bd - Sc) : Ld;
-            grad += -gc * std::real(conj(Mbar[a - 1][c - 1]) * Kac + conj(Mbar[c - 1][a - 1]) * Kca);
-            if (pd) {
-              double Ec = state.E(jNum, lc_);
-              const azure2::physics::LevelPairShift<double> chord = PairShift(state, jNum, la_, lc_, d);
-              double delta = chord.slope() / chord.gap;
-              grad += -gc * delta * (std::real(Mbar[a - 1][c - 1]) * (Ea - inEnergy) +
-                                     std::real(Mbar[c - 1][a - 1]) * (Ec - inEnergy));
-            }
-          }
-        }
-        accum.AddGamma(jNum, lev(a), d, grad);
-      }
-    }
-    return;
-  }
-
-  // Standard and Brune level matrices.  The level data are gathered once into
-  // flat arrays: the loops below are n^2 per channel, and the accessor calls
-  // and divisions they used to make per element dominated the gradient.
   const int nch = jg->NumChannels();
-  // E, G, S, S G and 1/(E_r - E_c) off the diagonal: kept per parameter set
-  // for the whole J-group; gathered here over the active levels when a THM
-  // block leaves levels out of the R matrix (levelOf).
-  const ChannelSpace::LevelArrays *levelArraysPtr;
+  const LevelState &state = this->state();
+  LevelAdjointGather &g = lma_gather_;
+  azure2::physics::LevelMatrixAdjointTables t;
+  t.n = n;
+  t.nc = nch;
+  t.brune = brune;
+  t.park = park;
+  // The channels whose kernel carries the level's shift: the particle channels of Park, the 'P' channels of Brune.
+  g.shiftChannel.resize(nch);
+  for (int d = 0; d < nch; d++) {
+    const AChannel *ch = (park || brune) ? jg->GetChannel(d + 1) : nullptr;
+    g.shiftChannel[d] = !ch ? false
+                        : park ? (ch->GetRadType() == 'P' && compound()->GetPair(ch->GetPairNum())->GetPType() == 0)
+                               : (ch->GetRadType() == 'P');
+  }
+  t.shift_channel = g.shiftChannel.data();
+  // The channel kernel: the caller's, or the Lo-matrix element of the point with B_c of the shift channels.
+  if (lambda) {
+    t.kernel = lambda;
+  } else {
+    g.kernel.resize(nch);
+    g.boundary.resize(nch);
+    for (int d = 0; d < nch; d++) {
+      g.kernel[d] = energyPoint->GetLoElement(jNum, d + 1);
+      g.boundary[d] = g.shiftChannel[d] ? jg->GetChannel(d + 1)->GetBoundaryCondition() : 0.0;
+    }
+    t.kernel = g.kernel.data();
+    t.boundary = g.boundary.data();
+  }
+  // The level data.  Every level: the state's own arrays, and for the standard and Brune matrices E, G, S, S G and
+  // 1/(E_r - E_c) as kept per parameter set.  A THM block that leaves levels out of the R matrix (levelOf): gathered
+  // here over its active levels.
   if (levelOf) {
     ChannelSpace::LevelArrays &la = lma_active_;
+    const size_t cells = (size_t)n * nch;
     la.n = n;
     la.nch = nch;
     la.E.resize(n);
-    la.G.resize((size_t)n * nch);
-    la.S.resize((size_t)n * nch);
-    la.SG.resize((size_t)n * nch);
+    la.G.resize(cells);
+    la.S.resize(cells);
+    g.d1.resize(cells);
+    g.d2.resize(cells);
+    g.parkNorm.resize(n);
+    if (!park) la.SG.resize(cells);
     for (int r = 0; r < n; r++) {
-      const int level = lev(r + 1);
-      la.E[r] = state().E(jNum, level);
+      const int level = (*levelOf)[r + 1];
+      la.E[r] = state.E(jNum, level);
+      g.parkNorm[r] = state.ParkNorm(jNum, level);
       for (int ch = 0; ch < nch; ch++) {
-        la.G[(size_t)r * nch + ch] = state().Gamma(jNum, level, ch + 1);
-        la.S[(size_t)r * nch + ch] = state().Shift(jNum, level, ch + 1);
-        la.SG[(size_t)r * nch + ch] = la.S[(size_t)r * nch + ch] * la.G[(size_t)r * nch + ch];
+        const size_t i = (size_t)r * nch + ch;
+        la.G[i] = state.Gamma(jNum, level, ch + 1);
+        la.S[i] = state.Shift(jNum, level, ch + 1);
+        if (!park) la.SG[i] = la.S[i] * la.G[i];
+        g.d1[i] = state.ShiftDerivative(jNum, level, ch + 1);
+        g.d2[i] = state.ShiftSecondDerivative(jNum, level, ch + 1);
       }
     }
-    la.inv.assign((size_t)n * n, 0.0);
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++)
-        if (r != c) la.inv[(size_t)r * n + c] = azure2::physics::inverse_level_gap(la.E[r], la.E[c]);
-    levelArraysPtr = &la;
+    if (!park) {
+      la.inv.assign((size_t)n * n, 0.0);
+      for (int r = 0; r < n; r++)
+        for (int c = 0; c < n; c++)
+          if (r != c) la.inv[(size_t)r * n + c] = azure2::physics::inverse_level_gap(la.E[r], la.E[c]);
+    }
+    t.E = la.E.data();
+    t.gamma = la.G.data();
+    t.shift = la.S.data();
+    t.shift_gamma = la.SG.data();
+    t.inv_gap = la.inv.data();
+    t.shift_d1 = g.d1.data();
+    t.shift_d2 = g.d2.data();
+    t.park_norm = g.parkNorm.data();
   } else {
-    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state(), jNum);
-  }
-  const ChannelSpace::LevelArrays &levelArrays = *levelArraysPtr;
-  const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
-  std::vector<double> &reSym = lma_resym_, &imSym = lma_imsym_;
-  std::vector<char> &bruneP = lma_brunep_;
-  bruneP.assign(nch, 0);
-  bool anyBruneP = false;
-  for (int ch = 0; ch < nch; ch++)
-    if (brune && jg->GetChannel(ch + 1)->GetRadType() == 'P') bruneP[ch] = anyBruneP = true;
-
-  // Brune adds explicit E_lambda dependence through the boundary/shift kernel
-  //   M[r][c] = ... - sum_{ch P} g_r,ch g_c,ch K_ch[r][c],
-  //   K_ch[r][c] = L + B - D_ch[r][c],  D diagonal = S_r,  off-diag = Q_{rc},
-  //   Q_rc = (S_r (inE - E_c) - S_c (inE - E_r)) / (E_r - E_c),
-  // so dlnL/dE_nu += sum_{r,c} Re(Mbar[r][c]) sum_ch g_r g_c dD/dE_nu; dD/dE
-  // only couples to E_r and E_c, with S'(E) = shiftDeriv.
-  if (brune && shiftDeriv && anyBruneP) {
-    const std::vector<std::vector<double>> &sd = (*shiftDeriv)[jNum - 1];
-    std::vector<double> &dE = lma_de_;
-    dE.assign(n, 0.0);
-    for (int ch = 0; ch < nch; ch++) {
-      if (!bruneP[ch]) continue;
-      for (int r = 0; r < n; r++) {
-        const double gr = G[(size_t)r * nch + ch];
-        if (gr == 0.0) continue;
-        const double Sr = S[(size_t)r * nch + ch];
-        const double dSr = sd[r][ch];
-        const complex *mrow = &Mbar[r][0];
-        // D = S_r ;  dD/dE_r = S'_r.
-        dE[r] += std::real(mrow[r]) * gr * gr * dSr;
-        for (int c = 0; c < n; c++) {
-          if (c == r) continue;
-          const double g = gr * G[(size_t)c * nch + ch];
-          if (g == 0.0) continue;
-          const double iv = inv[(size_t)r * n + c];
-          const azure2::physics::LevelPairShift<double> chord = azure2::physics::level_pair_shift<double>(
-              {E[r], Sr, dSr, state().ShiftSecondDerivative(jNum, lev(r + 1), ch + 1)},
-              {E[c], S[(size_t)c * nch + ch], sd[c][ch], state().ShiftSecondDerivative(jNum, lev(c + 1), ch + 1)});
-          const double Q = chord.chord(inEnergy) * iv;
-          const double dQdEr = chord.chord_by_Ea(inEnergy, Q) * iv;
-          const double dQdEc = chord.chord_by_Eb(inEnergy, Q) * iv;
-          const double w = std::real(mrow[c]) * g;
-          dE[r] += w * dQdEr;
-          dE[c] += w * dQdEc;
-        }
-      }
-    }
-    for (int r = 0; r < n; r++) accum.AddE(jNum, lev(r + 1), dE[r]);
-  }
-
-  // Structural gamma gradient.  M[r][c] = (E_r-inE) delta - sum_ch g_r,ch g_c,ch K_ch[r][c],
-  // so  dlnL/d gamma_{a,d} += -sum_c Re( conj(Mbar[a][c]+Mbar[c][a]) * K_d[a][c] ) * gamma_{c,d}.
-  // The kernel K_d[r][c] is the channel-d contribution to the level matrix:
-  //   non-Brune (or non-'P'):  K_d = L_d  (the Lo-matrix element, indep. of r,c)
-  //   Brune 'P' channel:       K_d[r][c] = L_d + B_d - D_d[r][c],
-  //     D_d[r][c] = (r==c) ? S_r,d
-  //                        : (S_r,d (inE-E_c) - S_c,d (inE-E_r)) / (E_r - E_c)
-  // exactly mirroring FillMatrices.  With sym = Mbar + Mbar^T and D real,
-  //   -Re(conj(sym) K) = -Re(sym) Re(L + B) - Im(sym) Im(L) + Re(sym) D,
-  // and the D term splits into
-  //   S_a sum_{c!=a} Re(sym_ac) (inE-E_c)/(E_a-E_c) g_c
-  //   - (inE-E_a) sum_{c!=a} Re(sym_ac)/(E_a-E_c) S_c g_c  + Re(sym_aa) S_a g_a,
-  // so every channel is a few row-times-matrix products.
-  reSym.resize((size_t)n * n);
-  imSym.resize((size_t)n * n);
-  for (int a = 0; a < n; a++)
-    for (int c = 0; c < n; c++) {
-      const complex sym = Mbar[a][c] + Mbar[c][a];
-      reSym[(size_t)a * n + c] = std::real(sym);
-      imSym[(size_t)a * n + c] = std::imag(sym);
-    }
-  const std::vector<double> &SG = levelArrays.SG;
-  std::vector<double> &acc = lma_acc_;
-  acc.resize((size_t)4 * nch);
-  double *sRe = &acc[0], *sIm = &acc[nch], *t1 = &acc[2 * (size_t)nch], *t2 = &acc[3 * (size_t)nch];
-  std::vector<complex> &Lconst = lma_l_;
-  Lconst.resize(nch);
-  for (int d = 0; d < nch; d++) {
-    if (lambda) {
-      Lconst[d] = lambda[d];
-      continue;
-    }
-    complex Ld = point->GetLoElement(jNum, d + 1);
-    if (bruneP[d]) Ld += jg->GetChannel(d + 1)->GetBoundaryCondition();
-    Lconst[d] = Ld;
-  }
-  for (int a = 0; a < n; a++) {
-    std::fill(acc.begin(), acc.end(), 0.0);
-    const double *rs = &reSym[(size_t)a * n], *is = &imSym[(size_t)a * n];
-    for (int c = 0; c < n; c++) {
-      const double *gc = &G[(size_t)c * nch];
-      const double wr = rs[c], wi = is[c];
-      for (int d = 0; d < nch; d++) {
-        sRe[d] += wr * gc[d];
-        sIm[d] += wi * gc[d];
-      }
-      if (anyBruneP && c != a) {
-        const bool coincident = azure2::physics::levels_coincide(E[a], E[c]);  // iv 1, D = S_a + S'_m (inE - E_a)
-        const double iv = inv[(size_t)a * n + c];
-        const double w1 = coincident ? wr : wr * (inEnergy - E[c]) * iv, w2 = wr * iv;
-        const double *sgc = &SG[(size_t)c * nch];
-        for (int d = 0; d < nch; d++) {
-          t1[d] += w1 * gc[d];
-          t2[d] += coincident ? -w2 * PairShift(state(), jNum, lev(a + 1), lev(c + 1), d + 1).slope() * gc[d]
-                              : w2 * sgc[d];
-        }
-      }
-    }
-    for (int d = 0; d < nch; d++) {
-      double g = -(std::real(Lconst[d]) * sRe[d] + std::imag(Lconst[d]) * sIm[d]);
-      if (bruneP[d]) {
-        const double Sa = S[(size_t)a * nch + d];
-        g += Sa * t1[d] - (inEnergy - E[a]) * t2[d] + rs[a] * Sa * G[(size_t)a * nch + d];
-      }
-      accum.AddGamma(jNum, lev(a + 1), d + 1, g);
+    t.E = state.Energies(jNum);
+    t.gamma = state.Gammas(jNum);
+    t.shift = state.Shifts(jNum);
+    t.shift_d1 = state.ShiftDerivatives(jNum);
+    t.shift_d2 = state.ShiftSecondDerivatives(jNum);
+    t.park_norm = state.ParkNorms(jNum);
+    if (!park) {
+      const ChannelSpace::LevelArrays &la = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state, jNum);
+      t.E = la.E.data();
+      t.gamma = la.G.data();
+      t.shift = la.S.data();
+      t.shift_gamma = la.SG.data();
+      t.inv_gap = la.inv.data();
     }
   }
+  if (brune && shiftDeriv) t.brune_shift_d1 = &(*shiftDeriv)[jNum - 1];
+  azure2::physics::level_matrix_adjoint(t, Mbar, inEnergy, lma_scratch_, LevelSink(accum, jNum, levelOf));
 }
 
 /*!
@@ -1593,27 +1378,8 @@ void AMatrixFunc::LevelMatrixABarAdjoint(Site *point, int jNum, const matrix_c &
   int n = (int)A.size();
   if (n == 0) return;
 
-  // Conjugate transpose A^H.
-  matrix_c Ah(n, vector_c(n, complex(0.0, 0.0)));
-  for (int r = 0; r < n; r++)
-    for (int c = 0; c < n; c++)
-      Ah[r][c] = conj(A[c][r]);
-
   // Mbar = -A^H * Abar * A^H.
-  matrix_c tmp(n, vector_c(n, complex(0.0, 0.0)));  // tmp = Abar * A^H
-  for (int r = 0; r < n; r++)
-    for (int c = 0; c < n; c++) {
-      complex s(0.0, 0.0);
-      for (int t = 0; t < n; t++) s += Ab[r][t] * Ah[t][c];
-      tmp[r][c] = s;
-    }
-  matrix_c Mbar(n, vector_c(n, complex(0.0, 0.0)));
-  for (int r = 0; r < n; r++)
-    for (int c = 0; c < n; c++) {
-      complex s(0.0, 0.0);
-      for (int t = 0; t < n; t++) s += Ah[r][t] * tmp[t][c];
-      Mbar[r][c] = -s;
-    }
+  const matrix_c Mbar = azure2::physics::inverse_adjoint(A, Ab);
   this->LevelMatrixAdjoint(point, jNum, Mbar, inEnergy, accum, shiftDeriv, nullptr, levelOf);
 }
 
@@ -1645,41 +1411,10 @@ const vector_c &AMatrixFunc::GetRawChannelSolve(int jGroupNum, int chNum) {
         bool same = true;
         for (int k = 0; k < n && same; k++) same = (std::real(solve[k]) == f.gcut[(size_t)k * f.nch + chNum - 1]);
         if (same && !f.pencil) {
-          const vector_c &uf = this->FormalSolve(jGroupNum, chNum - 1);
-          if (f.identity)
-            solve = uf;
-          else
-            for (int r = 0; r < n; r++) {
-              const double *vr = &f.V[(size_t)r * n];
-              complex sum(0.0, 0.0);
-              for (int k = 0; k < n; k++) sum += vr[k] * uf[k];
-              solve[r] = sum;
-            }
+          azure2::physics::channel_space::level_solve_from_formal(f, this->FormalSolve(jGroupNum, chNum - 1), solve);
         } else if (same) {
           // Pencil: A g_c = Z X (e_c + z),  (1 - Lambda R) z = Lambda R e_c.
-          ChannelState &st = chan_[jGroupNum - 1];
-          const int m = (int)f.act.size(), b = f.pos[chNum - 1];
-          std::fill(solve.begin(), solve.end(), complex(0.0, 0.0));
-          if (b >= 0) {
-            vector_c &z = st.wz;
-            z.resize(m);
-            for (int a = 0; a < m; a++) z[a] = st.lamAct[a] * st.R[(size_t)a * m + b];
-            this->SolveBordered(jGroupNum, nullptr, z.data());
-            z[b] += 1.0;
-            vector_c &y = st.w4;
-            y.resize(n);
-            for (int k = 0; k < n; k++) {
-              complex sum(0.0, 0.0);
-              for (int a = 0; a < m; a++) sum += st.X[(size_t)k * m + a] * z[a];
-              y[k] = sum;
-            }
-            for (int r = 0; r < n; r++) {
-              const double *zr = &f.Z[(size_t)r * n];
-              complex sum(0.0, 0.0);
-              for (int k = 0; k < n; k++) sum += zr[k] * y[k];
-              solve[r] = sum;
-            }
-          }
+          azure2::physics::channel_space::pencil_channel_solve(f, chan_[jGroupNum - 1], f.pos[chNum - 1], solve);
         } else {
           vector_c &tmp = chan_[jGroupNum - 1].w3;
           tmp = solve;
@@ -1725,7 +1460,6 @@ const std::vector<complex> &AMatrixFunc::KernelLambda(Site *point, int j) {
 bool AMatrixFunc::CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent &bar,
                                        std::vector<std::vector<BilinearTerm>> &terms) {
   Site *point = energyPoint;
-  const complex I(0.0, 1.0);
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   // The exit of the point's exit pair (CalculateTMatrix has refused a point without one).
@@ -1745,11 +1479,15 @@ bool AMatrixFunc::CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent
       const int jNum = mg->group;
       const int chNum = mg->ch;
       const int chpNum = mg->chp;
-      complex uphase = point->GetExpCoulombPhase(jNum, chNum) * point->GetExpHardSpherePhase(jNum, chNum) *
-          point->GetExpCoulombPhase(jNum, chpNum) * point->GetExpHardSpherePhase(jNum, chpNum);
-      complex uBar = conj(-uphase) * tb;
-      complex pen2 = 2.0 * I * point->GetSqrtPenetrability(jNum, chNum) * point->GetSqrtPenetrability(jNum, chpNum);
-      const complex beta = conj(pen2) * uBar;
+      const azure2::physics::ChannelPhases entrance{point->GetExpCoulombPhase(jNum, chNum),
+                                                    point->GetExpHardSpherePhase(jNum, chNum)};
+      const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
+                                                point->GetExpHardSpherePhase(jNum, chpNum)};
+      const complex uBar = azure2::physics::amplitude_cotangent(entrance, exit, tb);
+      const complex beta = azure2::physics::bilinear_cotangent(
+          azure2::physics::penetrability_factor(point->GetSqrtPenetrability(jNum, chNum),
+                                                point->GetSqrtPenetrability(jNum, chpNum)),
+          uBar);
       std::vector<BilinearTerm> &list = terms[jNum - 1];
       bool merged = false;
       for (BilinearTerm &t : list)
@@ -1815,37 +1553,13 @@ void AMatrixFunc::BilinearAdjoint(Site *energyPoint, int jNum, const std::vector
     const std::vector<complex> &lam = this->KernelLambda(energyPoint, jNum);
     const std::vector<double> &G = ChannelSpace::CurrentLevelArrays(ChannelMemo(), jg, state(), jNum).G;
     vector_c ga(nch), gb(nch);
+    LevelSink sink(accum, jNum);
     for (const BilinearTerm &t : terms) {
       const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
       const vector_c &uEx = this->GetRawChannelSolve(jNum, t.chp);
-      const complex cb = conj(t.beta);
-      for (int la = 1; la <= n; la++) {
-        accum.AddGamma(jNum, la, t.ch, std::real(cb * uEx[la - 1]));
-        accum.AddGamma(jNum, la, t.chp, std::real(cb * uEn[la - 1]));
-      }
-      // conj(u)^T g_d for both solves.
-      std::fill(ga.begin(), ga.end(), complex(0.0, 0.0));
-      std::fill(gb.begin(), gb.end(), complex(0.0, 0.0));
-      for (int la = 0; la < n; la++) {
-        const complex ca = conj(uEn[la]), cbx = conj(uEx[la]);
-        const double *g = &G[(size_t)la * nch];
-        for (int d = 0; d < nch; d++) {
-          ga[d] += ca * g[d];
-          gb[d] += cbx * g[d];
-        }
-      }
-      for (int la = 0; la < n; la++) {
-        const complex a = -t.beta * conj(uEn[la]), b = -t.beta * conj(uEx[la]);
-        // (Mbar g_d)_l = a_l (conj(uEx) . g_d);  (Mbar^T g_d)_l = b_l (conj(uEn) . g_d).
-        for (int d = 0; d < nch; d++)
-          accum.gamma[jNum - 1][la][d] -= std::real(conj(lam[d]) * (a * gb[d] + b * ga[d]));
-        double *kr = &K[(size_t)la * n], *nr = &N[(size_t)la * n];
-        for (int c = 0; c < n; c++) {
-          const double v = std::real(a * conj(uEx[c]));
-          kr[c] += v;
-          nr[c] += inEnergy * v;
-        }
-      }
+      azure2::physics::add_explicit_widths(t, uEn.data(), uEx.data(), n, sink);
+      azure2::physics::deferred_bilinear_adjoint(t, uEn.data(), uEx.data(), G.data(), lam.data(), inEnergy, n, nch,
+                                                 K.data(), N.data(), ga, gb, sink);
     }
     return;
   }
@@ -1862,19 +1576,12 @@ void AMatrixFunc::BilinearAdjoint(Site *energyPoint, int jNum, const std::vector
   matrix_c &Mbar = mbar_scratch_;
   Mbar.resize(n);
   for (int r = 0; r < n; r++) Mbar[r].assign(n, complex(0.0, 0.0));
+  LevelSink sink(accum, jNum);
   for (const BilinearTerm &t : terms) {
     const vector_c &uEn = this->GetRawChannelSolve(jNum, t.ch);
     const vector_c &uEx = this->GetRawChannelSolve(jNum, t.chp);
-    const complex cb = conj(t.beta);
-    for (int la = 1; la <= n; la++) {
-      accum.AddGamma(jNum, la, t.ch, std::real(cb * uEx[la - 1]));
-      accum.AddGamma(jNum, la, t.chp, std::real(cb * uEn[la - 1]));
-    }
-    for (int r = 0; r < n; r++) {
-      const complex a = -t.beta * conj(uEn[r]);
-      vector_c &row = Mbar[r];
-      for (int c = 0; c < n; c++) row[c] += a * conj(uEx[c]);
-    }
+    azure2::physics::add_explicit_widths(t, uEn.data(), uEx.data(), n, sink);
+    azure2::physics::add_rank_one_cotangent(t.beta, uEn.data(), uEx.data(), n, Mbar);
   }
   this->LevelMatrixAdjoint(energyPoint, jNum, Mbar, this->InEnergy(energyPoint), accum, shiftDeriv);
 }
@@ -1983,15 +1690,7 @@ const vector_c &AMatrixFunc::FormalSolve(int j, int ch0) {
   vector_c &u = st.usolve[ch0];
   if (!st.uvalid[ch0]) {
     AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kChannelSolve);
-    const int n = f.n, m = (int)f.act.size();
-    u.assign(n, complex(0.0, 0.0));
-    const int b = f.pos[ch0];
-    if (b >= 0) {
-      vector_c &w = st.w2;
-      w.resize(n);
-      for (int k = 0; k < n; k++) w[k] = f.gamma[(size_t)k * m + b];
-      this->FormalApply(j, w.data(), u.data());
-    }
+    azure2::physics::channel_space::formal_channel_solve(f, st, ch0, u);
     st.uvalid[ch0] = 1;
   }
   return u;
@@ -2018,30 +1717,14 @@ void AMatrixFunc::FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &
   std::vector<std::vector<double>> &gOut = toFormal ? accum.fgamma[j - 1] : accum.gamma[j - 1];
   const std::vector<int> &lev = active_levels_[j - 1];
   vector_c ya(nch), yb(nch);
-  auto column = [&](int c0, vector_c &y) {
-    std::fill(y.begin(), y.end(), complex(0.0, 0.0));
-    y[c0] = 1.0;
-    const int b = f.pos[c0];
-    if (b < 0) return;
-    const complex *Fb = this->FColumn(j, b);
-    const int m = (int)f.act.size();
-    for (int a = 0; a < m; a++) y[f.act[a]] += st.lamAct[a] * Fb[a];
-  };
+  LevelSink sink(eOut, gOut, toFormal ? nullptr : lev.data());
   for (const BilinearTerm &t : terms) {
     const int a = t.ch - 1, b = t.chp - 1;
-    const complex cb = conj(t.beta);
     const vector_c &ua = this->FormalSolve(j, a);
     const vector_c &ub = this->FormalSolve(j, b);
-    column(a, ya);
-    column(b, yb);
-    for (int k = 0; k < n; k++) {
-      const int row = toFormal ? k : lev[k] - 1;
-      const complex pa = cb * ua[k], pb = cb * ub[k];
-      eOut[row] -= std::real(pa * ub[k]);
-      if (pa == complex(0.0, 0.0) && pb == complex(0.0, 0.0)) continue;
-      double *g = &gOut[row][0];
-      for (int d = 0; d < nch; d++) g[d] += std::real(pa * yb[d] + pb * ya[d]);
-    }
+    azure2::physics::channel_space::kernel_column(f, st, a, ya);
+    azure2::physics::channel_space::kernel_column(f, st, b, yb);
+    azure2::physics::channel_space::formal_bilinear_adjoint(t, ua.data(), ub.data(), ya.data(), yb.data(), n, nch, sink);
   }
 }
 
@@ -2067,13 +1750,8 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     if (!accum.lmUsed[j - 1]) continue;
     const JGroup *jg = compound()->GetJGroup(j);
     const int n = (int)std::lround(std::sqrt((double)accum.lmK[j - 1].size()));
-    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++) {
-        const double xk = accum.lmK[j - 1][(size_t)r * n + c], xn = accum.lmN[j - 1][(size_t)r * n + c];
-        X1[r][c] = xk - xn;
-        X2[r][c] = xn;
-      }
+    matrix_c X1, X2;
+    azure2::physics::deferred_level_cotangents(accum.lmK[j - 1].data(), accum.lmN[j - 1].data(), n, X1, X2);
     const std::vector<complex> zero(jg->NumChannels(), complex(0.0, 0.0));
     this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, zero.data());
     this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, zero.data());
@@ -2095,78 +1773,20 @@ void AMatrixFunc::ResolveFormalCotangents(GradAccum &accum, const vector_matrix_
     formal_jgroup_[j - 1] = jg;
     ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
     ChannelSpace::Update(jg, state(), j, active_levels_[j - 1], configure(), f);
-    const int n = f.n, nch = f.nch, m = (int)f.act.size();
-    const std::vector<double> &ebar = accum.fe[j - 1];
-    const std::vector<std::vector<double>> &gbar = accum.fgamma[j - 1];
-    std::vector<double> e(n);
-    for (int k = 0; k < n; k++) e[k] = std::real(f.e[k]);
-    // H = Gamma Gammabar^T over the coupled channels.
-    std::vector<double> H((size_t)n * n, 0.0);
-    for (int k = 0; k < n; k++)
-      for (int l = 0; l < n; l++) {
-        double s = 0.0;
-        for (int a = 0; a < m; a++) s += f.gamma[(size_t)k * m + a] * gbar[l][f.act[a]];
-        H[(size_t)k * n + l] = s;
-      }
-    std::vector<double> Phi((size_t)n * n, 0.0), Psi((size_t)n * n, 0.0);
-    for (int l = 0; l < n; l++) {
-      Phi[(size_t)l * n + l] = ebar[l];
-      Psi[(size_t)l * n + l] = -e[l] * ebar[l] - 0.5 * H[(size_t)l * n + l];
-      for (int k = 0; k < n; k++) {
-        if (k == l) continue;
-        const double num = H[(size_t)k * n + l] - H[(size_t)l * n + k];
-        const double den = e[l] - e[k];
-        const double ratio = (num == 0.0 || den == 0.0) ? 0.0 : num / (2.0 * den);
-        Phi[(size_t)k * n + l] = ratio;
-        Psi[(size_t)k * n + l] = -e[l] * ratio - 0.5 * H[(size_t)l * n + k];
-      }
-    }
-    // Psi as built is symmetric only up to round-off; use its symmetric part.
-    for (int k = 0; k < n; k++)
-      for (int l = k + 1; l < n; l++) {
-        const double s = 0.5 * (Psi[(size_t)k * n + l] + Psi[(size_t)l * n + k]);
-        Psi[(size_t)k * n + l] = Psi[(size_t)l * n + k] = s;
-      }
-    // V X V^T for X = Phi, Psi.
-    auto congruence = [&](const std::vector<double> &X) {
-      std::vector<double> T((size_t)n * n, 0.0), out((size_t)n * n, 0.0);
-      for (int r = 0; r < n; r++)
-        for (int l = 0; l < n; l++) {
-          double s = 0.0;
-          for (int k = 0; k < n; k++) s += f.V[(size_t)r * n + k] * X[(size_t)k * n + l];
-          T[(size_t)r * n + l] = s;
-        }
-      for (int r = 0; r < n; r++)
-        for (int c = 0; c < n; c++) {
-          double s = 0.0;
-          for (int l = 0; l < n; l++) s += T[(size_t)r * n + l] * f.V[(size_t)c * n + l];
-          out[(size_t)r * n + c] = s;
-        }
-      return out;
-    };
-    const std::vector<double> Kbar = congruence(Phi), Nbar = congruence(Psi);
-    matrix_c X1(n, vector_c(n)), X2(n, vector_c(n));
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < n; c++) {
-        X1[r][c] = Kbar[(size_t)r * n + c] + Nbar[(size_t)r * n + c];
-        X2[r][c] = -Nbar[(size_t)r * n + c];
-      }
+    const int nch = f.nch;
+    azure2::physics::channel_space::FormalResolve resolved;
+    azure2::physics::channel_space::resolve_formal_cotangents(f, accum.fe[j - 1], accum.fgamma[j - 1], resolved);
     // The kernel: zero, but for the reference shifts that Update moved into K
     // (constants, like the kernel: F does not depend on them).
     std::vector<complex> kernel(nch, complex(0.0, 0.0));
     for (int c = 0; c < nch; c++)
       if (jg->GetChannel(c + 1)->GetRadType() == 'P')
         kernel[c] = jg->GetChannel(c + 1)->GetBoundaryCondition() - f.lamShift[c];
-    this->LevelMatrixAdjoint(nullptr, j, X1, 0.0, accum, shiftDeriv, kernel.data());
-    this->LevelMatrixAdjoint(nullptr, j, X2, 1.0, accum, shiftDeriv, kernel.data());
+    this->LevelMatrixAdjoint(nullptr, j, resolved.X1, 0.0, accum, shiftDeriv, kernel.data());
+    this->LevelMatrixAdjoint(nullptr, j, resolved.X2, 1.0, accum, shiftDeriv, kernel.data());
     // Gbar = V Gammabar.
-    const std::vector<int> &lev = active_levels_[j - 1];
-    for (int r = 0; r < n; r++)
-      for (int c = 0; c < nch; c++) {
-        double s = 0.0;
-        for (int k = 0; k < n; k++) s += f.V[(size_t)r * n + k] * gbar[k][c];
-        accum.gamma[j - 1][lev[r] - 1][c] += s;
-      }
+    azure2::physics::channel_space::add_level_widths_from_formal(
+        f, accum.fgamma[j - 1], LevelSink(accum.e[j - 1], accum.gamma[j - 1], active_levels_[j - 1].data()));
     for (size_t k = 0; k < accum.fe[j - 1].size(); k++) {
       accum.fe[j - 1][k] = 0.0;
       std::fill(accum.fgamma[j - 1][k].begin(), accum.fgamma[j - 1][k].end(), 0.0);
@@ -2278,8 +1898,8 @@ bool AMatrixFunc::TBarProducts(const azure2::EntrancePathways &P, const azure2::
     }
     const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1] : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
     const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1] : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
-    tbar_q_[(size_t)f.s1 * nl + f.l] += f.z * T2;
-    tbar_q_[(size_t)f.s2 * nl + f.l] += f.z * T1;
+    azure2::physics::add_interference_cotangents(f.z, T1, T2, tbar_q_[(size_t)f.s1 * nl + f.l],
+                                                 tbar_q_[(size_t)f.s2 * nl + f.l]);
   }
   tbar_decay_ = &theDecay;
   tbar_particle_ = particleExit;
@@ -2339,42 +1959,8 @@ bool AMatrixFunc::LevelAdjoint(Site *energyPoint, int j, const std::vector<Bilin
   std::vector<const vector_c *> &u = la_u_;
   u.resize(nu);
   for (int s = 0; s < nu; s++) u[s] = &this->GetRawChannelSolve(j, used[s] + 1);
-  vector_c &gu = la_gu_;  // [s][d] = g_d . u_s
-  gu.assign((size_t)nu * nch, complex(0.0, 0.0));
-  for (int i = 0; i < n; i++) {
-    const double *g = &arrays.G[(size_t)i * nch];
-    for (int s = 0; s < nu; s++) {
-      const complex ui = (*u[s])[i];
-      complex *row = &gu[(size_t)s * nch];
-      for (int d = 0; d < nch; d++) row[d] += g[d] * ui;
-    }
-  }
-  vector_c &ku = la_ku_;
-  ku.resize(nu);
-  for (const ChannelSpace::LevelDerivatives::Entry &e : ld.entries) {
-    const int l = e.level;
-    if (!e.zero) {
-      std::fill(ku.begin(), ku.end(), complex(0.0, 0.0));
-      for (int i = 0; i < n; i++) {
-        const double kt = e.k[i] - E * e.q[i];
-        if (kt == 0.0) continue;
-        for (int s = 0; s < nu; s++) ku[s] += kt * (*u[s])[i];
-      }
-    }
-    double v = 0.0;
-    for (const BilinearTerm &t : terms) {
-      const int sa = slot[t.ch - 1], sb = slot[t.chp - 1];
-      const complex ua = (*u[sa])[l], ub = (*u[sb])[l];
-      complex dm(0.0, 0.0);
-      if (!e.zero) dm += ua * ku[sb] + ku[sa] * ub;
-      if (e.ch >= 0) dm -= lam[e.ch] * (ua * gu[(size_t)sb * nch + e.ch] + gu[(size_t)sa * nch + e.ch] * ub);
-      const complex cb = conj(t.beta);
-      v -= std::real(cb * dm);
-      if (e.ch == t.ch - 1) v += std::real(cb * ub);
-      if (e.ch == t.chp - 1) v += std::real(cb * ua);
-    }
-    add(l, e.ch, v);
-  }
+  azure2::physics::width_solve_products(arrays.G.data(), u, n, nch, la_gu_);  // [s][d] = g_d . u_s
+  azure2::physics::level_parameter_adjoint(ld.entries, terms, slot, u, la_gu_, lam.data(), E, n, nch, la_ku_, add);
   return true;
 }
 

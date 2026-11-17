@@ -2,7 +2,9 @@
 // (docs/upgrade/coulomb.md section 1.2).  From pycoulomb's libcoulomb/src/coulomb.cpp (README.md).
 #include <cmath>
 #include <complex>
+#include <algorithm>
 #include <limits>
+#include <vector>
 
 #include "azure2/physics/coulomb/Coulomb.h"
 #include "methods.h"
@@ -75,6 +77,42 @@ double coulomb_phase(int l, double eta) noexcept {
   }
   im += series.imag();
   return im - shift;
+}
+
+// Moved unchanged from physics/src/transfer/DistortedWaves.cpp (its RiccatiBessel, the transfer code's plane waves) on
+// 2026-11-16, so that coulsm's F at eta = 0 can use it (docs/upgrade/coulomb.md section 10).
+void riccati_bessel(int l_max, double x, double *u) {
+  if (!(x > 0.0)) {
+    for (int l = 0; l <= l_max; ++l) u[l] = 0.0;
+    return;
+  }
+  if (l_max < x) {
+    double jm = std::sin(x) / x, j = std::sin(x) / (x * x) - std::cos(x) / x;
+    u[0] = x * jm;
+    for (int l = 1; l <= l_max; ++l) {
+      u[l] = x * j;
+      const double next = (2 * l + 1) / x * j - jm;
+      jm = j;
+      j = next;
+    }
+    return;
+  }
+  const double top = std::max<double>(l_max, x);
+  const int start = static_cast<int>(top + 30.0 + std::sqrt(40.0 * top));
+  std::vector<double> j(start + 2, 0.0);
+  j[start] = 1.0;
+  for (int l = start; l >= 1; --l) {
+    j[l - 1] = (2 * l + 1) / x * j[l] - j[l + 1];
+    if (std::fabs(j[l - 1]) > 1e100)  // kept below 1e100, so that the sum of squares cannot overflow
+      for (int m = l - 1; m <= start; ++m) j[m] *= 1e-100;
+  }
+  double sum = 0.0;
+  for (int l = start; l >= 0; --l) sum += (2 * l + 1) * j[l] * j[l];
+  // The sign from the closed form of j_0 or, where it is small, j_1.
+  const double j0 = std::sin(x) / x, j1 = std::sin(x) / (x * x) - std::cos(x) / x;
+  const double sign = std::fabs(j0) > std::fabs(j1) ? (j0 * j[0] < 0.0 ? -1.0 : 1.0) : (j1 * j[1] < 0.0 ? -1.0 : 1.0);
+  const double scale = sign / std::sqrt(sum);
+  for (int l = 0; l <= l_max; ++l) u[l] = x * j[l] * scale;
 }
 
 const char *method_name(Method method) noexcept {

@@ -88,7 +88,7 @@ SESSION_CLASSES = {"Session", "_HybridPotentials", "SessionPhysics", "SessionTHM
 def unlocked_uses(path):
     """The lines of `path` that read `<x>._engine` outside a class of the session, outside a function wrapped by
     engine_call and outside a `with session_lock(...)` / `with self._lock` block."""
-    tree = ast.parse(open(path).read())
+    tree = ast.parse(open(path, encoding="utf-8").read())
     bad = []
 
     def locked_with(node):
@@ -143,6 +143,32 @@ try:
 
         work = [first, second]
         alone = [work[i](points[i]) for i in range(2)]
+
+        def same(a, b):
+            return len(a) == len(b) and all(np.array_equal(np.asarray(u), np.asarray(v)) for u, v in zip(a, b))
+
+        def differing(a, b):
+            """Which of the values differ, and the largest relative difference of each (the failure's detail)."""
+            out = {}
+            for k, (u, v) in enumerate(zip(a, b)):
+                u, v = np.ravel(np.asarray(u, float)), np.ravel(np.asarray(v, float))
+                if u.shape != v.shape:
+                    out[k] = "shape"
+                elif not np.array_equal(u, v):
+                    rel = float(np.max(np.abs(u - v) / np.maximum(np.abs(v), 1e-300)))
+                    out[k] = f"{int(np.sum(u != v))}/{v.size}, {rel:.1e}"
+            return out
+
+        # each thread's work alone in a threading.Thread first: a difference here is the thread's, not the two at
+        # once (on Windows a Python thread's x87 precision was 53 bits: azure2/support/FloatingPointPrecision.h)
+        one = {}
+        for i in range(2):
+            t = threading.Thread(target=lambda i=i: one.__setitem__(i, work[i](points[i])))
+            t.start()
+            t.join()
+        check("each thread's values alone in a threading.Thread: the main thread's, bit for bit",
+              all(same(one.get(i, []), alone[i]) for i in range(2)),
+              {i: differing(one[i], alone[i]) for i in one})
         got = {}
 
         def run(i):
@@ -154,12 +180,9 @@ try:
         for t in threads:
             t.join()
 
-        def same(a, b):
-            return len(a) == len(b) and all(np.array_equal(np.asarray(u), np.asarray(v)) for u, v in zip(a, b))
-
         check("evaluate twice beside the objective's value, gradient, rows and Jacobian at once: each thread's values alone, "
               "bit for bit", all(same(r, alone[i]) for i in range(2) for r in got.get(i, [[]])),
-              {i: len(got.get(i, [])) for i in range(2)})
+              {i: [differing(r, alone[i]) for r in got.get(i, [])] for i in range(2)})
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

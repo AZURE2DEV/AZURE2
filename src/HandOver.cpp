@@ -1,12 +1,14 @@
 // The hand-over of a parameter vector to the data: normalizations, energy shifts (with the re-energising of the
 // shifted points), sample thicknesses, target densities, Doppler temperatures and screening potentials go into
-// the segments, target effects and points, and the prior penalties of the target-effect parameters.
+// the segments, target effects and points.  (The priors of the target-effect parameters are gathered in
+// src/DiagonalPriors.cpp.)
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -31,15 +33,6 @@ void WorkingCopy::FillThicknessFromParams(const vector_r &p) {
     }
 }
 
-double WorkingCopy::ThicknessPenalty() const {
-  double chi2 = 0.0;
-  for (int k = 1; k <= Data().NumThicknessParams(); k++) {
-    const Segment &seg = set_->segments_[set_->thicknessSegments_[k - 1] - 1];
-    chi2 += seg.ThicknessPenalty(State(seg));
-  }
-  return chi2;
-}
-
 void WorkingCopy::FillDopplerFromParams(const vector_r &p, const Config *configure) {
   if (set_->dopplerEffects_.empty() || set_->dopplerParamOffset_ < 0) return;
   for (int k = 1; k <= Data().NumDopplerParams(); k++) {
@@ -61,13 +54,6 @@ void WorkingCopy::FillDopplerFromParams(const vector_r &p, const Config *configu
     }
     for (int n : set_->dopplerCopies_[k - 1]) EffectValues(n).dopplerTemperature = v;
   }
-}
-
-double WorkingCopy::DopplerPenalty() const {
-  double chi2 = 0.0;
-  for (int k = 1; k <= Data().NumDopplerParams(); k++)
-    chi2 += Data().GetDopplerTargetEffect(k)->DopplerPenalty(EffectValues(Data().DopplerCopies(k).front()).dopplerTemperature);
-  return chi2;
 }
 
 void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &configure) {
@@ -115,13 +101,6 @@ void WorkingCopy::FillDensitiesFromParams(const vector_r &p, const Config &confi
   for (const LeafRef &leaf : set_->leafRefs_) update({&set_->segments_[leaf.first], leaf.second});
 }
 
-double WorkingCopy::DensityPenalty() const {
-  double chi2 = 0.0;
-  for (int k = 1; k <= Data().NumDensityParams(); k++)
-    chi2 += Data().GetDensityTargetEffect(k)->DensityPenalty(EffectValues(Data().GetDensityLeadCopy(k)).density);
-  return chi2;
-}
-
 void WorkingCopy::ApplyScreening() {
   if (set_->screeningEffects_.empty()) return;
   std::vector<int> paramOf(Data().NumTargetEffects() + 1, 0);
@@ -156,13 +135,6 @@ void WorkingCopy::FillScreeningFromParams(const vector_r &p) {
     for (int n : set_->screeningCopies_[k - 1]) EffectValues(n).screeningUe = p[idx];
   }
   this->ApplyScreening();
-}
-
-double WorkingCopy::ScreeningPenalty() const {
-  double chi2 = 0.0;
-  for (int k = 1; k <= Data().NumScreeningParams(); k++)
-    chi2 += Data().GetScreeningTargetEffect(k)->ScreeningPenalty(EffectValues(Data().ScreeningCopies(k).front()).screeningUe);
-  return chi2;
 }
 
 /*!
@@ -320,8 +292,10 @@ void WorkingCopy::FillEnergyShiftsFromParamsImpl(const vector_r &p, const Compou
         work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, compound, configure);
     } else {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int q = 0; q < (int)work.size(); q++)
+      for (int q = 0; q < (int)work.size(); q++) {
+        const azure2::support::ExtendedPrecisionScope fpPrecision;
         work[q].seg.segment->UpdatePointEnergyWithShift(*this, work[q].seg.term, work[q].i, compound, configure);
+      }
     }
     if (compound && configure)
       for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(*this, t.term, compound, *configure);

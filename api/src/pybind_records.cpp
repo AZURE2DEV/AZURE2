@@ -27,7 +27,7 @@
 #include "Config.h"
 #include "JGroup.h"
 #include "PPair.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "Segment.h"
 #include "TargetEffect.h"
 #include "ThmExperiment.h"
@@ -70,7 +70,7 @@ struct ParameterView {
 };
 
 // The declared prior of a parameter, (centre, width) in its unit, the width 0 when it has none: the numbers the
-// objective's diagonal priors are made of, read where they read them (include/Objective.h, ForEachDiagonalPrior;
+// objective's diagonal priors are made of, read where they read them (include/DiagonalPriors.h, ForEachDiagonalPrior;
 // docs/upgrade/parameter_kinds.md section 4), here whether or not the parameter is free.
 std::pair<double, double> PriorOf(const ParameterView &v) {
   const ParameterRecord &r = *v.record;

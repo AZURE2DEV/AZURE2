@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
                           "\"units\"", "\"diagnostic_codes\"", "\"ratio_to_rutherford\"", "\"charge_state\""})
     check(std::string("schema has ") + key, json.find(key) != std::string::npos);
   const std::string golden = Slurp(argv[2]);
-  check("Schema::ToJson() + newline == tests/schema/schema_v3.json (regenerate with AZURE2 --schema > "
+  check("Schema::ToJson() + newline == tests/schema/schema_v3.json (regenerate with AZURE2 --schema-out="
         "tests/schema/schema_v3.json and bump schema_version if the table changed: check 21)",
         golden == json + "\n");
 
