@@ -84,9 +84,10 @@ at E = -1, -0.1, 0, 0.05, 0.3, 1, 3, 6 MeV and l = 0..3, plus 17O+n, which must
 return exactly zero. Tolerance 1e-5 relative + 1e-8 absolute; the observed
 agreement is ~1e-13.
 
-Every case is run with `useGSL` both off and on, which must not matter: the
-engine builds O_l from its asymptotic expansion by inward integration and calls
-no library Coulomb function. (Were it to use GSL's, C_l would inherit their
+The engine builds O_l from its asymptotic expansion by inward integration and calls
+no library Coulomb function (until 2026-11-16 the function took the argument
+`useGSL` of the retired option `use_gsl_coul`, and every case ran with it off
+and on to show that it did not matter). (Were it to use GSL's, C_l would inherit their
 errors — G_l and F_l from GSL are off by up to ~2% for l >= 2, eta ~ 2,
 rho ~ 1-4, checked against mpmath.)
 

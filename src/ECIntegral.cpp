@@ -24,7 +24,7 @@ extern double DoubleFactorial(int);
  */
 
 ECIntegral::ECIntegral(const PPair *pPair, const Config &configure) : scratch_(configure.scratch->ForThisThread().ec) {
-  params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  params_.coulFunc = std::make_unique<CoulFunc>(pPair);
   // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialMemo(&scratch_.radial);
   params_.whitFunc = std::make_unique<WhitFunc>(pPair);
@@ -107,7 +107,8 @@ namespace {
  * In the rate the radial integral is evaluated at thousands of incident
  * energies.  The final-state Whittaker whit(lf, r, bindingEnergy) does NOT
  * depend on the incident energy (bindingEnergy is the bound level's energy,
- * fixed), yet it is the dominant cost (gsl_sf_hyperg_U, ~85% of runtime) and
+ * fixed), yet it was the dominant cost (~85% of runtime when it was GSL's U; it is physics/coulomb's whittaker
+ * now, docs/upgrade/coulomb.md section 1.4) and
  * the adaptive qagiu recomputes it from scratch every time because it samples
  * different radii at each energy.
  *

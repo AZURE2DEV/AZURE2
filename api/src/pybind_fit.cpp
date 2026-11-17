@@ -17,6 +17,7 @@
 
 #include "AZUREAPI.h"
 #include "Fitters.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -86,7 +87,7 @@ py::dict FitWithEngineDict(AZUREAPI &api, const std::string &method, bool minos,
   }
   AZUREAPI::EngineFit fit;
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     fit = api.FitWithEngine(request);
   }
   if (error) throw *error;

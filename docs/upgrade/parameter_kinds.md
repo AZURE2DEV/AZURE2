@@ -184,7 +184,7 @@ limits, its hand-over clamp). Before this rule the layout was written per kind (
 **One carrier.** `PriorCentre` (`SetupSpecs.h`: written, value, source; `Or(default)`) is the centre of every kind in
 the specs, the one the norms and energy shifts had (`DatasetSpec::normCentre`, `shiftCentre`) made general. The build
 fills it from the nuisance (`Build.cpp`, `BuildEffects.cpp`), the engine object of the kind keeps it beside its width
-and uses it in its penalty, and the one enumeration of diagonal priors (`ForEachDiagonalPrior`, `Objective.h`)
+and uses it in its penalty, and the one enumeration of diagonal priors (`ForEachDiagonalPrior`, `DiagonalPriors.h`)
 hands it to the gradient, the least-squares rows and the MCMC priors. The API listing reports it
 (`Parameter.prior_nominal`, now also for an abundance and an apparatus parameter).
 
@@ -197,7 +197,7 @@ engine's unit where it is not the base unit (`engineUnit`: eV for screening, ato
 
 **A new nuisance kind with a prior** needs: its width and `PriorCentre` in its spec, filled by `PriorCentreOf` where
 the build reads the nuisance; the centre kept beside the width by its engine object and used in its penalty; one
-line in `ForEachDiagonalPrior` (`Objective.h`, from which the gradient, the least-squares rows and the MCMC take it);
+line in the gather of `src/DiagonalPriors.cpp` (`ForEachDiagonalPrior`, from which the gradient, the least-squares rows and the MCMC take it);
 a `ParameterSource` for its write-back; its field in the API listing.
 
 Before (measured by calculations, value ≠ centre against value = centre, at 441a0907): the norm and the constant shift

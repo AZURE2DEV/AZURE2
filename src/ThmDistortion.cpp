@@ -8,6 +8,7 @@
 #include <cmath>
 #include <sstream>
 #include <gsl/gsl_integration.h>
+#include "azure2/support/FloatingPointPrecision.h"
 
 /*
  * Numerics (docs/source/theory/thm_implementation.rst, "Distortion factor R(E)";
@@ -657,6 +658,7 @@ std::string ThmDistortion::Build(const ThmExperiment &x, const Kinematics &k, do
   std::vector<char> empty(nodes, 0);
 #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < nodes; i++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     if (angWindow && !CheckWindow(gridLo + i * gridStep).empty() && EsF(gridLo + i * gridStep) > 0.0) {
       empty[i] = 1;
       continue;

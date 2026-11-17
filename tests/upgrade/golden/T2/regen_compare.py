@@ -120,9 +120,10 @@ def main():
     ap.add_argument("--commit", default="", help="engine commit recorded in ENGINE (with --regenerate)")
     ap.add_argument("--only", choices=sorted(RUNS), action="append", help="run only these (repeatable)")
     args = ap.parse_args()
-    if not args.binary or not os.access(args.binary, os.X_OK):
+    found = shutil.which(args.binary) if args.binary else None  # which(): on Windows the path may lack its .exe
+    if not found:
         sys.exit("set AZURE2_BINARY or pass --binary path/to/AZURE2")
-    binary = os.path.abspath(args.binary)
+    binary = os.path.abspath(found)
     work = tempfile.mkdtemp(prefix="t2gold.")
     fail = 0
     try:

@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
            F{{"reaction", "15N(p,a)12C[4.43891]"}, {"quantity", "sigma"}, {"unit", "b"}, {"secondary_gamma", "L 2 Ic 3/2 delta 0.12"},
              {"file", "u1.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}});
   }
-  // ---- sqrtshift b e v (prior about 0, Segment::AddShiftPenalty); shiftfn on one line: its own energy_scale
+  // ---- sqrtshift b e v (prior about 0, AppendShiftPriors); shiftfn on one line: its own energy_scale
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat sqrtshift 0.001 0.003 1\n"
                                      "1 1 2 0.2 1.4 0 180 0 1 0 0 0.002 0 0 s2.dat shiftfn \"a0*(x-0.8)\" 1 0 0.01 1\n",
@@ -877,6 +877,42 @@ int main(int argc, char **argv) {
     const ConvertResult p = ConvertToFormat3(format1, opt);
     check("useAdaptiveGrid=0 in <potential>: gone, with the note",
           p.ok && p.text.find("useAdaptiveGrid") == std::string::npos && HasNote(p, "useAdaptiveGrid=0 removed"));
+  }
+
+  // ---- <lastRun>: the old program's option mask is its first number, "use GSL Coulomb functions" is bit 12 (4096)
+  //      (gui/src/AZURESetup.cpp writeLastRun / readLastRun, include/Config.h USE_GSL_COULOMB_FUNC of the dev branch);
+  //      ticked: one note and nothing else changes in the converted text; not ticked: no note
+  {
+    const std::string line = "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 l1.dat\n";
+    auto lastRun = [](const std::string &mask) {
+      return "<lastRun>\n" + mask + "\n\"\"\n\"\"\n0 0\n0 \"\"\n-1. -1. -1.\n</lastRun>\n";
+    };
+    auto format1 = [&](const std::string &extra) {
+      std::string t = Text({line, "", "", extra, ""});
+      t.erase(t.find("format=2\n"), std::string("format=2\n").size());
+      return t;
+    };
+    ConvertOptions opt;
+    opt.projectDir = scratch;
+    const ConvertResult none = ConvertToFormat3(format1(""), opt);
+    const ConvertResult off = ConvertToFormat3(format1(lastRun("9997")), opt);    // 9997 has bits 0 2 3 8 9 10 13 only
+    const ConvertResult on = ConvertToFormat3(format1(lastRun("14093")), opt);    // 9997 + 4096
+    const ConvertResult onFirst = ConvertToFormat3(format1(lastRun("4096")), opt);
+    auto count = [](const ConvertResult &r) {
+      int n = 0;
+      for (const ConvertNote &note : r.notes)
+        if (note.text.find("use GSL Coulomb functions") != std::string::npos) n++;
+      return n;
+    };
+    check("lastRun GSL box: converted", none.ok && off.ok && on.ok && onFirst.ok);
+    check("lastRun GSL box not ticked (9997): no note", count(off) == 0);
+    check("no <lastRun>: no note", count(none) == 0);
+    check("lastRun GSL box ticked (14093): the note, exactly once", count(on) == 1 && count(onFirst) == 1);
+    check("lastRun GSL box ticked: the note names the page and the size",
+          HasNote(on, "docs/upgrade/coulomb.md") && HasNote(on, "up to about 5 % in a penetrability"));
+    check("lastRun GSL box: the converted text is the same with and without the box",
+          on.text == off.text && on.text == none.text && onFirst.text == none.text);
+    check("lastRun GSL box: only the one note more", on.notes.size() == off.notes.size() + 1);
   }
 
   std::printf("convert_constructs: %d checks, %d failures\n", checks, failures);

@@ -83,7 +83,8 @@ struct ConvertResult {
 /*!
  * Converts a format-1 project to format 2 in place, the converter's first step (docs/upgrade/project.md section 4), and
  * returns what it changed, one line per change (empty for a file already in format 2 or 3):
- *  - <lastRun> removed (the Qt GUI's runtime options, read by nothing);
+ *  - <lastRun> removed (the Qt GUI's runtime options, read by nothing; ConvertToFormat3 notes a ticked "use GSL
+ *    Coulomb functions" box first);
  *  - <mcmc>'s run settings removed (the CLI asks for them), and <mcmc> with them when its <parameters> are empty;
  *  - useAdaptiveGrid moved from <potential> to <config>, and <potential> removed unless useHybridPotential=1 for
  *    the default or for any pair;

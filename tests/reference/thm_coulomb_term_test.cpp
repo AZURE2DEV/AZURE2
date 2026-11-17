@@ -233,48 +233,39 @@ int main(int argc, char **argv) {
   const bool verbose = argc > 1 && std::strcmp(argv[1], "-v") == 0;
   std::cout << "THM external Coulomb term vs mpmath reference" << std::endl;
 
-  double worstRel = 0.0, worstGsl = 0.0;
+  double worstRel = 0.0;
   double totalMs = 0.0, maxMs = 0.0;
   int timed = 0;
   for (const RefValue &ref : kReference) {
     const PairSpec &spec = kPairs.at(ref.pair);
     PPair pair = makePair(spec);
     const double p = halfOffShellMomentum(pair, ref.E, spec.bindingE);
-    // useGSL must not matter: O_l is not taken from a library routine (GSL's
-    // Coulomb functions are off by up to ~2% for l >= 2, eta ~ 2, rho ~ 1-4).
-    for (int useGSL = 0; useGSL <= 1; useGSL++) {
-      auto t0 = std::chrono::steady_clock::now();
-      complex got = ThmCoulombTerm(&pair, ref.l, ref.E, p, useGSL == 1);
-      double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-      if (!useGSL) {
-        totalMs += ms;
-        maxMs = std::max(maxMs, ms);
-        timed++;
-      }
-      const complex want(ref.re, ref.im);
-      const double err = std::abs(got - want);
-      const double rel = err / std::max(std::abs(want), 1.0e-300);
-      if (std::abs(want) > 1.0e-3) {
-        if (useGSL)
-          worstGsl = std::max(worstGsl, rel);
-        else
-          worstRel = std::max(worstRel, rel);
-      }
-      char name[128], detail[256];
-      snprintf(name, sizeof(name), "%s E=%g l=%d %s", ref.pair, ref.E, ref.l, useGSL ? "gsl" : "builtin");
-      snprintf(detail, sizeof(detail), "got (%.10g, %.10g), want (%.10g, %.10g), rel %.2e",
-               got.real(), got.imag(), want.real(), want.imag(), rel);
-      if (verbose)
-        std::cout << "  " << name << "  " << detail << "  " << ms << " ms" << std::endl;
-      check(name, err <= kRelTol * std::abs(want) + kAbsTol, detail);
-    }
+    // (Each case ran twice, with the argument useGSL off and on, until the argument went with the option use_gsl_coul
+    // on 2026-11-16: O_l is not taken from a library routine, so it never mattered.)
+    auto t0 = std::chrono::steady_clock::now();
+    complex got = ThmCoulombTerm(&pair, ref.l, ref.E, p);
+    double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    totalMs += ms;
+    maxMs = std::max(maxMs, ms);
+    timed++;
+    const complex want(ref.re, ref.im);
+    const double err = std::abs(got - want);
+    const double rel = err / std::max(std::abs(want), 1.0e-300);
+    if (std::abs(want) > 1.0e-3) worstRel = std::max(worstRel, rel);
+    char name[128], detail[256];
+    snprintf(name, sizeof(name), "%s E=%g l=%d", ref.pair, ref.E, ref.l);
+    snprintf(detail, sizeof(detail), "got (%.10g, %.10g), want (%.10g, %.10g), rel %.2e",
+             got.real(), got.imag(), want.real(), want.imag(), rel);
+    if (verbose)
+      std::cout << "  " << name << "  " << detail << "  " << ms << " ms" << std::endl;
+    check(name, err <= kRelTol * std::abs(want) + kAbsTol, detail);
   }
 
   // A neutral pair has no Coulomb term: exactly zero, not merely small.
   {
     PPair n = makePair(kPairs.at("17O+n"));
     for (double E : {-1.0, 0.0, 0.3, 3.0}) {
-      complex v = ThmCoulombTerm(&n, 1, E, halfOffShellMomentum(n, E, 4.143), false);
+      complex v = ThmCoulombTerm(&n, 1, E, halfOffShellMomentum(n, E, 4.143));
       check("17O+n exactly zero", v.real() == 0.0 && v.imag() == 0.0);
     }
   }
@@ -283,7 +274,7 @@ int main(int argc, char **argv) {
   {
     PPair lp = makePair(kPairs.at("7Li+p"));
     for (double E : {-0.5, 0.0}) {
-      complex v = ThmCoulombTerm(&lp, 0, E, halfOffShellMomentum(lp, E, 2.2246), false);
+      complex v = ThmCoulombTerm(&lp, 0, E, halfOffShellMomentum(lp, E, 2.2246));
       check("7Li+p real below threshold", v.imag() == 0.0);
     }
   }
@@ -292,9 +283,9 @@ int main(int argc, char **argv) {
   {
     PPair lp = makePair(kPairs.at("7Li+p"));
     const double B = 2.2246;
-    complex c0 = ThmCoulombTerm(&lp, 0, 0.0, halfOffShellMomentum(lp, 0.0, B), false);
+    complex c0 = ThmCoulombTerm(&lp, 0, 0.0, halfOffShellMomentum(lp, 0.0, B));
     for (double E : {-1.0e-4, 1.0e-4}) {
-      complex v = ThmCoulombTerm(&lp, 0, E, halfOffShellMomentum(lp, E, B), false);
+      complex v = ThmCoulombTerm(&lp, 0, E, halfOffShellMomentum(lp, E, B));
       char detail[128];
       snprintf(detail, sizeof(detail), "C(%g) = (%.8g, %.8g), C(0) = (%.8g, %.8g)", E, v.real(), v.imag(),
                c0.real(), c0.imag());
@@ -302,8 +293,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  std::cout << "  worst relative error (|C| > 1e-3): built-in " << worstRel << ", GSL " << worstGsl
-            << std::endl;
+  std::cout << "  worst relative error (|C| > 1e-3): " << worstRel << std::endl;
   std::cout << "  time per call: mean " << totalMs / std::max(timed, 1)
             << " ms, max " << maxMs << " ms" << std::endl;
   std::cout << checks - failures << "/" << checks << " checks passed" << std::endl;

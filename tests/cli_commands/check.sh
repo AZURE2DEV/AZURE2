@@ -19,6 +19,11 @@
 #   4. tools/menu_to_command.py turns an old script's menu answers into the command (and refuses the answers that
 #      made no run or that depend on the project).
 #
+#   5. --schema-out=FILE writes the text --schema prints, byte for byte, all or nothing: with a directory that cannot
+#      be written, a temporary name that is taken, a FILE that is a directory, or a directory that does not exist,
+#      the file that was there is untouched, no temporary file is left, the exit status is not 0 and a message says
+#      why; --schema itself prints what it did.
+#
 # A run by command wrote the same files as the run by menu with the same answers while the menu existed (the branch
 # that removed the menu compared every project in the three bases and the eight fits with the menu's reference
 # outputs).  Shown failing: the range of --walkers written into its help text again (printed twice); --delta-chi2
@@ -212,6 +217,48 @@ refuses() {
 refuses '3\nparam.sav\n\n7\n' "scripted-answer trap"
 refuses '1\n\nintEC.dat\n7\n' "with and without external capture"
 refuses '7\n' "Exit"
+
+# ---- 5. --schema-out=FILE: all or nothing ------------------------------------------------------------------------
+S="$WORK/schema_out"
+mkdir -p "$S/ok" "$S/ro" "$S/taken" "$S/isdir/file"
+(cd "$S" && $RUN "$AZURE2_BIN" --schema > stdout.json 2> stdout.err; echo $? > stdout.status)
+[ "$(cat "$S/stdout.status")" = 0 ] && [ -s "$S/stdout.json" ] && ok "--schema prints the table (exit 0)" ||
+  bad "--schema: exit $(cat "$S/stdout.status"), $(wc -c < "$S/stdout.json") bytes"
+printf 'OLD CONTENT\n' > "$S/ok/schema.json"
+out="$(cd "$S" && $RUN "$AZURE2_BIN" --schema-out="$S/ok/schema.json" 2>&1)"; st=$?
+if [ "$st" = 0 ] && cmp -s "$S/ok/schema.json" "$S/stdout.json" && [ -z "$out" ] && [ ! -e "$S/ok/schema.json.tmp" ]; then
+  ok "--schema-out=FILE: FILE equals the stdout of --schema byte for byte, nothing else printed, no temporary left"
+else bad "--schema-out=FILE: exit $st, output '$out', FILE differs from --schema or a temporary is left"; fi
+# fails_untouched NAME DIR FILE: the run exits non-zero with a message, and FILE (a regular file with known content,
+# or a directory) is as it was
+fails_untouched() {
+  local name="$1" file="$2" before after
+  before="$(cat "$file" 2>/dev/null; ls -a "$(dirname "$file")" 2>/dev/null | tr '\n' ' ')"
+  out="$(cd "$S" && $RUN "$AZURE2_BIN" --schema-out="$file" 2>&1)"; st=$?
+  after="$(cat "$file" 2>/dev/null; ls -a "$(dirname "$file")" 2>/dev/null | tr '\n' ' ')"
+  if [ "$st" != 0 ] && grep -q "ERROR: --schema-out" <<< "$out" && [ "$before" = "$after" ]; then
+    ok "--schema-out, $name: exit $st with a message, the old file and its folder untouched"
+  else bad "--schema-out, $name: exit $st, output '$out', folder before '$before' after '$after'"; fi
+}
+printf 'OLD CONTENT\n' > "$S/ro/schema.json"
+chmod a-w "$S/ro"
+if [ -w "$S/ro" ]; then
+  ok "--schema-out, unwritable folder: skipped (the user can write everywhere, e.g. root); the next two cases cover it"
+else
+  fails_untouched "an unwritable folder" "$S/ro/schema.json"
+fi
+printf 'OLD CONTENT\n' > "$S/taken/schema.json"
+mkdir "$S/taken/schema.json.tmp"                       # the temporary's name is a directory: it cannot be written
+fails_untouched "the temporary's name taken" "$S/taken/schema.json"
+mkdir -p "$S/isdir/schema.json" && printf 'x\n' > "$S/isdir/schema.json/inner"   # FILE is a directory: rename fails
+fails_untouched "FILE a directory" "$S/isdir/schema.json"
+[ ! -e "$S/isdir/schema.json.tmp" ] && ok "--schema-out, FILE a directory: no temporary left" ||
+  bad "--schema-out, FILE a directory: schema.json.tmp left behind"
+fails_untouched "a folder that does not exist" "$S/no_such_folder/schema.json"
+out="$(cd "$S" && $RUN "$AZURE2_BIN" --schema-out= 2>&1)"; st=$?
+[ "$st" = 2 ] && grep -q "needs a FILE" <<< "$out" && ok "--schema-out= without a file: refused (exit 2)" ||
+  bad "--schema-out= without a file: exit $st, $out"
+chmod u+w "$S/ro"
 
 [ "$fail" -eq 0 ] && echo "  PASS" || echo "  FAIL"
 [ "$fail" -eq 0 ]

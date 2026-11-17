@@ -119,15 +119,16 @@ class SessionFit:
 
         Parameters
         ----------
-        method : a fitter of ``pyazr.kinds()["fitters"]`` (the program's switch in brackets): ``"migrad"``
-            (default), ``"migrad-gradient"`` (``--use-gradient``), ``"lm"`` (``--use-lm``), ``"gsl-lm"``
-            (``--use-gsl-lm``), ``"nlopt"`` (``--use-nlopt``, builds with NLopt only).  An unknown name is refused
-            with the list.  The program runs ``migrad-gradient`` for a project with THM data when no switch is
-            given; here the method is the one named.
-        minos : run MINOS after the fit (Up = the session's ``chiVariance``, 1 by default); MIGRAD rows only.
+        method : a fitter of ``pyazr.kinds()["fitters"]`` (the engine's table: each row gives the program's switch
+            ``option``, what the fitter yields and its ``doc``; a build without NLopt has no ``"nlopt"`` row).  The
+            default ``"migrad"`` is the row the program runs without a switch.  An unknown name is refused with the list.  The program
+            runs ``migrad-gradient`` for a project with THM data when no switch is given; here the method is the one
+            named.
+        minos : run MINOS after the fit (Up = the session's ``chiVariance``, 1 by default); for a fitter whose row
+            says ``minos`` only.
         x0 : the start fit vector (default ``parameters.x0``).
         max_calls : the call limit (``--max-calls``) of a fitter that honours one (``call_limit`` of its row in
-            ``pyazr.kinds()["fitters"]``: MIGRAD, NLopt); the others ignore it and say so in ``notices``.  None: no
+            ``pyazr.kinds()["fitters"]``); the others ignore it and say so in ``notices``.  None: no
             limit.
         progress : called with a dict per progress record, from the engine's threads with the GIL taken: ``fitter``,
             ``stage`` ("fit", then "hesse" and "minos" for the error analysis after a MIGRAD row; each stage counts its

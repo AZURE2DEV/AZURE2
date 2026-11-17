@@ -77,7 +77,7 @@ class Config {
     USE_BRUNE_FORMALISM = (1 << 9),
     IGNORE_ZERO_WIDTHS = (1 << 10),
     USE_RMC_FORMALISM = (1 << 11),
-    USE_GSL_COULOMB_FUNC = (1 << 12),
+    // (1 << 12) was USE_GSL_COULOMB_FUNC, the option use_gsl_coul retired on 2026-11-16 (docs/upgrade/coulomb.md 9.1)
     USE_LONGWAVELENGTH_APPROX = (1 << 13),
     USE_API = (1 << 14),
     PERFORM_MCMC = (1 << 15),

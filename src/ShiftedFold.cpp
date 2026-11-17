@@ -8,6 +8,7 @@
 
 #include "CalculationPlan.h"
 #include "Config.h"
+#include "DiagonalPriors.h"
 #include "Segment.h"
 #include "ModelPass.h"
 #include "SegmentState.h"
@@ -234,7 +235,10 @@ double SegmentLocalChi2(const Segment &segment, const CompoundSystem *compound, 
                        refolded ? LeafValues::Ready : LeafValues::Calculate);
     chi += PointResidual(data, segment, pid, results, norm).Chi2();
   }
-  segment.AddShiftPenalty(data.State(segment), chi);
+  // The segment's energy-shift priors, as the objective adds them (AppendShiftPriors).
+  DiagonalPriors priors;
+  AppendShiftPriors(data, segment.Pos() + 1, nullptr, priors);
+  AddPriorsChi2(priors, chi);
   return chi;
 }
 

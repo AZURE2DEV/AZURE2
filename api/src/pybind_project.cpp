@@ -5,7 +5,9 @@
 // spells no field, unit or grammar: it hands texts over and applies the line edits these functions describe.
 // Texts are bytes (UTF-8 as in the file); line numbers and columns are the file's, 1-based, columns in bytes.
 
+#include <fstream>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -21,6 +23,15 @@
 #include "azure2/io/RecordReader.h"
 
 namespace py = pybind11;
+
+/// The bytes of a project file ("" when it cannot be read), for the refusal of one that is not format 3 (the
+/// session's set-up, pybind_api.cpp).
+std::string ReadProjectText(const std::string &path) {
+  std::ifstream in(path, std::ios::binary);
+  std::ostringstream s;
+  s << in.rdbuf();
+  return s.str();
+}
 
 namespace {
 
