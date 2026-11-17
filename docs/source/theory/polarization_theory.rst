@@ -398,14 +398,14 @@ Condon-Shortley phase, and for :math:`M = 1` that is a sign. Two further
 conventions had to be settled numerically against their worked example; see
 :doc:`polarization_implementation`.
 
-One extension remains unimplemented and should not be assumed to work:
-*tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest) need a
-spin-1 projectile and the corresponding rank-2 operators. For particle channels
-the amplitude matrix built here is general enough in principle — it carries all
-channel spins and projections — but the observable side would have to be
-written; for capture, Seyler and Weller's Eqs. (22)–(25) give the
-:math:`c_k`, :math:`d_k` and :math:`e_k` coefficients that would be needed, in
-the same notation as the :math:`b_k` already coded.
+*Tensor observables* (:math:`T_{20}`, :math:`T_{22}`, and the rest), target
+analysing powers, spin correlations, outgoing polarizations and polarization
+transfers of a reaction between particle pairs are the quantity
+``spin_observable``, one trace over the same amplitude matrix
+(:doc:`polarization_implementation`, the last section). For capture they
+remain unimplemented and should not be assumed to work: Seyler and Weller's
+Eqs. (22)–(25) give the :math:`c_k`, :math:`d_k` and :math:`e_k` coefficients
+that would be needed, in the same notation as the :math:`b_k` already coded.
 
 .. [LaneThomas1958] A. M. Lane and R. G. Thomas, *Reviews of Modern Physics*
    **30** (1958) 257. The formalism AZURE2 is built on; the source of

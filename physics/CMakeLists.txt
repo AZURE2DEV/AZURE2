@@ -35,6 +35,7 @@ add_library(azure2_physics STATIC
   src/Pathways.cpp
   src/Recoupling.cpp
   src/ResonanceQuantities.cpp
+  src/SpinObservable.cpp
   src/SymmetricEigen.cpp
   src/System.cpp
   src/Widths.cpp)
@@ -111,14 +112,15 @@ add_test(NAME physics_system_unit COMMAND physics_system_unit_test)
 # against central differences (docs/upgrade/data_kinds.md section 4.7).  The modified S factor's conversion against
 # mpmath (data_kinds.md section 4.1).  The width scales (Wigner limit, single-particle width, photon penetrability)
 # against closed forms (Widths.h).  The adjoints of the collision matrix against central differences of their
-# forward functions (docs/upgrade/physics_functions.md, stage 6).
+# forward functions (docs/upgrade/physics_functions.md, stage 6).  The spin observables' operator token, its
+# matrices against the Madison closed forms and the trace formula with its gradient (SpinObservable.h).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters_unit_test.cpp
              external_capture_unit_test.cpp observable_coupling_test.cpp pathways_unit_test.cpp
              resonance_quantities_test.cpp astrophysical_factor_test.cpp widths_test.cpp
              collision_matrix_test.cpp channel_solve_test.cpp observables_test.cpp
              collision_matrix_adjoint_test.cpp channel_solve_adjoint_test.cpp
-             observables_adjoint_test.cpp)
+             observables_adjoint_test.cpp spin_observable_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)

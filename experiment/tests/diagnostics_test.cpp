@@ -213,6 +213,8 @@ int main() {
                        "    truncation 0\n    detailed_balance no\n</targets>\n"},
       {"E_FORMULA_SYNTAX", "<targets>\nbeam b1\n    spread formula a0*x a0=1 MeV lab\n</targets>\n"},
       {"E_SPIN_SYNTAX", Model(Set(kDatum, "J", "    J 3"))},
+      {"E_SPIN_OPERATOR", Data(Set(Set(Set(kDataset, "quantity", "    quantity spin_observable"), "unit", "    unit 1"),
+                                   "columns", "    columns E_lab[MeV] theta_cm[deg] value error") + "    operator b:w\n")},
       {"E_NUCLEUS_SYNTAX", Set(kTargets, "active", "    active C13")},
       {"E_UNKNOWN_ELEMENT", Set(kTargets, "active", "    active 13Xx")},
       {"E_PAIR_SYNTAX", Model("datum a1\n    quantity scattering_length\n    pair n20Ne\n    s coherent\n"

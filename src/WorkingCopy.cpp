@@ -93,7 +93,7 @@ static bool CoefficientsAllowed(const CompoundSystem *compound, const Segment &s
 
 static bool AnalyzingPowerAllowed(const CompoundSystem *compound, const Segment &segment, int number, bool isTest,
                                   const Config &configure) {
-  if (!segment.IsAnalyzingPower()) return true;
+  if (!segment.IsAnalyzingPower() || segment.GetSpinObservable()) return segment.SpinObservableAllowed(compound, number, isTest, configure);
   const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
   if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number

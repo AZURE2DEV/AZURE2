@@ -1,0 +1,265 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=3
+format=3
+</config>
+<levels>
+0 1 3.000000 1 1 1 0 0 1 1 0 2e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+2 1 4.000000 1 1 1 4 0 2 1 0 1.5e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+2 1 4.000000 1 1 1 0 4 2 1 0 1e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+2 1 4.000000 1 1 1 4 4 2 1 0 -800000 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+1 -1 5.000000 1 1 1 2 2 3 1 0 2.5e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+2 -1 6.000000 1 1 1 2 2 4 1 0 3e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+0 -1 7.000000 1 1 1 2 2 5 1 0 2e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+3 -1 8.000000 1 1 1 2 6 6 1 0 1e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+</levels>
+<data>
+# <segmentsData> line 1
+dataset by
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:y
+    file           data/by.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset ty
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       t:y
+    file           data/ty.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 3
+dataset biT11
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:iT11
+    file           data/biT11.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 4
+dataset bT20
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:T20
+    file           data/bT20.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 5
+dataset bT21
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:T21
+    file           data/bT21.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 6
+dataset bT22
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:T22
+    file           data/bT22.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 7
+dataset tT20
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       t:T20
+    file           data/tT20.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 8
+dataset tT21
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       t:T21
+    file           data/tT21.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 9
+dataset tT22
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       t:T22
+    file           data/tT22.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 10
+dataset byy
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:yy
+    file           data/byy.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 11
+dataset bxx
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:xx
+    file           data/bxx.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 12
+dataset bzz
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:zz
+    file           data/bzz.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 13
+dataset bxz
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:xz
+    file           data/bxz.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 14
+dataset by_x_ty
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:y*t:y
+    file           data/by_x_ty.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 15
+dataset bx_x_tx
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:x*t:x
+    file           data/bx_x_tx.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 16
+dataset bz_x_tz
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:z*t:z
+    file           data/bz_x_tz.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 17
+dataset byy_x_tyy
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:yy*t:yy
+    file           data/byy_x_tyy.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 18
+dataset e1y
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       e1:y
+    file           data/e1y.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 19
+dataset by_to_e1y
+    reaction       2H(d,d)2H
+    quantity       spin_observable
+    unit           1
+    operator       b:y>e1:y
+    file           data/by_to_e1y.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  1.9 10.1 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

@@ -1,0 +1,285 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=3
+format=3
+</config>
+<levels>
+0 1 21.000000 1 1 1 0 0 1 1 0 500000 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+0 1 21.000000 1 1 2 0 0 1 1 0 300000 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+
+0 -1 21.600000 1 1 1 2 2 2 1 0 800000 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+0 -1 21.600000 1 1 2 2 2 2 1 0 600000 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+
+2 -1 22.200000 1 1 1 2 2 3 1 0 1.5e+06 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+2 -1 22.200000 1 1 2 2 2 3 1 0 1e+06 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+2 -1 22.200000 1 1 1 2 6 3 1 0 50000 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+
+1 -1 23.600000 1 1 1 0 2 4 1 0 2e+06 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+1 -1 23.600000 1 1 1 2 2 4 1 0 -1e+06 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+1 -1 23.600000 1 1 2 0 2 4 1 0 1.5e+06 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+1 -1 23.600000 1 1 2 2 2 4 1 0 800000 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+
+1 1 25.000000 1 1 1 2 0 5 1 0 3e+06 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+1 1 25.000000 1 1 2 2 0 5 1 0 2e+06 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+1 1 25.000000 1 1 2 2 4 5 1 0 -500000 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+
+2 1 27.000000 1 1 1 0 4 6 1 0 2e+06 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+2 1 27.000000 1 1 1 2 4 6 1 0 1e+06 0.5 1 0.5 1 0 1.00782503224 3.01604928132 1 1 19.8139 19.8139 0 0 0.0 0 4.0 0 0 0
+2 1 27.000000 1 1 2 0 4 6 1 0 1e+06 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+2 1 27.000000 1 1 2 2 4 6 1 0 1e+06 0.5 1 0.5 1 0 1.00866491595 3.01602932197 0 2 19.8139 20.5776 0 0 0.0 0 4.0 0 0 0
+
+</levels>
+<data>
+# <segmentsData> line 1
+dataset grid1
+    reaction       3H(p,n)3He
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 2
+dataset grid1_2
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       b:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 3
+dataset grid1_3
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       t:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 4
+dataset grid1_4
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       e1:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 5
+dataset grid1_5
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       e2:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 6
+dataset grid1_6
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       b:y>e1:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 7
+dataset grid1_7
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       b:y>e2:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 8
+dataset grid1_8
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       t:y>e1:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 9
+dataset grid1_9
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       t:y>e2:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 10
+dataset grid1_10
+    reaction       3H(p,n)3He
+    quantity       spin_observable
+    unit           1
+    operator       b:y*t:y
+    file           data/grid1.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 11
+dataset grid2
+    reaction       3He(n,p)3H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 12
+dataset grid2_2
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       b:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 13
+dataset grid2_3
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       t:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 14
+dataset grid2_4
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       e1:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 15
+dataset grid2_5
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       e2:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 16
+dataset grid2_6
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       b:y>e1:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 17
+dataset grid2_7
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       b:y>e2:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 18
+dataset grid2_8
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       t:y>e1:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 19
+dataset grid2_9
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       t:y>e2:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 20
+dataset grid2_10
+    reaction       3He(n,p)3H
+    quantity       spin_observable
+    unit           1
+    operator       b:y*t:y
+    file           data/grid2.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    energy_window  0.0 20.0 MeV
+    angle_window   0.0 180 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

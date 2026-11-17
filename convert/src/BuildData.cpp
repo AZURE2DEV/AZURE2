@@ -148,10 +148,12 @@ void Builder::BuildData() {
     r.kind = "dataset";
     r.name = name;
     r.comments.push_back("# <segmentsData> line " + std::to_string(d.key));
-    const bool thm = s.isDiff() >= 10;
+    const bool spin = !s.spinObservable().empty();  // dev's isDiff 10 with its operator token, not THM's offset
+    const bool thm = !spin && s.isDiff() >= 10;
     const int code = thm ? s.isDiff() - 10 : s.isDiff();
     Count(Construct::kDataCode);
     if (thm) Count(Construct::kThm);
+    if (spin) Count(Construct::kSpinObservable);
     const Apparatus *app = active && apparatusOfData_.count(d.key) ? &apparatus_[apparatusOfData_[d.key]] : nullptr;
     const OldPair *in = Pair(s.entranceKey());
     const bool beta = in && in->pType == 20;
@@ -174,7 +176,7 @@ void Builder::BuildData() {
     }
 
     // reaction
-    const std::string angleFrame = (code == 4 || code == 7) ? "cm" : "lab";
+    const std::string angleFrame = (code == 4 || code == 7 || code == 10) ? "cm" : "lab";
     std::vector<io::Token> reaction;
     std::vector<std::pair<std::string, std::string>> pairKeys;
     std::string why;
@@ -203,6 +205,10 @@ void Builder::BuildData() {
       case 5: quantity = "sigma"; unit = "b"; extra.push_back({"multipole", "E1"}); break;
       case 6: quantity = "sigma"; unit = "b"; extra.push_back({"multipole", "E2"}); break;
       case 7: quantity = "analyzing_power"; unit = "1"; angleRole = "theta_cm"; break;
+      case 10:  // only with its token (spin above): the bare code is THM's offset
+        quantity = "spin_observable"; unit = "1"; angleRole = "theta_cm";
+        extra.push_back({"operator", s.spinObservable()});
+        break;
       case 9:
         quantity = "legendre";
         unit = s.absolute() == 1 ? "b/sr" : "1";
@@ -446,10 +452,12 @@ void Builder::BuildExtrapolations() {
     r.kind = "extrapolation";
     r.name = name;
     r.comments.push_back("# <segmentsTest> line " + std::to_string(t.key));
-    const bool thm = s.isDiff() >= 10;
+    const bool spin = !s.spinObservable().empty();  // dev's isDiff 10 with its operator token, not THM's offset
+    const bool thm = !spin && s.isDiff() >= 10;
     const int code = thm ? s.isDiff() - 10 : s.isDiff();
     Count(Construct::kTestCode);
     if (thm) Count(Construct::kThm);
+    if (spin) Count(Construct::kSpinObservable);
     const OldPair *in = Pair(s.entranceKey());
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
     // As for a data line: exit key -1 needs the total-capture type (4 on a test line), or the old engine refused it.
@@ -465,7 +473,7 @@ void Builder::BuildExtrapolations() {
                      ": the exit key -1 (total capture) needs the total-capture data type (4 on a test line); the old engine refused it";
       return;
     }
-    const std::string angleFrame = (code == 5 || code == 7) ? "cm" : "lab";
+    const std::string angleFrame = (code == 5 || code == 7 || code == 10) ? "cm" : "lab";
     std::vector<io::Token> reaction;
     std::vector<std::pair<std::string, std::string>> pairKeys;
     std::string why;
@@ -487,6 +495,7 @@ void Builder::BuildExtrapolations() {
       case 4: quantity = "sigma"; unit = "b"; break;
       case 5: quantity = "dsigma_domega"; unit = "b/sr"; angles = true; break;
       case 7: quantity = "analyzing_power"; unit = "1"; angles = true; break;
+      case 10: quantity = "spin_observable"; unit = "1"; angles = true; break;  // only with its token (spin above)
       default:
         res_.refusal = "test line " + std::to_string(t.key) + " has isDiff " + std::to_string(s.isDiff()) + ", which the old engine did not compute";
         return;
@@ -527,6 +536,7 @@ void Builder::BuildExtrapolations() {
     }
     Add(r, "quantity", quantity, quantityComment);
     Add(r, "unit", unit);
+    if (spin) Add(r, "operator", s.spinObservable());
     if (code == 3) {
       Add(r, "expansion", "a_over_a0");
       Add(r, "orders", "0 " + std::to_string(s.maxAngDistOrder()));

@@ -791,8 +791,7 @@ int main(int argc, char **argv) {
                       std::string::npos);
   }
   // ---- what the converter would otherwise copy through or drop unread: a section of a newer AZURE2 (its dev branch),
-  //      a section no AZURE2 wrote, a section inside <mcmc> other than <parameters>, a data or extrapolation line of
-  //      dev's general spin observables (a type followed by a spin operator); each refused, with what to do
+  //      a section no AZURE2 wrote, a section inside <mcmc> other than <parameters>; each refused, with what to do
   {
     const std::string line = "1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat\n";
     const ConvertResult cr = Convert({line, "", "", "<channelRadii>\n1 0 5.5\n1 1 4.5 J=3/2   # one wave\n</channelRadii>\n", ""});
@@ -814,13 +813,21 @@ int main(int argc, char **argv) {
     check("<notes>: refused as a section of no AZURE2", !notes.ok && notes.refusal.find("not a section of any AZURE2") != std::string::npos);
     const ConvertResult nested = Convert({line, "", "", "<mcmc>\n<priors>\n</priors>\n</mcmc>\n", ""});
     check("<priors> inside <mcmc>: refused", !nested.ok && nested.refusal.find("<priors> inside <mcmc>") != std::string::npos);
+    // dev's general spin observables: type 10 followed by the operator becomes a spin_observable record at c.m.
+    // angles (the bare type 10 is this branch's THM offset of an angle-integrated line); dev's older type 9 is refused
     const ConvertResult spin = Convert({"1 1 1 1.9 10.1 0 180 10 b:y 1 0 0 0 0 0 by.dat\n", "", "", "", ""});
-    check("a data line of type 10 with the operator b:y: refused as dev's spin observable",
-          !spin.ok && spin.refusal.find("data segment #1 has type 10 followed by the spin operator 'b:y'") != std::string::npos &&
-              spin.refusal.find("general spin observable") != std::string::npos);
-    const ConvertResult spinTest = Convert({line, "1 1 1 1.9 10.1 0.1 0 180 10 10 t:y 0\n", "", "", ""});
-    check("an extrapolation line of type 10 with the operator t:y: refused as dev's spin observable",
-          !spinTest.ok && spinTest.refusal.find("test segment #1 has type 10 followed by the spin operator 't:y'") != std::string::npos);
+    check("a data line of type 10 with the operator b:y: a spin_observable record",
+          spin.ok && spin.text.find("    quantity       spin_observable\n") != std::string::npos &&
+              spin.text.find("    operator       b:y\n") != std::string::npos && spin.text.find("theta_cm[deg]") != std::string::npos &&
+              spin.text.find("thm") == std::string::npos);
+    const ConvertResult spinTest = Convert({line, "1 1 1 1.9 10.1 0.1 0 180 10 10 b:y*t:y 0\n", "", "", ""});
+    check("an extrapolation line of type 10 with the operator b:y*t:y: a spin_observable record",
+          spinTest.ok && spinTest.text.find("    quantity       spin_observable\n") != std::string::npos &&
+              spinTest.text.find("    operator       b:y*t:y\n") != std::string::npos && spinTest.text.find(" deg cm") != std::string::npos);
+    const ConvertResult spin9 = Convert({"1 1 1 1.9 10.1 0 180 9 b:y 1 0 0 0 0 0 by.dat\n", "", "", "", ""});
+    check("a data line of type 9 with an operator (dev before 2026-11-11): refused, with the way out",
+          !spin9.ok && spin9.refusal.find("data segment #1 has type 9 followed by the spin operator 'b:y'") != std::string::npos &&
+              spin9.refusal.find("Write 10 for the type") != std::string::npos);
     const ConvertResult tail = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat sample 1 radius 5.5\n", "", "", "", ""});
     check("a data line ending in a keyword the grammar does not read: refused, naming it",
           !tail.ok && tail.refusal.find("data segment #1 ends with 'radius 5.5'") != std::string::npos);

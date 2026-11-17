@@ -136,6 +136,7 @@ int main() {
       {"ratio_to_mott", {{"dataset", DS("4He(a,a)4He", "ratio_to_mott", "1", MA), false, "", true}}},
       {"legendre", {}},
       {"analyzing_power", {{"dataset", DS("12C(p,p)12C", "analyzing_power", "1", MA), false, "", true}}},
+      {"spin_observable", {{"dataset", DS("12C(p,p)12C", "spin_observable", "1", MA, {{"operator", "b:y"}}), false, "", true}}},
       {"phase_shift", {{"dataset", DS("12C(p,p)12C", "phase_shift", "deg", M, {{"J", "1/2"}, {"l", "0"}, {"s", "1/2"}})}}},
       {"yield",
        {{"dataset", DS("13C(p,g)14N", "yield", "1/particle", M, {{"target", "t1"}, {"quadrature", "points 20"}})},
@@ -177,7 +178,7 @@ int main() {
       {"expansion", "absolute"}, {"multipole", "E1"}, {"secondary_gamma", "L 1 Ic 1 delta 0"}, {"charge_state", "1"},
       {"efficiency", "0.1 fixed"}, {"thm", "global"}, {"level", "1"}, {"reaction", "15N(p,a)12C"}, {"frame", "E_x"},
       {"pair", "p+15N"}, {"imag", "1 fm"}, {"imag_error", "1 fm"}, {"orders", "0 2"}, {"shape", "0.46 1/MeV"},
-      {"reference", "data/ref.dat"}};
+      {"reference", "data/ref.dat"}, {"operator", "b:y"}};
 
   for (const Quantity &q : Quantities()) {
     const auto it = variants.find(q.name);

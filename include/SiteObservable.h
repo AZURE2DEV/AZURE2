@@ -9,6 +9,11 @@
 class CompoundSystem;
 class Site;
 struct TermSettings;
+namespace azure2 {
+namespace physics {
+struct SpinObservable;
+}
+}  // namespace azure2
 
 /*!
  * What a site's result record holds: the observables of a reaction at the site's energy (docs/upgrade/energy_grid.md
@@ -124,6 +129,8 @@ struct AngularRow {
   const double *p1 = nullptr;
   /// The reader's c.m. angle (rad), for the A_y factors of a reader without them (a point that is its own site).
   double theta = 0.0;
+  /// An analysing power: the reader's spin observable, null for A_y (TermSettings::spinObservable).
+  const azure2::physics::SpinObservable *spin = nullptr;
 };
 
 /// One row of the table of kinds.

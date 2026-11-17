@@ -342,6 +342,29 @@ Quantity AnalyzingPower() {
   return q;
 }
 
+Quantity SpinObservable() {
+  Quantity q;
+  q.name = "spin_observable";
+  q.title = "Spin observable";
+  q.doc = "A polarization observable named by its operator (tensor analysing powers, spin correlations, outgoing "
+          "polarizations, polarization transfers) of a reaction between particle pairs; folded as O sigma over sigma.";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "1";
+  q.units = {OneUnit("1")};
+  q.energyRoles = {"E_lab", "E_cm"};
+  q.angleRoles = {"theta_lab", "theta_cm"};
+  q.angle = Quantity::RequiredAngle;
+  q.fields = {Requires("operator"), Allows("target"), Allows("beam"), Allows("detector")};
+  q.targetKinds = {"layer", "none"};
+  q.tree = "O(r, theta) = Re(c Tr(F A F^dagger B))/Tr(F F^dagger), folded as O sigma over sigma";
+  q.refusals = {RefusedAtBuild("E_REACTION_NOT_ALLOWED", "a photon or beta pair, or a particle without the spin of its "
+                                                         "operator",
+                               "the operator acts on the spins of the four particles of a reaction between particle "
+                               "pairs: a vector operator needs spin >= 1/2, a Cartesian tensor spin 1, T_kq rank k <= 2j; "
+                               "for capture only A_y (analyzing_power) is computed")};
+  return q;
+}
+
 Quantity PhaseShift() {
   Quantity q;
   q.name = "phase_shift";
@@ -570,7 +593,7 @@ const std::vector<Quantity> &Quantities() {
   static const std::vector<Quantity> rows = {
       // data sets and extrapolations
       Sigma(), SigmaNuclear(), SigmaTotal(), DsigmaDomega(), SFactor(), ModifiedSFactor(), RatioToReference(), RatioToRutherford(), RatioToMott(), Legendre(),
-      AnalyzingPower(), PhaseShift(), Yield(), Transmission(), NeutronYield(), BetaDelayedSpectrum(),
+      AnalyzingPower(), SpinObservable(), PhaseShift(), Yield(), Transmission(), NeutronYield(), BetaDelayedSpectrum(),
       // model data
       ResonanceStrength(), ResonanceEnergy(), TotalWidth(), PartialWidth(), BranchingRatio(), Anc(),
       ScatteringLength(),

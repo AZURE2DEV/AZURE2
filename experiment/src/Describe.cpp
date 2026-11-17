@@ -30,6 +30,13 @@ const char *ObservableName(Observable o) {
   return "?";
 }
 
+/// The observable of a reaction in words: a general spin observable is named with its operator.
+std::string ObservableName(const ReactionSpec &r) {
+  if (r.observable == Observable::AnalyzingPower && !r.spinObservable.empty())
+    return "spin observable " + r.spinObservable + ", c.m. angle";
+  return ObservableName(r.observable);
+}
+
 /// For a ratio to a Coulomb cross section, what the observable is divided by ("" otherwise).
 std::string ReferenceText(const ReactionSpec &r) {
   if (!r.reference.Empty()) {
@@ -260,7 +267,7 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
     out << "dataset " << r.name << " (data set " << d.key << ", line " << r.line << ")" << (d.active ? "" : ": inactive")
         << "\n";
     if (!d.active) continue;
-    out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(d.reaction.observable)
+    out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(d.reaction)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
     out << ReferenceText(d.reaction) << UnitsText(r, d.reaction.scale, &d.columns);
     for (const Term &t : Terms(r, d.reaction))
@@ -287,7 +294,7 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
     out << "extrapolation " << r.name << " (extrapolation " << x.key << ", line " << r.line << ")"
         << (x.active ? "" : ": inactive") << "\n";
     if (!x.active) continue;
-    out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(x.reaction.observable)
+    out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(x.reaction)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
     out << ReferenceText(x.reaction) << UnitsText(r, x.reaction.scale, nullptr);
     for (const Term &t : Terms(r, x.reaction))
@@ -332,7 +339,7 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
   const std::vector<const ValidatedRecord *> data = RecordsOf(p, "dataset"), extrapolations = RecordsOf(p, "extrapolation");
   auto reactionTree = [&](const ValidatedRecord &r, const ReactionSpec &spec) {
     const Value *reaction = r.Get("reaction");
-    j.Key("observable").String(ObservableName(spec.observable));
+    j.Key("observable").String(ObservableName(spec));
     j.Key("tree").String(reaction ? reaction->reaction.Tree() : "");
     j.Key("coulomb_reference").String(ReferenceName(spec.coulombReference));
     const Value *u = r.Get("unit");

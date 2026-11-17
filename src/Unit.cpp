@@ -571,6 +571,7 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   set.first = first;
   set.count = count;
   set.valuesPerSlot = kSiteObservables[(int)set.kind].values;
+  set.spin = GetSpinObservable();
   set.labFrame = labFrame != nullptr;
   set.perSlot = set.labFrame || (maxL >= 0 && RowDependsOnEnergy(compound, targetEffect));
   const int positions = set.perSlot ? count : 1;

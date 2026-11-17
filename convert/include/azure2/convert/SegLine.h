@@ -103,6 +103,18 @@ class SegLine {
   SegLine(std::istream &stream) {
     stream >> isActive_ >> entranceKey_ >> exitKey_ >> minE_ >> maxE_ >> minA_ >> maxA_ >> isDiff_;
     if (isDiff_ == 2) stream >> phaseJ_ >> phaseL_;
+    // isDiff 10 has two readings in old files: dev's spin observable, named by one token with a ':' (b:y, b:y*t:y),
+    // and this branch's THM offset of an angle-integrated line (0 + 10), where a number follows.  The token decides.
+    if (isDiff_ == 10) {
+      const std::streampos at = stream.tellg();
+      std::string token;
+      if (stream >> token && token.find(':') != std::string::npos) {
+        spinObservable_ = token;
+      } else {
+        stream.clear();
+        stream.seekg(at);
+      }
+    }
     stream >> dataNorm_ >> varyNorm_ >> dataNormError_;
     std::string dummyString;
     getline(stream, dummyString);
@@ -458,6 +470,8 @@ class SegLine {
    * Returns the spin value for the segment if the segment contains phase shift.
    */
   double phaseJ() const { return phaseJ_; };
+  /// dev's isDiff 10: the operator token of a spin observable ("": the line is not one).
+  const std::string &spinObservable() const { return spinObservable_; };
   /*!
    * Returns the orbital angular momentum value for the segment
    * if the segment contains phase shift.
@@ -593,6 +607,7 @@ class SegLine {
   double dataNormError_;
   int varyNorm_;
   double phaseJ_;
+  std::string spinObservable_;
   int phaseL_;
   double phaseS_;
   double energyShift_;

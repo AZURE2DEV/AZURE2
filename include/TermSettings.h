@@ -1,6 +1,8 @@
 #ifndef AZURE2_TERMSETTINGS_H
 #define AZURE2_TERMSETTINGS_H
 
+#include "azure2/physics/SpinObservable.h"
+
 struct ThmWeightTable;
 class ThmDistortion;
 class ThmDwVertex;
@@ -21,7 +23,9 @@ struct TermSettings {
   bool phase = false;                ///< phase shift
   bool thm = false;                  ///< THM (half-off-shell)
   bool angularDist = false;          ///< Legendre coefficients (an angular distribution or coefficient data)
-  bool analyzingPower = false;       ///< A_y
+  bool analyzingPower = false;       ///< A_y, or the spin observable below
+  /// With analyzingPower: null for A_y, else the general spin observable (owned by the segment's shared pointer).
+  const azure2::physics::SpinObservable *spinObservable = nullptr;
   bool total = false;                ///< the total cross section of the entrance pair (optical theorem)
   bool upos = false;                 ///< unobserved primary, observed secondary
   bool coefficientAbsolute = false;  ///< angular-coefficient data are A_k (b/sr), not a_k
@@ -55,9 +59,15 @@ bool SameThmWeight(const ThmWeightTable *a, const ThmWeightTable *b);
 /// holds its experiment's data energies, a background its parameters).  The weight table is read per data set
 /// (thm_weight), so two data sets of one experiment that name equal tables hold two objects: it is compared by value
 /// (SameThmWeight), and such data sets share their sites.
+/// Whether two terms name the same spin observable: both none (A_y), or equal operator tokens.
+inline bool SameSpinObservable(const azure2::physics::SpinObservable *a, const azure2::physics::SpinObservable *b) {
+  return a == b || (a && b && a->token == b->token);
+}
+
 inline bool SameObservable(const TermSettings &a, const TermSettings &b) {
   return a.entranceKey == b.entranceKey && a.exitKey == b.exitKey && a.differential == b.differential &&
          a.phase == b.phase && a.thm == b.thm && a.angularDist == b.angularDist && a.analyzingPower == b.analyzingPower &&
+         SameSpinObservable(a.spinObservable, b.spinObservable) &&
          a.total == b.total && a.upos == b.upos && a.j == b.j && a.l == b.l && a.phaseS == b.phaseS &&
          a.secondaryDecayL == b.secondaryDecayL && a.ic == b.ic && a.delta == b.delta &&
          a.crossSectionComponent == b.crossSectionComponent && SameThmWeight(a.thmWeight, b.thmWeight) &&

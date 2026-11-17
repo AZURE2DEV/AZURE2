@@ -71,6 +71,10 @@
    "grammar": "<J><parity>",
    "doc": "a spin and parity: 0+, 3-, 1/2+, ..."
   },
+  "spin_operator": {
+   "grammar": "<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]",
+   "doc": "the operator of a spin observable: terms <who>:<op> joined by '*', entrance '>' exit for a transfer; who b|t|e1|e2 (beam, target, light and heavy exit particle); op x|y|z (vector), xx|yy|zz|xy|xz|yz (Cartesian tensor, spin 1), T<k><q>|iT<k><q> (spherical, Madison)"
+  },
   "nucleus": {
    "grammar": "<A><Symbol>",
    "doc": "a nuclide <A><Symbol>"
@@ -133,9 +137,9 @@
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|spin_observable|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_reference", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_reference", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "spin_observable", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -360,6 +364,13 @@
      "grammar": "<J>",
      "by_quantity": true,
      "doc": "channel spin of the phase shift"
+    },
+    "operator": {
+     "title": "Spin operator",
+     "type": "spin_operator",
+     "grammar": "<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]",
+     "by_quantity": true,
+     "doc": "the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the target analysing power, b:y*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, b:y>e1:y a polarization transfer"
     },
     "expansion": {
      "title": "Legendre expansion",
@@ -670,9 +681,9 @@
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|modified_sfactor|ratio_to_reference|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|spin_observable|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_reference", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "modified_sfactor", "ratio_to_reference", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "spin_observable", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -840,6 +851,13 @@
      "grammar": "<J>",
      "by_quantity": true,
      "doc": "channel spin of the phase shift"
+    },
+    "operator": {
+     "title": "Spin operator",
+     "type": "spin_operator",
+     "grammar": "<who>:<op>[*<who>:<op>][><who>:<op>[*<who>:<op>]]",
+     "by_quantity": true,
+     "doc": "the operator of the spin observable Re(c Tr(F A F^dagger B))/Tr(F F^dagger) (Madison frame): b:y is A_y, t:y the target analysing power, b:y*t:y C_yy, b:yy and b:T20 tensor analysing powers, e1:y an outgoing polarization, b:y>e1:y a polarization transfer"
     },
     "expansion": {
      "title": "Legendre expansion",
@@ -3149,6 +3167,51 @@
     }
    ]
   },
+  "spin_observable": {
+   "title": "Spin observable",
+   "doc": "A polarization observable named by its operator (tensor analysing powers, spin correlations, outgoing polarizations, polarization transfers) of a reaction between particle pairs; folded as O sigma over sigma.",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": ["theta_lab", "theta_cm"],
+    "angle_axis": "required",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "operator": {
+     "required": true
+    },
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "O(r, theta) = Re(c Tr(F A F^dagger B))/Tr(F F^dagger), folded as O sigma over sigma",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "a photon or beta pair, or a particle without the spin of its operator",
+     "message": "the operator acts on the spins of the four particles of a reaction between particle pairs: a vector operator needs spin >= 1/2, a Cartesian tensor spin 1, T_kq rank k <= 2j; for capture only A_y (analyzing_power) is computed",
+     "checked_by": "build"
+    }
+   ]
+  },
   "phase_shift": {
    "title": "Phase shift",
    "doc": "The elastic phase shift delta_{J l s} (data_formats.rst, phase shifts).",
@@ -4224,6 +4287,10 @@
   "E_SPIN_SYNTAX": {
    "severity": "error",
    "meaning": "a spin that is not 0, 1, 3/2, ... (with + or - where a parity is needed)"
+  },
+  "E_SPIN_OPERATOR": {
+   "severity": "error",
+   "meaning": "the operator of a spin observable that does not follow its grammar (b:y, b:y*t:y, b:T20, b:y>e1:y)"
   },
   "E_NUCLEUS_SYNTAX": {
    "severity": "error",

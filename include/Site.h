@@ -107,6 +107,8 @@ class Site {
   bool IsAngularDist() const;
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
   bool IsAnalyzingPower() const { return settings_->analyzingPower; };
+  //! With IsAnalyzingPower: the general spin observable of the term, null for A_y.
+  const azure2::physics::SpinObservable *GetSpinObservable() const { return settings_->spinObservable; };
   /// The total cross section of the entrance pair (optical theorem), Segment::IsTotalTerm.
   bool IsTotal() const { return settings_->total; };
   //! A_y is kept beside the cross section rather than replacing it, because

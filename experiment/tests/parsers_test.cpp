@@ -108,6 +108,10 @@ int main() {
     check("spin 3/2", Parse(S(ValueType::Spin), "3/2").ok && Parse(S(ValueType::Spin), "3/2").value.spin.twice == 3);
     check("spin 1.5 refused (one spelling)", Code(Parse(S(ValueType::Spin), "1.5")) == "E_SPIN_SYNTAX");
     check("spin 2/2 refused", Code(Parse(S(ValueType::Spin), "2/2")) == "E_SPIN_SYNTAX");
+    check("spin operator b:y*t:y>e1:T20", Parse(S(ValueType::SpinOperator), "b:y*t:y>e1:T20").ok &&
+                                              Parse(S(ValueType::SpinOperator), "b:y*t:y>e1:T20").value.word == "b:y*t:y>e1:T20");
+    check("spin operator b:w refused", Code(Parse(S(ValueType::SpinOperator), "b:w")) == "E_SPIN_OPERATOR");
+    check("spin operator y refused (no particle)", Code(Parse(S(ValueType::SpinOperator), "y")) == "E_SPIN_OPERATOR");
     check("spin-parity 0+", Parse(S(ValueType::SpinParity), "0+").ok && Parse(S(ValueType::SpinParity), "0+").value.spin.parity == 1);
     check("nucleus 13C", Parse(S(ValueType::Nucleus), "13C").value.nucleus.Z == 6);
     check("nucleus: A < Z", Code(Parse(S(ValueType::Nucleus), "3C")) == "E_NUCLEUS_SYNTAX");

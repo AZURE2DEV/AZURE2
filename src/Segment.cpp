@@ -9,6 +9,9 @@
 #include "DataCovariance.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
+
+#include <stdexcept>
+#include <string>
 #include "TargetEffect.h"
 #include "ModelPass.h"
 #include "azure2/experiment/Expression.h"
@@ -35,6 +38,17 @@ void Segment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   exitkey_ = r.exitKey;
   isTHM_ = r.thm;
   isAnalyzingPower_ = (r.observable == Observable::AnalyzingPower);
+  // A general spin observable is an analysing power with an operator token (physics/SpinObservable.h): A_y's route,
+  // the token's trace in place of A_y's.  The build has parsed the token; one that does not parse here is a spec made
+  // by hand.
+  spinObservable_.reset();
+  if (isAnalyzingPower_ && !r.spinObservable.empty()) {
+    auto observable = std::make_shared<azure2::physics::SpinObservable>();
+    std::string error;
+    if (!observable->Parse(r.spinObservable, error))
+      throw std::invalid_argument("spin observable \"" + r.spinObservable + "\": " + error);
+    spinObservable_ = observable;
+  }
   iscmdifferential_ = (r.observable == Observable::DifferentialCM || r.observable == Observable::AnalyzingPower);
   isdifferential_ = iscmdifferential_ || r.observable == Observable::DifferentialLab;
   isphase_ = (r.observable == Observable::PhaseShift);
@@ -772,6 +786,7 @@ std::shared_ptr<TermSettings> Segment::MakeOwnSettings() const {
   t->thm = IsTHM();
   t->angularDist = IsAngularDist() || IsCoefficients();
   t->analyzingPower = IsAnalyzingPower();
+  t->spinObservable = GetSpinObservable();
   t->total = IsTotalTerm();
   t->upos = IsUPOS();
   t->coefficientAbsolute = IsCoefficientAbsolute();
