@@ -13,7 +13,7 @@
 #include "ThmGroup.h"
 #include "EvaluationCount.h"
 #include "Results.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include <functional>
 #include <memory>
 #include <atomic>
@@ -40,7 +40,7 @@ class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class AZUREParams;
-class PriorCovariance;
+#include "InferenceTypes.h"
 class GSLException;
 struct BandData;
 namespace ROOT {
@@ -131,31 +131,21 @@ class WorkingCopy {
   /// Set the screening effects' U_e from a parameter vector, then ApplyScreening (called by
   /// FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
   void FillScreeningFromParams(const vector_r &);
-  /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
-  double ScreeningPenalty() const;
   /// Set the fitted densities from a parameter vector and recompute the target thickness of every point of
   /// their lines (called by FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
   void FillDensitiesFromParams(const vector_r &, const Config &);
-  /// Sum of the density priors ((N - N0)/sigma)^2.
-  double DensityPenalty() const;
   /// The apparatus parameters from the parameter vector (ApparatusParameters.cpp): each row writes the values of the
   /// effects of its parameters, then what follows them (the stopping scale: the sub-points' stopping, the thickness).
   void FillApparatusFromParams(const vector_r &, const Config &);
-  /// The sum of the priors ((x - x0)/sigma)^2 of the apparatus parameters of row `row` (-1: of every row).
-  double ApparatusPenalty(int row = -1) const;
   /// What follows a change of the stopping scale of the effects marked in `changed` (0-based): the stopping of their
   /// sub-points and the thickness of their points (StoppingScale.cpp, the row's follow-up).
   void FollowStoppingScales(const std::vector<char> &changed, const Config &);
   /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
   /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
   void FillDopplerFromParams(const vector_r &, const Config *configure);
-  /// Sum of the Doppler priors ((T - T0)/sigma)^2.
-  double DopplerPenalty() const;
   /// Set the fitted thicknesses from a parameter vector (a value below 0 is taken as 0); thickness-group followers
   /// take their leader's.  Called by FillEnergyShiftsFromParams.
   void FillThicknessFromParams(const vector_r &);
-  /// Sum of the thickness priors ((n - n0)/sigma)^2.
-  double ThicknessPenalty() const;
   /// Link the thicknessgroup members to the group's first segment in file order; -1 (with an ERROR) when a member has
   /// no transmission / yield block.  Also lays out the thickness parameters (NumThicknessParams).
   int ResolveThicknessGroups(const Config &);

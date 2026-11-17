@@ -64,9 +64,9 @@ complex Site::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, const Comp
       return ec_amplitudes_[k][m];
     // Sized from the requested indices: a point without stored amplitudes (a sub-point or a fit's
     // working copy) has an empty ec_amplitudes_, and sizing from it indexed past the end.
-    if (ec_shifted_.size() <= k) ec_shifted_.resize(k + 1);
-    if (ec_shifted_[k].size() <= m) ec_shifted_[k].resize(m + 1);
-    ShiftedECAmplitude &memo = ec_shifted_[k][m];
+    if (values_.ec_shifted.size() <= k) values_.ec_shifted.resize(k + 1);
+    if (values_.ec_shifted[k].size() <= m) values_.ec_shifted[k].resize(m + 1);
+    ShiftedECAmplitude &memo = values_.ec_shifted[k][m];
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 
     const int aa = compound->GetPairNumFromKey(this->GetEntranceKey());
@@ -118,11 +118,11 @@ static complex ECPathwayAmplitude(const CompoundSystem *compound, const Config &
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
   // amplitude carries the entrance Coulomb wave, whose routines return NaN or
   // garbage there (e.g. a Gaussian-folding sub-point at E_cm <= 0).
-  if (ChannelFunc(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).IsClosed(cmEnergy))
+  if (ChannelFunc(entrancePair).IsClosed(cmEnergy))
     return complex(0.0, 0.0);
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
-  CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  CoulFunc theCoulombFunction(entrancePair);
   // Every pathway of this point with the same l asks for the same exp(-i phi) at a_c (CoulFunc::SetRadialMemo).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE))
     theCoulombFunction.SetRadialMemo(&configure.scratch->ForThisThread().ec.radial);
@@ -263,5 +263,5 @@ void Site::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude, c
 void Site::ClearECAmplitudes() {
   ec_amplitudes_.clear();
   ec_energies_.clear();
-  ec_shifted_.clear();
+  values_.ec_shifted.clear();
 }

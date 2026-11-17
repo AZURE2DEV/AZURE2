@@ -124,7 +124,7 @@ fi
 # ---- 4. --describe
 if [ -f "$WORK/new/m.azr" ]; then
   d="$(cd "$WORK/new" && "$AZURE2_BIN" --describe m.azr)"
-  if grep -q "entrance pair 1 (p+15N), exit pair 2 (a+12C)" <<< "$d" && grep -q "data file $WORK/new/data/" <<< "${d//\\//}" &&
+  if grep -q "entrance pair 1 (p+15N), exit pair 2 (a+12C)" <<< "$d" && { grep -q "data file $WORK/new/data/" <<< "${d//\\//}" || grep -q "data file $(cd "$WORK/new" && pwd -P)/data/" <<< "$d"; } &&
      grep -q ".shift.offset (energy shift, fixed)" <<< "$d"; then
     ok "--describe: pair keys with their pairs, the resolved data file, the parameters"
   else

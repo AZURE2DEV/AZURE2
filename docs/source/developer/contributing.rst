@@ -124,6 +124,12 @@ Style
   an output directory, ``cwd``) or into a temporary directory it removes or
   returns, never beside the project unasked (a session writes into the output
   directory its project names).
+* Portable Python (the CI's Windows job runs pyazr): open a text file with
+  ``encoding="utf-8"`` (the default there is the local code page); ask
+  ``pyazr.paths.is_absolute`` whether a path a project names is absolute, not
+  ``os.path.isabs`` (the engine's rule, ``experiment::IsAbsolutePath``, is the
+  same on every system: a leading ``/`` or ``\``, or a drive letter with its
+  separator); no ``os.pread``, no ``ctypes.CDLL(None)``.
 * Versions: pyazr's version is ``__version__`` in ``pyazr/__init__.py``
   (semantic versioning). The engine's version is set in ``CMakeLists.txt`` and
   bumped when a release is tagged.
@@ -204,6 +210,11 @@ A check must not pass for the wrong reason: test that a run succeeded
 (``ran``) before comparing its output, and that a comparison found rows
 (``counted``) before reporting it equal. Strip ``\r`` before counting fields
 (Windows line ends), and use portable ``sed``/``awk`` (macOS has BSD tools).
+The shell of macOS is bash 3.2: expand an array that may be empty as
+``${a[@]+"${a[@]}"}`` under ``set -u``, write a ``case`` pattern inside
+``$( )`` with its opening parenthesis, and keep a here-document out of
+``$( )``. A temporary directory may be a link there (``/var`` to
+``/private/var``) and the program prints the real path.
 
 .. note::
 

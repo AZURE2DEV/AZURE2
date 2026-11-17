@@ -1,5 +1,5 @@
-#ifndef PARAMETERKIND_H
-#define PARAMETERKIND_H
+#ifndef AZURE2_INFERENCE_PARAMETERKIND_H
+#define AZURE2_INFERENCE_PARAMETERKIND_H
 
 #include <string>
 #include <utility>
@@ -15,10 +15,13 @@
  * its own prior?": no code asks the parameter's name, which is a label for
  * people and files (docs/upgrade/parameter_kinds.md).
  *
- * Plain data and the standard library only, so that the inference/
- * ParameterVector of docs/upgrade/ARCHITECTURE.md section 3 can take it over by
- * a rename.
+ * Plain data and the standard library only: a part of the inference/ library
+ * (docs/upgrade/inference.md), which describes the parameter vector and does not
+ * hold its values (they are the engine's AZUREParams, on Minuit2's parameters).
  */
+
+namespace azure2 {
+namespace inference {
 
 /// Kinds of fit parameter, in their order in the vector.  The values never change; a new kind takes the next value,
 /// a row in ParamKindTable() and the fields that say what it belongs to in the API's record table
@@ -225,4 +228,7 @@ struct ParameterRecord {
   }
 };
 
-#endif  // PARAMETERKIND_H
+}  // namespace inference
+}  // namespace azure2
+
+#endif  // AZURE2_INFERENCE_PARAMETERKIND_H

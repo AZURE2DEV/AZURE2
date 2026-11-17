@@ -47,6 +47,11 @@ def main():
     except Exception as err:
         print(f"skip: the pyazr engine is not available ({type(err).__name__}: {err})")
         return 77
+    try:
+        import matplotlib  # noqa: F401  (an optional package: pyproject.toml, the extra "examples")
+    except ImportError as err:
+        print(f"skip: matplotlib is not installed ({err}); every check of this self-test draws a figure")
+        return 77
     t = time.time()
     with tempfile.TemporaryDirectory(prefix="azure2_plot_selftest_") as tmp:
         work = Path(tmp)

@@ -51,6 +51,15 @@ CoulombWaves coulomb(int l, double eta, double rho, Method method = Method::coul
 /// sigma_l(eta) = Im ln Gamma(l + 1 + i eta), not reduced modulo 2 pi.  NaN for an invalid l or eta.
 double coulomb_phase(int l, double eta) noexcept;
 
+/*!
+ * The regular Riccati-Bessel functions u_l(x) = x j_l(x) = F_l(0, x) for l = 0 ... l_max at x into u[0 ... l_max]
+ * (0 for x <= 0).  Each by a recurrence in its stable direction: upward from j_0, j_1 where l_max < x, else Miller's
+ * downward recurrence from far above both, normalised with sum (2l+1) j_l^2 = 1 and signed by j_0 or j_1.  Within
+ * 3e-15 of mpmath for l <= 8, x = 1e-6 ... 5e4 (tests/coulomb_neutral_test.cpp through coulsm).  The derivative is
+ * u_l' = u_{l-1} - (l/x) u_l.  Pure, as the functions above.
+ */
+void riccati_bessel(int l_max, double x, double *u);
+
 /// "coulsm", "coul", "coulfg", "coulcc".
 const char *method_name(Method method) noexcept;
 /// Inverse of method_name (case-sensitive); false, method unchanged, for an unknown name.

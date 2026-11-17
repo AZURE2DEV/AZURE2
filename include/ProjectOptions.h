@@ -45,6 +45,10 @@ bool ApplyOptionFlag(Config &config, const std::string &arg);
  */
 bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &section, int tagLine);
 
+/// What a session says of a keyword that is no option of the calculation: the refusal of a removed option
+/// (io::RemovedConfigKeys(): use_gsl_coul, with why and what to do), else that the name is none.
+std::string NotAnOptionText(const std::string &name);
+
 /// The options of the calculation for the project text `projectText` as a run with these command-line arguments would
 /// have them: each flag of an option row in `args` (other arguments ignored), then the project's keys.  False (ERROR
 /// lines printed) when a flag and a key contradict each other.

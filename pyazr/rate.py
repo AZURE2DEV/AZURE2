@@ -220,7 +220,7 @@ class RateSession:
         else:
             fd, path = tempfile.mkstemp(prefix="temperatures_", suffix=".dat", dir=self._scratch)
             try:
-                with os.fdopen(fd, "w") as fh:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     fh.write("".join(f"{float(v)!r}\n" for v in t))
                 with engine_text.held():
                     pairs = self._binding.reaction_rate(p, 0.0, 0.0, 0.0, path)
@@ -356,7 +356,7 @@ def write_rate_table(path, rate, band=None, comparison=None, parameters=None):
     w.writerow(list(cols))
     for i in range(rate.T9.size):
         w.writerow([f"{cols[k][i]:.10g}" for k in cols])
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(out.getvalue())
     return path
 
@@ -373,7 +373,7 @@ def read_rate_table(path):
     its uncertainty in the same unit), separated by blanks or commas; ``#`` comments and a header line of words are
     skipped.  A dict with T9, rate, uncertainty (None without) and path."""
     rows = []
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             s = line.split("#", 1)[0].replace(",", " ").split()
             if not s:

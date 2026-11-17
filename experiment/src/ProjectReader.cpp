@@ -171,7 +171,7 @@ void CheckSections(const io::Document &doc, std::vector<Diagnostic> &out) {
 
 // A <config> line the engine reads nothing of: a key that is not one of io::ConfigKeys() (a newer program's key, a
 // misspelt one), or a line after the eleven positional entries that is neither blank, a comment nor key=value.  The run
-// would go on without it.  useAdaptiveGrid has its own refusal (E_CONFIG_KEY_REMOVED, below).
+// would go on without it.  A key that was removed has its own refusal (E_CONFIG_KEY_REMOVED, below).
 void CheckConfigLines(const io::Document &doc, std::vector<Diagnostic> &out) {
   std::size_t open = 0;
   const std::vector<std::string> lines = io::ConfigLinesOf(doc, open);
@@ -185,7 +185,7 @@ void CheckConfigLines(const io::Document &doc, std::vector<Diagnostic> &out) {
       continue;
     }
     keyLines.insert(e.line);
-    if (e.name == "useAdaptiveGrid" || io::ConfigKeyNamed(e.name)) continue;
+    if (io::RemovedConfigKeyNamed(e.name) || io::ConfigKeyNamed(e.name)) continue;
     Diagnostic d;
     d.code = codes::kUnreadLine;
     d.line = (int)(open + e.line) + 1;
@@ -334,23 +334,21 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
                 "<potentials>: convert the original with AZURE2 --convert OLD NEW --to 3";
     p.diagnostics.push_back(d);
   }
-  // useAdaptiveGrid chose a uniform grid of its own for a folded point (0) or the adaptive one (1): the uniform grid
-  // is gone (it lost narrow resonances), so the key would say nothing; a file that still has it is refused, and the
-  // line is deleted (the converter drops it from old files).
+  // A key <config> had and has no more (io::RemovedConfigKeys(): useAdaptiveGrid, use_gsl_coul) would say nothing; a
+  // file that still has it is refused with either value, and the line is deleted (the converter drops
+  // useAdaptiveGrid from old files, which never held use_gsl_coul).
   {
     std::size_t open = 0;
     const io::ConfigSection config = io::ReadConfigSection(io::ConfigLinesOf(doc, open));
     for (const io::ConfigEntry &e : config.entries) {
-      if (e.positional || e.name != "useAdaptiveGrid") continue;
+      const io::RemovedConfigKey *removed = e.positional ? nullptr : io::RemovedConfigKeyNamed(e.name);
+      if (!removed) continue;
       Diagnostic d;
       d.code = codes::kRemovedConfigKey;
       d.line = (int)(open + e.line) + 1;
       d.section = "config";
       d.field = e.name;
-      d.message = "useAdaptiveGrid is no longer a key of <config>: delete the line.  Every folded point is on the "
-                  "shared mesh of its nucleus, which is never coarser than the uniform grid of the same number of "
-                  "points (the uniform grid, useAdaptiveGrid=0, lost narrow resonances and is gone); a value of 1 "
-                  "said what is now the only grid.";
+      d.message = io::RemovedConfigKeyText(*removed, io::OptionSpelling::kKey);
       p.diagnostics.push_back(d);
     }
   }

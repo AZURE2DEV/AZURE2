@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 #include "Constants.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 
 class Config;
 

@@ -87,7 +87,7 @@ evaluations (copies of the caller's state in ``FitterStates``, their pool a
 ``StatePool`` owned by the caller), the sampler (``WalkerLevels``, its own
 and a copy per walker, the idle ones in the caller's ``SamplerStates``), the reaction rate, a limit's conversion and the
 sub-point grids. Where each level's energy and amplitudes sit in the
-parameter vector is the ``LevelParameterLayout`` (``CompoundSystem::ParameterLayout()``,
+parameter vector is the ``LevelParameterLayout`` of ``inference/`` (``CompoundSystem::ParameterLayout()``,
 built by ``Fill``): every walk of the level block reads it. ``CompoundSystem`` is not
 copied (its copy constructor is deleted): one object, made by ``SetUpCompoundSystem``
 (``include/CompoundSystemSetUp.h``) and owned by the run or the session as
@@ -138,7 +138,7 @@ pass (``EnergyTaskList``); it reads the immutable tables built at set-up: the
 (``MeshPlan``) is made at set-up and again when an energy shift moves the
 points beyond their planned nodes. Everything an evaluation computes goes into
 the caller's ``Results``, whose ``TaskScratch`` (one per thread) holds the
-solvers: ``AMatrixFunc`` with one ``LevelMatrixSolver`` per group, and
+solvers: ``AMatrixFunc`` with one ``azure2::physics::LevelMatrixSolver`` per group, and
 ``THMMatrixFunc``. :doc:`level_matrix` and :doc:`data_model` describe them.
 
 Inference
@@ -157,9 +157,26 @@ the one
 ``Objective`` (``Objective::Engine()``), whose ``ObjectiveTerm`` list is fixed.
 ``AZUREParams`` holds Minuit's parameter list with one ``ParameterRecord``
 per parameter, whose kind is a row of ``ParamKindTable()``; the gradient makes
-a ``ParamIndexMap`` and accumulates into a ``GradAccum``. ``AZURECalcMCMC``
+a ``ParamIndexMap`` and accumulates into a ``GradAccum``. The boxes named
+``azure2::inference::`` are the library ``inference/``: plain data and
+arithmetic that include nothing of the engine (the records and kinds, the
+index map, the posterior's support, the prior covariance, and
+``TermList``, the sums of the objective's list, which ``Objective`` holds
+with the engine's context). The terms read the engine's objects and stay in
+``src/Objective.cpp``. ``AZURECalcMCMC``
 is the sampler's log-probability on pools of its own; it drives ``nu::Mcmc``,
 whose ``nu::Ensemble`` owns the walkers.
+
+Each of the two classes is one header and several source files, one job per file. ``AZURECalc``:
+``src/AZURECalc.cpp`` (the evaluation: ``operator()``, ``Chi2On``, ``Chi2Value``), ``AZURECalcGradient.cpp``
+(``Gradient``, ``G2``), ``AZURECalcJacobian.cpp`` (``ResidualJacobian``, ``ResidualsOnly``, ``FillShiftColumns``),
+``AZURECalcNuisance.cpp`` (the limits manager's priors), ``AZURECalcPool.cpp`` (the idle states of the caller's
+``FitterStates``), ``AZURECalcOutput.cpp`` (the intermediate files, ``param.fit``) and ``AZURECalcDiagnostics.cpp``
+(the ``AZURE_DUMP_NONFINITE`` dump). ``AZURECalcMCMC``: ``src/AZURECalcMCMC.cpp`` (the log-likelihood and
+log-probability of a walker, the map between the varying and the full vector), ``AZURECalcMCMCPriors.cpp`` (the
+priors and their set-up), ``AZURECalcMCMCRun.cpp`` (``RunMCMCSampling``, the walker-position files),
+``AZURECalcMCMCChain.cpp`` (the chain file, the reports of a step) and ``AZURECalcMCMCPool.cpp`` (the idle states of
+the caller's ``SamplerStates``).
 
 A fitter is a ``FitterRow`` of ``Fitters()``: its function takes the
 objective, the ``AZUREParams`` (start in, end point out) and a ``FitControl``

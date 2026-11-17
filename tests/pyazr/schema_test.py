@@ -46,7 +46,7 @@ check("_azure2.schema_json() + newline is the committed file", _azure2.schema_js
 binary = os.environ.get("AZURE2_BIN")
 if binary:
     out = subprocess.run([binary, "--schema"], capture_output=True, check=False)
-    check("AZURE2 --schema prints the committed file", out.returncode == 0 and out.stdout.decode("utf-8") == golden_text,
+    check("AZURE2 --schema prints the committed file", out.returncode == 0 and out.stdout.decode("utf-8").replace("\r\n", "\n") == golden_text,  # a Windows program's stdout is CRLF
           f"exit {out.returncode}")
 else:
     print("  (AZURE2_BIN not set: the CLI comparison is skipped)")

@@ -2,7 +2,7 @@
 #define AZUREGRAD_H
 
 #include "Constants.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include <vector>
 #include <map>
 #include <tuple>
@@ -18,7 +18,6 @@ class Segment;
 namespace azure2 {
 struct Results;
 }
-class ParamIndexMap;
 
 /*!
  * \brief Reverse-mode (adjoint) gradient support for the AZURE2 forward model.
@@ -28,143 +27,16 @@ class ParamIndexMap;
  * gamma_lambda,c, dataset normalizations n_k, and energy shifts).  See PLAN.md for
  * the full derivation and phase structure.
  *
- * Phase 0 provides the parameter-index map: a faithful mirror of the flat
+ * Phase 0 provides the parameter-index map (BuildParamIndexMap): a faithful mirror of the flat
  * ordering produced by CompoundSystem::FillCompoundFromParams / WorkingCopy::FillNormsFromParams
  * / WorkingCopy::FillEnergyShiftsFromParams, so that gradient components computed in
  * "physics" coordinates (jGroup, level, channel) can be scattered into the same
  * flat vector the sampler perturbs.
  */
 
-// ParamKind, the kinds of fit parameter: ParameterKind.h (one enumeration for the engine, the API and pyazr).
-
-/// Description of one entry in the full (unfiltered) flat parameter vector.
-struct ParamDesc {
-  ParamKind kind;
-  int jGroup;   ///< 1-based JGroup index   (LevelEnergy/Gamma only, else -1)
-  int level;    ///< 1-based level index    (LevelEnergy/Gamma only, else -1)
-  int channel;  ///< 1-based channel index  (Gamma; ThmCoherent: its 1-based index in that block; else -1)
-  int segment;  ///< 1-based segment index  (Norm/EnergyShift/EnergyShiftSqrt only, else -1)
-  bool fixed;   ///< whether this parameter is fixed (excluded from packed vector)
-  int nucleus = -1;  ///< 1-based compound nucleus (Abundance only, else -1)
-  int sample = -1;   ///< 1-based sample of the <abundances> block (Abundance only, else -1)
-  int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
-  int screening = -1;  ///< 1-based screening parameter (WorkingCopy::GetScreeningEffect), Screening only, else -1
-  int density = -1;    ///< 1-based density parameter (WorkingCopy::GetDensityEffect), Density only, else -1
-  int doppler = -1;    ///< 1-based Doppler parameter (WorkingCopy::GetDopplerEffect), Doppler only, else -1
-  int thickness = -1;  ///< 1-based thickness parameter (WorkingCopy::GetThicknessSegment), Thickness only, else -1
-  int apparatus = -1;  ///< 1-based apparatus parameter (DataSet::GetApparatusParam), Apparatus only, else -1
-};
-
-/*!
- * \brief Bidirectional map between physics coordinates and the flat parameter
- *        vector used by FillCompoundFromParams / FillNormsFromParams.
- *
- * The flat vector layout is, in order:
- *   - for each JGroup j, for each level la:  E_{j,la}, then gamma_{j,la,ch} for ch=1..NumChannels
- *   - the norm parameters (starting at normOffset)
- *   - the energy-shift parameters (starting at energyShiftOffset)
- *   - the sqrt(E) energy-shift coefficients (starting at energyShiftSqrtOffset)
- *   - the shift-function parameters a0.. of each segment declaring a "shiftfn" block,
- *     in segment order (starting at energyShiftFnOffset; none without such a block)
- *   - the THM coherent-background parameters (cbackground=; none without it)
- *
- * "Full" indices run over every entry above (matching the `all_rwa_` vector in
- * AZUREAPI).  The "packed" index is the position within the non-fixed subset
- * (matching the vector the sampler/optimizer actually passes).
- */
-class ParamIndexMap {
- public:
-  /// Full index (into all_rwa_) of the energy parameter for (jGroup, level).
-  int EIndex(int jGroup, int level) const;
-  /// Full index of the gamma parameter for (jGroup, level, channel).
-  int GammaIndex(int jGroup, int level, int channel) const;
-
-  /// Full index of the norm parameter for a 1-based segment, or -1 if that
-  /// segment does not carry a (varying) norm parameter.
-  int NormIndex(int segment) const;
-  /// Full index of the energy-shift parameter for a 1-based segment, or -1.
-  int EnergyShiftIndex(int segment) const;
-  /// Full index of the sqrt(E) energy-shift coefficient for a 1-based segment, or -1.
-  int EnergyShiftSqrtIndex(int segment) const;
-  /// Full index of the abundance parameter with this 1-based ordinal (AbundanceSamples::Ordinal), or -1.
-  int AbundanceIndex(int ordinal) const;
-  /// Full index of parameter aj of the shift function declared on a 1-based segment, or -1.
-  int EnergyShiftFnIndex(int segment, int j) const;
-  /// Full index of the 1-based screening parameter k, or -1.
-  int ScreeningIndex(int k) const {
-    auto it = screeningIndex_.find(k);
-    return (it == screeningIndex_.end()) ? -1 : it->second;
-  }
-  /// Full index of the 1-based density parameter k, or -1.
-  int DensityIndex(int k) const {
-    auto it = densityIndex_.find(k);
-    return (it == densityIndex_.end()) ? -1 : it->second;
-  }
-  /// Full index of the 1-based Doppler-temperature parameter k, or -1.
-  int DopplerIndex(int k) const {
-    auto it = dopplerIndex_.find(k);
-    return (it == dopplerIndex_.end()) ? -1 : it->second;
-  }
-  /// Full index of the 1-based apparatus parameter k, or -1.
-  int ApparatusIndex(int k) const {
-    auto it = apparatusIndex_.find(k);
-    return (it == apparatusIndex_.end()) ? -1 : it->second;
-  }
-  /// Full index of the 1-based sample-thickness parameter k, or -1.
-  int ThicknessIndex(int k) const {
-    auto it = thicknessIndex_.find(k);
-    return (it == thicknessIndex_.end()) ? -1 : it->second;
-  }
-
-  /// Number of entries in the full (unfiltered) parameter vector.
-  int NumFull() const { return (int)desc_.size(); }
-  /// Number of non-fixed (packed) parameters.
-  int NumPacked() const { return numPacked_; }
-
-  /// Description of full-index i.
-  const ParamDesc &Desc(int fullIndex) const { return desc_[fullIndex]; }
-
-  /// Packed index for a full index, or -1 if that parameter is fixed.
-  int FullToPacked(int fullIndex) const { return fullToPacked_[fullIndex]; }
-  /// Full index for a packed index.
-  int PackedToFull(int packedIndex) const { return packedToFull_[packedIndex]; }
-
-  int NormOffset() const { return normOffset_; }
-  int EnergyShiftOffset() const { return energyShiftOffset_; }
-  int EnergyShiftSqrtOffset() const { return energyShiftSqrtOffset_; }
-  int EnergyShiftFnOffset() const { return energyShiftFnOffset_; }
-
-  /// Full index of E_{j,la} / gamma_{j,la,ch} (1-based) without a map lookup, or -1.
-  int EIndexFlat(int jGroup, int level) const { return eFlat_[jGroup - 1][level - 1]; }
-  int GammaIndexFlat(int jGroup, int level, int channel) const { return gammaFlat_[jGroup - 1][level - 1][channel - 1]; }
-
-  friend ParamIndexMap BuildParamIndexMap(const CompoundSystem *, const WorkingCopy *, const std::vector<bool> &);
-  friend void AppendApparatusParams(ParamIndexMap &, const WorkingCopy *, int &);
-
- private:
-  std::vector<std::vector<int>> eFlat_;                  ///< [j-1][la-1] -> full idx
-  std::vector<std::vector<std::vector<int>>> gammaFlat_; ///< [j-1][la-1][ch-1] -> full idx
-  std::vector<ParamDesc> desc_;                          ///< per full index
-  std::map<std::pair<int, int>, int> eIndex_;            ///< (j,la) -> full idx
-  std::map<std::tuple<int, int, int>, int> gammaIndex_;  ///< (j,la,ch) -> full idx
-  std::map<int, int> normIndex_;                         ///< segment -> full idx
-  std::map<int, int> shiftIndex_;                        ///< segment -> full idx
-  std::map<int, int> sqrtShiftIndex_;                    ///< segment -> full idx
-  std::map<int, int> abundanceIndex_;                    ///< abundance ordinal -> full idx
-  std::map<std::pair<int, int>, int> fnShiftIndex_;      ///< (segment, j) -> full idx
-  std::map<int, int> screeningIndex_;                    ///< screening parameter k -> full idx
-  std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
-  std::map<int, int> dopplerIndex_;                      ///< Doppler parameter k -> full idx
-  std::map<int, int> thicknessIndex_;                    ///< thickness parameter k -> full idx
-  std::map<int, int> apparatusIndex_;                    ///< apparatus parameter k -> full idx
-  std::vector<int> fullToPacked_;
-  std::vector<int> packedToFull_;
-  int numPacked_ = 0;
-  int normOffset_ = 0;
-  int energyShiftOffset_ = 0;
-  int energyShiftSqrtOffset_ = 0;
-  int energyShiftFnOffset_ = 0;
-};
+// ParamKind, the kinds of fit parameter, and ParamDesc / ParamIndexMap, where each parameter sits in the full and the
+// packed vector: the inference/ library (azure2/inference/ParameterKind.h, ParameterIndexMap.h; InferenceTypes.h names
+// them here).  BuildParamIndexMap below makes the map of a compound system and a data set.
 
 /// Free level parameters of each J-group, [j-1][level-1] and [j-1][level-1][ch-1].
 struct FreeLevelMask {
@@ -385,8 +257,8 @@ struct ShiftColumnCount {
  * `fixed` is the full fixed mask.  `skipPacked` (may be null) marks packed
  * columns not to difference; they are left as they are.  `nRes` data rows
  * (before any whitening), row-major `jac` with `nCols` columns.  The model is
- * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
- * analytic gradient shares.
+ * left at `full`.  Defined in AZURECalcJacobian.cpp; the shift helpers the
+ * analytic gradient shares are in ShiftParamTarget.h.
  */
 ShiftColumnCount FillShiftColumns(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,

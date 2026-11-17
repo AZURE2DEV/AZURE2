@@ -170,7 +170,7 @@ def read_parameter_file(path):
     matches names (``AZUREParams::ReadUserParameters``), and a positional read of a file of another layout is silently
     off by one or more rows."""
     values, basis = {}, None
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             t = line.split()
             if len(t) >= 2 and t[0] in ("#parametrization", "parametrization"):
@@ -380,7 +380,7 @@ class Parameters(list):
             raise ParameterError("write needs the session's whole table (Session.parameters), not a selection: a "
                                  "parameter file names every parameter.")
         x = self._vector(x)
-        with open(os.fspath(path), "w") as fh:
+        with open(os.fspath(path), "w", encoding="utf-8") as fh:
             # The engine reads the tag and converts a file of the other alternative basis; '#' keeps it a comment for
             # readers that index rows by position.
             fh.write(f"{'#parametrization':>28s} {float(self._basis or 0): .7e} {0.0: .7e}\n")

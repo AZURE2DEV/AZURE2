@@ -270,6 +270,17 @@ with tempfile.TemporaryDirectory() as tmp:
         f = s.objective()
         points = [f.x0, displaced(f.x0)]
         alone = [(f(x), f.grad(x)) for x in points]
+        # each thread's work alone in a threading.Thread first: a difference there is the thread's, not the two at
+        # once (on Windows a Python thread's x87 precision was 53 bits: azure2/support/FloatingPointPrecision.h)
+        one = {}
+        for i in range(2):
+            t = threading.Thread(target=lambda i=i: one.__setitem__(i, (f(points[i]), f.grad(points[i]))))
+            t.start()
+            t.join()
+        check("one thread alone (a threading.Thread) gives the main thread's values, bit for bit",
+              all(i in one and one[i][0] == alone[i][0] and same(one[i][1], alone[i][1]) for i in range(2)),
+              {i: (one[i][0] - alone[i][0], float(np.max(np.abs(np.asarray(one[i][1]) - alone[i][1]))))
+               for i in one})
         got = {}
 
         def work(i):
@@ -281,7 +292,9 @@ with tempfile.TemporaryDirectory() as tmp:
         for t in threads:
             t.join()
         check("two threads at once give each thread's values alone, bit for bit",
-              all(v == alone[i][0] and same(g, alone[i][1]) for i in range(2) for v, g in got[i]))
+              all(v == alone[i][0] and same(g, alone[i][1]) for i in range(2) for v, g in got[i]),
+              {i: [(v - alone[i][0], float(np.max(np.abs(np.asarray(g) - alone[i][1])))) for v, g in got[i]]
+               for i in range(2)})
 
 if failures:
     print(f"FAIL: {len(failures)} check(s): {failures}")

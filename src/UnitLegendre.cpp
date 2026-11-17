@@ -14,7 +14,7 @@
 /// The maximum order of the Legendre polynomials stored in the point object.
 
 int Site::GetMaxLOrder() const {
-  return legendreP_ ? (int)legendreP_->size() - 1 : -1;
+  return values_.legendreP ? (int)values_.legendreP->size() - 1 : -1;
 }
 
 /*!
@@ -22,7 +22,7 @@ int Site::GetMaxLOrder() const {
  */
 
 double Site::GetLegendreP(int lOrder) const {
-  return (*legendreP_)[lOrder];
+  return (*values_.legendreP)[lOrder];
 }
 
 /*!
@@ -40,9 +40,9 @@ void Site::AddLegendreP(double polynomial) {
 
 void Site::ClearLegendrePolynomials() {
   // An empty list needs no copy of a shared one.
-  if (legendreP_ && !legendreP_.SoleOwner())
-    legendreP_.reset();
-  else if (legendreP_)
+  if (values_.legendreP && !values_.legendreP.SoleOwner())
+    values_.legendreP.reset();
+  else if (values_.legendreP)
     MutableLegendre().clear();
 }
 
@@ -137,7 +137,7 @@ void Site::CalcLegendreP(WorkingCopy *data, int maxL, const CompoundSystem *comp
   if (compound) {
     const int entrance = compound->GetPairNumFromKey(this->GetEntranceKey());
     if (entrance > 0)
-      entrance_symmetry_ = LegendreSymmetryFactor(*compound->GetPair(entrance), GetEntranceKey() == GetExitKey());
+      values_.entrance_symmetry = LegendreSymmetryFactor(*compound->GetPair(entrance), GetEntranceKey() == GetExitKey());
   }
   // A slot holding Legendre coefficients has no angle: its readers' rows apply them (ValueFor).
   if (is_sub_point_ && AngleFree()) return;

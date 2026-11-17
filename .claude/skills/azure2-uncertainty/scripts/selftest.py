@@ -201,6 +201,11 @@ def sampler_checks(np, tmp):
                f"{int(d['divergent'].sum())} divergences, {d['ngrad'].mean():.1f} gradients per draw")
     check(f"sample_nuts on two parameters recovers the Laplace covariance ({out[-160:]})", ok)
     lap = np.load(os.path.join(tmp, "nuts.npz"))["laplace_sigma"] if ok else None
+    try:
+        import emcee  # noqa: F401  (an optional package: pyproject.toml, the extra "examples")
+    except ImportError:
+        print("SKIP  sample_emcee on two parameters: emcee is not installed (the other checks ran)")
+        return
     code, out = run("sample_emcee.py", "T3/two.azr", "--walkers", "16", "--steps", "700", "--burn", "200", "--out",
                     "emcee.npz", cwd=tmp)
     ok = code in (0, 1) and lap is not None

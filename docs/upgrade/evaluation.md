@@ -95,8 +95,8 @@ allow-list with its reason).  "Done" in the last column means the change is in t
 | `output_compound_`, `output_data_`, `output_results_`, `output_mutex_` (`include/AZURECalc.h`) | a clone kept for the iteration snapshots of a fit | the caller's (`FitterStates::output`, `outputData`, `outputResults`, `outputMutex`; section 7.7). Still to do: the snapshot as an evaluation into its own `Results` |
 | `fixedMask_`, `g2CacheP_`, `g2Cache_`, `lastGradP_`, `lastGrad_`, `lastGradMutex_` (`include/AZURECalc.h`) | the free mask; Minuit's G2 computed with the last gradient at its parameters; the last gradient for a dump | done (section 7.7): the mask a plain member set by the non-`const` `SetFixedMask`; the gradient memo in the caller's `FitterStates::gradient` |
 | `all_physical_`, `physical_`, `rwa_`, `all_rwa_`, `all_indexes`, `fixed_`, `paramNames_`, `paramKinds_`, `priorMeans_`, `priorStds_`, `usePriors_`, `freeKinds_`, `priorCov_`, `useRWA_` (`include/AZURECalcMCMC.h`) | the sampler's parameter layout, filled lazily in `const` methods | done (section 7.7): plain members, written by the non-`const` `BuildAutoPriors` and `SetUpPriorCovariance` before the walkers run |
-| `levelGammas_`, `levelEnergies_`, `levelDecoupled_`, `shiftFunctions_`, `cached_max_levels_`, `cached_max_channels_` (`include/AMatrixFunc.h`) | buffers of the level-matrix fill | done (branch 2): plain members, written by the non-`const` fill |
-| `inverse_valid_`, `inverse_`, `work_` (`include/LevelMatrixSolver.h`) | the explicit inverse formed on first request from the LU factors | done (branch 2): `Inverse`, `Bilinear` non-`const` (and `AMatrixFunc::GetAMatrix`, whose `const_cast` went) |
+| `levelGammas_`, `levelEnergies_`, `levelDecoupled_`, `shiftFunctions_`, `cached_max_levels_`, `cached_max_channels_` (`include/AMatrixFunc.h`) | buffers of the level-matrix fill | done (branch 2): plain members, written by the non-`const` fill (since the physics-functions branch: one member, `level_gather_`, the arrays handed to `azure2::physics::fill_level_matrix`) |
+| `inverse_valid_`, `inverse_`, `work_` (`include/LevelMatrixSolver.h`, now `physics/include/azure2/physics/LevelMatrixSolver.h`) | the explicit inverse formed on first request from the LU factors | done (branch 2): `Inverse`, `Bilinear` non-`const` (and `AMatrixFunc::GetAMatrix`, whose `const_cast` went) |
 | `ec_shifted_` (`include/Site.h`) | per site, the EC amplitude at the last shifted energy | done as ownership (section 7.7): a plain member, `GetECAmplitudeWithShift` non-`const` (its callers hold the site they write). Still to do: a field of the hand-over's table, with the `Site` split |
 | `channelFunc_` (`include/ThmVertexBoundary.h`) | a `ChannelFunc` whose calls are non-`const` (its last-value cache) | done (branch 2): `OnShellAt` non-`const` |
 | `warned` (`ThmDistortion.h`, `ThmDwVertex.h`, `ThmLineshape.h`, `ThmOptions.h`) | warn-once flags of option objects | notices |
@@ -263,6 +263,14 @@ its own `CNuc` (the `cnuc_pool_` stays) — the first milestone below does not n
 tables), the present target-effect values and the overflow nodes are evaluation, the `Unit`s are problem except
 their slots' hand-over values.
 
+**Status 2026-11-15** (read from the code of 486d746e).  The `CNuc` of this paragraph is `CompoundSystem` now, and
+it is constant and shared: every reader takes it `const`, no evaluation holds a copy of it, and there is no
+`cnuc_pool_` (check 59 of `tests/consistency/repo_consistency_test.py` keeps a `Clone()` of the compound and the
+pool's name out of the tree).  The fitted level values are a `LevelState` (`include/LevelState.h`), a value that
+each evaluation owns; the fitter and the sampler keep the idle ones in the caller's `FitterStates` and
+`SamplerStates`.  What the last sentence says of the `Unit`s is corrected by the finding of section 4.1 and by the
+table of section 7.8.
+
 **Minuit2's parallel gradient and the MCMC's walkers** each run several evaluations at once.  Each needs a
 `Results`, its parameter-dependent model part (until `CNuc` is split: a `CNuc` copy) and its hand-over table — nothing
 else, and nothing shared but the `const` problem.  The per-evaluation state is a value (`Evaluation`: the three parts
@@ -312,6 +320,8 @@ branch (see section 7.5); what this branch does is what does not need it:
    with its `Results`) taken by one caller at a time.  A fit with the analytic gradient (one evaluation at a time,
    its parallelism inside the point pass) then holds one, at any thread count; Minuit2's numerical gradient and the
    MCMC's walkers hold one per thread that evaluates.
+   **Status 2026-11-15:** the pair is a `LevelState` and a working copy with its `Results`; no copy of the compound
+   system is made (the status line of section 4).
 2. (Planned, not done in branch 3: see section 7.5.)  `AZUREAPI` reads its nuisance layout once, at construction
    and at a rebuild; its evaluating methods write the session's `Results` as non-`const` methods.
 3. Kept, with the reason: `WorkingCopy::Clone`, `WorkingData` and the snapshot copies (`output_*`) of a fit (a
@@ -348,9 +358,20 @@ Each is a commit series that leaves the tree passing (all projects × 3 bases id
    **Status 2026-11-15: not done as designed.**  The pool and the snapshot copies are no longer members written by
    `const` methods (they are the caller's, section 7.7), but `WorkingData`, `WorkingCopy::Clone` and
    `AZURE_POOL_CHECK` stay until the `Site` split of section 4.1.
+   **Status 2026-11-15, later (section 7.8): the split was prepared and not made.**  The members of a site are
+   classified by who writes them, and the 25 that an evaluation writes are one struct of the site
+   (`Site::Values`).  The classification shows that the hand-over table of this item is nearly the whole site
+   (280 of 392 bytes) and that `Clone` already copies the evaluation's state and little else, so moving the
+   values out of the site would not remove the copies.  **Decided 2026-11-16: the copies stay** (section 7.8, the
+   last part).
 4. **`CNuc` split, the parameter vector out** (`cnuc_split.md` step 7, another agent's area): `cnuc_pool_` goes; the
    sampler's and the fitter's state become non-`const` objects of the minimiser adapter; the MCMC globals become a run
    object.  Gate: memory of a fit at 1, 3 and 12 threads equal within the `Results` size per thread.
+   **Status 2026-11-15:** the copy of the compound is gone: `cnuc_pool_` does not exist, the compound system is
+   constant and shared, and an evaluation owns a `LevelState` (the status line of section 4); the fitter's and the
+   sampler's states are the caller's (section 7.7).  The gate as written is not met and cannot be while an
+   evaluation running beside another has a working copy of its own (section 7.8: 11.6 MB each for T2).  Whether
+   the MCMC globals became a run object was not checked for this line.
 5. **The diagnostics record** (section 2): one `Diagnostics` struct read once; the counters of section 1.3 become
    its members (or go); `--describe` lists the set switches.  Can run in parallel with 2–4.  Done in the fourth
    branch (sections 7.6 and 8): one table and one reader in `support/`, `Config::environment`, `RunDiagnostics`.
@@ -486,7 +507,10 @@ copies, `AZURE_POOL_CHECK`, `Site::ec_shifted_` (section 4.1, item 3); `AZUREAPI
 **Relative paths (done, branch 3, continued).**  A project's relative paths are resolved against one directory held
 by the run, never against the process's working directory, and pyazr no longer changes the working directory.
 - One rule, one function: `azure2::experiment::PathToOpen(directory, path)` (`experiment/.../ProjectPaths.h`; an
-  absolute path, or no directory, as written; an empty path is the directory itself).  The engine's
+  absolute path, or no directory, as written; an empty path is the directory itself).  Absolute is one rule too,
+  the same on every system (`IsAbsolutePath`, 2026-11-16; pyazr's twin is `pyazr.paths.is_absolute`): a leading `/`
+  or `\`, or a drive letter with its separator (`C:/...`, `C:\...`).  Before it, a Windows path with a drive letter
+  was taken as relative to the project (seen on the CI's Windows machine, never run elsewhere).  The engine's
   `Config::OpenPath(path)` applies it with `Config::baseDirectory`, which `Config::ReadConfigFile` sets to the
   project file's directory (made absolute once, at start, against the working directory: the file name is the
   caller's) unless the caller named one; pyazr names the session's `cwd` (`RuntimeOptions.base_directory`).
@@ -617,6 +641,141 @@ each, kB): T2 fit 159 044 / 161 656, T2 sampler 149 668 / 153 236, 13N fit 135 3
 fit shows where: during the fit the resident size is lower than before (156.4 against 159.1 MB), and it rises by
 5 MB in the final evaluation, where the same bytes are requested from a heap that is laid out differently.  Which
 request does not fit freed space was not searched, and nothing was changed for it.
+
+### 7.8 Done on 2026-11-15 (`feature/upgrade-6-site-split`): a site's members by who writes them; the split is not made
+
+**What was done.**  Every member of `Site`, and what else of `Unit` and `WorkingCopy` an evaluation writes, was
+classified from the code of 486d746e: the writers were followed from the hand-over (`HandOver.cpp`,
+`ShiftFrames.cpp`, `ShiftedFold.cpp`, `StoppingScale.cpp`, `TargetSetup.cpp`, `NodeTable.cpp`,
+`WorkingCopyUnits.cpp`, `PointPass.cpp`), not taken from the table of section 4.1.  The 25 members of a site that
+an evaluation writes are grouped in one struct, `Site::Values`, which the site holds as `values_`.  No accessor
+changed its name, its arguments or what it returns; no ownership changed; nothing is copied more or less than
+before.  **The split itself (the values out of the site, `WorkingCopy::Clone` and the pools gone) was not made**:
+the last part of this section says what was found and what is left to decide.
+
+**`Site`: 38 members.**
+
+| Group | Members | Written by |
+|---|---|---|
+| Fixed at set-up (10) | `is_sub_point_`, `segment_key_`, `lab_angle_`, `nominal_energy_`, `settings_`, `row_`, `legendre_order_` | the set-up only (`InitializeLeaves`, `Segment::AddLeaf`, `SeparateSlotsByAngle`, `MakeSubPoint`, `BelongToRowOf`) |
+| | `screen_param_` | `ApplyScreening`, at every hand-over with a screening effect: the same value each time |
+| | `ec_amplitudes_`, `ec_energies_` | the external-capture set-up (`CalculateECAmplitudes`); `WorkingCopy::Clone` empties them in the copy, which evaluates through `ec_shifted` |
+| Evaluation (25, `Site::Values`) | `cm_energy`, `cm_angle`, `excitation_energy` | `Unit::SetFrame`, from `UpdatePointEnergyWithShift` (a shifted term) |
+| | `lab_energy` | `UpdatePointEnergyWithShift` |
+| | `geofactor`, `sfactorconv`, `screen_k`, `edep`, `thm_ps`, `thm_vertex`, `eDependentEnergy`, `eDependentValid` | `CalcEDependentValues` (a shifted point; a sub-point with external capture whose energy moved, `PrepareSubPoints`), `AdoptEDependentValues` (a re-placed grid) |
+| | `entrance_symmetry`, `legendreP` | `CalcLegendreP` (a shifted point, a re-placed grid) |
+| | `coulombamplitude`, `spinDependentCoulomb`, `coulombdirect`, `coulombexchange` | `CalcCoulombAmplitude` (the same) |
+| | `screen_ue` | `SetScreening`, every evaluation with a screening effect |
+| | `stoppingPower` | `FollowStoppingScales` (a fitted stopping scale, a re-placed slot) |
+| | `targetThickness` | `FillDensitiesFromParams`, `FillThicknessFromParams`, `FollowStoppingScales`, `MoveTargetToShift` |
+| | `targetLabEnergy` | `MoveTargetToShift` |
+| | `rowset`, `rowset_at` | `BuildRowSets` (when slots move) |
+| | `ec_shifted` | `GetECAmplitudeWithShift`: the external-capture amplitude at the shifted energy, kept for the next call |
+| The record's place (3) | `slot_`, `num_ang_slots_`, `num_natural_slots_` | `LayoutResults`: at set-up, and from `BeginEvaluation` when a re-placed grid changed the layout |
+
+The three members of the record's place stay direct members: they are a layout, not values, and they are read by
+name in `src/SiteObservables.cpp`, which another branch is rewriting at the same time.  **A slot of a re-placed
+grid** (`ReplaceSubPointGrids`) is a new site made by the evaluation, its fixed members included.
+
+**`Unit`: 17 members of its own.**  Fixed (9): `cm_factor_`, `bohr_z1_`, `bohr_z2_`, `set_up_`,
+`targetEffectNum_`, `own_settings_`, `photo_qgamma_`, `photo_mcn_`, `plan_task_`.  Evaluation (4): `bin_low_cm_`,
+`bin_high_cm_`, `frame_jacobian_` (`SetFrame`), `support_thickness_change_` (`MoveTargetToShift`).  Layout, written
+again when a grid is re-placed (4): `sub_first_`, `sub_count_` (`LayOutUnits`), `model_slot_`, `num_model_ang_`
+(`LayoutResults`).  They were left where they are.
+
+**`WorkingCopy`.**  Fixed or shared: `set_` (the `DataSet`, shared `const`), `draft_` (the set-up only), `plan_`,
+`capacity_`, `iterations_`, `covFiles_`, the error flags, `isFit_`, `isErrorAnalysis_`, the `ec*` file members,
+`channelTable_` (shared `const`).  Evaluation: `segmentStates_`, `effectValues_`, `thmCoherentValues_`,
+`abundances_`, `units_`, `slots_`, `slotBlock_`, `slotWriter_`, `slotReaders_`, the pending blocks, `resultsSize_`,
+`modelSize_`, `rowSets_`, `contractedSize_`, `gridLevels_`, `meshAnchors_`, `meshSupports_`, `meshCentres_`,
+`nodes_` (its slots and overflow; the stage table is shared).
+
+**Where the table of section 4.1 is out of date.**  (1) `abundances_` (the isotopic abundances of the present
+vector, `FillAbundancesFromVector`) is missing: it is the evaluation's.  (2) `gridNuc_`, "a `CNuc`", is
+`gridLevels_` now: a `LevelState` with its `LevelInputs`, made by the evaluation that re-places grids, and not
+copied by `Clone`.  (3) "the EC amplitude at the shifted energy" is the evaluation's, but the set-up's amplitudes
+(`ec_amplitudes_`, `ec_energies_`) are fixed, and a copy does not keep them.  (4) The record offsets of a site are
+written by an evaluation only when a grid is re-placed.  In everything else the table agrees with the code.
+
+**What was found, and why the split was not made.**  The design (section 4, milestone 3) rests on the hand-over
+table being small beside the problem, so that an evaluation is "constructed from the problem in microseconds" and
+the pools become unnecessary.  The code does not bear that out:
+
+- Of the 392 bytes of a `Site` (504 of a `Unit`; GCC 11, x86-64), 280 are `Site::Values` and 16 the record's
+  place; 96 are fixed, 48 of them the two external-capture matrices that a copy holds empty.  The large tables
+  (`edep`, `legendreP`, `rowset`) are already shared between copies until one writes them (`SharedTable`), and the
+  measurement's values are in the shared `DataSet`.  `WorkingCopy` therefore already is "the shared problem plus
+  the evaluation's state": `Clone` copies the state.
+- Measured (`work/director/site1_mem.out`, MIGRAD with Minuit2's numerical gradient, peak resident memory at 1 and
+  4 threads, one run each): T2, 14 422 slots, 161 908 and 196 628 kB, so 11.6 MB for each further evaluation
+  running at the same time; 13N, 2 416 slots, 124 836 and 134 900 kB, 3.4 MB each.  The fixed members of the slots
+  are 1.4 MB and 0.2 MB of that.  A split that shared them would save at most that much per further evaluation
+  (4.1 MB, 2.1 % of the T2 peak at four threads) and nothing at one thread.  The T2 sampler (16 walkers, 100
+  steps) holds 153 064 kB at one sampler thread and 253 860 kB at four, 33.6 MB for each further thread
+  (`work/director/site1_extra.out`); what part of that is the working copy was not separated.
+- Evaluations that run at the same time each need their own values, whoever holds them; and a set of values made
+  anew for every evaluation would repeat the hand-over of every shifted segment (about a second, by the comments
+  at the pools in `AZURECalc.cpp`), so a pool of them, or values kept by the caller, stays.  Moving the values
+  into a table of the evaluation renames the copy; it does not remove it.
+- The ways to make the move, with their cost: (a) every accessor of a site takes the evaluation's table: about 450
+  calls in about 30 files, among them the files whose formulae are moving to `physics/` in another branch tonight;
+  (b) the evaluation's entry keeps the accessors and points to a shared fixed part: no reader changes, but the
+  set-up writes the fixed part through many paths and a re-placed slot has none to point to, for the 96 bytes
+  above; (c) the values of a site held by pointer and copied when first written: an evaluation of a project
+  without shifts or fitted target-effect values would then share nearly everything, at the price of one more
+  indirection in every accessor and one more allocation per site.  None was started: (a) and (b) cannot reach the
+  goal of milestone 3, and (c) is a change of the data structure with a speed risk, which is the director's and
+  the PI's to decide.
+
+**What an evaluation of a fit copies today** (unchanged by this branch; from `AZURECalc.cpp`, `AZURECalcMCMC.cpp`,
+`StatePool.h`, `WorkingCopy.cpp`):
+
+1. In the steady state, nothing: it takes an idle `LevelState` and an idle `WorkingData` (a working copy with its
+   `Results`) from the caller's `FitterStates` or `SamplerStates` and gives them back.
+2. The first time one more evaluation runs at the same time as the others: one `LevelState` (a copy of the
+   fitter's) and one `WorkingCopy::Clone`: the units and slots, the segment states, the target-effect, abundance
+   and THM coherent values, the slot blocks and row sets, the node slots and overflow, the mesh anchors, the plan
+   and the handful of fixed members.  The `DataSet`, the channel table, the compound system and the shared tables
+   of the sites are not copied.  Its `Results` starts empty.
+3. For the intermediate output files, so that an output written during the run does not touch a state the run
+   evaluates on: the fitter keeps one `LevelState` and one `Clone` with a `Results` of their own
+   (`FitterStates::output`, `outputData`, `outputResults`), made at the first such output; the sampler makes one
+   copy of its `WalkerLevels` and one `Clone` at each such output and frees them after it.
+4. With `AZURE_TRACE_FCN=fresh`, one `LevelState` and one `Clone` in every evaluation; with `AZURE_POOL_CHECK`,
+   in each of the first five.  Both switches work as before.
+
+**Verified** (`work/director/verify_site1_stage1.out`, `site1_extra.out`).  Build with 0 warnings; every output
+file of every project in the three bases identical to `tab-t74-1` (887 Brune, 851 formal, 887 Park); the eight
+fits identical to the base build's (`work/b-trial86`); the tests not labelled slow, 310 of 310; the regression
+scripts, 172 of 172; the consistency test and the published pages (60).  Against the base build, identical file by
+file: the T2 and 13N gradient fits at one thread, the T2 sampler chain at 1 and at 4 sampler threads, T2 MIGRAD
+with its numerical gradient at 4 threads.  User-space instructions at one thread, base / now: T2 gradient fit
+1.718033e11 / 1.717964e11, 13N gradient fit 1.864297e11 / 1.864300e11, T2 sampler 1.271775e12 / 1.271426e12.  Peak
+resident memory, kB, one run each: 161 908 / 161 860, 135 448 / 135 608, 153 928 / 153 064.  `sizeof(Site)` and
+`sizeof(Unit)` are what they were (392, 504).
+
+**Decided 2026-11-16.**  The PI accepted the director's advice: way (c) is not taken, the copies stay, and
+milestone 3 is closed as "not done as designed".  He asked the same day how hard it would be to have one shared
+object and no copies.  The answer given:
+
+- *One object for evaluations that run at the same time cannot hold what differs between them.*  Two walkers of
+  the sampler, or two points of Minuit2's numerical gradient, are at two parameter vectors: each has its own
+  norms, and with an energy shift or a fitted target parameter its own energies, frames, channel rows, Coulomb
+  amplitudes, stopping and thickness in every site.  Those values exist once per evaluation in any design.
+- *What can still be shared is what an evaluation does not write.*  In a project without energy shifts, fitted
+  target-effect parameters or re-placed grids an evaluation writes no site after the set-up, and the units and
+  slots (the slots alone are 14 422 x 392 bytes = 5.7 MB of the 11.6 MB of T2, and 0.9 of the 3.4 MB of 13N;
+  the units were not counted) could be one block shared by the copies and copied when first
+  written.  Per block the cost is one pointer in `WorkingCopy` and no further indirection in
+  a site's accessors, but every non-`const` path to a site (`SlotAt`, `SiteAt`, `Slots`, `UnitAt`; about 450
+  calls in about 30 files) must first be sorted into readers and writers, because a writer detaches the block.
+  In a project with a shift or a fitted target parameter every copy detaches at its first hand-over and nothing
+  is saved.
+- *Size and gain.*  A few days of work with the full comparison (every output, the eight fits, the sampler
+  chains at 1 and 4 threads, instruction counts).  The saving on T2 at four threads (three further copies,
+  peak 196.6 MB) is 17 MB (9 %) for the slots and cannot pass 35 MB (18 %); it is nothing at one thread, in a
+  fit with the analytic gradient (one working copy at any thread count) and in a project with a shift or a
+  fitted target parameter.  Not started.
 
 ## 8. The environment record and the run's diagnostics (milestone 5): design
 

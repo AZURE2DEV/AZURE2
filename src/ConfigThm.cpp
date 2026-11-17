@@ -4,11 +4,11 @@
  */
 #include "Config.h"
 #include "ThmBlockEdits.h"
+#include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/ThmSectionLines.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <iostream>
 #include <map>
@@ -17,16 +17,13 @@
 
 namespace {
 
-// A file named in the section or by a record, relative to the project file.  Absolute is a leading slash or backslash,
-// or (Windows) a drive letter: "C:/..." or "C:\..." handed to the native binary was otherwise prefixed with the
-// project directory.
+// A file named in the section or by a record, relative to the project file unless absolute (the one rule:
+// experiment::IsAbsolutePath, which knows a drive letter).
 std::string ThmRelativePath(const std::string &projectFile, const std::string &value) {
   std::string dir;
   size_t slash = projectFile.find_last_of("/\\");
   if (slash != std::string::npos) dir = projectFile.substr(0, slash + 1);
-  bool absolute = !value.empty() && (value[0] == '/' || value[0] == '\\' ||
-                                     (value.size() > 1 && value[1] == ':' && std::isalpha((unsigned char)value[0])));
-  return (absolute || dir.empty()) ? value : dir + value;
+  return (azure2::experiment::IsAbsolutePath(value) || dir.empty()) ? value : dir + value;
 }
 
 // A weight table named by a record (a data set's or an extrapolation's thm_weight), read when `readFiles`.

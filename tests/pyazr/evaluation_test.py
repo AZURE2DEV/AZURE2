@@ -66,6 +66,7 @@ TOTAL_TERMS = {"Total-Park-Chi-Squared:": "Park J > 0", "Total-Abundance-Chi-Squ
                "Total-Screening-Chi-Squared:": "screening priors", "Total-Density-Chi-Squared:": "density priors",
                "Total-Doppler-Chi-Squared:": "Doppler priors", "Total-Thickness-Chi-Squared:": "thickness priors",
                "Total-Nuisance-Chi-Squared:": "nuisance priors", "Total-Model-Data-Chi-Squared:": "model data",
+               "Total-Gamma-Decay-Chi-Squared:": "gamma decay priors",
                "Total-Prior-Covariance-Chi-Squared:": "prior covariance"}
 
 

@@ -1,9 +1,9 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
-ALevel.cpp LevelInputs.cpp LevelState.cpp LevelParameterLayout.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
+ALevel.cpp LevelInputs.cpp LevelState.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
-ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
-PPair.cpp AZURECalc.cpp Objective.cpp
+ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
+PPair.cpp AZURECalc.cpp AZURECalcGradient.cpp AZURECalcJacobian.cpp AZURECalcNuisance.cpp AZURECalcPool.cpp AZURECalcOutput.cpp AZURECalcDiagnostics.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
 Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
 WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
@@ -23,7 +23,7 @@ MeshPlanner.cpp
 MeshSlots.cpp
 ExternalCaptureSetup.cpp
 DataParameters.cpp
-HandOver.cpp
+HandOver.cpp DiagonalPriors.cpp
 TaskScratch.cpp
 RunScratch.cpp
 RunDiagnostics.cpp
@@ -37,14 +37,16 @@ UnitExternalCapture.cpp
 SegmentParameters.cpp
 ShiftFrames.cpp
 ShiftedFold.cpp
-THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
+THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
 SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LevelReport.cpp CompoundSystemChecks.cpp
-LevelInputMessages.cpp ProjectSetup.cpp)
+LevelInputMessages.cpp ProjectSetup.cpp
+RunRequest.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
-    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp SamplerSupport.cpp)
+    list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp AZURECalcMCMCPriors.cpp AZURECalcMCMCRun.cpp AZURECalcMCMCChain.cpp
+         AZURECalcMCMCPool.cpp SamplerSupport.cpp SamplerRun.cpp)
 endif()
 
 include_directories(${AZURE2_SOURCE_DIR}/include)
@@ -57,9 +59,10 @@ target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
 set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
-# two use convert/, linked below); RunRequest.cpp: the commands and the options of a run, the command line's reader;
-# RunPreparation.cpp: a run request into the Config
-set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunRequest.cpp RunPreparation.cpp)
+# two use convert/, linked below); RunPreparation.cpp: a run request into the Config.  RunRequest.cpp (the commands
+# and the options of a run, the command line's reader) is the engine library's: a session reads the answers of its
+# sampler run through it (api/src/AZUREAPISampler.cpp), so that no range of an option is typed twice.
+set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunPreparation.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)
@@ -88,6 +91,8 @@ endif (BUILD_LIBRARY)
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
 # azure2_experiment_reader (the reading path of a format-3 project, ProjectReader.h, and the <levels> tables) links io/.
+# azure2_inference (inference/: the parameter vector as plain data, docs/upgrade/inference.md) uses nothing and is
+# below the engine likewise; include/InferenceTypes.h names its types for the engine.
 target_link_libraries(AZURE2Core PUBLIC
     azure2_support
     azure2_physics
@@ -96,6 +101,7 @@ target_link_libraries(AZURE2Core PUBLIC
     azure2_io
     azure2_experiment
     azure2_experiment_reader
+    azure2_inference
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}
@@ -151,9 +157,12 @@ if(CROSS_COMPILE_WINDOWS)
         COMMENT "Windows executable with DLLs built")
 endif()
 
-# A wheel build (scikit-build-core) puts the program into the wheel's scripts, so that pip installs it on the PATH.
+# A wheel build (scikit-build-core) puts the program inside the package, pyazr/bin/AZURE2, and the console script
+# AZURE2 (pyproject.toml, pyazr/program.py) runs it.  Not the wheel's scripts: pip moves a script, and the libraries
+# the wheel carries are found relative to the program's own file (seen on macOS, 2026-11-16: the installed program
+# could not load libgsl).
 if(SKBUILD)
-    install(TARGETS AZURE2 RUNTIME DESTINATION ${SKBUILD_SCRIPTS_DIR} COMPONENT python)
+    install(TARGETS AZURE2 RUNTIME DESTINATION pyazr/bin COMPONENT python)
 else()
     install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
 endif()

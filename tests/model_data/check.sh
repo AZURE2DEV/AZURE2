@@ -189,9 +189,13 @@ test_scattering_length
 test_anc
 
 echo "-- the term in the totals"
-# Seven level data with residual -1 and the scattering length, (a0/100)^2 of it.
-want="$(awk -v a="$(model t2 a_p15N)" 'BEGIN { printf "%.10g", 7 + (a / 100) ^ 2 }')"
-check "Total-Model-Data-Chi-Squared = 7 + (a0/100 fm)^2" "$(total t2 Total-Model-Data-Chi-Squared)" "$want" 2e-6
+# The level data of t2.md (every datum but the scattering length) have residual -1 each (see "The data" above), the
+# scattering length (a0/100)^2: the count is read from the file, so that a datum added to t2.md joins the totals.  A
+# datum the engine drops or evaluates wrongly still changes the total and not the count: the check fails.
+nlevel="$(awk '/^datum / { n++ } $1 == "quantity" && $2 == "scattering_length" { s++ } END { print n - s }' "$WORK/t2.md")"
+want="$(awk -v n="$nlevel" -v a="$(model t2 a_p15N)" 'BEGIN { printf "%.10g", n + (a / 100) ^ 2 }')"
+check "Total-Model-Data-Chi-Squared = $nlevel level data x 1 + (a0/100 fm)^2" \
+  "$(total t2 Total-Model-Data-Chi-Squared)" "$want" 2e-6
 check "modelData.out total = chiSquared.out's" "$(awk '/^Total model-data chi2/ { print $NF }' "$WORK/t2/output/modelData.out")" \
   "$(total t2 Total-Model-Data-Chi-Squared)" 1e-6
 grep -q "^Model data (<modelData>)" "$WORK/t2/run.log" && ok "the table is in the run log" || bad "the table is not in the run log"

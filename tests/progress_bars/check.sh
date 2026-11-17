@@ -68,7 +68,10 @@ import re, sys
 bar = re.compile(rb"\tSegment # *(-?[0-9]+(?: \(Total: [0-9]+\))?) +\[[* ]{25}\] ([0-9]+)%")
 chars = set(b"Segment#[]*% \t0123456789():Tola")
 done, bad, stray = [], [], []
-for line in open(sys.argv[1], "rb").read().split(b"\n"):
+log = open(sys.argv[1], "rb").read()
+if log.count(b"\r\n") == log.count(b"\n"):  # Windows: every line ends \r\n; a \r inside a bar stays
+    log = log.replace(b"\r\n", b"\n")
+for line in log.split(b"\n"):
     if b"\r" in line or line.startswith(b"\tSegment #"):
         frags = line.split(b"\r")
         ms = [bar.fullmatch(f) for f in frags]
