@@ -132,8 +132,8 @@ class NuisanceTerm : public ObjectiveTerm {
 // levels of (J/kParkNormScale)^2 for J < 0 (zero for every valid parameter set).  A level with J <= 0 has no standard
 // R-matrix counterpart (its Brune reduced widths would be imaginary), and nothing in the level matrix itself keeps a
 // minimizer out of that region, so this is the wall.  The shift functions must be current (CompoundSystem::CalcShiftFunctions).
-// The gather is ParkLevelsOf, the arithmetic inference/'s ParkWall.h, which the gradient (AddParkPenaltyGradient)
-// and the rows (AppendModelRows) call.
+// The gather is ParkLevelsOf, the arithmetic inference/'s ParkWall.h, which the value, the gradient and the rows below
+// call.
 class ParkTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
@@ -148,6 +148,19 @@ class ParkTerm : public ObjectiveTerm {
     const double parkPenalty = ParkWallChi2(ParkLevelsOf(c.compound, c.state, false), kParkNormScale);
     chi2 += parkPenalty;
     StoreTotal(c, parkPenalty);
+  }
+  // d/dx of sum_lambda (J_lambda/s)^2 over the levels on the wall (ParkWallGradient: the gradient's form).
+  TermGradient AddGradient(const ObjectiveContext &c, const ParamIndexMap &, const vector_matrix_r *,
+                           GradAccum &accum) const override {
+    if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return TermGradient::kNone;
+    std::vector<double> dGamma;
+    double dE;
+    for (const ParkLevel &l : ParkLevelsOf(c.compound, c.state, true)) {
+      if (!ParkWallGradient(l, kParkNormScale, dGamma, dE)) continue;
+      for (size_t ch = 0; ch < l.channels.size(); ch++) accum.AddGamma(l.group, l.level, l.channels[ch], dGamma[ch]);
+      accum.AddE(l.group, l.level, dE);
+    }
+    return TermGradient::kAdded;
   }
   // Park formalism: the J > 0 wall, when a level sits beyond it (0 otherwise, printed in the Park formalism).
   std::string TotalLabel() const override { return "Total-Park-Chi-Squared"; }
@@ -236,7 +249,7 @@ class TargetPriorTerm : public ObjectiveTerm {
 // T7: isotopic abundances (the samples of DataSet::Abundances at the working copy's values), summed over samples:
 // every entry with a prior adds ((w - w0)/sigma)^2, and each sample whose width s is > 0 adds ((sum w) - c)^2 / s^2,
 // c the sum's centre (1 unless written).  The gather is AbundanceBlockOf (DiagonalPriors.h), the arithmetic
-// inference/'s AbundancePriors.h, which the gradient (AddAbundancePenaltyGradient) and the rows (AppendModelRows) call.
+// inference/'s AbundancePriors.h, which the value, the gradient and the rows below call.
 class AbundanceTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
@@ -252,6 +265,16 @@ class AbundanceTerm : public ObjectiveTerm {
     const double abundancePenalty = AbundanceChi2(AbundanceBlockOf(*c.data, c.config.abundanceSumSigma), true);
     chi2 += abundancePenalty;
     StoreTotal(c, abundancePenalty);
+  }
+  // The prior of every nucleus with a sigma and the sum-to-one term, which couples every abundance through the sum
+  // (AbundanceGradient).
+  TermGradient AddGradient(const ObjectiveContext &c, const ParamIndexMap &, const vector_matrix_r *,
+                           GradAccum &accum) const override {
+    if (!c.data->Data().Abundances().Present()) return TermGradient::kNone;
+    std::vector<double> dw;
+    AbundanceGradient(AbundanceBlockOf(*c.data, c.config.abundanceSumSigma), dw);
+    for (int k = 1; k <= (int)dw.size(); k++) accum.AddAbundance(k, dw[k - 1]);
+    return TermGradient::kAdded;
   }
   // Isotopic abundances: their priors and the sum-to-one term.
   std::string TotalLabel() const override { return "Total-Abundance-Chi-Squared"; }
@@ -273,6 +296,16 @@ class ModelDataTerm : public ObjectiveTerm {
     chi2 += v;
     if (set.hasSection) StoreTotal(c, v);
   }
+  // Scattering lengths through the level-matrix adjoint at the threshold, level quantities by central differences
+  // (ModelData::Gradient); unavailable where an adjoint is not (the caller differentiates numerically).
+  TermGradient AddGradient(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
+                           GradAccum &accum) const override {
+    const ModelDataSet &set = c.compound->GetModelData();
+    if (set.rows.empty()) return TermGradient::kNone;
+    return ModelData::Gradient(c.compound, c.state, c.inputs, c.config, set, pmap, shiftDeriv, accum)
+               ? TermGradient::kAdded
+               : TermGradient::kUnavailable;
+  }
   // The <modelData> data (modelData.out), whenever the project has the section.
   std::string TotalLabel() const override { return "Total-Model-Data-Chi-Squared"; }
   void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
@@ -291,6 +324,13 @@ class GammaDecayTerm : public ObjectiveTerm {
     const double v = c.compound->GetGammaDecays().Penalty(*c.compound, c.state);
     chi2 += v;
     StoreTotal(c, v);
+  }
+  // In the parameters alone: straight to the record numbers' indices (GradAccum::direct).
+  TermGradient AddGradient(const ObjectiveContext &c, const ParamIndexMap &, const vector_matrix_r *,
+                           GradAccum &accum) const override {
+    if (c.compound->GetGammaDecays().Empty()) return TermGradient::kNone;
+    c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, c.state, accum.direct);
+    return TermGradient::kAdded;
   }
   // Whenever the project has a record.  Without this field the file's totals did not add up to the minimised
   // chi-squared for such a project.
@@ -377,6 +417,18 @@ void Objective::WriteTotals(const WorkingCopy &data, const Config &config, const
   for (const ObjectiveTerm *t : reportWalk_) t->WriteTotal(data, config, results, out);
 }
 
+bool Objective::AddGradient(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
+                            GradAccum &accum, TermSet which, bool *added) const {
+  if (added) *added = false;
+  for (const ObjectiveTerm *t : gradientWalk_) {
+    if ((which == TermSet::kModelOnly && !t->ModelOnly()) || (which == TermSet::kOthers && t->ModelOnly())) continue;
+    const TermGradient g = t->AddGradient(c, pmap, shiftDeriv, accum);
+    if (g == TermGradient::kUnavailable) return false;
+    if (g == TermGradient::kAdded && added) *added = true;
+  }
+  return true;
+}
+
 void Objective::RecordPriorCovariance(const ObjectiveContext &c) const {
   double scratch = 0.0;
   priorCovariance_->Add(c, scratch);
@@ -409,14 +461,6 @@ double Objective::ModelDataChi2(const ObjectiveContext &c) const {
 
 void Objective::ModelDataResiduals(const ObjectiveContext &c, vector_r &residuals) const {
   ModelData::Residuals(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData(), residuals);
-}
-
-bool Objective::ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap &pmap,
-                                  const vector_matrix_r *shiftDeriv, GradAccum &accum) const {
-  // T11 (gamma_decay priors, the remainder's wall) depends on the parameters alone: its gradient goes straight to their
-  // indices (GradAccum::direct).
-  c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, c.state, accum.direct);
-  return ModelData::Gradient(c.compound, c.state, c.inputs, c.config, c.compound->GetModelData(), pmap, shiftDeriv, accum);
 }
 
 bool Objective::AppendModelDataRows(const ObjectiveContext &c, const ParamIndexMap &pmap,

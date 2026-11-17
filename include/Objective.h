@@ -172,8 +172,6 @@ class Objective {
   void ModelDataResiduals(const ObjectiveContext &c, vector_r &residuals) const;
   bool AppendModelDataRows(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
                            int nCols, vector_r &residuals, vector_r &jac) const;
-  bool ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
-                         GradAccum &accum) const;
   /*!
    * The gradient walk: every term of `which`'s AddGradient into accum, in the gradient's order.  Returns false as soon
    * as a term's gradient is unavailable (the caller differentiates numerically); `added`, if given, is set to whether

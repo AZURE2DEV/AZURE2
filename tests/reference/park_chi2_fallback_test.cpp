@@ -6,7 +6,7 @@
  * Under --use-park the objective MIGRAD minimizes (AZURECalc::operator()) is
  * the data chi-squared plus sum_lambda (J_lambda / 1e-3)^2 over the levels with
  * J < 0.  The analytic gradient adds that penalty's derivative
- * (AddParkPenaltyGradient), but the side-effect-free Chi2Value -- which the
+ * (ParkTerm's AddGradient), but the side-effect-free Chi2Value -- which the
  * gradient differentiates where the analytic adjoint does not apply (all of it
  * when the adjoint bails), and which LM and the GSL trust region take as their
  * cost -- left the penalty out.  Beyond the wall the fallback gradient was
@@ -343,7 +343,7 @@ void FallbackVariant(const std::string &label, const std::string &azr, unsigned 
 }
 
 // A level whose overlap J is not a number (a NaN width or shift-function derivative) is not on the wall: the value
-// (ParkTerm), the rows (AppendModelRows) and the gradient (AddParkPenaltyGradient) skip it alike.  Until 2026-11-16 the
+// (ParkTerm), the rows (its AppendRows) and the gradient (its AddGradient) skip it alike.  Until 2026-11-16 the
 // gradient tested J >= 0, which a NaN fails, so it added 2 J/s^2 (...) = NaN to the level's energy and widths while
 // the value and the rows added nothing.  On variant A: the wall level's J set to NaN after the shift functions.
 void NanVariant(const std::string &azr) {
@@ -361,7 +361,10 @@ void NanVariant(const std::string &azr) {
   auto gradient = [&]() {
     GradAccum accum;
     accum.Init(m.compound, m.state);
-    AddParkPenaltyGradient(m.compound, m.state, m.cfg, accum);
+    azure2::Results results;
+    for (const auto &term : Objective::Engine().Terms())
+      if (term->Name() == "Park J > 0")
+        term->AddGradient(ObjectiveContext{m.compound, m.state, m.inputs, m.data, results, p, m.cfg}, pmap, nullptr, accum);
     vector_r g(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, g);
     return g;
