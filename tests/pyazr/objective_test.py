@@ -189,6 +189,9 @@ with tempfile.TemporaryDirectory() as tmp:
 # summed the squares of the pulls, (d/e)^2, where the objective sums d^2/e^2: 11 of these 24 cases differed in the
 # last bits (T1 Brune x0, 13N formal x0, ...).  T1-T3 (tests/upgrade) and 13N, three parametrizations, at the start
 # and at a point with every free level energy and width moved by 1e-4 relative.
+# Also: evaluate(x).objective = objective()(x) bit for bit.  Since 2026-11-17 the evaluation walks the terms once and
+# takes its total from the breakdown's sum (each term from 0, then added in order), objective()(x) from the running
+# sum; the two are one sequence of additions as long as every term after the first adds its value in one step.
 print("\n6. calculate_chi2_rwa = the objective's data term (+ the model's terms), bit for bit")
 MODEL_TERMS = ("Park J > 0", "abundances", "model data", "gamma decay priors")
 with tempfile.TemporaryDirectory() as tmp:
@@ -219,6 +222,9 @@ with tempfile.TemporaryDirectory() as tmp:
                     check(f"{label}: no segment prior active", priors == 0.0, repr(priors))
                     check(f"{label}: calculate_chi2_rwa {chi2!r} = data {data!r} + model {model!r}",
                           chi2 == data + model, f"difference {chi2 - (data + model)!r}")
+                    value = float(m.objective()(x))
+                    check(f"{label}: evaluate(x).objective {ev.objective!r} = objective()(x) {value!r}",
+                          ev.objective == value, f"difference {ev.objective - value!r}")
 
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")

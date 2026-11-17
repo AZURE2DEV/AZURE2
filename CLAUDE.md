@@ -86,7 +86,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 | Path | What | Notes |
 |---|---|---|
-| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; made with the data by the one set-up `SetUpCompoundSystem`, `include/CompoundSystemSetUp.h`, and shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (`src/WorkingCopy.cpp` the set-up of the points, `WorkingCopyFill.cpp` reading the data sets and extrapolations into segments, `WorkingCopyUnits.cpp`; what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²; one file per job, `src/AZURECalc.cpp` the evaluation, `AZURECalcGradient.cpp`, `AZURECalcJacobian.cpp`, `AZURECalcNuisance.cpp`, `AZURECalcPool.cpp`, `AZURECalcOutput.cpp`, `AZURECalcDiagnostics.cpp`), `AMatrixFunc` (the level matrix and T matrix of a point's energy: `src/AMatrixFunc.cpp` the forward solve, `AMatrixFuncTBar.cpp` cross section → T cotangents (`PointTBar`), `AMatrixFuncAdjoint.cpp` T → level parameters (`TBarAdjoint`, `LevelBasis`)), `AZUREGrad` (gradients), `AZURECalcMCMC` (`src/AZURECalcMCMC.cpp` the posterior, `AZURECalcMCMCPriors.cpp`, `AZURECalcMCMCRun.cpp`, `AZURECalcMCMCChain.cpp`, `AZURECalcMCMCPool.cpp`) |
+| `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CompoundSystem` (the compound nuclei as set up: pairs, J^π groups, channels, levels' set-up data; made with the data by the one set-up `SetUpCompoundSystem`, `include/CompoundSystemSetUp.h`, and shared constant, `include/CompoundSystem.h`; the values at a vector are each owner's `LevelState`) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (`src/WorkingCopy.cpp` the set-up of the points, `WorkingCopyFill.cpp` reading the data sets and extrapolations into segments, `WorkingCopyUnits.cpp`; what an evaluation changes: norms, shifts, frames, the data points, `Unit`, and the slots of their target-effect folds, each a `Site` (`include/Site.h`: energies, angle rows, channel rows, Coulomb amplitude, screening, stopping, EC amplitudes; the observables read a `Site`), shared by the points of a sharing group on the shared mesh (`include/SlotGroup.h`: a slot is written by its first reader, `WorkingCopy::WritesSlot`, read by all; never write a fold's intermediate values into a slot); `include/WorkingCopy.h`) → `AZURECalc` (χ²; one file per job, `src/AZURECalc.cpp` the evaluation, `AZURECalcGradient.cpp`, `AZURECalcJacobian.cpp`, `AZURECalcNuisance.cpp`, `AZURECalcPool.cpp`, `AZURECalcOutput.cpp`, `AZURECalcDiagnostics.cpp`), `AMatrixFunc` (the level matrix and T matrix of a point's energy: `src/AMatrixFunc.cpp` the forward solve, `AMatrixFuncTBar.cpp` cross section → T cotangents (`PointTBar`), `AMatrixFuncAdjoint.cpp` T → level parameters (`TBarAdjoint`, `LevelBasis`)), `AZUREGrad` (gradients: `src/AZUREGrad.cpp` the accumulator, the parameter-index map and the adjoint's orchestration, `AZUREGradThm.cpp` the THM (HOES) rows, `ComputeTHMRows`), `AZURECalcMCMC` (`src/AZURECalcMCMC.cpp` the posterior, `AZURECalcMCMCPriors.cpp`, `AZURECalcMCMCRun.cpp`, `AZURECalcMCMCChain.cpp`, `AZURECalcMCMCPool.cpp`) |
 | `api/` | `AZUREAPI` (one file per job, `api/src/AZUREAPI.cpp` the session's model, `AZUREAPIReports.cpp`, `AZUREAPIChi2.cpp`, `AZUREAPIGradient.cpp`, `AZUREAPIObjective.cpp`, `AZUREAPIFit.cpp`, `AZUREAPIDiagnostics.cpp`) + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
 | `stopping/` | Stopping and straggling: materials, SRIM-2013's electronic and nuclear stopping (ported from LunaSRIM; SRIM's data files in `stopping/data/srim/`, cite SRIM), energy loss, range, TRIM/Bohr straggling with Tschalär propagation, with uncertainty and provenance | Uses `physics/` only; the engine calls it through `TargetStopping` (`stopping evaluation`, `stopping table`), pyazr through `pyazr.stopping`; `docs/upgrade/stopping.md` |
@@ -259,12 +259,19 @@ whole term is one class in `src/Objective.cpp` and one line in the `Objective` c
      differences. The program's gradient (`AZURECalcGradient.cpp`), pyazr's `chi2_and_grad` (model-only terms) and
      its objective gradient (the others, `AZUREAPIGradient.cpp`) all call it.
    - `AppendRows(c, rows)` if it is a sum of squares: `rows.Append(r, &accum or nullptr, &direct or nullptr)` per
-     row, the same number of rows at every parameter vector (a row of 0 where the term is inactive); LM, the GSL
-     trust region, the Jacobian-path gradient, G2 and pyazr's `objective_rows` read them.
+     row; LM, the GSL trust region, the Jacobian-path gradient, G2 and pyazr's `objective_rows` read them. A term the
+     project does not use adds no rows (return at once: tests count the rows of a project). The number of rows may
+     depend on the project, never on the parameter vector: a row of 0 is for a term the project uses that is inactive
+     at this vector.
    - `TotalLabel()` (`"Total-<Name>-Chi-Squared"`) and `WriteTotal(data, config, results, out)`:
      `if (<the project uses the term>) WriteStoredTotal(results, out);` -- conditional, so that the file of a project
-     without the term is unchanged byte for byte; the field lands after the existing ones.
+     without the term is unchanged byte for byte; the field lands after the existing ones. For a constant strength
+     the condition is that it is non-zero; for a project key, that the key is set.
    - `AddForSampler` / `ExcludesForSampler` only if the sampler should not take the whole term (defaults: it does).
+   A segment's norm is `c.data->State(*segment).norm`; it is free when `segment->IsVaryNorm()`, at `pmap.NormIndex(s)`.
+   A term on the norms skips THM segments (`c.data->Data().ThmGroupOf(s) >= 0`), profiled norms and the followers of
+   a norm group, as `src/DiagonalPriors.cpp` does; the gradient assigns the norms' data part first and scatters
+   `direct` after it, so `direct` adds.
    Its constants live in the class (not in a header other files include). Its walk of the engine's objects is a
    gather that fills plain arrays; its arithmetic (value, gradient, rows), when more than a line, is one header of
    `inference/` with its test in `inference/tests/` (values by hand, gradient and rows against central differences),
@@ -276,10 +283,15 @@ whole term is one class in `src/Objective.cpp` and one line in the `Objective` c
    `tests/shift_penalty_zero/check.sh` (b)): its stderr gives the analytic gradient against finite differences and
    the "Jacobian-path" gradient (the rows) against the adjoint; the latter prints only differences above 1e-2
    relative, so read the numbers. pyazr: `Session.evaluate(x).terms[<Name>]` equals the field of `chiSquared.out`
-   (`tests/pyazr/evaluation_test.py` reads the labels from the engine). A term non-zero on 13N's norms fails
-   `tests/pyazr/objective_test.py` section 4 by design (it tests that the norm prior is the only norm penalty).
+   (`tests/pyazr/evaluation_test.py` reads the labels from the engine). Any project with free norms started away
+   from 1 serves a term on the norms (the check prints them as "idx N norm ... segS"). A term made non-zero for
+   every project fails tests by design, not by a fault: on 13N's norms `tests/pyazr/objective_test.py` section 4 (it
+   tests that the norm prior is the only norm penalty) and `prior_builder_test.py` (objective = data + priors), and,
+   when it has rows, every test that counts a project's rows (`pyazr_prior_covariance`, `pyazr_scattering_length`,
+   `pyazr_thm_profiled`, `pyazr_thm_experiment`).
 4. Docs: the field in `docs/source/reference/output_files.rst`; the term's line in the list at the top of
-   `include/Objective.h` and in `docs/upgrade/objective.md` section 1 (T-number).
+   `include/Objective.h` (write it before the first build: the header rebuilds the engine) and in
+   `docs/upgrade/objective.md` section 1 (T-number).
 
 **A physics function or an observable.**
 1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an
