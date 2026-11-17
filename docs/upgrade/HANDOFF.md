@@ -14,8 +14,10 @@ merge of the eleven port branches, each of which was first merged with `b8ee2219
 - `-ec-unbound` x `-channel-radii`: the unbound-final-state capture code took the pair's radius; here it takes the
   channel's. `ECFinalStateFactors(pair, radius, ...)` with `NFIntegral(pair, radius)`; the `ECTable` key and
   `Reduction` carry the radius; `src/LineWindow.cpp` uses the final channel's `GetRadius()` (4 places); both
-  signature marks are kept in `src/ExternalCaptureSetup.cpp`. **Not covered by a test**: no project here has an
-  unbound final state and a `channel_radius` record together; each port's own tests pass.
+  signature marks are kept in `src/ExternalCaptureSetup.cpp`. Test: `tests/channel_radii` (f), three unbound-state
+  models with every l of p+12C moved by records against the pair radius moved outright (identical; a line-shape
+  routine set back to the pair's radius fails it). Not tested: a radius for one l alone (capture across two radii is
+  refused, so it needs a model whose capture stays inside one radius).
 - `-ec-unbound` x `-capture-cascade`: a data set with `secondary_gamma` on a capture exit and a `line_window` is
   refused (`src/UposChecks.cpp`, dev's rule: the line-shape integration has no secondary-gamma form);
   `tests/ec_unbound_broad` (h). `secondary_gamma` on an `extrapolation` is not read on this base, so the refusal is
@@ -29,10 +31,9 @@ merge of the eleven port branches, each of which was first merged with `b8ee2219
 **Open.**
 - dev moved after the `-rmfit` port was cut: `50fc6cd5` (2026-11-17, `rmfit/campaign.py`, `rmfit/enginepin.py`, its
   test: `rmfit init` rewrites the md5 guard of a campaign's job scripts on an allowed engine change) is not here.
-- A test of an unbound final state with a per-channel radius.
 - The open points of the port entries below stand.
 
-**The full gate** (queue job, 8 slots, on the merge commit `818a0bea`, before the cascade refusal and this entry):
+**The full gate** (queue job, 8 slots, on the merge commit `818a0bea`, before the cascade refusal, the unbound-state radius test and this entry):
 consistency, configure, build and the docs clean; ctest 376 of 377, the base's one failing (`pyazr_park_dsde`); the
 regression suites 182 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its
 range"). The base `b8ee2219` in the same queue: ctest all but `pyazr_park_dsde` (and a load-dependent

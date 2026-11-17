@@ -19,6 +19,9 @@
 #       l = 0 alone at 4.0 fm (E1 from l = 0 into the l = 1 final channel at 3.6 fm) is refused;
 #   (e) refused: a photon pair, a selection of channels given twice, a channel named by a record with s and one with
 #       J; warned about, and changing nothing: a record that names no channel.
+#   (f) capture into an unbound final state (the models of tests/ec_unbound_broad: a narrow resonance, the line-shape
+#       integration, and internal capture alone over the line shape): every l of p+12C at 4.0 fm by records gives the
+#       model with the pair at 4.0 fm.
 #
 #   ./tests/channel_radii/check.sh path/to/AZURE2
 
@@ -164,6 +167,36 @@ else bad "13N every l at 4.0 fm: no chiSquared.out"; tail -5 "$WORK/n_all4/run.l
 if calc n_l0 "$WORK/n_l0.azr"; then bad "13N: l = 0 alone at 4.0 fm (E1 into the l = 1 final channel at 3.6 fm) was not refused";
 elif grep -q "external capture across two channel radii" "$WORK/n_l0/run.log"; then ok "13N: l = 0 alone at 4.0 fm refused (a capture transition across two radii)";
 else bad "13N: l = 0 alone at 4.0 fm failed without the capture ERROR"; tail -5 "$WORK/n_l0/run.log"; fi
+
+# ---- (f): capture into an unbound final state ---------------------------------------------------------------------
+# The models of tests/ec_unbound_broad (12C(p,g) into the unbound 1/2+ of 13N, pair radius 4.48 fm): the final state
+# as a narrow resonance (a_none), integrated over its line shape (a_w1), and the line shape of internal capture alone
+# with external capture into the pair off (g_w1, its N_f formed from the level's channels).  Every l of p+12C at
+# 4.0 fm by records must give the model with the pair radius 4.0 fm.
+UB="$HERE/../ec_unbound_broad/models"
+# ubx NAME AZR -> extrapolate in $WORK/NAME, 0 if a capture output was written; ubout NAME: every extrapolation output
+ubx() {
+  local dir="$WORK/$1"
+  mkdir -p "$dir/output" "$dir/checks"
+  cp "$2" "$dir/t.azr"
+  (cd "$dir" && run_limited 900 "$AZURE2_BIN" extrapolate --no-gui t.azr < /dev/null > run.log 2>&1)
+  [ -s "$dir/output/AZUREOut_aa=1_R=3.extrap" ]
+}
+ubout() { cat "$WORK/$1"/output/AZUREOut_aa=1_R=*.extrap; }
+for m in a_none a_w1 g_w1; do
+  if [ ! -f "$UB/$m.azr" ]; then bad "unbound final state: no model $UB/$m.azr"; continue; fi
+  radius "$UB/$m.azr" 4.0 > "$WORK/u_${m}_b4.azr"
+  records "$UB/$m.azr" 0:4.0 1:4.0 2:4.0 3:4.0 > "$WORK/u_${m}_all4.azr"
+  ubx "u_${m}_a" "$UB/$m.azr" || { bad "unbound $m: no output"; tail -5 "$WORK/u_${m}_a/run.log"; continue; }
+  ubx "u_${m}_b4" "$WORK/u_${m}_b4.azr" || { bad "unbound $m, pair radius 4.0: no output"; tail -5 "$WORK/u_${m}_b4/run.log"; continue; }
+  if ubx "u_${m}_all4" "$WORK/u_${m}_all4.azr"; then
+    ubout "u_${m}_all4" > "$WORK/uo_all4"; ubout "u_${m}_b4" > "$WORK/uo_b4"; ubout "u_${m}_a" > "$WORK/uo_a"
+    r="$(maxdiff "$WORK/uo_all4" "$WORK/uo_b4")"; t="$(maxdiff "$WORK/uo_a" "$WORK/uo_b4")"
+    if grep -q "gives no channel of the model its radius" "$WORK/u_${m}_all4/run.log"; then bad "unbound $m: a record named no channel";
+    elif le "$r" 1e-9 && gt "$t" 1e-3; then ok "unbound final state ($m): every l at 4.0 fm == pair radius 4.0 ($r; 4.48 vs 4.0 differ by $t)";
+    else bad "unbound final state ($m): every l at 4.0 fm vs pair radius 4.0: $r (teeth $t)"; fi
+  else bad "unbound $m, every l at 4.0 fm: no output"; tail -5 "$WORK/u_${m}_all4/run.log"; fi
+done
 
 # ---- (e): refusals and the warning ------------------------------------------------------------------------------
 refused() {  # NAME PATTERN AZR

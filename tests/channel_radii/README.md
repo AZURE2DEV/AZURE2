@@ -45,6 +45,11 @@ with the pair radius changed outright -- on the A- and R-matrix routes, in the B
 - (d) 13N with external capture: every l of p+12C at 4.0 fm reproduces every point of the pair-radius-4.0 model
   (capture integrals, ANC conversion, target integration); l = 0 alone (E1 from l = 0 into the l = 1 final channel at
   another radius) is refused;
+- (f) capture into an unbound final state, with the models of `tests/ec_unbound_broad` (12C(p,γ) into the unbound
+  1/2+ of 13N): the final state as a narrow resonance, integrated over its line shape (`line_window`), and the line
+  shape of internal capture alone. Every l of p+12C at 4.0 fm by records reproduces the model with the pair radius
+  4.0 fm exactly; the 4.48 fm model differs by 2 to 5 %. With the line-shape code taking the pair's radius in place
+  of the channel's, the two windowed cases fail (0.5 to 0.8);
 - (e) refused: a selection of channels given twice (`E_CHANNEL_RADIUS_TWICE`), a photon pair
   (`E_CHANNEL_RADIUS_PAIR_KIND`), a radius of zero, a record with s and a record with J on one channel; a record that
   names no channel is warned about and changes nothing.
