@@ -880,6 +880,11 @@ ejectile (particle 1 of the exit pair):
   on with ``nan`` in ``chiSquared.out`` and the extrapolation files.
   A lab-differential point below the threshold of its exit pair is refused
   for the same reason (no ejectile, nothing to convert).
+  Elastic scattering with a projectile as heavy as the target reaches lab
+  angles up to 90° only (:math:`\theta_{c.m.} = 2\,\theta_{lab}`), and with a
+  heavier projectile no backward angle: a lab angle above 90° is refused in
+  both cases. Builds before 2026-11-17 let it pass and computed such a point
+  at 180° c.m. for equal masses, with a meaningless value.
 - Recoil detection is not an option: data taken on the heavy recoil must be
   converted by hand (elastic scattering: :math:`\theta_{c.m.} = 180^\circ -
   2\theta_{recoil}`) and given as c.m. (code 5 / 4).
