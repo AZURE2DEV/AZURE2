@@ -9,6 +9,7 @@
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -158,12 +159,17 @@ void SortInPieces(std::vector<T> &v, Less less) {
   std::vector<int> bound(pieces + 1);
   for (int p = 0; p <= pieces; p++) bound[p] = (int)((long long)n * p / pieces);
 #pragma omp parallel for schedule(static) if (pieces > 1)
-  for (int p = 0; p < pieces; p++) std::sort(v.begin() + bound[p], v.begin() + bound[p + 1], less);
+  for (int p = 0; p < pieces; p++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
+    std::sort(v.begin() + bound[p], v.begin() + bound[p + 1], less);
+  }
   for (int width = 1; width < pieces; width *= 2) {
 #pragma omp parallel for schedule(static) if (pieces > 2 * width)
-    for (int p = 0; p < pieces - width; p += 2 * width)
+    for (int p = 0; p < pieces - width; p += 2 * width) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       std::inplace_merge(v.begin() + bound[p], v.begin() + bound[p + width],
                          v.begin() + bound[std::min(pieces, p + 2 * width)], less);
+    }
   }
 }
 
@@ -204,6 +210,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
   // rebuilds the tasks at every evaluation, and this serial section is what the other threads wait for.
 #pragma omp parallel for schedule(static) if (n > 4096)
   for (int k = 0; k < n; k++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     keys[k] = nodeList(nodes[k]).energy[at(nodes[k])];
     sources[k] = ECAmplitudeSource(data.SiteAt(units[k]), configure);
   }
@@ -225,6 +232,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Conf
   std::vector<Key> order(n);
 #pragma omp parallel for schedule(static) if (n > 4096)
   for (int k = 0; k < n; k++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     const Site &u = data.SiteAt(units[k]);
     const NodeList &list = nodeList(nodes[k]);
     const int i = at(nodes[k]);

@@ -15,6 +15,7 @@
 #include "MeshPlanner.h"
 #include "Profile.h"
 #include "azure2/support/Environment.h"
+#include "azure2/support/FloatingPointPrecision.h"
 #include "ProjectCommands.h"
 #include "ProjectSetup.h"
 #include "CommandLineValues.h"
@@ -423,6 +424,9 @@ int runMCMC(Config &configure, const RunRequest &request) {
  */
 
 int main(int argc, char *argv[]) {
+  // The main thread's x87 precision at 64 bits, whatever the C runtime's start-up set (the OpenMP regions take the
+  // same scope in each thread: azure2/support/FloatingPointPrecision.h).
+  const azure2::support::ExtendedPrecisionScope fpPrecision;
   // Check for --help option first.  If set, print help and exit.
   for (int i = 1; i < argc; i++)
     if (strcmp(argv[i], "--help") == 0) {

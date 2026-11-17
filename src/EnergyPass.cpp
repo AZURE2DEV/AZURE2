@@ -25,6 +25,7 @@
 #include "THMMatrixFunc.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -263,7 +264,10 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   // Before the energy pass: the sub-points' energy-dependent values (external capture), point by point.
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) {
 #pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
-    for (int k = 0; k < (int)folds.size(); k++) plan_.Point(*this, folds[k])->PrepareSubPoints(this, compound, configure);
+    for (int k = 0; k < (int)folds.size(); k++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
+      plan_.Point(*this, folds[k])->PrepareSubPoints(this, compound, configure);
+    }
   }
   // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
   // throws fails its plan task; the units after it are calculated with a new solve.
@@ -352,11 +356,17 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
                                        " units differ from their own solve (listed above)");
   } else {
 #pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
-    for (int k = 0; k < (int)tasks.size(); k++) runEnergyTask(k);
+    for (int k = 0; k < (int)tasks.size(); k++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
+      runEnergyTask(k);
+    }
     collectFailures();
     ContractRowSets(results);
 #pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
-    for (int k = 0; k < (int)folds.size(); k++) runFold(k);
+    for (int k = 0; k < (int)folds.size(); k++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
+      runFold(k);
+    }
   }
   // NaN on the point of a failed plan task, reported once (Unit::MarkFailed); the CLI's objective then recalculates
   // point by point (PrecalculatePoints).
