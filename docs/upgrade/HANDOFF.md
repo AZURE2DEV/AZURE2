@@ -2,6 +2,56 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (join-page agent) — the small things the dev ports left open, on `0d271891`
+
+**Branch** `feature/upgrade-5-join-page`, cut from `0d271891`; build `work/b-joinpage` (`work/build.sh`, module in
+`PYAZR_OUTPUT_DIR`). One commit per item; nothing pushed.
+
+- **Web page** (`77b45917`): `forms.js` has a widget for the value type `spin_operator` (one monospaced text box,
+  the engine validates the token; two round trips in `forms.test.mjs`); the THM pair table's radius column is keyed
+  `radius` and reads the pair's `channel_radius` field through the column's `value`, since `channel_radius` is now a
+  record kind the page may not spell. `pyazr_ui_static` and `pyazr_ui_node` failed before, pass now.
+- **rmfit tests** (`4a98a8a5`): `rmfit/tests/CMakeLists.txt` gives every `rmfit_*` test
+  `PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}`, as `tests/pyazr` does; without it they failed at the import in such a build.
+  **Open:** `rmfit_enginepin` still fails there. `enginepin.fingerprint()` and `keeps_close_levels()` look for
+  `_azure2*.so` in `$AZURE2_ROOT/pyazr` only, and the job-script guard (`guard_lines_csh`/`_sh`) md5s that same path,
+  so the in-tree assumption is rmfit's design, not the test's. Following `PYAZR_ENGINE_DIR` there would change what a
+  campaign pins (today: no pin in such a build) and what its job scripts check: the owner's decision.
+- **Docs** (`3f4cd080`, `e70c8254`, `7ce608ec`, `6f640e2f`): `user_guide/rmfit.rst` (dev's page, corrected for two
+  backends, the pin and the ctests) in the User Guide, a Layout row for `rmfit/` in `CLAUDE.md`; dev's three golden
+  rules of `azure2-eval` in `azure2-evaluation` (each checked here; an absolute output path in `<config>` is used as
+  it stands, `experiment::PathToOpen`); `dev_features.md` opens with a dated paragraph: the ports merged as of
+  `0d271891` and the open points of their entries; the legacy note of `experimental_effects.rst` names ±3σ as the
+  old kernel's (the engine integrates ±5σ, `kConvolutionRange`). The two formal-capture differences were already in
+  `tests/formal_ec_final_state/README.md` and `dev_features.md` section 1: nothing added.
+- **Found, then refused (follow-up commit): LM and GSL-LM took wrong rows over a line shape.** `LineWindowProblem`
+  (`src/LineWindow.cpp:272`) refuses only the fitter named `migrad-gradient`. `lm` (`src/Fitters.cpp:25`) and
+  `gsl-lm` (`:21`) run, on the rows of `AZURECalc::ResidualJacobian` (`src/FitLeastSquares.cpp:282`,
+  `src/FitGslTrustRegion.cpp:79`), which are the adjoint's (`ComputeResidualJacobian`, `src/AZUREGrad.cpp:594`;
+  `EnergyTaskRows`, `ScalarTask` in `src/GradEnergyTasks.cpp:299`), not finite differences. The adjoint has no
+  line-window branch: `ForEachGroup` (`src/GradEnergyTasks.cpp:258`) builds the site's T-matrix with
+  `CalculateTMatrix` at the nominal final state, while the forward value is `LineWindowCrossSection`
+  (`src/EnergyPass.cpp:106`, `:195`). Run once (scratch copy of `tests/ec_unbound_broad/models/a_w1.azr` with its four
+  windowed points as a data set, pyazr `Objective.jacobian` against central differences of `residuals`, which share
+  `ComputeResidualJacobian`): for the final level's energy the rows are 0 against -1.9 to -14.7, for its proton
+  width 0.34 to 1.88 against 0.078 to 0.82. A pyazr session's `grad`, `jacobian` and the NUTS sampler read the same
+  rows. **Now refused** (the coordinator's follow-up): `LineWindowProblem` refuses every fitter whose row of
+  `Fitters()` has `gradient` or `residualRows` (today `lm`, `gsl-lm`, `migrad-gradient`; plain `migrad` (`nlopt` where
+  built) run), naming the fitter and the allowed ones; on the port (`c675245a`) only the bit `USE_ANALYTIC_GRADIENT`
+  (`--use-gradient`, a THM project) was refused, so this is wider than the port. Every analytic derivative starts in
+  `Forward` (`src/GradEnergyTasks.cpp`), which throws `LineWindowDerivativeRefused` (`include/LineWindow.h`) for a
+  windowed segment: the program's gradient and rows, pyazr's `value_and_grad`/`grad`/`jacobian`/
+  `residuals_and_jacobian`/`model_gradients`, the bands and `fit_with_engine` with those fitters (the binding maps
+  it to `EngineError`); the program's uncertainty band catches that type only and writes the outputs without it.
+  Values are unchanged. Tests: `tests/ec_unbound_broad/check.sh` (i), `pyazr_line_window_derivatives`.
+
+**Run:** build (0 warnings); `ctest -R pyazr_ui -j6` 20 of 20 (with the smoke test); `pyazr_ui_static` and
+`pyazr_ui_node` failing before the page change; `docs_build` (and `sphinx-build -W -n` into a scratch directory);
+`ctest -L rmfit -LE slow -j6` with the caller's `PYAZR_ENGINE_DIR` unset: 42 of 43 pass or skip, `rmfit_enginepin`
+fails; `tools/check_skills.py`; `repo_consistency_test.py` before each commit. **Not run:** the full gate, `ctest -LE
+slow` as a whole, `tests/run_tests.sh`, the slow rmfit tests, CI. No engine file, `expected/`, golden file or tolerance
+changed.
+
 ## 2026-11-17 (director, 10:20) — merged: a lab angle no elastic scattering reaches is refused; T3's `x8`
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 110 (rehearsal 109 plus four commits of mine). The

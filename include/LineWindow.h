@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,8 +76,9 @@ struct LineNodeStore {
 };
 
 /// Why this site's line window cannot be computed ("" if it can): the exit must be a capture pair whose final level
-/// lies above exactly one particle threshold, outside the RMC formalism and the analytic gradient, for a cross
-/// section (not angular coefficients, a phase or a polarization observable).
+/// lies above exactly one particle threshold, outside the RMC formalism, for a cross section (not angular
+/// coefficients, a phase or a polarization observable), and the run's fitter must take neither the analytic gradient
+/// nor the residual rows' Jacobian (its row of Fitters()): the adjoint does not run over the line shape.
 std::string LineWindowProblem(const Site &site, const CompoundSystem *compound, const Config &configure);
 /// The same for a data set's reaction before its points exist (`otherObservable`: not a cross section).
 std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable, const CompoundSystem *compound,
@@ -86,6 +88,17 @@ std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable
 /// matrix already solved in `func`: the site's record is the weighted sum of the nodes' records.  Leaves the T-matrix
 /// of the last node in `func`.
 void LineWindowCrossSection(GenMatrixFunc &func, Site *site, Results &results);
+
+/// The refusal of an analytic derivative (gradient, residual rows' Jacobian, model sensitivities) of a model with a
+/// line window: the adjoint takes the T-matrix at the nominal final state, not over the line shape, so its numbers
+/// would be wrong.  Thrown where every such derivative starts (GradEnergyTasks.cpp, `Forward`); a caller that can go
+/// on without the derivative (the program's uncertainty band) catches this type only.
+struct LineWindowDerivativeRefused : std::runtime_error {
+  explicit LineWindowDerivativeRefused(const std::string &what) : std::runtime_error(what) {}
+};
+
+/// The message of that refusal for the segment (data set or extrapolation) of key `segmentKey`: what, what is allowed.
+std::string LineWindowDerivativeMessage(int segmentKey);
 
 }  // namespace azure2
 

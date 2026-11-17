@@ -1257,6 +1257,12 @@ add_test(NAME pyazr_fit_engine_control
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_engine_control_test.py)
 set_tests_properties(pyazr_fit_engine_control PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
+# A line window (capture over a broad final state's line shape): every analytic derivative of a session (gradient,
+# Jacobian, model sensitivities, the fitters that read them) raises EngineError, the values keep working.
+add_test(NAME pyazr_line_window_derivatives
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/line_window_derivatives_test.py)
+set_tests_properties(pyazr_line_window_derivatives PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

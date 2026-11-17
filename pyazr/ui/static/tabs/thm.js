@@ -195,7 +195,8 @@ async function channelsSection(ctx) {
     withFilter: false, label: "THM pairs", caption: "THM pairs (a nonzero binding energy)",
     columns: [{ key: "key", title: "pair", numeric: true }, { key: "label", title: "particles (J^π)" },
       { key: "binding_energy", title: "B", unit: "MeV", numeric: true, doc: "the THM binding energy of the pair's "
-        + "composite projectile" }, { key: "channel_radius", title: "radius", unit: "fm", numeric: true }] });
+        + "composite projectile" }, { key: "radius", title: "radius", unit: "fm", numeric: true,
+        value: (r) => r.channel_radius }] });
   const channelTable = renderTable(document, { rows: channels, label: "THM channels",
     onSelect: (r) => ctx.navigate(`#/nucleus/level/${encodeURIComponent(r.level)}`),
     caption: "their channels", columns: [{ key: "level", title: "level" }, { key: "pair", title: "pair",

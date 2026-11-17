@@ -134,6 +134,8 @@ export const WIDGETS = {
   formula: (f, t) => whole(f, t, { mono: true }),
   spin: (f, t, ctx) => whole(f, t, { list: ctx.spins || [] }),
   spin_parity: (f, t, ctx) => whole(f, t, { list: ctx.spinParities || [] }),
+  // a spin observable's operator (b:y, b:y*t:y, b:y>e1:y): one token in the engine's grammar, checked by the engine
+  spin_operator: (f, t) => whole(f, t, { mono: true }),
   nucleus: (f, t) => whole(f, t),
   pair: (f, t, ctx) => whole(f, t, { list: ctx.pairLabels || [] }),
   composition: (f, t) => whole(f, t),

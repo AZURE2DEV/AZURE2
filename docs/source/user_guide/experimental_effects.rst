@@ -233,9 +233,11 @@ segment always did.)
    form, an exact rewrite
    :math:`\sigma_{\rm lab}(x) = \sigma_{\rm cm}(F x)/F` with
    :math:`F = m_t/(m_p + m_t)` of the segment's entrance pair. Before October
-   2026 the constant-sigma kernel was also not normalised over its
-   :math:`\pm 3\sigma_b` window, so convolved segments came out 0.27 % low;
-   the normalised kernel removes that.
+   2026 the constant-sigma kernel was also integrated over only
+   :math:`\pm 3\sigma_b` and not normalised, so convolved segments came out
+   0.27 % low (the Gaussian's weight outside :math:`\pm 3\sigma_b`); the
+   kernel of today, integrated over :math:`\pm 5\sigma_b` and normalised by
+   its own integral, removes that.
 
 Target Integration
 ^^^^^^^^^^^^^^^^^^

@@ -10,6 +10,24 @@ parameters) with these uncertainties, and the rest of the data agree. This skill
 each stage must pass before the next starts, and what must be written down so that another person can rerun and
 judge it. Each step is done with the skill named in it; this skill holds no recipe of its own.
 
+## Three rules before any explanation
+
+- **Level energies are excitation energies E_x of the compound nucleus; question the frame first.** A level written
+  at its E_cm, or a data file read in the wrong frame, gives a fit that almost works and an investigation of the
+  wrong mechanism. When a resonance sits in the wrong place or a channel does not open where it should, compute
+  E_x = E_cm + S (S the pair's separation energy) and read the frame each data column names (`E_lab[MeV]`,
+  `E_cm[keV]`) before anything else (`azure2-setup`; `docs/source/user_guide/levels_channels.rst`).
+- **A suspected AZURE2 bug is reproduced on a minimal input before it is reported.** Cut the case down to one data
+  set and a few levels (a copy of `tests/13N` is a start), run it through the program and through pyazr, and
+  compare with a calculation by hand. Real bugs exist, and so do input errors that look like them; the small input
+  tells the two apart, and it is the test case of the fix.
+- **A copied project keeps its absolute output and checks directories.** The second and third lines of `<config>`
+  (the output and checks directories) are relative to the project file, but an absolute path written there is used
+  wherever the copy runs, and the copy then writes into the original's `output/`. Before running a project outside
+  its own directory, read them (`Project.config()`) and set them to `output/` and `checks/`
+  (`Project.set_config(output_dir="output/", checks_dir="checks/")`, the directories created); `rmfit audit`
+  reports such a path (`output-path`).
+
 ## The evaluation directory
 
 One directory per evaluation, under version control, with:

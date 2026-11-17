@@ -60,6 +60,7 @@ test("the widgets give back the text of T2's records", { skip: skipNoSchema }, (
     [R.gamma_decay.fields.branching, "g+15O[6.7931] 0.23037345432917689 fit"],
     [R.gamma_decay.fields.total_width, "0.0385027 eV fit"], [R.target.fields.stopping, "evaluation"],
     [R.potential.fields.central, "woods_saxon depth 50 MeV radius 3 fm diffuseness 0.6 fm"],
+    [R.dataset.fields.operator, "b:y*t:y"], [R.extrapolation.fields.operator, "b:y>e1:y"],
   ];
   for (const [field, text] of cases) assert.equal(roundTrip(field, text, { records }), norm(text), text);
 });

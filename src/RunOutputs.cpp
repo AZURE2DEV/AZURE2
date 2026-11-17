@@ -11,6 +11,7 @@
 #include "Config.h"
 #include "ModelData.h"
 #include "InferenceTypes.h"
+#include "LineWindow.h"
 #include "Profile.h"
 #include "ScatteringLength.h"
 #include "Segment.h"
@@ -143,10 +144,19 @@ void WriteRunOutputs(ProgramRun &run) {
                             << std::endl;
     }
     if (!cov.empty()) {
-      if (BuildBandData(run.compound.get(), run.state, run.inputs, run.data, run.results, run.configure, cov, bandData, &run.fitFixedMask)) {
+      bool built = false, refusedByLineWindow = false;
+      try {
+        built = BuildBandData(run.compound.get(), run.state, run.inputs, run.data, run.results, run.configure, cov,
+                              bandData, &run.fitFixedMask);
+      } catch (const azure2::LineWindowDerivativeRefused &refused) {
+        // The band's sensitivities are the adjoint's, which a line window refuses: no band, said so; the outputs go on.
+        run.configure.outStream << "Cross-section bands unavailable: " << refused.what() << "." << std::endl;
+        refusedByLineWindow = true;
+      }
+      if (built) {
         bandPtr = &bandData;
         run.configure.outStream << "Writing cross-section uncertainty bands..." << std::endl;
-      } else {
+      } else if (!refusedByLineWindow) {
         run.configure.outStream << "Cross-section bands unavailable: the analytic model "
                                  "sensitivities are not supported for this configuration."
                               << std::endl;
