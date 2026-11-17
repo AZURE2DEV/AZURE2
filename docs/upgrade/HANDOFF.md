@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-seed`: dev's bounded MIGRAD seed, re-written here
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. The first of
+dev's features written after `dev_features.md` (dev read there to `3e502625`; this is from dev's
+`feature/migrad-seed-robust`, on dev's line since 2026-11-15).
+
+**What it is.** The first MIGRAD step from the Gauss-Newton seed had no bound for a parameter the data hardly
+constrain and for a limited parameter near its limit; a failed first line search sends Minuit2 into a numerical
+HESSE of n(n-1)/2 evaluations. Design, formula and numbers: `fit.md` section 5.
+
+**Where it is.**
+- `include/MigradSeed.h`, `src/MigradSeed.cpp` (new): the bound (a static function) and the watch of the first
+  step; one object per MIGRAD, owned by `MigradPass`. No static, no `mutable`, no environment switch.
+- `src/AZURECalc.cpp` (+7 lines, 1403 of its 1437): `SeedWith` pointer, the bound where the Jacobian's G2 is
+  stored, the gradient call told to the seed, `DisableG2`.
+- `src/FitMigrad.cpp`: `MigradPass` is the watched pass and, after a stall, one pass with Minuit2's numerical seed;
+  the old body is `MigradOnce`.
+- `tests/reference/migrad_seed_test.cpp` (ctest `migrad_seed`); `docs/source/reference/command_line.rst`
+  (`--use-gradient`); `fit.md` section 5.
+
+**Not ported, on purpose:** dev's `AZURE_SEED_BOUND=0` and its test hook `AZURE_SEED_STALL_TEST` (a switch that
+moves a number needs an option; the unit test drives the watch directly). dev's `tests/migrad_seed/check.sh`
+used both and the old menu; the unit test replaces it.
+
+**Run here** (CRC, GCC 11.5, 8 threads unless said): `migrad_seed` passes; `repo_consistency_test.py` passes; the
+32 ctest entries matching `fit|migrad|grad` (not `slow`) pass; `tests/13N` with `--use-gradient`: 89 function calls
+(this branch's base: 70), total chi-squared 28100.17227 (base 28100.17230), "4 of 14 free parameters" bounded; the
+same fit started from its own `param.sav`: no restart, the HESSE notice, converged. **Not yet run:**
+`./scripts/check.sh` in full (queued), `ctest -L slow`, any CI. A pinned chi-squared of a call-limited gradient fit
+can move, because the path of the first steps changes (on dev one did: `tests/shared_point_tables`, 109.134 to
+106.338 at 5 calls); none was re-pinned in the feature's commit.
+
+**Full gate, CRC job 1756130 (2026-11-15 18:23), against the base's own run (job 1755945):** consistency passes;
+the build passes; ctest 309 of 311 (the base's two failures, `pyazr_park_dsde` and `pyazr_units_scales`, and no
+other); `tests/run_tests.sh` 169 passed, 3 failed: the base's two (`capture_ay_coupling`, "a warning for ancai06
+inside its range") and `shared_point_tables` (b), the 5-call gradient fit: 106.432604829 at 1 and at 4 threads
+against the recorded 109.263831704. Re-pinned in the commit after the feature's (`expected/chi2_fit`, the test's
+README); the docs build passes (60 pages).
+
+**Open.** (1) The base of this branch fails two unit tests on this machine before any change
+(`pyazr_park_dsde`, `pyazr_units_scales`): not looked at yet. (2) The restart inside a real fit has no test (no
+project fails its first line search).
+
 ## 2026-11-16 (owner's session, dev port) — rmfit beside pyazr, on pyazr 3.0
 
 **Branch** `feature/upgrade-5-dev-rmfit`, cut from `feature/upgrade` (`e8b1fe94`). `rmfit/` is the package of `dev`

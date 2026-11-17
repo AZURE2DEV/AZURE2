@@ -29,7 +29,8 @@ Checks (`check.sh path/to/AZURE2`):
 
 - (a) a calculation gives byte-identical output files at 1 and 4 threads;
 - (b) MIGRAD with the analytic gradient, capped at 5 calls, completes at 1 and 4 threads, re-placing grids, with
-  the recorded chi-squared (`expected/chi2_fit`: 109.263831704 since the shared mesh, 2026-11-12; before it
+  the recorded chi-squared (`expected/chi2_fit`: 106.432604829 since the bounded seed, 2026-11-15; 109.263831704
+  since the shared mesh, 2026-11-12; before it
   thm's 109.250542525, dev: 109.134 -- thm's adaptive sub-point grid, MERGE_NOTES.md section A, row 02ae97b);
 - (c) its output files are byte-identical at 1 and 4 threads;
 - (d) the peak RSS of the 4-thread fit is at most 3.0 times that of the calculation (Linux): 2.5 measured,
@@ -43,3 +44,8 @@ integrated on one mesh per compound nucleus.  At the parameters where the capped
 (engine before, every grid refined eightfold): the mesh is the closer one, segment by segment as well.  The capped fit
 then ends elsewhere after its five calls: 109.263831704 (shared mesh, 1 and 4 threads), 109.250542525 (before),
 109.219622427 (refined eightfold); five calls are not a minimum, so the end point follows the path, not the rule.
+
+2026-11-15, the bounded seed (`docs/upgrade/fit.md` section 5): the first MIGRAD step is bounded, so the five calls
+take another path and end lower: 106.432604829 at 1 and at 4 threads (the same build without the bound, this
+branch's base: 109.263831704).  The same test moved on dev for the same reason (109.134 to 106.338).  Nothing in the
+calculation changed: checks (a), (c) and (d) pass unchanged.

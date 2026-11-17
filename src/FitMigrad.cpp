@@ -8,6 +8,10 @@
 #include <sstream>
 #include <string>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <Minuit2/FunctionMinimum.h>
 #include <Minuit2/MnMigrad.h>
 #include <Minuit2/MnUserCovariance.h>
@@ -16,6 +20,7 @@
 #include "CompoundSystem.h"
 #include "AZUREParams.h"
 #include "FitEvaluations.h"
+#include "MigradSeed.h"
 #include "Fitters.h"
 #include "WorkingCopy.h"
 
@@ -124,8 +129,13 @@ FitResult FitMigradRows(AZURECalc &objective, AZUREParams &params, const FitCont
 
 }  // namespace
 
-FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters &start, bool analyticGradient,
-                     const FitControl &control) {
+namespace {
+
+/// One MIGRAD from `start`.  `seed`: the analytic gradient with its bounded Gauss-Newton seed, watched (MigradSeed.h);
+/// nullptr with `analyticGradient`: Minuit2's numerical seed.  `*stalled`: the seed's first step found no improvement
+/// and the pass ended on the seed's own stop request; the result is then not a fit.
+FitResult MigradOnce(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters &start, bool analyticGradient,
+                     const FitControl &control, MigradSeed *seed, bool *stalled) {
   FitResult result;
   result.fitter = analyticGradient ? "migrad-gradient" : "migrad";
   const unsigned int migradCalls = control.maxCalls > 0 ? std::min(control.maxCalls, kNoCallLimit) : kNoCallLimit;
@@ -144,18 +154,66 @@ FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
     // With the analytic gradient MIGRAD is given the objective as an FCNGradientBase (AZURECalc::Gradient);
     // otherwise as a plain FCNBase, so that Minuit uses its own numerical gradient.
     if (analyticGradient) {
-      *control.log << "Using analytic gradient for Minuit2." << std::endl;
-      std::vector<double> p0 = start.Params();
-      if (objective.EnableG2(p0))
+      // The seed's watch: an observer in front of `evaluations`' own, with the seed's stop request (which follows
+      // the caller's).  Put back before `evaluations` ends.
+      const EvaluationObserver *inner = objective.Observer();
+      EvaluationObserver watching;
+      const long freeParameters = start.VariableParameters();
+      watching.evaluated = [&](long evaluation, double value, const std::vector<double> &p, bool errorAnalysis) {
+        seed->Forward(control.stop);
+#ifdef _OPENMP
+        const bool inParallel = omp_in_parallel() != 0;  // inside Minuit2's numerical gradient
+#else
+        const bool inParallel = false;
+#endif
+        if (seed->Evaluated(value, inParallel))
+          *control.log << std::endl
+                       << "MIGRAD is computing a numerical Hessian (HESSE): about "
+                       << freeParameters * (freeParameters - 1) / 2 + 4 * freeParameters << " function evaluations for "
+                       << freeParameters << " free parameters, with no gradient calls; chi^2 does not change while it runs."
+                       << std::endl;
+        if (inner && inner->evaluated) inner->evaluated(evaluation, value, p, errorAnalysis);
+        seed->Forward(control.stop);  // a stop asked by the caller's progress just now: no evaluation after it
+      };
+      if (seed) {
+        watching.stop = seed->Stop();
+        objective.Observe(&watching);
+        objective.SeedWith(seed);
+      } else {
+        objective.DisableG2();
+      }
+      if (seed && objective.EnableG2(start.Params())) {
         *control.log << "Seeding MIGRAD with the analytic Gauss-Newton G2." << std::endl;
-      else
+        const MigradSeed::Bounded bounded = seed->Seed();
+        if (bounded.raised > 0) {
+          *control.log << "MIGRAD seed: the first step of " << bounded.raised << " of " << bounded.free
+                       << " free parameters was bounded (weakly constrained or near a limit; largest: parameter "
+                       << bounded.worst + 1 << ", ";
+          if (std::isfinite(bounded.worstSteps))
+            *control.log << bounded.worstSteps << " initial step sizes";
+          else
+            *control.log << "no curvature";
+          *control.log << ")." << std::endl;
+        }
+      } else if (seed) {
         *control.log << "Analytic G2 unavailable for this model; MIGRAD seeds numerically." << std::endl;
+      }
       ROOT::Minuit2::MnMigrad migrad(objective, start);
       minimum.reset(new ROOT::Minuit2::FunctionMinimum(migrad(migradCalls)));
+      if (seed) {
+        objective.SeedWith(nullptr);
+        objective.Observe(inner);
+        if (stalled) *stalled = seed->Stalled() && !evaluations.Stopped();
+      }
     } else {
       const ROOT::Minuit2::FCNBase &fb = objective;
       ROOT::Minuit2::MnMigrad migrad(fb, start);
       minimum.reset(new ROOT::Minuit2::FunctionMinimum(migrad(migradCalls)));
+    }
+    if (stalled && *stalled) {
+      objective.CountCallsInto(nullptr);
+      result.calls = calls.load();
+      return result;
     }
     if (evaluations.Stopped()) {
       // The evaluations after the request returned 0: Minuit's minimum is not a point of the objective.  The fit
@@ -196,6 +254,24 @@ FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
   }
   result.minimum = std::shared_ptr<ROOT::Minuit2::FunctionMinimum>(std::move(minimum));
   return result;
+}
+
+}  // namespace
+
+FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters &start, bool analyticGradient,
+                     const FitControl &control) {
+  if (!analyticGradient) return MigradOnce(objective, start, false, control, nullptr, nullptr);
+  *control.log << "Using analytic gradient for Minuit2." << std::endl;
+  MigradSeed seed(start, objective.Up());
+  bool stalled = false;
+  FitResult result = MigradOnce(objective, start, true, control, &seed, &stalled);
+  if (!stalled) return result;
+  // Minuit2 answers a failed first line search with a numerical HESSE of n(n-1)/2 evaluations.  Its own numerical
+  // seed (second derivatives by differences, the limit transformations included) costs a few evaluations per
+  // parameter: tried once before that.
+  *control.log << "MIGRAD's first step from the analytic seed found no improvement (" << result.calls
+               << " function calls); restarting with Minuit2's numerical seed." << std::endl;
+  return MigradOnce(objective, start, true, control, nullptr, nullptr);
 }
 
 void AdoptMigradEndPoint(AZUREParams &params, const FitResult &result) {
