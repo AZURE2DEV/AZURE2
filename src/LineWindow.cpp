@@ -139,7 +139,7 @@ std::vector<double> LineNFTerms(const CompoundSystem *c, const Config &configure
     const double e = levelEnergy - p->GetSepE() - p->GetExE();
     const int twoJ = p->SpinOrbitTwoJ(jg->GetJ());
     if (e > 0.0) {
-      CoulFunc coul(p, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+      CoulFunc coul(p);
       terms[ch - 1] = coul.PEShift_dE(chan->GetL(), twoJ, p->GetChRad(), e);
     } else {
       NFIntegral nf(p);
@@ -191,7 +191,7 @@ std::shared_ptr<const LineNodeSet> MakeLineNodes(const Site &site, const Compoun
   const AChannel *fc = jg->GetChannel(lf.ch);
   const int l = fc->GetL(), twoJ = lf.fp->SpinOrbitTwoJ(jg->GetJ());
   const double a = lf.fp->GetChRad();
-  CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  CoulFunc coul(lf.fp);
   const double ER = centre - lf.thr;
   if (!(ER > 0.0)) throw std::runtime_error("line_window: the final level's energy has moved below its particle threshold.");
   const double gt = LineObservedAmplitude(c, state, configure, lf, centre, set->nfTerms);
@@ -315,7 +315,7 @@ void LineWindowCrossSection(GenMatrixFunc &func, Site *site, Results &results) {
     const AChannel *fc = jg->GetChannel(lf.ch);
     const int l = fc->GetL(), twoJ = lf.fp->SpinOrbitTwoJ(jg->GetJ());
     const double a = lf.fp->GetChRad();
-    CoulFunc coul(lf.fp, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+    CoulFunc coul(lf.fp);
     // the current parameters of the final level
     const double ER = centre - lf.thr;
     const double gt = LineObservedAmplitude(c, state, configure, lf, centre, set->nfTerms);
@@ -359,3 +359,18 @@ void LineWindowCrossSection(GenMatrixFunc &func, Site *site, Results &results) {
 }
 
 }  // namespace azure2
+
+double GenMatrixFunc::ExitSqrtPenetrability(Site *point, int jNum, int chNum) const {
+  if (lineNode_) {
+    const AChannel *exitChannel = compound()->GetJGroup(jNum)->GetChannel(chNum);
+    if (compound()->GetPair(exitChannel->GetPairNum())->GetPType() == 10)
+      return lineNode_->photonEnergy > 0.0
+                 ? lineNode_->amp * pow(lineNode_->photonEnergy / hbarc, (double)exitChannel->GetL() + 0.5)
+                 : 0.0;
+  }
+  return point->GetSqrtPenetrability(jNum, chNum);
+}
+
+complex GenMatrixFunc::ExternalElementAt(int k, int m, const complex &element) const {
+  return lineNode_ ? lineNode_->ec[k - 1][m - 1] : element;
+}

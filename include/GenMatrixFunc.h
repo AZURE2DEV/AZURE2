@@ -59,6 +59,13 @@ class GenMatrixFunc {
   /// while LineWindowCrossSection runs; null otherwise.
   const azure2::LineNode *ActiveLineNode() const { return lineNode_; }
   void SetActiveLineNode(const azure2::LineNode *node) { lineNode_ = node; }
+  /// The exit channel's sqrt(P) for CalculateTMatrix: the point's own; at a node of the line-shape integration, for a
+  /// photon channel, that of the photon at E - E_x(E_f) times the final-state amplitude A(E_f), zero below E_x
+  /// (LineWindow.cpp).
+  double ExitSqrtPenetrability(Site *point, int jNum, int chNum) const;
+  /// The external-capture T element (k, m) for CalculateTMatrix: `element`; at a node the node's own, that of the
+  /// scattering state at E_f (LineWindow.cpp).
+  complex ExternalElementAt(int k, int m, const complex &element) const;
   /// True when `other` holds the same T-matrix bit for bit, internal and external elements (the shared-solve check
   /// of AZURE_PLAN_CHECK, CalculationPlan.h).
   bool SameTMatrix(const GenMatrixFunc &other) const {

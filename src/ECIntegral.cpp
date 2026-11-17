@@ -232,7 +232,7 @@ void ECIntegral::Integrate(double chanrad) {
  */
 bool ECIntegral::IntegrateUnbound(double chanrad, double finalEnergy) {
   if (!unboundCoul_)
-    unboundCoul_ = std::make_unique<CoulFunc>(pair_, !!(configure_->paramMask & Config::USE_GSL_COULOMB_FUNC));
+    unboundCoul_ = std::make_unique<CoulFunc>(pair_);
   CoulFunc *cf = unboundCoul_.get();
   const Kinematics::Channel kin(pair());
   const int li = params_.liValue, lf = params_.lfValue, L = params_.multLValue;

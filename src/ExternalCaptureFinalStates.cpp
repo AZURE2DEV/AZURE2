@@ -85,7 +85,7 @@ void ECFinalStateFactors(const PPair *pair, int l, int twoJ, double levelEnergy,
   const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
   const double toAmplitude = sqrt(2.0 * pair->GetRedMass() * radius * uconv / pow(hbarc, 2.0));
   if (finalEnergy > 0.0) {
-    CoulFunc coul(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+    CoulFunc coul(pair);
     nfIntegral = pow(hbarc, 2.0) / (2.0 * pair->GetRedMass() * uconv * radius) * coul.PEShift_dE(l, twoJ, radius, finalEnergy);
     conversion = toAmplitude;
   } else {
