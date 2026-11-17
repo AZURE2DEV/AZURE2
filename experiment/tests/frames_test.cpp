@@ -333,6 +333,16 @@ void TestClosedForms() {
     AngleLimit lim;
     const bool ok = ElasticLabToCM(heavy, 30.0, cm, lim);
     check("elastic, m1 > m2: refused beyond asin(m2/m1)", !ok && lim.maxSet && std::fabs(lim.max - asin(1.0 / 3.0) * 180 / pi) < 1e-12 && !lim.why.empty());
+    // A backward lab angle is beyond the maximum too, although (m1/m2) sin theta_lab < 1 there (170 deg: 0.52).
+    AngleLimit back;
+    check("elastic, m1 > m2: a lab angle above 90 deg is refused", !ElasticLabToCM(heavy, 170.0, cm, back) && back.maxSet && !back.why.empty());
+    // Equal masses: theta_cm = 2 theta_lab reaches 180 deg at 90 deg lab; nothing is scattered beyond.
+    Partition equal{4.0, 4.0, 0, 0};
+    AngleLimit eq, at;
+    double cmEq = -1, cmAt = -1;
+    check("elastic, equal masses: a lab angle above 90 deg is refused, the maximum is 90 deg",
+          !ElasticLabToCM(equal, 100.0, cmEq, eq) && eq.maxSet && std::fabs(eq.max - 90.0) < 1e-12 && !eq.why.empty());
+    check("elastic, equal masses: 80 deg lab is 160 deg c.m.", ElasticLabToCM(equal, 80.0, cmAt, at) && std::fabs(cmAt - 160.0) < 1e-12);
   }
   // photon aberration, beta from four-momenta
   {
