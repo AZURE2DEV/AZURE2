@@ -2,6 +2,22 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (director, 04:25) — merged: the binding's call guard compiles under clang (macOS wheels)
+
+**Merged into `feature/upgrade-4-data`** through rehearsal 107 (one commit of mine). The base build is
+`work/b-trial107`; the reference tag stays `tab-trial103-1`.
+
+The wheels' macOS jobs of `b8ee2219` and `47238208` (arm64 and x86_64) failed in `pip wheel`; the Linux wheels
+passed. The log is not readable without a login, so the cause is **inferred, not seen**: pybind11 makes a call
+guard as `Guard{}`; `EngineCallScope` (rehearsal 103) was an aggregate, and list-initialising it from `{}`
+copy-initialises its member `pybind11::gil_scoped_release`, whose default constructor is explicit. That is
+ill-formed (CWG 1518): clang refuses it, GCC accepts it. `EngineCallScope` now has a constructor, so `Guard{}`
+calls it; the members and their order are unchanged. The build workflow's macOS job never compiled rehearsal
+103 (its runs were replaced by later pushes), so the wheels were the first to show it.
+
+**Verified** on Linux: build with 0 warnings, 338 of 338 quick tests (`work/director/ctest_107.out`). No full
+run: only the binding's guard changed. Whether macOS now compiles is shown by the next CI run alone.
+
 ## 2026-11-17 (director, 04:10) — merged: objective slices 4-7, the extension traps, the long files, CI repairs
 
 **Merged into `feature/upgrade-4-data`** through rehearsals 104, 105 and 106: `feature/upgrade-7-objective-arrays-2`
