@@ -27,7 +27,7 @@
 #include "ShftFunc.h"
 #include "THMMatrixFunc.h"
 #include "PointFold.h"
-#include <cstring>
+#include "azure2/support/FloatingPointPrecision.h"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -67,7 +67,7 @@ vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const Level
         int l = channel->GetL();
         double levelEnergy = state.E(j, la);
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
-        double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), channel->GetRadius())
+        double dS = ChannelFunc(pair, channel->GetRadius())
                         .ShiftDerivative(l, pair->SpinOrbitTwoJ(jg->GetJ()), resonanceEnergy);
         tab[j - 1][la - 1][ch - 1] = dS;
       }
@@ -88,7 +88,7 @@ void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &st
     if (!jg->IsInRMatrix()) continue;
     for (int la = 1; la <= jg->NumLevels(); la++) {
       const ALevel *level = jg->GetLevel(la);
-      if (!level->IsInRMatrix() || state.ParkNorm(j, la) >= 0.0) continue;
+      if (!level->IsInRMatrix() || !(state.ParkNorm(j, la) < 0.0)) continue;  // J >= 0 or NaN: off the wall (ParkTerm)
       const double factor = 2.0 * state.ParkNorm(j, la) / s2;
       double dE = 0.0;
       for (int ch = 1; ch <= jg->NumChannels(); ch++) {
@@ -117,10 +117,10 @@ void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configur
     samples.Of(k, sample, nucleus);
     const double s = samples.SumSigma(sample, configure.abundanceSumSigma);
     const double centre = samples.Sample(sample).sumCentre;
-    double g = (s > 0.0) ? 2.0 * (samples.Sum(values, sample) - centre) / (s * s) : 0.0;
+    double g = (s > 0.0) ? GaussianPriorGradient(samples.Sum(values, sample), centre, s) : 0.0;
     const SampleAbundance &e = samples.Sample(sample).entries[nucleus - 1];
     const double w = values[k - 1];
-    if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (w - e.nominal) / (e.sigma * e.sigma);
+    if (e.sigma > 0.0 && !e.priorReplaced) g += GaussianPriorGradient(w, e.nominal, e.sigma);
     accum.AddAbundance(k, g);
   }
 }
@@ -271,59 +271,6 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
 }
 
 /*!
- * Returns the full-vector index of E_{jGroup,level}, or -1 if absent.
- */
-int ParamIndexMap::EIndex(int jGroup, int level) const {
-  auto it = eIndex_.find({jGroup, level});
-  return (it == eIndex_.end()) ? -1 : it->second;
-}
-
-/*!
- * Returns the full-vector index of gamma_{jGroup,level,channel}, or -1 if absent.
- */
-int ParamIndexMap::GammaIndex(int jGroup, int level, int channel) const {
-  auto it = gammaIndex_.find({jGroup, level, channel});
-  return (it == gammaIndex_.end()) ? -1 : it->second;
-}
-
-/*!
- * Returns the full-vector index of the norm parameter for a segment, or -1.
- */
-int ParamIndexMap::NormIndex(int segment) const {
-  auto it = normIndex_.find(segment);
-  return (it == normIndex_.end()) ? -1 : it->second;
-}
-
-/*!
- * Returns the full-vector index of the energy-shift parameter for a segment.
- */
-int ParamIndexMap::EnergyShiftIndex(int segment) const {
-  auto it = shiftIndex_.find(segment);
-  return (it == shiftIndex_.end()) ? -1 : it->second;
-}
-
-/*!
- * Returns the full-vector index of the sqrt(E) energy-shift coefficient for a segment.
- */
-int ParamIndexMap::EnergyShiftSqrtIndex(int segment) const {
-  auto it = sqrtShiftIndex_.find(segment);
-  return (it == sqrtShiftIndex_.end()) ? -1 : it->second;
-}
-
-int ParamIndexMap::AbundanceIndex(int ordinal) const {
-  auto it = abundanceIndex_.find(ordinal);
-  return (it == abundanceIndex_.end()) ? -1 : it->second;
-}
-
-/*!
- * Returns the full-vector index of parameter aj of a segment's shift function, or -1.
- */
-int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
-  auto it = fnShiftIndex_.find({segment, j});
-  return (it == fnShiftIndex_.end()) ? -1 : it->second;
-}
-
-/*!
  * Builds the parameter-index map: the level block from the compound's layout
  * (CompoundSystem::ParameterLayout), then by mirroring, in the exact same order, the
  * assignment loops in:
@@ -340,173 +287,72 @@ int ParamIndexMap::EnergyShiftFnIndex(int segment, int j) const {
 ParamIndexMap BuildParamIndexMap(const CompoundSystem *compound, const WorkingCopy *data,
                                  const std::vector<bool> &fixed) {
   ParamIndexMap map;
-  int i = 0;
 
   // --- R-matrix parameters: the level block, as the compound's layout places it. ---
-  map.eFlat_.assign(compound->NumJGroups(), {});
-  map.gammaFlat_.assign(compound->NumJGroups(), {});
+  std::vector<int> numLevels, numChannels;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     const JGroup *jGroup = compound->GetJGroup(j);
-    map.eFlat_[j - 1].assign(jGroup->NumLevels(), -1);
-    map.gammaFlat_[j - 1].assign(jGroup->NumLevels(), std::vector<int>(jGroup->NumChannels(), -1));
+    numLevels.push_back(jGroup->NumLevels());
+    numChannels.push_back(jGroup->NumChannels());
   }
+  map.SizeLevelBlock(numLevels, numChannels);
   for (const LevelParameterLayout::Slot &slot : compound->ParameterLayout().Slots()) {
     const int j = slot.group, la = slot.level, ch = slot.channel;
-    if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy) {
-      map.eFlat_[j - 1][la - 1] = i;
-      map.eIndex_[{j, la}] = i;
-      map.desc_.push_back(ParamDesc{ParamKind::LevelEnergy, j, la, -1, -1, false});
-    } else {
-      map.gammaFlat_[j - 1][la - 1][ch - 1] = i;
-      map.gammaIndex_[{j, la, ch}] = i;
-      const bool radiative = compound->GetGammaDecays().OwnsSlot(j, la, ch);
-      map.desc_.push_back(ParamDesc{radiative ? ParamKind::RadiativeDecay : ParamKind::Gamma, j, la, ch, -1, false});
-    }
-    i++;
+    if (slot.kind == LevelParameterLayout::Slot::Kind::kEnergy)
+      map.AppendLevelEnergy(j, la);
+    else
+      map.AppendAmplitude(j, la, ch, compound->GetGammaDecays().OwnsSlot(j, la, ch));
   }
 
   // --- Isospin shifts, then mix amplitudes, only with <isospin> records (CompoundSystem::FillMnParams). ---
   for (int k = 0; k < compound->GetIsospin().NumParams(); k++) {
     const ParameterRecord record = compound->GetIsospin().RecordOf(k);
-    ParamDesc d{record.kind, record.jGroup, record.level, record.channel, -1, false};
-    d.nucleus = record.nucleus;
-    map.desc_.push_back(d);
-    i++;
+    map.AppendIsospin(record.kind, record.jGroup, record.level, record.channel, record.nucleus);
   }
-  map.isospinTies_ = compound->GetIsospin().Ties();
+  map.SetIsospinTies(compound->GetIsospin().Ties());
 
-  // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---
-  for (int k = 1; data && k <= data->Data().Abundances().NumParams(); k++) {
-    map.abundanceIndex_[k] = i;
-    ParamDesc d{ParamKind::Abundance, -1, -1, -1, -1, false};
-    data->Data().Abundances().Of(k, d.sample, d.nucleus);
-    map.desc_.push_back(d);
-    i++;
-  }
-
-  // --- Norm parameters: one per varying-norm segment. ---
-  map.normOffset_ = i;
   if (data) {
-    for (int s = 1; s <= data->Data().NumSegments(); s++) {
-      const Segment *segment = data->Data().GetSegment(s);
-      if (segment && segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
-        map.normIndex_[s] = i;
-        map.desc_.push_back(ParamDesc{ParamKind::Norm, -1, -1, -1, s, false});
-        i++;
-      }
+    const DataSet &set = data->Data();
+    // --- Isotopic abundances: one per (sample, nucleus), only with an <abundances> block. ---
+    for (int k = 1; k <= set.Abundances().NumParams(); k++) {
+      int sample = -1, nucleus = -1;
+      set.Abundances().Of(k, sample, nucleus);
+      map.AppendAbundance(k, sample, nucleus);
     }
-  }
-
-  // --- Energy-shift parameters: one per segment (all segments). ---
-  map.energyShiftOffset_ = i;
-  if (data) {
-    for (int s = 1; s <= data->Data().NumSegments(); s++) {
-      const Segment *segment = data->Data().GetSegment(s);
-      if (segment) {
-        map.shiftIndex_[s] = i;
-        map.desc_.push_back(ParamDesc{ParamKind::EnergyShift, -1, -1, -1, s, false});
-        i++;
-      }
+    // --- Norm parameters: one per varying-norm segment. ---
+    for (int s = 1; s <= set.NumSegments(); s++) {
+      const Segment *segment = set.GetSegment(s);
+      if (segment && segment->IsVaryNorm() && !segment->IsProfiledNorm()) map.AppendNorm(s);
     }
-  }
-
-  // --- sqrt(E) energy-shift coefficients: one per segment (all segments). ---
-  map.energyShiftSqrtOffset_ = i;
-  if (data) {
-    for (int s = 1; s <= data->Data().NumSegments(); s++) {
-      const Segment *segment = data->Data().GetSegment(s);
-      if (segment) {
-        map.sqrtShiftIndex_[s] = i;
-        map.desc_.push_back(ParamDesc{ParamKind::EnergyShiftSqrt, -1, -1, -1, s, false});
-        i++;
-      }
-    }
-  }
-
-  // --- Shift-function parameters: those of each segment that declares one (WorkingCopy::FillMnParams). ---
-  map.energyShiftFnOffset_ = i;
-  if (data) {
-    for (int s = 1; s <= data->Data().NumSegments(); s++) {
-      const Segment *segment = data->Data().GetSegment(s);
+    // --- Energy-shift parameters: one per segment (all segments). ---
+    for (int s = 1; s <= set.NumSegments(); s++)
+      if (set.GetSegment(s)) map.AppendEnergyShift(s);
+    // --- sqrt(E) energy-shift coefficients: one per segment (all segments). ---
+    for (int s = 1; s <= set.NumSegments(); s++)
+      if (set.GetSegment(s)) map.AppendEnergyShiftSqrt(s);
+    // --- Shift-function parameters: those of each segment that declares one (WorkingCopy::FillMnParams). ---
+    for (int s = 1; s <= set.NumSegments(); s++) {
+      const Segment *segment = set.GetSegment(s);
       if (!segment || !segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
-      for (int j = 0; j < segment->NumShiftFnParams(); j++) {
-        map.fnShiftIndex_[{s, j}] = i;
-        ParamDesc d{ParamKind::EnergyShiftFn, -1, -1, -1, s, false};
-        d.fnTerm = j;
-        map.desc_.push_back(d);
-        i++;
-      }
+      for (int j = 0; j < segment->NumShiftFnParams(); j++) map.AppendEnergyShiftFn(s, j);
     }
+    // --- Electron-screening potentials: one per target with a screening field (WorkingCopy::FillMnParams). ---
+    for (int k = 1; k <= set.NumScreeningParams(); k++) map.AppendScreening(k);
+    // --- Fitted target densities: one per densityfit line or density group (WorkingCopy::FillMnParams). ---
+    // No analytic derivative: the target thickness enters through the depth window, finite differences.
+    for (int k = 1; k <= set.NumDensityParams(); k++) map.AppendDensity(k);
+    // --- Fitted Doppler temperatures: one per 'doppler T vary sigma' line (WorkingCopy::FillMnParams). ---
+    // Analytic: d/dT through the Doppler weights (Unit::DopplerWeights), GradAccum::AddDoppler.
+    for (int k = 1; k <= set.NumDopplerParams(); k++) map.AppendDoppler(k);
+    // --- Fitted sample thicknesses: one per transmission / yield line with the fit form (WorkingCopy::FillMnParams). ---
+    // Analytic: d/dn of the transform (the tree's backward, AddParamCotangents), GradAccum::AddThickness.
+    for (int k = 1; k <= set.NumThicknessParams(); k++) map.AppendThickness(k, set.GetThicknessSegment(k));
+    // --- THM coherent backgrounds (cbackground=): the last block but one, if any. ---
+    for (int k = 0; k < set.NumThmCoherentParams(); k++) map.AppendThmCoherent(k + 1);
   }
-
-  // --- Electron-screening potentials: one per target with a screening field (WorkingCopy::FillMnParams). ---
-  if (data) {
-    for (int k = 1; k <= data->Data().NumScreeningParams(); k++) {
-      map.screeningIndex_[k] = i;
-      ParamDesc d{ParamKind::Screening, -1, -1, -1, -1, false};
-      d.screening = k;
-      map.desc_.push_back(d);
-      i++;
-    }
-  }
-
-  // --- Fitted target densities: one per densityfit line or density group (WorkingCopy::FillMnParams). ---
-  // No analytic derivative: the target thickness enters through the depth window, finite differences.
-  if (data) {
-    for (int k = 1; k <= data->Data().NumDensityParams(); k++) {
-      map.densityIndex_[k] = i;
-      ParamDesc d{ParamKind::Density, -1, -1, -1, -1, false};
-      d.density = k;
-      map.desc_.push_back(d);
-      i++;
-    }
-  }
-
-  // --- Fitted Doppler temperatures: one per 'doppler T vary sigma' line (WorkingCopy::FillMnParams). ---
-  // Analytic: d/dT through the Doppler weights (Unit::DopplerWeights), GradAccum::AddDoppler.
-  if (data) {
-    for (int k = 1; k <= data->Data().NumDopplerParams(); k++) {
-      map.dopplerIndex_[k] = i;
-      ParamDesc d{ParamKind::Doppler, -1, -1, -1, -1, false};
-      d.doppler = k;
-      map.desc_.push_back(d);
-      i++;
-    }
-  }
-
-  // --- Fitted sample thicknesses: one per transmission / yield line with the fit form (WorkingCopy::FillMnParams). ---
-  // Analytic: d/dn of the transform (the tree's backward, AddParamCotangents), GradAccum::AddThickness.
-  if (data) {
-    for (int k = 1; k <= data->Data().NumThicknessParams(); k++) {
-      map.thicknessIndex_[k] = i;
-      ParamDesc d{ParamKind::Thickness, -1, -1, -1, data->Data().GetThicknessSegment(k), false};
-      d.thickness = k;
-      map.desc_.push_back(d);
-      i++;
-    }
-  }
-
-  // --- THM coherent backgrounds (cbackground=): the last block, if any. ---
-  if (data)
-    for (int k = 0; k < data->Data().NumThmCoherentParams(); k++) {
-      map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, k + 1, -1, false});
-      i++;
-    }
-  AppendApparatusParams(map, data, i);  // the apparatus parameters, last (ApparatusParameters.cpp)
+  AppendApparatusParams(map, data);  // the apparatus parameters, last (ApparatusParameters.cpp)
   // --- Apply the fixed mask and build packed<->full lookups. ---
-  const int nFull = (int)map.desc_.size();
-  map.fullToPacked_.assign(nFull, -1);
-  map.packedToFull_.clear();
-  for (int f = 0; f < nFull; f++) {
-    bool isFixed = (f < (int)fixed.size()) ? fixed[f] : false;
-    map.desc_[f].fixed = isFixed;
-    if (!isFixed) {
-      map.fullToPacked_[f] = (int)map.packedToFull_.size();
-      map.packedToFull_.push_back(f);
-    }
-  }
-  map.numPacked_ = (int)map.packedToFull_.size();
-
+  map.Pack(fixed);
   return map;
 }
 
@@ -1016,7 +862,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
     }
     const long n = (long)order.size();
 #pragma omp parallel for schedule(dynamic)
-    for (long k = 0; k < n; k++) {
+    for (long k = 0; k < n; k++) { const azure2::support::ExtendedPrecisionScope fpPrecision;
       const Segment *seg = ld->Data().GetSegment(rows[order[k].first].segment);
       out[order[k].first][slot[k]] =
           azure2::EvaluateModelPoint(*ld, *seg, order[k].second, lc, state, config, results, azure2::LeafValues::Calculate);
@@ -1067,7 +913,7 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
     bool bail = false;
     const long n = (long)order.size();
 #pragma omp parallel
-    {
+    { const azure2::support::ExtendedPrecisionScope fpPrecision;
       GradAccum accum;
       accum.Init(lc, state);
       vector_r fullRow(pmap.NumFull(), 0.0);

@@ -14,7 +14,7 @@ class CompoundSystem;
 class LevelInputs;
 class LevelState;
 class Config;
-class ParamIndexMap;
+#include "InferenceTypes.h"
 struct GradAccum;
 
 /*!

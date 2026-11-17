@@ -160,6 +160,10 @@ Contains the **physical** (observable) parameters resulting from the fit. If
 the user wishes to use these as new starting values, they must be manually
 entered into the **Levels and Channels** tab.
 
+A partial width Γ is printed in keV, eV or meV with six decimals: the largest of
+the three in which it prints as at least 1.000000 (a width of 0.9999999999 keV,
+the round trip of a width entered as 1 keV, prints as ``1.000000 keV``).
+
 relativistic.out
 ^^^^^^^^^^^^^^^^
 
@@ -189,6 +193,23 @@ shifts.out
 Written when a segment's energy shift or :math:`\sqrt{E}` shift coefficient
 is varied: one row per such segment with its key, data file, angle and energy
 bounds, norm, ``shift`` (MeV) and ``sqrt_shift`` (MeV\ :sup:`1/2`).
+
+When a data set has a shift function (an ``energy_scale`` record with a
+``function``), the rows are followed by one line per function, starting with
+``#``: the owning segment's key, the keys of every member, the function, the
+constant shift (MeV), the parameters :math:`a_j`, the lowest and highest
+original lab energies of the members' points (MeV), the total shift at those
+two energies (MeV), and ``penalty``: the function's own prior penalty,
+:math:`\sum_j ((a_j - a_j^0)/\sigma_j)^2` over the varied parameters
+:math:`a_j` with a prior, exactly the shift-function part of the objective.
+It does not contain the constant shift's prior, and a parameter whose prior
+the prior covariance (``priorCovariance=<file>``) replaces is left out, as
+the objective leaves it out (its term is in
+``Total-Prior-Covariance-Chi-Squared`` of ``chiSquared.out``). A last line
+``# Total-Shift-Chi-Squared:`` repeats the total of every energy-shift prior.
+(Builds before 2026-11-16 printed the owner's shift priors minus the constant
+shift's prior formed again, which subtracted that prior also when the prior
+covariance had replaced it.)
 
 thm_experiments.out
 ^^^^^^^^^^^^^^^^^^^
@@ -335,8 +356,9 @@ the start of a fit, so it never describes an earlier one)::
     call_limit     none
 
 ``minimizer`` is the fitter that ran and ``fitter`` the one the switches chose
-(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when
-``lm`` or ``gsl-lm`` ran ``migrad`` for a model without an analytic Jacobian.
+(rows of the fitter table, :doc:`../user_guide/fitting`): they differ when the
+fitter that ran is the row named in the ``fallback`` column of the one chosen
+(a least-squares fitter on a model without an analytic Jacobian).
 ``status`` is the outcome in the words every fitter shares: ``converged``,
 ``call_limit`` (stopped at the ``--max-calls`` limit), ``iteration_limit``
 (LM's or GSL's 200 iterations), ``stopped``, ``invalid`` (MIGRAD's minimum is
@@ -357,6 +379,9 @@ With a ``<scatteringLengths>`` block the totals line ends with
 ``<modelData>`` section (:doc:`data_formats`) it also carries
 ``Total-Model-Data-Chi-Squared``, the sum over its data.  The two are the
 parts of one term of the objective, "model data".
+With a ``gamma_decay`` record (:doc:`../user_guide/gamma_decay`) the line
+carries ``Total-Gamma-Decay-Chi-Squared``, the priors on the record's numbers
+and the wall on a negative remainder; it is 0 for a record without a prior.
 The same holds for ``Total-Park-Chi-Squared`` and
 ``Total-Abundance-Chi-Squared``; the file written through pyazr's
 ``write_outputs`` carries all three evaluated at the parameters it was
@@ -478,8 +503,7 @@ speed up subsequent calculations, as long as:
 - The integration grid has not changed: target thickness, energy straggling,
   convolution width and the adaptive-grid settings all move the sub-point
   energies the integrals are evaluated at.
-- The Coulomb-function routine (``--gsl-coul``) and the hybrid potential are
-  the same.
+- The hybrid potential is the same.
 - Relativistic kinematics (``relativistic=1`` in ``<config>``) are on or off as
   before: the switch changes every channel's eta, rho and flux factor (it was
   missing from the signature before October 2026; a file written with it off is

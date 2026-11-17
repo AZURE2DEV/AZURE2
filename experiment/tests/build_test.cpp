@@ -904,6 +904,23 @@ int main() {
       const Format3Project without = ReadFormat3Text(text.substr(0, text.find("useAdaptiveGrid")) + "format=3\n</config>\n", read);
       check("without the line: no diagnostic", without.diagnostics.empty());
     }
+    // the removed option use_gsl_coul (docs/upgrade/coulomb.md section 9.1), with either value: the same code, the line
+    // to delete and the reason (GSL's Coulomb functions are wrong below the barrier), never E_UNREAD_LINE
+    for (const char *value : {"0", "1", "true"}) {
+      Format3ReadOptions read;
+      read.build = false;
+      const std::string text = std::string("<config>\ntrue\noutput/\nchecks/\nnone\nnone\nnone\nnone\nnone\nnone\nnone\nnone\n"
+                                           "use_gsl_coul=") + value + "\nformat=3\n</config>\n";
+      const Format3Project p = ReadFormat3Text(text, read);
+      const bool one = p.diagnostics.size() == 1 && p.diagnostics[0].code == "E_CONFIG_KEY_REMOVED" &&
+                       p.diagnostics[0].line == 13 && p.diagnostics[0].field == "use_gsl_coul" &&
+                       p.diagnostics[0].message.find("use_gsl_coul is no longer a key of <config>: delete the line") == 0 &&
+                       p.diagnostics[0].message.find("wrong by up to 5 % in the penetrability") != std::string::npos &&
+                       p.diagnostics[0].message.find("AZURE2's own Coulomb functions") != std::string::npos;
+      check(std::string("E_CONFIG_KEY_REMOVED alone for use_gsl_coul=") + value + ", at its line, saying to delete it and why", one);
+      if (!one)
+        for (const Diagnostic &d : p.diagnostics) std::printf("        got %s line %d: %s\n", d.code.c_str(), d.line, d.message.c_str());
+    }
     // the options of the calculation in <config> (the reading path: ProjectReader; project_format3.md section 3.12): a value
     // the engine does not read, and each contradiction with its two keys named, an absent key at its default
     {
@@ -923,7 +940,7 @@ int main() {
       const std::vector<std::string> none, value = {"E_CONFIG_OPTION_VALUE"}, both = {"E_CONFIG_OPTIONS_CONTRADICT"};
       check("every option at 0 and 1 where it contradicts nothing: no diagnostic",
             codesOf("use_brune=1\nuse_park=1\ntransform=0\nignore_externals=0\nuse_long_wavelength=0\n"
-                    "ec_convection_current=0\nuse_gsl_coul=true\nuse_coulomb_table=false\nuse_ec_table=0\nreplace_grids=0\n") == none &&
+                    "ec_convection_current=0\nuse_coulomb_table=false\nuse_ec_table=0\nreplace_grids=0\n") == none &&
             codesOf("use_rmc=1\nuse_brune=0\n") == none && codesOf("use_brune=0\n") == none);
       int line = 0;
       std::string message;

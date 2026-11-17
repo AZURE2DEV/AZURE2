@@ -17,7 +17,7 @@
 #include "ObservedLevelTable.h"
 #include "LevelInputs.h"
 #include "LevelState.h"
-#include "LevelParameterLayout.h"
+#include "InferenceTypes.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace ROOT {

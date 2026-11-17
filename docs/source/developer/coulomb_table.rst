@@ -96,7 +96,8 @@ Reference routines
   :math:`U' = -a\, U(a+1, b+1, z)` and GSL's scaled ``hyperg_U``. Exact, with
   no numerical derivative; at :math:`\eta_b = 0` it equals the neutral
   recursion to 1e-14.
-- GSL's Coulomb functions (``--gsl-coul``) are **not** a usable reference:
+- GSL's Coulomb functions (the option ``--gsl-coul`` chose them until it was
+  removed on 2026-11-16 for this reason) are **not** a usable reference:
   against Michel they are wrong by up to 3–6 % in :math:`P` and :math:`S` for
   :math:`0.1 \le \eta < 10` and :math:`1 \le \rho < 10` (0.03–0.3 % for
   :math:`\eta \ge 1`, :math:`\rho \ge 10`), and correct to ~1e-8 for

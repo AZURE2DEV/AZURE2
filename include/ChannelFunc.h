@@ -42,7 +42,7 @@ class ShftFunc;
 class ChannelFunc {
  public:
   /// \p radius: the channel's radius a_c in fm (AChannel::GetRadius).
-  ChannelFunc(const PPair *pair, bool useGSLFunctions, double radius);
+  ChannelFunc(const PPair *pair, double radius);
   ~ChannelFunc();
 
   /// e > 0 and a charged pair with Sommerfeld parameter eta above kEtaClosed.
@@ -74,7 +74,6 @@ class ChannelFunc {
   ShftFunc &shft();
 
   const PPair *pair_;
-  bool useGSL_;
   double threshold_;
   double radius_;
   std::unique_ptr<CoulFunc> coul_;

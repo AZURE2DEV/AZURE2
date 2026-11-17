@@ -48,7 +48,7 @@
 #include "Segment.h"
 #include "ModelPass.h"
 #include "Objective.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "Results.h"
 
 namespace {

@@ -363,7 +363,7 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
             // the normalization, as in CompoundSystem::TransformOut; the estimate only
             // sizes the integration grid, and adding it moves the grid of
             // existing projects -- tests/17O by 1.4e-3 in chi2.)
-            ChannelFunc channelFunc(chPair, false, channel->GetRadius());
+            ChannelFunc channelFunc(chPair, channel->GetRadius());
             if (channelFunc.IsClosed(localEnergy)) continue;
             if (isRWA) {
               const int twoJ = chPair->SpinOrbitTwoJ(jgroup->GetJ());
@@ -407,7 +407,7 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
         double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
         // Closed channels are left out, as above (ChannelFunc: P = 0 also just
         // above a Coulomb threshold).
-        ChannelFunc channelFunc(chPair, false, channel->GetRadius());
+        ChannelFunc channelFunc(chPair, channel->GetRadius());
         if (channelFunc.IsClosed(localEnergy)) continue;
         double gamma = std::abs(inputs.Gamma(j, l, ch));
         if (gamma <= 0.0) continue;

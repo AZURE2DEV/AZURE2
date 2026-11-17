@@ -287,9 +287,9 @@ lines, which a reader that does not know a key skips:
    run with data uses it (an extrapolation or a rate ignores the key). Engines
    older than 2026-11-05 ignore the key silently.
 
-``use_brune=0|1`` and the ten other options of the calculation
+``use_brune=0|1`` and the nine other options of the calculation
    ``use_park``, ``transform``, ``ignore_externals``, ``use_long_wavelength``,
-   ``ec_convection_current``, ``use_rmc``, ``use_gsl_coul``,
+   ``ec_convection_current``, ``use_rmc``,
    ``use_coulomb_table``, ``use_ec_table``, ``replace_grids``, under the names
    of pyazr's keywords: a
    flag on the command line or a keyword of a session wins over the key, the

@@ -10,8 +10,7 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "Objective.h"
-#include "ParameterKind.h"
-#include "PriorCovariance.h"
+#include "InferenceTypes.h"
 #include "WorkingCopy.h"
 
 namespace {
@@ -83,10 +82,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
   ForEachDiagonalPrior(data(), pmap, [&](int f, double nominal, double sigma) {
     if (f >= 0 && f < (int)full.size()) priorRow(f, nominal, sigma);
   });
-  for (int f = 0; f < (int)full.size(); f++) {
-    double nominal, sigma;
-    if (NuisancePriorOf(f, nominal, sigma)) priorRow(f, nominal, sigma);
-  }
+  for (const DiagonalPrior &e : NuisancePriors(full)) priorRow(e.index, e.centre, e.sigma);
   rows = residuals;
   if (jacobianOut) *jacobianOut = jacobian;
   return true;
@@ -94,7 +90,7 @@ bool AZUREAPI::ObjectiveRowsRWA(const vector_r &params, vector_r &rows, vector_r
 
 bool AZUREAPI::OutsideSamplerSupport(const vector_r &params) {
   ReadFitSettings();
-  return !PosteriorSupport::OfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
+  return !PosteriorSupportOfParameters(*nuisanceParams_).Contains(FullOf(params, all_rwa_, fixed_));
 }
 
 double AZUREAPI::LogProbabilityRWA(const vector_r &params) {

@@ -120,6 +120,8 @@ add_subdirectory(support)
 add_subdirectory(io)
 # experiment/: model expressions and frames (docs/upgrade/data_model.md), which use physics/ only.
 add_subdirectory(experiment)
+# inference/: the fit's parameter vector as plain data (docs/upgrade/inference.md), which uses nothing.
+add_subdirectory(inference)
 # convert/: the old project formats -- their line parsers (which the engine uses until the format-3 reader) and the
 # converter to format 3 (docs/upgrade/project_format3.md section 8).
 add_subdirectory(convert)

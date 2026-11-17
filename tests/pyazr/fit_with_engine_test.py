@@ -143,6 +143,11 @@ def main():
     if not os.environ.get("AZURE2_BIN"):
         print("skip: AZURE2_BIN (the program) is not set")
         return 77
+    fitters = pyazr.kinds()["fitters"]  # the engine's table: the program's switch of a method is its row's option
+
+    def switch(method):
+        return fitters[method]["option"]
+
     t2 = os.path.join(TESTS, "upgrade", "T2")
     nuisance_row = "Level 1 Energy (MeV) 12.4215 0 0 0.001 0 1 level 0"
 
@@ -155,17 +160,24 @@ def main():
         # T2 has THM data: the program's plain fit of it is migrad-gradient; Minuit's numerical gradient on 13N.
         ("13N migrad", os.path.join(TESTS, "13N"), "13N.azr", (), None, ["--covariance-band", "--max-calls=300"],
          ["fit"], "migrad", False, 300, True),
-        ("T2 migrad-gradient", t2, "T2.azr", (), None, ["--use-gradient", "--covariance-band"], ["minos", "--delta-chi2=1"],
-         "migrad-gradient", True, None, False),
-        ("T2 lm", t2, "T2.azr", (), None, ["--use-lm", "--covariance-band"], ["fit"], "lm", False, None, True),
-        ("T2 gsl-lm", t2, "T2.azr", (), None, ["--use-gsl-lm", "--covariance-band"], ["fit"], "gsl-lm",
+        ("T2 migrad-gradient", t2, "T2.azr", (), None, [switch("migrad-gradient"), "--covariance-band"],
+         ["minos", "--delta-chi2=1"], "migrad-gradient", True, None, False),
+        ("T2 lm", t2, "T2.azr", (), None, [switch("lm"), "--covariance-band"], ["fit"], "lm", False, None, True),
+        ("T2 gsl-lm", t2, "T2.azr", (), None, [switch("gsl-lm"), "--covariance-band"], ["fit"], "gsl-lm",
          False, None, True),
-        ("T2 with a nuisance prior on energy_1, lm", t2, "T2.azr", (), with_prior, ["--use-lm"], ["fit"], "lm",
+        ("T2 with a nuisance prior on energy_1, lm", t2, "T2.azr", (), with_prior, [switch("lm")], ["fit"], "lm",
          False, None, False),
         ("data covariance with relvector terms, migrad-gradient", os.path.join(TESTS, "data_covariance"), "rel.azr",
-         (os.path.join(TESTS, "angle_mapping", "data"),), None, ["--use-gradient", "--max-calls=400"],
+         (os.path.join(TESTS, "angle_mapping", "data"),), None, [switch("migrad-gradient"), "--max-calls=400"],
          ["fit"], "migrad-gradient", False, 400, False),
     ]
+    # Every fitter of the table has a case (recipe "A fitter" in CLAUDE.md).  The one exception: nlopt, a build option
+    # (-DUSE_NLOPT=ON; without it the table has no such row), derivative-free, no covariance: not built where this test
+    # was written, so no case was made for it.
+    no_case = {"nlopt"}
+    check("every fitter of the engine's table has a case here: " + ", ".join(fitters),
+          all(m in {c[7] for c in cases} or m in no_case for m in fitters),
+          f"no case for {[m for m in fitters if m not in {c[7] for c in cases} and m not in no_case]}")
     with tempfile.TemporaryDirectory() as tmp:
         only = os.environ.get("FIT_WITH_ENGINE_CASES", "")  # a word of the labels: run those cases only
         for k, (label, src, project, extra, edit, flags, command, method, minos, calls, band) in enumerate(cases):

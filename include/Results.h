@@ -85,6 +85,10 @@ struct Results {
     /// written to chiSquared.out whenever it has).
     double modelData = 0.0;
     bool hasModelData = false;
+    /// The gamma_decay records' priors and the wall on a negative remainder (T11), and whether the project has a
+    /// record (the total is written to chiSquared.out whenever it has).
+    double gammaDecay = 0.0;
+    bool hasGammaDecay = false;
     /// The priors of the isospin shifts and mixes and the soft ties (IsospinTies.h), when the project has any.
     double isospin = 0.0;
     bool hasIsospin = false;

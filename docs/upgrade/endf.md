@@ -787,7 +787,7 @@ engine's B_c, through `physics::level_parameters`) and `observed_levels_of_block
 caller's B_c -> Brune E, amplitudes, widths and ANCs, through `brune_from_formal` and `observed_levels`; its
 iteration tolerance an argument, the engine's 1e-6 MeV by default). Both take plain pair records and build the
 `System` and the engine's `PPair` objects themselves, with the engine's `ChannelFunc` / `WhitFunc` and the session
-options `use_coulomb_table`, `use_gsl_coul`. What differs from the design, and why:
+option `use_coulomb_table` (and `use_gsl_coul` until it was retired, 2026-11-16). What differs from the design, and why:
 - Door 1 is a free function of pair records and a block's numbers, not `Session.formal_levels(x)`: the session's
   object is in files another agent rewrites (`api/src/pybind_api.cpp`, `AZUREAPI*.cpp`). `from_session` gives it
   the session's fit vector (Brune or Park amplitudes). A session in the formal basis is refused (its B_c belongs to

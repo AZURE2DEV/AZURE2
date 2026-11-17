@@ -188,7 +188,6 @@ key (= pyazr keyword)      flags (on / off)                                     
 ``use_long_wavelength``    ``--no-long-wavelength`` (off)                                1
 ``ec_convection_current``  ``--ec-convection-current`` / ``--no-ec-convection-current``  1
 ``use_rmc``                ``--use-rmc``                                                 0
-``use_gsl_coul``           ``--gsl-coul``                                                0
 ``use_coulomb_table``      ``--coulomb-table`` / ``--no-coulomb-table``                  1
 ``use_ec_table``           ``--ec-table`` / ``--no-ec-table``                            1
 ``replace_grids``          ``--grid-replacement`` / ``--no-grid-replacement``            1
@@ -215,7 +214,9 @@ command line states that option itself.  ``AZURE2 --describe`` prints each
 option's value and where it came from (``default``, ``project``, ``command
 line``) for every project (``--json``: the member ``options``).  Refused, by
 ``--validate`` and by the run, each with its code: a value other than 0, 1,
-true, false (``E_CONFIG_OPTION_VALUE``); and a pair that cannot hold together,
+true, false (``E_CONFIG_OPTION_VALUE``); the removed option ``use_gsl_coul``
+with either value (``E_CONFIG_KEY_REMOVED``: delete the line; see
+``--gsl-coul`` below); and a pair that cannot hold together,
 whatever gave the two values -- a flag, a key or the default
 (``E_CONFIG_OPTIONS_CONTRADICT``, naming both with their sources, what is
 allowed and the fix): ``use_park=1`` with ``use_brune=0`` (so ``--use-park
@@ -338,10 +339,14 @@ Available Options
        GUI option).  Needs ``--no-brune`` (or ``use_brune=0`` in the
        project): with Brune on, the run is refused.
    * - ``--gsl-coul``
-     - Use GSL Coulomb functions (equivalent to the GUI option).  Not
-       recommended: against the default routine, :math:`P` and :math:`S` are
-       wrong by up to 3–6 % for :math:`0.1 \le \eta < 10`,
-       :math:`1 \le \rho < 10` (see :doc:`../developer/coulomb_table`).
+     - Removed (2026-11-16): the run is refused (exit 2) with the reason.
+       It chose GSL's Coulomb functions, whose :math:`P` and :math:`S` are
+       wrong by up to 5 % inside the outer turning point, below the Coulomb
+       barrier (see :doc:`../developer/coulomb_table`).  AZURE2's own
+       functions, which every run without the flag already used, are the only
+       ones.  The ``<config>`` key ``use_gsl_coul`` is refused in the same
+       words (``E_CONFIG_KEY_REMOVED``: delete the line), and so is the
+       keyword of ``pyazr.Session`` (``TypeError``).
    * - ``--coulomb-table[=FILE]``
      - Take :math:`P`, :math:`S` and the hard-sphere phase of charged
        channels, open and closed, from the universal Coulomb table, with the
@@ -455,6 +460,16 @@ Available Options
        the units with their factors, and the diagnostic codes
        (:doc:`format3`).  No project file is needed.  The same document is
        ``pyazr.schema()``; ``tests/schema/schema_v3.json`` is its committed copy.
+   * - ``--schema-out=FILE``
+     - Write the text ``--schema`` prints (byte for byte) to ``FILE``, all or
+       nothing: the program writes a temporary file ``FILE.tmp`` beside it and
+       renames it over ``FILE`` only after the whole text was written and
+       flushed without error.  On any error (an unwritable directory, a full
+       disk, ``FILE`` a directory) ``FILE`` is untouched, the message names the
+       cause on standard output and the exit status is 1; ``FILE`` empty is
+       refused with exit 2.  Use it, not ``--schema > FILE``, to regenerate
+       ``tests/schema/schema_v3.json``: a redirect empties the file before the
+       program runs.  ``--schema`` itself is unchanged.
    * - ``--no-long-wavelength``
      - Electric external capture without the long-wavelength approximation:
        the radial operator :math:`\bar e_L r^L` becomes the charge term of the

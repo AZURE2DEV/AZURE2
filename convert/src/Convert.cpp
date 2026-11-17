@@ -205,6 +205,28 @@ ParameterFileConversion ConvertParameterFile(const std::string &parameterText, c
   return out;
 }
 
+namespace {
+
+/// True when the old setup program's check box "use GSL Coulomb functions" was ticked in a format-1 project: the first
+/// number of <lastRun> is the old program's option mask (AZURESetup::writeLastRun writes `paramMask` first, readLastRun
+/// reads it with `>>`), and the box is bit 12 (Config::USE_GSL_COULOMB_FUNC = 1 << 12 = 4096) of it.
+bool OldGslCoulombBoxTicked(const io::Document &doc) {
+  if (io::FormatOf(doc) != 1) return false;  // ConvertToFormat2 removes <lastRun> from a format-1 file only
+  const io::Document::Section *s = doc.Find("lastRun");
+  if (!s || s->close == io::Document::Section::npos) return false;
+  for (const std::string &line : doc.Body(*s)) {
+    const std::size_t a = line.find_first_not_of(" \t\r");
+    if (a == std::string::npos) continue;
+    const std::size_t b = line.find_first_of(" \t\r", a);
+    const std::string token = line.substr(a, b == std::string::npos ? std::string::npos : b - a);
+    if (token.empty() || token.find_first_not_of("0123456789") != std::string::npos || token.size() > 10) return false;
+    return (std::stoull(token) >> 12) & 1u;
+  }
+  return false;
+}
+
+}  // namespace
+
 ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions &options) {
   ConvertResult res;
   io::Document doc = io::Document::Parse(oldText);
@@ -218,6 +240,7 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   }
   res.refusal = UnconvertedSection(doc);
   if (!res.refusal.empty()) return res;
+  const bool gslCoulomb = OldGslCoulombBoxTicked(doc);  // before ConvertToFormat2 removes <lastRun>
   res.format2Changes = ConvertToFormat2(doc);
 
   OldProject old;
@@ -231,6 +254,19 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   if (!why.empty()) {
     res.refusal = why;
     return res;
+  }
+
+  if (gslCoulomb) {
+    const std::string construct = "<lastRun> use GSL Coulomb functions";
+    res.notes.push_back(
+        {construct, "",
+         "the old program's check box \"use GSL Coulomb functions\" was ticked in <lastRun> (dropped with that section): "
+         "it computed this project with GSL's Coulomb functions.  This program has its own Coulomb functions only "
+         "(docs/upgrade/coulomb.md, sections 8.3 and 9.1: GSL's are wrong by up to 5 % in the penetrability inside the "
+         "outer turning point), so results inside the Coulomb barrier can differ from the old ones by up to about 5 % in "
+         "a penetrability"});
+    res.constructs[construct].converted++;
+    res.constructs[construct].notes++;
   }
 
   // The sections: each new one where its old one was (targets before data when there was no <targetInt>).

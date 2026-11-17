@@ -4,7 +4,7 @@
 #
 # intEC.dat holds the EC amplitudes at the sub-point energies of one
 # integration grid, for one set of inputs.  A channel radius, the grid
-# (straggling, thickness, adaptive settings) or --gsl-coul can change the
+# (straggling, thickness, adaptive settings) can change the
 # amplitudes without changing how many there are, so the amplitude count alone
 # cannot tell the files apart, and a stale file used to be read back silently.
 # The signature written beside it (intEC.dat.sig) is what catches that.
@@ -131,10 +131,20 @@ run plain "$WORK/intEC.dat"
 warned plain "has no signature file" && ok "the missing signature is reported" || bad "no warning for a file without a signature"
 [ "$(chi2 plain)" = "$A" ] && ok "and the recomputed chi2 equals the fresh one" || bad "chi2 $(chi2 plain), fresh $A"
 
-echo "the same grid with the other Coulomb-function routine"
+# Until 2026-11-16 --gsl-coul chose GSL's Coulomb functions, and this case showed that a file of the default routine
+# was not reused with it.  The option is retired (docs/upgrade/coulomb.md section 9.1): the run is refused before
+# anything is read, the saved file stays as it is, and the next run takes it as before (the signature of a run
+# without the option did not change with the retirement).
+echo "the retired option --gsl-coul"
 cp "$WORK/plain/output/intEC.dat.sig" "$WORK/intEC.dat.sig"
+cp "$WORK/intEC.dat" "$WORK/intEC.before"
 run plain "$WORK/intEC.dat" --gsl-coul
-warned plain "$SIGWARN" && ok "switching to --gsl-coul invalidates the file" || bad "--gsl-coul reused integrals computed with the other routine"
+warned plain "is no longer an option of AZURE2: leave it out" && warned plain "wrong by up to 5 % in the penetrability" \
+  && ok "--gsl-coul is refused with the reason" || bad "--gsl-coul was not refused with the reason: $(sed -n 1,2p "$WORK/plain/run.log")"
+cmp -s "$WORK/intEC.dat" "$WORK/intEC.before" && cmp -s "$WORK/plain/output/intEC.dat.sig" "$WORK/intEC.dat.sig" \
+  && ok "and the saved file and its signature are untouched" || bad "the refused run changed the saved file"
+run plain "$WORK/intEC.dat"
+warned plain "WARNING: .*intEC\\|Could not open external capture file" && bad "after the refusal the matching file was rejected" || ok "and the next run reuses the file without a warning"
 
 [ "$failures" -eq 0 ] && echo "  PASS" || echo "  FAIL ($failures)"
 [ "$failures" -eq 0 ]

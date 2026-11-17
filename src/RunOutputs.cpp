@@ -10,7 +10,7 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "ModelData.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "Profile.h"
 #include "ScatteringLength.h"
 #include "Segment.h"

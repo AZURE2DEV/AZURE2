@@ -5,8 +5,8 @@
      directory and every scratch file under this test's folder, pip kept off the network), and the repository's
      ``git status`` is the same before and after (the build writes nothing into the source);
   2. its files are the expected list: the package's files (pyazr/datafiles.py: every .py file and every data file
-     DATA_FILES names, less NOT_SHIPPED), the engine module, the program AZURE2 in the scripts, the metadata with
-     the console script ``pyazr`` and the licence files (LICENSE, the SRIM notice, plotly's); a missing or an extra
+     DATA_FILES names, less NOT_SHIPPED), the engine module, the program pyazr/bin/AZURE2, the metadata with
+     the console scripts ``pyazr`` and ``AZURE2`` and the licence files (LICENSE, the SRIM notice, plotly's); a missing or an extra
      file fails;
   3. the wheel is **unpacked** (nothing is installed) and a fresh interpreter imports it with only that folder on
      its path and the repository out of reach (``pyazr.__file__`` is checked): the objective of T2 at the start
@@ -79,7 +79,7 @@ def build_wheel(scratch):
 def expected_files(version):
     info = f"pyazr-{version}.dist-info"
     files = {"pyazr/" + rel for rel in datafiles.package_files(os.path.join(ROOT, "pyazr"))}
-    files |= {"pyazr/_azure2" + sysconfig.get_config_var("EXT_SUFFIX"), f"pyazr-{version}.data/scripts/AZURE2"}
+    files |= {"pyazr/_azure2" + sysconfig.get_config_var("EXT_SUFFIX"), "pyazr/bin/AZURE2"}
     files |= {f"{info}/{name}" for name in ("METADATA", "WHEEL", "RECORD", "entry_points.txt")}
     files |= {f"{info}/licenses/{name}" for name in ("LICENSE", "stopping/data/srim/README.md",
                                                      "pyazr/ui/static/vendor/plotly-LICENSE.txt")}
@@ -154,7 +154,8 @@ def main(scratch):
         unpacked = os.path.join(scratch, "unpacked")
         shutil.rmtree(unpacked, ignore_errors=True)
         z.extractall(unpacked)
-    program = os.path.join(unpacked, f"pyazr-{version}.data", "scripts", "AZURE2")
+    check("the console script AZURE2 = pyazr.program:main", "AZURE2 = pyazr.program:main" in entry, entry)
+    program = os.path.join(unpacked, "pyazr", "bin", "AZURE2")
     if os.path.isfile(program):
         os.chmod(program, 0o755)  # zipfile does not restore the mode; pip does
     print(f"  wheel: {os.path.basename(wheel)}, {os.path.getsize(wheel)} bytes, {len(names)} files")

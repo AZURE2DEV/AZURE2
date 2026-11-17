@@ -153,7 +153,10 @@ The test changes are in commits of their own: 1c11fe1e (`prior_covariance` (c), 
 
 **Not done (open).** The writer still reads totals stored by the final evaluation (`Set...Penalty`) rather than the
 terms themselves (step 3 as designed). The `inference/` target is not a separate library yet: the terms use the
-engine's `EData` and `CNuc` directly, and become a library when Phase 4 makes the data plain values. The MCMC's
+engine's `EData` and `CNuc` directly, and become a library when Phase 4 makes the data plain values. (2026-11-16:
+the library exists for what needs no engine object, and the writer is audited: `inference.md`. `ObjectiveTerm` is
+`azure2::inference::Term<ObjectiveContext>`, `Objective` holds an `azure2::inference::TermList`, `PriorCovariance`
+is `inference/`'s, and the paths named in sections 1 and 6 are those of their dates.) The MCMC's
 level-energy spread and its user priors keep their code.
 
 ## 5. T9, the model data (Phase 4 step S15, decision M10)

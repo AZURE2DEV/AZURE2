@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "Constants.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "azure2/experiment/Isospin.h"
 
 class AZUREParams;
@@ -46,11 +46,9 @@ class MnUserParameters;
  * the level block in the vector (CompoundSystem::FillMnParams).
  */
 
-/// A derived slot of the parameter vector as a linear function of free slots: d(slot)/d(source) = coefficient.
-struct IsospinTie {
-  int slot = -1;
-  std::vector<std::pair<int, double>> sources;
-};
+/// A derived slot of the parameter vector as a linear function of free slots: d(slot)/d(source) = coefficient (the
+/// inference/ library's ParameterTie, which the parameter index map carries).
+using IsospinTie = azure2::inference::ParameterTie;
 
 class IsospinSet {
  public:
