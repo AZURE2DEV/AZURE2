@@ -314,7 +314,25 @@ def dataset_off_variant(base_azr: str, path: str, file_substr: str, output_dir=N
     if output_dir is not None:
         mdl.set_output_dir(output_dir)
     mdl.write(path)
-    return dict(path=path, file=file_substr, segments=n)
+    # a switched-off normgroup leader hands its group to the next active member: keep the group's norm, vary flag
+    # and norm error (rmfit.covariance.carry_group_norms); the caller carries the fitted norm over (``moved``)
+    from .covariance import carry_group_norms
+    moved = carry_group_norms(base_azr, path)
+    return dict(path=path, file=file_substr, segments=n, moved=moved)
+
+
+def carry_moved_norms(x_src, src_keys, x_dst, dst_keys, moved) -> np.ndarray:
+    """``x_dst`` (a copy) with each moved group's fitted norm, ``ParamKey("norm", seg=old)`` of the source vector,
+    placed at ``ParamKey("norm", seg=new)`` (``moved``: dataset_off_variant's ``{old leader: new leader}``).
+    take() alone would start the group from the new leader's own .azr norm field."""
+    out = np.array(x_dst, float, copy=True)
+    pos1 = {k: i for i, k in enumerate(src_keys)}
+    pos2 = {k: j for j, k in enumerate(dst_keys)}
+    for old, new in (moved or {}).items():
+        i, j = pos1.get(ParamKey("norm", seg=int(old))), pos2.get(ParamKey("norm", seg=int(new)))
+        if i is not None and j is not None:
+            out[j] = x_src[i]
+    return out
 
 
 # -- the pinned J^pi scan on a window ------------------------------------------------

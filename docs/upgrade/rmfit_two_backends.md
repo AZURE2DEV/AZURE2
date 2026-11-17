@@ -9,7 +9,8 @@ quantification stays on pyazr 3 (`rmfit/sampling.py`); `mixture.py` is pyazr 2 o
 `rmfit/` on this branch is the port of `feature/upgrade-5-dev-rmfit` (`543c7754`, HANDOFF entry "rmfit beside
 pyazr") folded back into the one rmfit package that `dev` and the R-matrix archive also run. The same tree runs on
 pyazr 2 (`dev`, the `.azr` text format, the archive's pinned builds) and on pyazr 3 (this branch, project format 3).
-Its public copy is `github.com/rdeboer1/rmfit` `cc41f0e`; this branch carries that tree unchanged.
+Its public copy is `github.com/rdeboer1/rmfit`; this branch carries that tree unchanged (`cc41f0e`, then
+`1997494`: rmfit imports on Python < 3.12 again, and the dataset-off normgroup fix).
 
 Why one package: the search, the ledger, the driver's state machine, the review criteria and the keys are the same
 on both engines (the port changed them nowhere), and the archive's running campaigns stay on pyazr 2 until they end.

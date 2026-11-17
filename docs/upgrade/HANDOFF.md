@@ -1191,6 +1191,14 @@ README); the docs build passes (60 pages).
 **Open.** (1) The base of this branch fails two unit tests on this machine before any change
 (`pyazr_park_dsde`, `pyazr_units_scales`): not looked at yet. (2) The restart inside a real fit has no test (no
 project fails its first line search).
+**Later the same day.** CI on `1471fd14` failed as on the base `49adbcf9` (the same tests on every platform; macOS does
+not compile `api/src/pybind_api.cpp` against pybind11 under Python 3.14). Nine of the Linux failures were rmfit's own:
+five f-strings in `enginepin.py` and `review.py` reused their quote inside a replacement field, which only Python
+3.12 accepts, so `import rmfit.campaign` failed on CI's Python 3.10. `rmfit/` is now the public tree `1997494`:
+those lines rewritten (same text out), a fast test `rmfit_py_compat` that flags such fields, and rmfit's
+new dataset-off fix for a normgroup whose leader is switched off (a pyazr 2 change; its test skips on pyazr 3). Still
+open on Windows: `rmfit_enginepin` (the engine module is a `.pyd`), `rmfit_patterns_signs_memory` (no `resource`
+module), `rmfit_site_shell` / `rmfit_site_slurm` (POSIX shell stubs), `rmfit_azure2_root`.
 
 ## 2026-11-16 (owner's session, dev port) — rmfit beside pyazr, on pyazr 3.0
 

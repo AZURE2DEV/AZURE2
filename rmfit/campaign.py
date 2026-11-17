@@ -1847,7 +1847,7 @@ class Campaign:
         the data improve beyond simply dropping that dataset's own chi2 (the
         Botek diagnostic from an earlier campaign: a dataset that distorts the
         fit shows a large extra recovery; a merely noisy one shows none)."""
-        from .structure import dataset_off_variant
+        from .structure import dataset_off_variant, carry_moved_norms
         cid, x, obj, keys = self.incumbent()
         tag = "".join(ch if ch.isalnum() else "_" for ch in file_substr)[:30]
         rid = self.ledger.start_round(self.structure_id, "dataset_off", f"{file_substr} {note}")
@@ -1859,10 +1859,15 @@ class Campaign:
         segs_off = [s.key for s in base_segments(self.base_azr) if s.active and file_substr in s.data_file]
         own_chi2 = sum(inc_seg.get(k, 0.0) for k in segs_off)
         self.log(f"dataset off: {file_substr} -> {info['segments']} segments deactivated; their chi2 in the incumbent {own_chi2:.1f}")
+        moved = info.get("moved") or {}
+        if moved:
+            self.log("dataset off: normgroup leader(s) switched off, the group's norm fields and fitted norm carried "
+                     "to the next active member: " + ", ".join(f"seg {o} -> seg {n}" for o, n in moved.items()))
         ev2 = Sharded(path, os.path.join(self.vdir, f"shards_off_{tag}"), nshards=self.nshards, flags=self.flags,
                       objective=self.objective)
         try:
-            x2 = take(x, keys, ev2.keys, ev2.x0)
+            # a switched-off leader's group: its fitted norm now lives under the new leader's key
+            x2 = carry_moved_norms(x, keys, take(x, keys, ev2.keys, ev2.x0), ev2.keys, moved)
             s0 = ev2.score(x2)
             fr = polish(ev2, x2, bounds=default_bounds(ev2, x2, self.policy), policy=self.policy,
                         max_nfev=nfev, log=self.log)

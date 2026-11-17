@@ -158,11 +158,12 @@ def guard_lines_sh(recorded):
                 'export AZURE2_ROOT="${AZURE2_ROOT:-$HOME/AZURE2}"\n')
     root = recorded["azure2_root"]
     so = recorded.get("so") or "_azure2.cpython-312-x86_64-linux-gnu.so"
+    md5 = recorded["so_md5"]   # (no quotes inside the f-strings: Python < 3.12 rejects them)
     return (f'export AZURE2_ROOT="{root}"\n'
             f'export PYAZR_ROOT="$AZURE2_ROOT"\n'
             f'm=$(md5sum "$AZURE2_ROOT/pyazr/{so}" | cut -c1-32)\n'
-            f'if [ "$m" != "{recorded['so_md5']}" ]; then\n'
-            f'  echo "$(date) ENGINE PIN FAILED: $m != {recorded['so_md5']} ({short(recorded)})"\n'
+            f'if [ "$m" != "{md5}" ]; then\n'
+            f'  echo "$(date) ENGINE PIN FAILED: $m != {md5} ({short(recorded)})"\n'
             f'  exit 1\n'
             f'fi\n')
 
