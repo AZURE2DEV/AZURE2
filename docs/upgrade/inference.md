@@ -232,3 +232,8 @@ the sample's ordinals to the vector.  `SolveThmProfile`'s names were kept (`ThmP
 **What was run** is in the three commit messages and the hand-over entry; the full check of the three slices is
 `work/director/verify_obj2b.out`.
 
+**After (B4, 2026-11-17).** The gradients and rows of T6, T7, T9 and T11 and every total and field of
+`chiSquared.out` are now members of the terms' classes (`AddGradient`, `AppendRows`, `WriteTotal`), walked by
+`Objective::AddGradient`, `AppendModelRows`, `WriteTotals`; `AddParkPenaltyGradient`,
+`AddAbundancePenaltyGradient`, `Objective::ModelDataGradient` and the free `AppendModelRows` went
+(`objective_arrays.md` section 8).

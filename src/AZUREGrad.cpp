@@ -75,30 +75,6 @@ vector_matrix_r BuildShiftDerivTable(const CompoundSystem *compound, const Level
   return tab;
 }
 
-/// d/dx of sum_lambda (J_lambda/s)^2 over the levels on the wall (ParkWallGradient on the gather ParkLevelsOf).
-void AddParkPenaltyGradient(const CompoundSystem *compound, const LevelState &state, const Config &configure, GradAccum &accum) {
-  if (!(configure.paramMask & Config::USE_PARK_FORMALISM)) return;
-  std::vector<double> dGamma;
-  double dE;
-  for (const ParkLevel &l : ParkLevelsOf(compound, state, true)) {
-    if (!ParkWallGradient(l, kParkNormScale, dGamma, dE)) continue;
-    for (size_t c = 0; c < l.channels.size(); c++) accum.AddGamma(l.group, l.level, l.channels[c], dGamma[c]);
-    accum.AddE(l.group, l.level, dE);
-  }
-}
-
-/*!
- * Gradient of the abundance term of the objective (T7; AbundanceGradient of inference/'s AbundancePriors.h on the
- * gather AbundanceBlockOf): the prior ((w - w0)/sigma)^2 of every nucleus with a sigma, and the sum-to-one term
- * ((sum w) - c)^2 / s^2 (c its centre, 1 unless written), which couples every abundance through the sum.
- */
-void AddAbundancePenaltyGradient(const WorkingCopy &data, const Config &configure, GradAccum &accum) {
-  if (!data.Data().Abundances().Present()) return;
-  std::vector<double> dw;
-  AbundanceGradient(AbundanceBlockOf(data, configure.abundanceSumSigma), dw);
-  for (int k = 1; k <= (int)dw.size(); k++) accum.AddAbundance(k, dw[k - 1]);
-}
-
 /*!
  * Allocates and zeroes the physics-coordinate gradient accumulators.
  */
