@@ -751,8 +751,9 @@ class Review:
                 else:
                     hint = ("no level inside the run" + (f" (nearest {lv.label})" if lv else "") +
                             " -- a missing-level candidate or a background / data problem")
+                ang = "" if d["ang"] < 0 else f", {d['ang']:.0f} deg"   # not nested: Python < 3.12
                 self.add("MEDIUM", "residual-run",
-                         f"{d['name']} (seg {d['key']}{'' if d['ang'] < 0 else f', {d['ang']:.0f} deg'}): {d['n']} consecutive points "
+                         f"{d['name']} (seg {d['key']}{ang}): {d['n']} consecutive points "
                          f"{'above' if d['sign'] < 0 else 'below'} the fit by more than {z:g} sigma at Ex {d['lo']:.3f}-{d['hi']:.3f} MeV; {hint}",
                          f"chi2 {d['chi2']:.1f} ({100 * d['chi2'] / max(self.chi2_total, 1e-300):.1f} % of the total), max |r| {d['maxz']:.1f}")
 
@@ -819,8 +820,9 @@ class Review:
                   "", "| Ex | detectors | data sets | nearest level |", "|---:|---:|---|---|"]
             for c in sorted(clusters, key=lambda c: -len(c["members"]))[:self.top]:
                 lv = self.nearest_level(c["ex"])
+                away = "" if lv is None else f" ({1e3 * abs(lv.energy - c['ex']):.0f} keV away)"   # not nested: Python < 3.12
                 L.append(f"| {c['ex']:.4f} | {len(c['members'])} | {', '.join(sorted(set(m[0] for m in c['members'])))[:60]} | "
-                         f"{lv.label if lv else ''}{'' if lv is None else f' ({1e3*abs(lv.energy-c['ex']):.0f} keV away)'} |")
+                         f"{lv.label if lv else ''}{away} |")
         self.sections.append(("Average versus structure", L))
         for name, r0, rD, n in flagged:
             self.add("MEDIUM", "average-not-structure",
@@ -834,7 +836,7 @@ class Review:
             if len(inside) >= 3:
                 self.add("HIGH" if lv.gamma_mev >= 1.0 else "MEDIUM", "broad-level-averages-peaks",
                          f"{lv.label}: a level {_fmt_width(lv.gamma_mev)} wide spans {len(inside)} visible unfitted peaks "
-                         f"(Ex {', '.join(f'{c['ex']:.3f}' for c in inside[:8])}{'...' if len(inside) > 8 else ''}) -- a broad pole fitting "
+                         f"(Ex {', '.join(format(c['ex'], '.3f') for c in inside[:8])}{'...' if len(inside) > 8 else ''}) -- a broad pole fitting "
                          f"the average of narrow resonances", "each peak seen in >= 2 detectors with the fit > 2 sigma low at its top")
 
     # ---- 6b. zigzag in the calculated curve ("bumpiness": a saw-tooth over a narrow resonance) ------
@@ -886,8 +888,9 @@ class Review:
             hint = (f"levels narrower than the point spacing inside ({'; '.join(lv.label for lv in d['narrow'][:3])}): the curve may be real "
                     f"but is under-sampled by the data -- check the target-integration / convolution grid" if d["narrow"] else
                     "no narrow level inside: a numerical artefact of the integration or convolution grid, not physics")
+            ang = "" if d["ang"] < 0 else f", {d['ang']:.0f} deg"   # not nested: Python < 3.12
             self.add("MEDIUM", "fit-zigzag",
-                     f"{d['name']} (seg {d['key']}{'' if d['ang'] < 0 else f', {d['ang']:.0f} deg'}): the calculated curve alternates up and down "
+                     f"{d['name']} (seg {d['key']}{ang}): the calculated curve alternates up and down "
                      f"over {d['steps']} consecutive steps at Ex {d['lo']:.4f}-{d['hi']:.4f} MeV (steps up to {100*d['amp']:.1f} %); {hint}",
                      "the GUI shows it as bumpiness on the fit curve")
 
