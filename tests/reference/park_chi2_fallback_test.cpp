@@ -397,7 +397,11 @@ void NanVariant(const std::string &azr) {
   check(label + ": no gradient from it (every component 0, none NaN)", zero);
   check(label + ": no value from it (" + num(wallValue()) + ")", wallValue() == 0.0);
   vector_r rows;
-  AppendModelRows(m.compound, m.state, *m.data, m.cfg, &pmap, 0, rows, nullptr);
+  {
+    azure2::Results results;
+    Objective::Engine().AppendModelRows(ObjectiveContext{m.compound, m.state, m.inputs, m.data, results, p, m.cfg}, &pmap, 0,
+                                        rows, nullptr);
+  }
   bool rowsZero = !rows.empty();
   for (double r : rows) rowsZero = rowsZero && r == 0.0;
   check(label + ": its row is 0 (" + std::to_string(rows.size()) + " rows)", rowsZero);

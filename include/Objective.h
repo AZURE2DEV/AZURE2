@@ -204,9 +204,6 @@ class Objective {
   const ObjectiveTerm *priorCovariance_ = nullptr;
 };
 
-void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
-                     vector_r &residuals, vector_r *jac);
-
 /*!
  * The prior covariance (<config> priorCovariance=) replaces the diagonal prior of each of its parameters
  * (docs/upgrade/objective.md D3): marks those priors on the segments, target effects and abundances (nuisance priors

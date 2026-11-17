@@ -162,6 +162,23 @@ class ParkTerm : public ObjectiveTerm {
     }
     return TermGradient::kAdded;
   }
+  // One row per R-matrix level, r = J/s on the wall, else 0 with no Jacobian (ParkWallRow: the row's form).
+  void AppendRows(const ObjectiveContext &c, ModelRows &rows) const override {
+    if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
+    std::vector<double> dGamma;
+    double r, dE;
+    for (const ParkLevel &l : ParkLevelsOf(c.compound, c.state, true)) {
+      if (!ParkWallRow(l, kParkNormScale, r, dGamma, dE)) {
+        rows.Append(0.0, nullptr, nullptr);
+        continue;
+      }
+      GradAccum acc;
+      acc.Init(c.compound, c.state);
+      for (size_t ch = 0; ch < l.channels.size(); ch++) acc.AddGamma(l.group, l.level, l.channels[ch], dGamma[ch]);
+      acc.AddE(l.group, l.level, dE);
+      rows.Append(r, &acc, nullptr);
+    }
+  }
   // Park formalism: the J > 0 wall, when a level sits beyond it (0 otherwise, printed in the Park formalism).
   std::string TotalLabel() const override { return "Total-Park-Chi-Squared"; }
   void WriteTotal(const WorkingCopy &, const Config &config, const azure2::Results &results, std::ostream &out) const override {
@@ -276,6 +293,20 @@ class AbundanceTerm : public ObjectiveTerm {
     for (int k = 1; k <= (int)dw.size(); k++) accum.AddAbundance(k, dw[k - 1]);
     return TermGradient::kAdded;
   }
+  // ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every abundance of
+  // the sample (AbundanceSumRows).  The per-nucleus priors are diagonal priors (the caller's rows).
+  void AppendRows(const ObjectiveContext &c, ModelRows &rows) const override {
+    const AbundanceSamples &samples = c.data->Data().Abundances();
+    if (!samples.Present()) return;
+    const AbundanceBlock block = AbundanceBlockOf(*c.data, c.config.abundanceSumSigma);
+    for (const AbundanceSumRow &row : AbundanceSumRows(block)) {
+      std::vector<std::pair<int, double>> direct;
+      if (rows.pmap)
+        for (int i = 1; i <= block.numNuclei; i++)
+          direct.push_back({rows.pmap->AbundanceIndex(samples.Ordinal(row.sample, i)), row.derivative});
+      rows.Append(row.residual, nullptr, &direct);
+    }
+  }
   // Isotopic abundances: their priors and the sum-to-one term.
   std::string TotalLabel() const override { return "Total-Abundance-Chi-Squared"; }
   void WriteTotal(const WorkingCopy &, const Config &, const azure2::Results &results, std::ostream &out) const override {
@@ -331,6 +362,11 @@ class GammaDecayTerm : public ObjectiveTerm {
     if (c.compound->GetGammaDecays().Empty()) return TermGradient::kNone;
     c.compound->GetGammaDecays().AddPenaltyGradient(*c.compound, c.state, accum.direct);
     return TermGradient::kAdded;
+  }
+  // r and dr/dq of the records' priors and the remainder's wall (GammaDecaySet::PenaltyRows).
+  void AppendRows(const ObjectiveContext &c, ModelRows &rows) const override {
+    for (const GammaDecaySet::PenaltyRow &row : c.compound->GetGammaDecays().PenaltyRows(*c.compound, c.state))
+      rows.Append(row.r, nullptr, &row.d);
   }
   // Whenever the project has a record.  Without this field the file's totals did not add up to the minimised
   // chi-squared for such a project.
@@ -582,52 +618,24 @@ std::vector<ParkLevel> ParkLevelsOf(const CompoundSystem *compound, const LevelS
   return levels;
 }
 
-void AppendModelRows(const CompoundSystem *compound, const LevelState &state, const WorkingCopy &data, const Config &config, const ParamIndexMap *pmap, int nCols,
-                     vector_r &residuals, vector_r *jac) {
-  auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
-    residuals.push_back(r);
-    if (!jac || !pmap) return;
-    const size_t base = jac->size();
-    jac->resize(base + (size_t)nCols, 0.0);
-    vector_r rowFull(pmap->NumFull(), 0.0);
-    if (acc) acc->Scatter(*pmap, rowFull);
-    if (direct)
-      for (const auto &d : *direct)
-        if (d.first >= 0 && d.first < pmap->NumFull()) rowFull[d.first] += d.second;
-    for (int f = 0; f < pmap->NumFull(); f++) {
-      const int a = pmap->FullToPacked(f);
-      if (a >= 0 && a < nCols) (*jac)[base + (size_t)a] = rowFull[f];
-    }
-  };
-  // Park: one row per R-matrix level, r = J/s on the wall, else 0 with no Jacobian (ParkWallRow).
-  if (config.paramMask & Config::USE_PARK_FORMALISM) {
-    std::vector<double> dGamma;
-    double r, dE;
-    for (const ParkLevel &l : ParkLevelsOf(compound, state, true)) {
-      if (!ParkWallRow(l, kParkNormScale, r, dGamma, dE)) {
-        appendRow(0.0, nullptr, nullptr);
-        continue;
-      }
-      GradAccum acc;
-      acc.Init(compound, state);
-      for (size_t c = 0; c < l.channels.size(); c++) acc.AddGamma(l.group, l.level, l.channels[c], dGamma[c]);
-      acc.AddE(l.group, l.level, dE);
-      appendRow(r, &acc, nullptr);
-    }
+void ModelRows::Append(double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
+  residuals.push_back(r);
+  if (!jac || !pmap) return;
+  const size_t base = jac->size();
+  jac->resize(base + (size_t)nCols, 0.0);
+  vector_r rowFull(pmap->NumFull(), 0.0);
+  if (acc) acc->Scatter(*pmap, rowFull);
+  if (direct)
+    for (const auto &d : *direct)
+      if (d.first >= 0 && d.first < pmap->NumFull()) rowFull[d.first] += d.second;
+  for (int f = 0; f < pmap->NumFull(); f++) {
+    const int a = pmap->FullToPacked(f);
+    if (a >= 0 && a < nCols) (*jac)[base + (size_t)a] = rowFull[f];
   }
-  // gamma_decay priors and the remainder's wall: r and dr/dq (GammaDecaySet::PenaltyRows).
-  for (const GammaDecaySet::PenaltyRow &row : compound->GetGammaDecays().PenaltyRows(*compound, state))
-    appendRow(row.r, nullptr, &row.d);
-  // Abundances: ((sum w) - c)/s per sample (c the sum's centre, 1 unless written) with s > 0; d/dw_k = 1/s on every
-  // abundance of the sample (AbundanceSumRows).
-  const AbundanceSamples &samples = data.Data().Abundances();
-  if (samples.Present()) {
-    const AbundanceBlock block = AbundanceBlockOf(data, config.abundanceSumSigma);
-    for (const AbundanceSumRow &row : AbundanceSumRows(block)) {
-      std::vector<std::pair<int, double>> direct;
-      if (pmap)
-        for (int i = 1; i <= block.numNuclei; i++) direct.push_back({pmap->AbundanceIndex(samples.Ordinal(row.sample, i)), row.derivative});
-      appendRow(row.residual, nullptr, &direct);
-    }
-  }
+}
+
+void Objective::AppendModelRows(const ObjectiveContext &c, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
+                                vector_r *jac) const {
+  ModelRows rows{pmap, nCols, residuals, jac};
+  for (const ObjectiveTerm *t : rowWalk_) t->AppendRows(c, rows);
 }
