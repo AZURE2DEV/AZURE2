@@ -24,7 +24,7 @@ Update this file at the end of every work session: what changed, what is next, w
   `0d271891` and the open points of their entries; the legacy note of `experimental_effects.rst` names ±3σ as the
   old kernel's (the engine integrates ±5σ, `kConvolutionRange`). The two formal-capture differences were already in
   `tests/formal_ec_final_state/README.md` and `dev_features.md` section 1: nothing added.
-- **Found, not changed: LM and GSL-LM take wrong rows over a line shape.** `LineWindowProblem`
+- **Found, then refused (follow-up commit): LM and GSL-LM took wrong rows over a line shape.** `LineWindowProblem`
   (`src/LineWindow.cpp:272`) refuses only the fitter named `migrad-gradient`. `lm` (`src/Fitters.cpp:25`) and
   `gsl-lm` (`:21`) run, on the rows of `AZURECalc::ResidualJacobian` (`src/FitLeastSquares.cpp:282`,
   `src/FitGslTrustRegion.cpp:79`), which are the adjoint's (`ComputeResidualJacobian`, `src/AZUREGrad.cpp:594`;
@@ -35,9 +35,15 @@ Update this file at the end of every work session: what changed, what is next, w
   windowed points as a data set, pyazr `Objective.jacobian` against central differences of `residuals`, which share
   `ComputeResidualJacobian`): for the final level's energy the rows are 0 against -1.9 to -14.7, for its proton
   width 0.34 to 1.88 against 0.078 to 0.82. A pyazr session's `grad`, `jacobian` and the NUTS sampler read the same
-  rows and are not refused either. The fix (refuse every fitter with residual rows, and the session's gradient, or
-  take finite differences for such points) is the owner's; `dev_features.md`'s "refused with `--use-gradient`" is
-  true only of that switch.
+  rows. **Now refused** (the coordinator's follow-up): `LineWindowProblem` refuses every fitter whose row of
+  `Fitters()` has `gradient` or `residualRows` (today `lm`, `gsl-lm`, `migrad-gradient`; plain `migrad` (`nlopt` where
+  built) run), naming the fitter and the allowed ones; on the port (`c675245a`) only the bit `USE_ANALYTIC_GRADIENT`
+  (`--use-gradient`, a THM project) was refused, so this is wider than the port. Every analytic derivative starts in
+  `Forward` (`src/GradEnergyTasks.cpp`), which throws `LineWindowDerivativeRefused` (`include/LineWindow.h`) for a
+  windowed segment: the program's gradient and rows, pyazr's `value_and_grad`/`grad`/`jacobian`/
+  `residuals_and_jacobian`/`model_gradients`, the bands and `fit_with_engine` with those fitters (the binding maps
+  it to `EngineError`); the program's uncertainty band catches that type only and writes the outputs without it.
+  Values are unchanged. Tests: `tests/ec_unbound_broad/check.sh` (i), `pyazr_line_window_derivatives`.
 
 **Run:** build (0 warnings); `ctest -R pyazr_ui -j6` 20 of 20 (with the smoke test); `pyazr_ui_static` and
 `pyazr_ui_node` failing before the page change; `docs_build` (and `sphinx-build -W -n` into a scratch directory);

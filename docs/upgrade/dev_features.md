@@ -1,20 +1,21 @@
 # Where each feature of `dev` lands in this branch
 
 **2026-11-17: the ports are merged.** As of `0d271891` this branch carries the owner's ports of `dev`'s features
-(`feature/upgrade-5-dev-all` and the two-backend rmfit; their entries in `HANDOFF.md`): per-channel radii (the
-record `channel_radius`), isospin-labelled levels across compound nuclei, general spin observables (the quantity
-`spin_observable`), external capture into an unbound final state with the line-shape integration (`line_window`),
-the capture cascade (`secondary_gamma` on a capture exit), the UDR kernels at low energy, the bounded MIGRAD seed,
-rmfit on pyazr 2 and 3, dev's two capture tests, the EXFOR user agent and the two test races. The text below is the
-plan as written before the ports, kept for its places and recipes. Open after the ports (from their entries):
-no analytic gradient over a line shape (refused with `--use-gradient`) and one open particle channel of the final
-level; no multi-step cascade and no analysing power of the secondary gamma ray, and a cascade with a line window is
-refused; for spin observables no table of literature names, A_y only for capture, no in-plane exit components and no
+(`feature/upgrade-5-dev-all` and the two-backend rmfit; their entries in `HANDOFF.md`): per-channel radii (the record
+`channel_radius`), isospin-labelled levels across compound nuclei, general spin observables (the quantity
+`spin_observable`), external capture into an unbound final state with the line-shape integration (`line_window`), the
+capture cascade (`secondary_gamma` on a capture exit), the UDR kernels at low energy, the bounded MIGRAD seed, rmfit on
+pyazr 2 and 3, dev's two capture tests, the EXFOR user agent and the two test races. The text below is the plan as
+written before the ports, kept for its places and recipes. Open after the ports (from their entries): no analytic
+derivative over a line shape (a line window refuses every fitter whose row of `Fitters()` reads the gradient or the
+residual rows' Jacobian, and pyazr's gradient, Jacobian and model sensitivities) and one open particle channel of the
+final level; no multi-step cascade and no analysing power of the secondary gamma ray, and a cascade with a line window
+is refused; for spin observables no table of literature names, A_y only for capture, no in-plane exit components and no
 analytic derivative through a target integration; for isospin no pyazr helpers (`join_levels`), `describe` and the
 compound-nucleus check do not show the ties, and THM with `vertex=constant` in a tied formal group is untested; for
 channel radii no channel form of `AZUREAPI::SetRadius`, no listing in `describe`, a THM entrance pair with an entry
-refused, and `physics::System`'s one radius per channel; for formal external capture the two differences of
-section 1; for rmfit which `rmfit-campaign` skill stays, the size ratchet, no CI job for its tests and
+refused, and `physics::System`'s one radius per channel; for formal external capture the two differences of section 1;
+for rmfit which `rmfit-campaign` skill stays, the size ratchet, no CI job for its tests and
 `W_PARAMETER_SETTING_UNKNOWN` per shard.
 
 For the owner and his agents. This branch does **not** have the features `dev` gained after the branch point
