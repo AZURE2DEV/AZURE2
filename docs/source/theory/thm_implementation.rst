@@ -517,11 +517,21 @@ background columns as terms), :math:`\tilde A = A/e`, :math:`\tilde y = d/e`,
 solved by Cholesky on the Jacobi-scaled :math:`G` (``SolveThmProfile`` in
 ``inference/src/LinearProfile.cpp``). Points with :math:`e_i = 0` carry no weight. The
 output file writes :math:`m_i + b(E_i)` as the fitted curve next to the data
-scaled by :math:`n^*`. The background may come out negative: it is a
-phenomenological term (non-quasi-free or sequential contributions, an
-imperfect subtraction), not a positive-definite cross section, and a sign
-constraint would make the profile non-linear; judge a negative background on
-the plot. :math:`n^* = 1/s` must be positive.
+scaled by :math:`n^*`. The background stands for an incoherent contribution
+(combinatorial, non-quasi-free, sequential), so it is a cross section and cannot
+be negative (the review of M. La Cognata, November 2026); in the published
+analyses it is usually small and often left out. The profile is linear and does
+not bound it: when :math:`b(E)` comes out negative anywhere in the energy range
+of the experiment's points, the run prints ``WARNING: <thm> experiment[<name>]:
+the profiled background b(E) is negative ...``, and the analysis should then use
+``background=none`` (or a lower order). :math:`n^* = 1/s` must be positive.
+
+*Energy shifts.* THM data are not shifted in energy: the resonance energies are
+kept at their literature values, and no displacement of a HOES peak has been
+observed (the same review). A data set of a THM experiment that carries an
+energy shift (fixed or fitted) is reported at set-up (``WARNING: <thm>
+experiment[<name>]: data set <key> carries an energy shift``); a calibration of
+the measured energy scale is the only reason to keep one.
 
 *Degenerate cases.* A singular :math:`G` (the model a combination of the
 background terms, or collinear background columns), or :math:`s \le 0` (no

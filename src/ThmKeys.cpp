@@ -145,9 +145,10 @@ const std::vector<ThmOptionKey> &ThmOptionKeys() {
          return ParseWord(value == "real" ? std::string("perlevel") : value, {"onshell", "constant", "perlevel"}, out);
        }},
       {{"kinematics", "enum", {"lacognata", "triple", "kf3body", "lambda32"}, "", "", "lacognata", "", "",
-        "the kinematic factors the model carries, by how the HOES data were extracted: lacognata exit k_f/mu_f (La "
-        "Cognata's working formula); triple exit Gamma_f alone; kf3body exit Gamma_f/(mu_f k_f); lambda32 exit "
-        "Gamma_f, entrance 1/k_i on shell"},
+        "the kinematic factor K(E) the model carries, by how the HOES data were extracted (the experiments divide "
+        "the yield by the Monte Carlo KF |phi|^2, so no further KF is applied): lacognata exit k_f/mu_f (the default; "
+        "Tumino et al. 2021 Eq. 50); triple K = 1; kf3body exit Gamma_f/(mu_f k_f) and lambda32 entrance 1/k_i on "
+        "shell are kept for old projects"},
        false, "lacognata|triple|kf3body|lambda32",
        [](const std::string &value, ThmOptionLine &out) {
          out.kind = ThmOptionLine::KINEMATICS;

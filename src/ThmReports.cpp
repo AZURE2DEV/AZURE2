@@ -46,7 +46,28 @@ void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Res
     for (size_t k = 0; k < r.segments.size(); k++) out << (k ? "," : " ") << r.segments[k];
     out << "\nbackground: " << r.background << "\npoints: " << r.points << "\nchi2: " << r.chi2
         << "\nstatus: " << r.status << "\n";
-
+    // An incoherent background stands for a cross section (combinatorial, non-quasi-free, sequential): it cannot be
+    // negative (the review of M. La Cognata, Nov 2026; docs "Background").  The profile does not bound it, so say so
+    // when it is negative inside the experiment's energy range.  The output files are not changed.
+    if (r.background != "none")
+      for (int g = 0; g < Data().NumThmGroups(); g++) {
+        const ThmGroup &group = Data().GetThmGroup(g);
+        if (group.name != r.name || group.segments.empty()) continue;
+        double eLo = 0.0, eHi = 0.0;
+        ThmGroupEnergyRange(*this, group, eLo, eHi);
+        auto b = [&](double e) { return r.value[1] + r.value[2] * e + r.value[3] * e * e; };
+        double eMin = b(eLo) < b(eHi) ? eLo : eHi;
+        if (r.value[3] > 0.0) {
+          const double t = -r.value[2] / (2.0 * r.value[3]);
+          if (t > eLo && t < eHi) eMin = t;
+        }
+        if (b(eMin) < 0.0 && configure.FirstTime("thm negative background " + r.name))
+          configure.outStream << "WARNING: <thm> experiment[" << r.name << "]: the profiled background b(E) is "
+                              << "negative in the experiment's energy range (b = " << b(eMin) << " at E = " << eMin
+                              << " MeV, model units).  A negative background is a negative cross section; use "
+                                 "background=none, or a background that stays non-negative."
+                              << std::endl;
+      }
     const char *names[4] = {"norm", "b0", "b1", "b2"};
     int q = 1 + (r.background == "none" ? 0 : r.background == "const" ? 1 : r.background == "linear" ? 2 : 3);
     for (int i = 0; i < q; i++)

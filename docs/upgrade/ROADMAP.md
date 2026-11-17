@@ -361,6 +361,11 @@ split into files of one job (`FOR_THE_OWNER.md` section 10 item 5), no function 
       whether SRIM's two data files are shipped.
 - [ ] THM (`THM.md` §1–2): σ_HOES observable with plane-wave and full-form-factor vertices, THM kernel (c.m.
       resolution, QF window, OES S-fold), free or double-ratio normalization, legacy K options marked.
+  - [x] Full-form-factor vertex `vertexModel=ff` (`thm_form_factor.md`; branch `feature/upgrade-5-thm-ff`, de95311a).
+  - [x] Legacy K options marked in the key table; warnings for a THM energy shift and a negative profiled
+        background (the review of M. La Cognata; same branch).
+  - [ ] Double-ratio normalization to a reference resonance; non-negative background as an option (thm-review
+        073fe48, not ported); the OES S-fold.
 Gate: outputs within the stated quadrature tolerance, each difference explained; smooth χ² in shifts; gradient = FD.
 
 ## Phase 6 — Evaluation without copies

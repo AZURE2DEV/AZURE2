@@ -498,6 +498,20 @@ int WorkingCopy::BuildThmGroups(const Config &configure, const CompoundSystem *c
                           << "); it needs more." << std::endl;
       return -1;
     }
+    // THM data are not moved in energy: resonance energies stay at their literature values and no THM peak
+    // displacement has been observed (the review of M. La Cognata, Nov 2026; docs/upgrade/THM.md).  A shift changes
+    // no result here, so it is reported, not refused.
+    for (int s : group.segments) {
+      const Segment *segment = Draft().GetSegment(s);
+      if ((segment->StartEnergyShift() != 0.0 || segment->IsVaryEnergyShift() || segment->StartEnergyShiftSqrt() != 0.0 ||
+           segment->IsVaryEnergyShiftSqrt()) &&
+          configure.FirstTime("thm energy shift " + std::to_string(segment->GetSegmentKey())))
+        configure.outStream << "WARNING: <thm> experiment[" << x.name << "]: data set " << segment->GetSegmentKey()
+                            << " carries an energy shift.  THM energies are not shifted to the levels: keep the "
+                               "resonance energies at their literature values and drop the shift, or state why it "
+                               "is a calibration of the measured energies."
+                            << std::endl;
+    }
     group.trivial = group.segments.size() == 1 && group.terms == 0;
     group.pairKey = Draft().GetSegment(group.segments[0])->GetEntranceKey();
     for (int s : group.segments)
