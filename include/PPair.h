@@ -92,8 +92,12 @@ class PPair {
   /// Separation energy of the pair (MeV). Subtract it, and the excitation
   /// energy, from a level's energy to get that channel's centre-of-mass energy.
   double GetSepE() const;
-  /// Channel radius (fm) -- the matching surface between internal and external regions.
-  double GetChRad() const;
+  /// The pair's radius (fm), column 28 of a level line: the radius a channel of the pair takes at set-up
+  /// (AChannel::SetRadius).  A channel quantity -- penetrability, shift function, hard-sphere phase, boundary
+  /// condition, Wigner limit, a bound-state integral -- reads AChannel::GetRadius(), not this.  This one is for
+  /// what belongs to the pair and to no channel: the beta-decay Fermi function, the THM vertex's form factor, the
+  /// signatures of the tables, the reports' "Channel Radius" line.
+  double GetPairRadius() const;
   /// Change the channel radius. Everything derived from it -- penetrabilities,
   /// shift functions, boundary conditions, external-capture integrals -- must
   /// be recomputed afterwards.

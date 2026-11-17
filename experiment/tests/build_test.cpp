@@ -755,6 +755,43 @@ int main() {
     ExpectOne("E_POTENTIAL_TWICE", BuildText(potentials(pot + "potential again\n" + pot.substr(pot.find('\n') + 1))));
     ExpectOne("E_POTENTIAL_PAIR_KIND", BuildText(potentials(Set(pot, "pair", "    pair g+16O"))));
     ExpectOne("E_POTENTIAL_RELATIVISTIC", BuildText(potentials(pot), true));
+    // ---- the `channel_radius` records of <channelRadii>: entries in record order, s and J where given
+    {
+      auto radii = [](const std::string &body) { return "<channelRadii>\n" + body + "</channelRadii>\n"; };
+      const std::string l1 = "channel_radius p1\n    pair p+12C\n    l 1\n    radius 4.0 fm\n";
+      const std::string j = "channel_radius p1j\n    pair p+12C\n    l 1\n    radius 4.5e-15 m\n    J 3/2\n";
+      const std::string sj = "channel_radius p1sj\n    pair p+12C\n    l 1\n    radius 4.2 fm\n    s 1/2\n    J 3/2\n";
+      const BuiltProject r = BuildText(radii(l1 + j + sj));
+      const bool three = r.Ok() && r.diagnostics.empty() && r.channelRadii.size() == 3;
+      check("three channel_radius records build", three);
+      if (three) {
+        const std::vector<ChannelRadiusEntry> &e = r.channelRadii;
+        check("pair key, l and radius in fm", e[0].pair_key == 7 && e[0].l == 1 && e[0].radius_fm == 4.0 && !e[0].has_s && !e[0].has_J);
+        check("J where given, the radius through the unit table", e[1].has_J && e[1].two_J == 3 && !e[1].has_s &&
+                                                                      std::fabs(e[1].radius_fm - 4.5) < 1e-12);
+        check("s and J", e[2].has_s && e[2].two_s == 1 && e[2].has_J && e[2].two_J == 3);
+        bool ambiguous = true;
+        const ChannelRadiusEntry *best = ChannelRadiusFor(e, 7, 1, 1, 3, &ambiguous);
+        check("the most specific record names the channel (l, s, J)", best == &e[2] && !ambiguous);
+        best = ChannelRadiusFor(e, 7, 1, 1, 1, &ambiguous);
+        check("another J falls back to the record with l alone", best == &e[0] && !ambiguous);
+        check("another l or pair: no record", !ChannelRadiusFor(e, 7, 2, 1, 3, &ambiguous) && !ChannelRadiusFor(e, 1, 1, 1, 3, &ambiguous));
+        std::vector<ChannelRadiusEntry> two = {e[1], e[1]};
+        two[1].has_J = false;
+        two[1].has_s = true;
+        two[1].two_s = 1;
+        ChannelRadiusFor(two, 7, 1, 1, 3, &ambiguous);
+        check("a record with s only and one with J only on one channel: ambiguous", ambiguous);
+        check("the entry's text", e[1].Text() == "pair 7, l = 1, J = 3/2");
+      }
+      ExpectOne("E_CHANNEL_RADIUS_TWICE", BuildText(radii(l1 + "channel_radius again\n" + l1.substr(l1.find('\n') + 1))));
+      check("the same l with another J is another selection", BuildText(radii(l1 + j)).Ok());
+      ExpectOne("E_CHANNEL_RADIUS_PAIR_KIND", BuildText(radii(Set(l1, "pair", "    pair g+16O"))));
+      ExpectOne("E_UNKNOWN_PAIR", BuildText(radii(Set(l1, "pair", "    pair p+13C"))));
+      // the THM data set enters through p+15N: a channel radius on that pair refuses it
+      const std::string thmSet = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
+      ExpectOne("E_CHANNEL_RADIUS_THM", BuildText(Data(thmSet) + radii(Set(l1, "pair", "    pair p+15N"))));
+    }
     // the THM data set d5 above enters through p+15N: a potential on that pair refuses it
     const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
     ExpectOne("E_THM_HYBRID_POTENTIAL", BuildText(Data(thm) + potentials(gauss)));
@@ -837,8 +874,6 @@ int main() {
         return ok;
       };
       const std::string base = config + "format=3\n</config>\n";
-      check("E_UNKNOWN_SECTION: <channelRadii> named as a newer AZURE2's block",
-            one(base + "<channelRadii>\n1 0 5.5\n</channelRadii>\n", "E_UNKNOWN_SECTION", 15, "newer AZURE2"));
       check("E_UNKNOWN_SECTION: <isospin> named as a newer AZURE2's block",
             one(base + "<isospin>\nreference 1\n</isospin>\n", "E_UNKNOWN_SECTION", 15, "isospin ties"));
       check("E_UNKNOWN_SECTION: a section of no AZURE2", one(base + "<notes>\nhello\n</notes>\n", "E_UNKNOWN_SECTION", 15,

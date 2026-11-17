@@ -632,7 +632,7 @@ channel functions a second time (`ParticleChannelValues(pair, l, pair->SpinOrbit
 |---|---|---|
 | `P` | the factor the observed W was formed with, W = s 2 \|gamma\|^2 P / N (`ChannelValues::P` at the record's E): an open particle channel (kind Width) P_l(E_c), the penetrability at the channel radius; a closed one (kind ANC) mu a / (hbar^2 W_l(2 kappa a)^2); 0 at a threshold; a photon channel (E_gamma / hbar c)^(2L+1) (1 with `--use-rmc`) or a static moment's factor; 0 for a beta channel | 1; MeV^-1 fm^-1 (closed); fm^-(2L+1) (photon) |
 | `mu_u` | the reduced mass of the channel's pair, `PPair::GetRedMass()`; 0 for a photon or beta channel | u |
-| `a_fm` | the channel radius of the channel's pair, `PPair::GetChRad()`; 0 for a photon or beta channel | fm |
+| `a_fm` | the channel's radius, `AChannel::GetRadius()` (the pair's unless a `channel_radius` record sets it); 0 for a photon or beta channel | fm |
 
 **Where it is filled.** P is handed on, not computed again: physics/ `observed_levels` evaluates the channel functions
 of every column once at E to form W, and `ObservedLevels` gains the member `P` (row-major as W) holding the value it

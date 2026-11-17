@@ -101,6 +101,13 @@ struct OldProject {
   OldThm thm;
   std::map<int, double> normCentre, shiftCentre;  ///< prior_centre rows by segment key
   std::map<int, std::string> normCentreText, shiftCentreText;
+  /// A line of dev's <channelRadii> block: "<pair key> <l> <radius> [s=<s>] [J=<J>]", the numbers as written.
+  struct ChannelRadiusLine {
+    int key = 0, l = 0;
+    std::string radius, s, J;  ///< s, J: "" when not given
+    std::string text;
+  };
+  std::vector<ChannelRadiusLine> channelRadii;  ///< the lines of an old <channelRadii> block (none: no block, or records)
   bool hasPotential = false;  ///< a <potential> block (the hybrid model on for some pair)
   PotentialBlock potential;   ///< as the engine reads it (its warnings included)
   double abundanceSumSigma = 0.0;  ///< <config> abundanceSumSigma= (the engine's global sum width)

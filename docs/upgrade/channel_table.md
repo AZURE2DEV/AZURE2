@@ -38,12 +38,13 @@ Kinds 1 and 2 are evaluation energies of the stage; kind 3 is not (the radii are
 
 ## 2. The channel table (kinds 1 and 2)
 
-**Definition.** A `ChannelTable` maps a key (α, l, E_c) to a row (P, S, e^{−iφ}, e^{i(σ_l − σ_0)}), dimensionless.
-α is the engine's pair number, which fixes Z₁Z₂, the masses, the channel radius a_c, the hybrid potential and the
-Coulomb route; E_c is the double formed by `EPoint`'s one expression, (E_x − S_α) − e_α, and the key compares it
+**Definition.** A `ChannelTable` maps a key (α, l, a_c, E_c) to a row (P, S, e^{−iφ}, e^{i(σ_l − σ_0)}),
+dimensionless. α is the engine's pair number, which fixes Z₁Z₂, the masses, the hybrid potential and the Coulomb
+route; a_c is the channel's radius in fm (`AChannel::GetRadius`, since 2026-11-15 a member of the key: the pair's
+radius for every channel today, a channel's own once radii per channel are read), compared exactly like the energy; E_c is the double formed by `EPoint`'s one expression, (E_x − S_α) − e_α, and the key compares it
 exactly: two energies one ulp apart are two rows. No tolerance, so no row depends on which energy came first.
 
-**Values.** One function, `ChannelTable::Compute(pair, l, E_c)`, gives a row, by the engine's rules unchanged: an
+**Values.** One function, `ChannelTable::Compute(pair, l, 2J, a_c, E_c)`, gives a row, by the engine's rules unchanged: an
 open channel (`ChannelFunc::IsClosed` false) takes P, S, e^{−iφ} from `CoulFunc` (physics/ `channel_functions`, the
 Coulomb table or the hybrid model as configured) and e^{i(σ_l − σ_0)} = Π_{l′=1}^{l} (l′ + iη)/|l′ + iη|; a closed
 channel (below, at or within the η > 100 band above threshold) takes S from `ChannelFunc::Shift` (the Whittaker branch)

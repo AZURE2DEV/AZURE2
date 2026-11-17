@@ -104,7 +104,8 @@ class ECIntegral {
    * The PPair object is used to create new instances of the CoulFunc and
    * WhitFunc objects.
    */
-  ECIntegral(const PPair *pPair, const Config &configure);
+  /// \p radius: the radius a_c (fm) of the final-state channel, the lower limit of the integral.
+  ECIntegral(const PPair *pPair, const Config &configure, double radius);
   /*!
    * The CoulFunc and WhitFunc objects are automatically destroyed with the object.
    */
@@ -143,6 +144,7 @@ class ECIntegral {
   Params params_;
   /// The run's scratch of this thread (ECScratch).
   ECScratch &scratch_;
+  double radius_;  ///< the final-state channel's radius a_c (fm)
   const PPair *pair_;
   const Config *configure_;
   double FW_;

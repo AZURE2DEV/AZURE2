@@ -29,6 +29,8 @@ Sections
      - ``potential``
    * - ``<gammaDecays>``
      - ``gamma_decay``
+   * - ``<channelRadii>``
+     - ``channel_radius``
 
 Value types
 -----------
@@ -717,6 +719,44 @@ Radiative decay of a level, in ``<gammaDecays>``.  A level's radiative partial w
      - ``<text>``
      - optional
      - the DOI of the publication
+
+channel_radius
+~~~~~~~~~~~~~~
+
+Channel radius, in ``<channelRadii>``.  A radius of their own for some channels of one particle pair, in place of the pair's radius of <levels>: every channel of the pair with this l, or only those with the channel spin s or the total J given.  The most specific record that names a channel gives its radius (l, s and J; then l and one of them; then l alone).  Everything taken at the channel radius follows: penetrability, shift, hard-sphere phase, boundary condition and Wigner limit.  A channel no record names keeps its pair's radius.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair of <levels> by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``l``
+     - ``<integer >= 0>``
+     - required
+     - the l of the channels
+   * - ``radius``
+     - ``<number> <length unit>``
+     - required
+     - the channel radius a_c of these channels
+   * - ``s``
+     - ``<J>``
+     - optional
+     - only the channels with this channel spin; absent: every s
+   * - ``J``
+     - ``<J>``
+     - optional
+     - only the channels of this total angular momentum; absent: every J
 
 Quantities
 ----------
@@ -2070,6 +2110,15 @@ Diagnostic codes
    * - ``E_POTENTIAL_PAIR_KIND``
      - error
      - a potential record on a photon or beta pair (a potential belongs to a particle pair)
+   * - ``E_CHANNEL_RADIUS_TWICE``
+     - error
+     - two channel_radius records for one selection of channels (pair, l, s, J)
+   * - ``E_CHANNEL_RADIUS_PAIR_KIND``
+     - error
+     - a channel_radius record on a photon or beta pair (a radius belongs to a particle channel)
+   * - ``E_CHANNEL_RADIUS_THM``
+     - error
+     - a channel_radius record on the entrance pair of a THM data set (the vertex is built at the pair's radius)
    * - ``E_POTENTIAL_RELATIVISTIC``
      - error
      - a potential record in a project with relativistic kinematics

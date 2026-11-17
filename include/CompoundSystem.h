@@ -205,6 +205,8 @@ class CompoundSystem {
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);
+  /// The `channel_radius` records onto the channels they name (CompoundSystemBuild.cpp); -1 after an error.
+  int ApplyChannelRadii(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
   int ParseExternalCapture(const Config &, std::map<int, int> &, const std::vector<azure2::io::LevelRow> &rows);

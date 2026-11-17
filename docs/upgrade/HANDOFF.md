@@ -2,6 +2,134 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — per-channel radii, step 3: the session side
+
+**Branch** `feature/upgrade-5-dev-channel-radii`, on the entry below. dev's step 3 was a session method
+(`set_channel_radius(pair, radius, L, S, J)` over `AZUREAPI::SetChannelRadius`). This branch took the session's
+radius method away (`tests/pyazr/radius_override_test.py`, check 4: a radius is a Project edit and a new session),
+and `AZUREAPI::SetRadius` is bound to nothing in pyazr, so no channel form was added to it: a channel's own radius
+is `Project.add("channel_radius", name, pair=, l=, radius=[, s=, J=])`, `Project.set` and `Project.remove`, which
+needed no code.
+
+**Changed.** `AZUREAPI::GetCoulombFunctions` (`api/src/AZUREAPIChannelFunctions.cpp`): with no radius in the request
+it took the pair's radius; it now takes the radius of the model's channels of that pair and l, which a
+`channel_radius` record may have given them, and the pair's when the model has no such channel. When records with s
+or J give those channels more than one radius there is no default: `std::invalid_argument` ("... have more than one
+radius ...: give the radius"), a `ValueError` in `Session.channel_functions`. The closed-channel shift is given at
+that default radius as it was at the pair's. A project without `channel_radius` records: the same numbers.
+
+**Test.** `tests/pyazr/channel_radius_record_test.py` (ctest `pyazr_channel_radius_record`), on
+`tests/channel_space`: records for every l of pair 1 at 4.2 fm give the reduced widths (rel 1e-12) and chi2
+(rel 1e-10) of `Project.set_pair(1, radius=4.2)`; l = 1 alone is neither model; `channel_functions` at the
+channel's own radius; the refusal on pair 2 (l = 1, s = 3/2 and 5/2 at two radii); `Project.set` and
+`Project.remove`, the removal giving the file's model back; a second record of one selection refused by the edit
+(`E_CHANNEL_RADIUS_TWICE`).
+
+**Open.** The compound-nucleus check and `describe` do not list the entries (`Project.describe` of a
+`channel_radius` answers that it is not a record that computes). A session reports a pair's radius
+(`Pair.channel_radius`) and no channel's.
+
+**Run here** (CRC, GCC 11.5): build; the test above, `radius_override_test.py`. The full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots): consistency, configure, build and the docs clean; `tests/channel_radii`
+passes; ctest 313 of 315, the two the base fails (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 171
+pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), every chi2 line
+equal to the gate of the entry below.
+
+## 2026-11-16 (owner's session, dev port) — per-channel radii, steps 2, 4, 5: the `channel_radius` record
+
+**Branch** `feature/upgrade-5-dev-channel-radii`, on `feature/upgrade` `f252ba30` merged into it (the handoff log
+kept both sides' entries; no other conflict). The PI decided on 2026-11-16 that this branch's choices hold for the
+three open points of the dev ports: column 32 of a level line stays the THM binding energy (dev's light-particle
+excitation needs a named key here), the formal boundary condition is at the lowest level of a group, and the record
+names are this branch's (`channel_radius`, `isospin_*`, `spin_observable`).
+
+**What is new.**
+- Record kind `channel_radius` of section `<channelRadii>` (`experiment/src/Schema.cpp`): `pair`, `pair_key`, `l`,
+  `radius`, optional `s` and `J`. `<channelRadii>` left `Schema::NewerSections()`. Schema version unchanged (no
+  existing project changes meaning); `tests/schema/schema_v3.json` and `format3.rst` regenerated.
+- Build (`experiment/src/ChannelRadii.cpp`, `ChannelRadii.h`): one `ChannelRadiusEntry` a record into
+  `BuiltProject::channelRadii`; `ChannelRadiusFor` picks the most specific entry for a channel (l+s+J, then one of s
+  and J, then l) and reports the s-only/J-only tie. Codes `E_CHANNEL_RADIUS_TWICE`, `E_CHANNEL_RADIUS_PAIR_KIND`,
+  `E_CHANNEL_RADIUS_THM` (a THM data set whose entrance pair has an entry: the vertex is at the pair's radius).
+- Set-up (`CompoundSystem::ApplyChannelRadii`, `CompoundSystemBuild.cpp`): after every channel exists (hard-sphere
+  groups included) and after a session's pair override; the tie is an ERROR, an entry that names no channel a
+  WARNING.
+- External capture: `ExternalRow::through_row`, the internal pathway a capture goes through, for direct capture
+  too. The entrance wave's closed test and hard-sphere phase are at that pathway's entrance channel's radius, the
+  integral at the final channel's; `RefuseCaptureAcrossRadii` refuses a model in which the folded wave's channel and
+  the final channel have different radii (dev's rule; DeBoer, 2026-11-10). `WorkingCopy::ECSignature` adds the two
+  radii of a pathway only where one is not its pair's, so an existing integrals file keeps its signature.
+- `physics::System` is unchanged, and this is **open for its owner**: a system channel is (partition, kind, l, s),
+  one for every J^pi block that has it, and `System` refuses two that differ in anything else. A record with `J`
+  gives the blocks different radii, so `Channel::radius_fm` (the first block's) is then not the radius of the others.
+  Nothing in `physics/` or `src/` reads that member today (the engine reads `AChannel::GetRadius`); whoever first
+  reads it needs the radius per block and channel instead. Tried and taken back: making the radius part of the
+  channel's identity in `SystemOfCompound.cpp` (the constructor refuses it: "same (partition, kind, l, s)").
+- Converter: dev's lines `<pair key> <l> <radius> [s=<s>] [J=<J>]` become records in the same section
+  (`OldProject.cpp`, `Builder::BuildChannelRadii`); a block that starts with a `channel_radius` record is left alone.
+- `tests/channel_radii` (dev's test, re-written for records): phase shifts wave by wave on both routes and both
+  bases against the model with the pair's radius changed, every l against the plain models, 13N with external
+  capture, the refusals and the warning.
+
+**Not written.** Step 3: `AZUREAPI::SetRadius` has no channel form, and a pyazr session cannot set a channel's
+radius except through the project's records. The compound-nucleus check and `describe` do not list the entries.
+`ChannelTable`'s pair signatures hold the pair's radius only; its rows are keyed by the radius, so a stale row is
+not found, but the reuse test does not see a changed entry. THM stays refused rather than carried.
+
+**Run here** (CRC, GCC 11.5): build; `experiment_build`, `experiment_diagnostics`, `experiment_schema`,
+`pyazr_schema`, `convert_constructs`, `convert_fixtures`, `physics_system_of_compound`, `physics_pathway_table`;
+`tests/channel_radii/check.sh`. The full gate: see the end of this entry. **Not run:** CI.
+
+**The full gate** (queue jobs, 8 slots; the merge of `feature/upgrade` f252ba30 alone, then this commit on it):
+consistency, configure, build and the docs clean on both; ctest 312 of 314 on both, the same two failing
+(`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 170 pass and 2 fail on the merge, 171 pass and
+2 fail here (the new `tests/channel_radii`), the same two failing (`capture_ay_coupling`, "a warning for ancai06
+inside its range"); every chi2 line of the suites equal between the two.
+
+## 2026-11-15 (owner's session, dev port) — per-channel radii, step 1: the channel holds its radius
+
+**Branch `feature/upgrade-5-dev-channel-radii`** (from `feature/upgrade` `7a1d96d0`), not merged. Step 1 of
+`dev_features.md` section 2 only: a refactor, no new input, every output meant to be identical.
+
+**What changed.**
+- `AChannel::SetRadius(radius, reducedMass)` (was `SetWignerLimit`) stores the radius and the Wigner limit;
+  `AChannel::GetRadius()` gives it and throws `std::logic_error` on a channel never set up. The three places that
+  make or re-radius a channel (`CompoundSystemBuild.cpp`) fill it from the pair, as before.
+- `PPair::GetChRad` is renamed `GetPairRadius`, so that no channel quantity reads it by habit. It stays for what
+  belongs to the pair: the beta Fermi function, the THM vertex's form factor (`ThmBesselParts`, `ThmCoulombTerm`,
+  `ThmDwVertex`, the THM reports), the signatures of the tables, the report line, the API's default radius.
+- The helpers take the radius instead of reading the pair's: `ChannelFunc(pair, gsl, radius)`,
+  `ShftFunc(pair, radius)`, `NFIntegral(pair, radius)`, `ECIntegral(pair, configure, radius)`,
+  `ECTable::Integral(pair, radius, ...)` (the radius was already in its term key), `ScatteringLength::CoulombX /
+  ZeroEnergyShift / FormulaCoefficients`, `ParticleChannelValues`, `ThmVertexBoundary::ShiftAtLevelEnergy`. Every
+  caller with a channel in hand passes `channel->GetRadius()`.
+- `ChannelTable::Key` gains `radius` (compared exactly, between 2J and the energy) and a constructor of all five
+  members: a key written one member short does not compile (as an aggregate it took the energy for the radius --
+  the unit test found that). `docs/upgrade/channel_table.md` section 2 says so.
+- The shared shift derivative of `LevelStateFill.cpp` (channels that differ only in channel spin) is shared at
+  one radius; the system's channel (`SystemOfCompound.cpp`) takes `radius_fm` from the channel.
+- External capture (`UnitExternalCapture.cpp`): two radii. The radial integral runs from the final channel's
+  radius. The entrance wave's closed test and hard-sphere phase are at the entrance channel's radius: for channel
+  capture that is the entrance channel of the internal pathway the capture passes through, which can be of another
+  partition (`tests/beam_profile_kernel`: 12C+alpha at 5.43 fm in, capture in 15N+p at 5.03 fm). The first form of
+  this step took both at the final channel's radius, and that project moved by 3.1e-3 in chi2 -- the only one of
+  the gate that did; with the two radii its outputs are byte-identical to the base's. For direct capture the
+  entrance and final channels are of one partition; dev refuses a transition whose two channels have different
+  radii, and that refusal belongs to step 4 here.
+
+**Open for the next steps.**
+- THM with radii per channel: the vertex pieces are kept per l of the entrance pair (`psCoulByL`), at the pair's
+  radius. Either refuse a `channel_radius` on a THM entrance pair or carry the radius there. Not decided.
+- `SystemOfCompound.cpp` merges channels of equal (partition, kind, l, 2s) across J^pi blocks; a radius qualified
+  by J needs the radius in that comparison.
+- `ChannelTable`'s pair signatures and `WorkingCopy::ECSignature` still hold the pair's radius only (step 4).
+- Steps 2-5 (the record, the API's channel form, the signatures, dev's test) wait for the record's name.
+
+**Run here** (CRC, GCC 11.5): build; `wigner_limit_reference` (two new checks), `channel_threshold`,
+`channel_table_unit`, `physics_system_of_compound`, `pyazr_wigner_convention`, `upgrade_predictions`;
+`repo_consistency_test.py`. The full gate (queue job, 8 slots): consistency, configure, build and the docs clean; ctest 308 of 310, the two the base fails (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites 170 pass, 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"), every chi2 line equal to the base's. **Not run:** CI.
+
 ## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-seed`: dev's bounded MIGRAD seed, re-written here
 
 **Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. The first of

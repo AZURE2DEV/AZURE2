@@ -62,7 +62,7 @@ void CheckProject(const std::string &azr) {
     for (int l = 0; l <= 4; l++)
       for (double e : {-2.0, -0.3, -1e-6, 2e-10, 1e-4, 0.01, 0.1, 0.35, 1.0, 2.5, 7.0})
         for (double J : {l + 0.5, std::fabs(l - 0.5)})  // both j of a spin-1/2 particle: distinct keys for a spin-orbit pair
-          keys.push_back({p, l, compound.GetPair(p)->SpinOrbitTwoJ(J), e});
+          keys.push_back({p, l, compound.GetPair(p)->SpinOrbitTwoJ(J), compound.GetPair(p)->GetPairRadius(), e});
   }
   std::printf("%s: %zu keys\n", azr.c_str(), keys.size());
   std::vector<ChannelTable::Key> shuffled = keys;
@@ -81,25 +81,25 @@ void CheckProject(const std::string &azr) {
   bool computeSame = true;
   for (const auto &k : keys)
     computeSame = computeSame && SameBits(*one->Find(k),
-                                          ChannelTable::Compute(compound.GetPair(k.pair), k.l, k.two_j, k.energy, cfg));
+                                          ChannelTable::Compute(compound.GetPair(k.pair), k.l, k.two_j, k.radius, k.energy, cfg));
   check("every row == ChannelTable::Compute at its key (bits)", computeSame);
   bool noNeighbour = true;
   for (const auto &k : keys)
-    noNeighbour = noNeighbour && !one->Find({k.pair, k.l, k.two_j, std::nextafter(k.energy, 1e9)}) &&
-                  !one->Find({k.pair, k.l, k.two_j, std::nextafter(k.energy, -1e9)});
+    noNeighbour = noNeighbour && !one->Find({k.pair, k.l, k.two_j, k.radius, std::nextafter(k.energy, 1e9)}) &&
+                  !one->Find({k.pair, k.l, k.two_j, k.radius, std::nextafter(k.energy, -1e9)});
   check("no row for E_c one ulp from a key", noNeighbour);
   // a pair with a spin-orbit term: rows of l >= 1 differ between j = l - 1/2 and l + 1/2 above threshold, and no row
   // is found under the other j's key (the key holds 2J)
   for (int p = 1; p <= compound.NumPairs(); p++) {
     const PPair *pair = compound.GetPair(p);
     if (pair->SpinOrbitTwoJ(0.5) == azure2::physics::kNoSpinOrbit) continue;
-    const ChannelTable::Row *a = one->Find({p, 1, 1, 1.0}), *b = one->Find({p, 1, 3, 1.0});
+    const ChannelTable::Row *a = one->Find({p, 1, 1, pair->GetPairRadius(), 1.0}), *b = one->Find({p, 1, 3, pair->GetPairRadius(), 1.0});
     check("spin-orbit pair " + std::to_string(p) + ": p1/2 and p3/2 rows differ", a && b && a->P != b->P && a->S != b->S);
     check("spin-orbit pair " + std::to_string(p) + ": no row under kNoSpinOrbit",
-          !one->Find({p, 1, azure2::physics::kNoSpinOrbit, 1.0}));
+          !one->Find({p, 1, azure2::physics::kNoSpinOrbit, compound.GetPair(p)->GetPairRadius(), 1.0}));
   }
   std::vector<ChannelTable::Key> more = keys;
-  for (const auto &k : keys) more.push_back({k.pair, k.l, k.two_j, k.energy * 1.5 + 0.01});
+  for (const auto &k : keys) more.push_back({k.pair, k.l, k.two_j, k.radius, k.energy * 1.5 + 0.01});
   auto fromPrevious = ChannelTable::Build(&compound, cfg, more, one.get());
   auto fromScratch = ChannelTable::Build(&compound, cfg, more);
   check("built from a previous table == built from scratch (bits)", SameTable(*fromPrevious, *fromScratch, more));
@@ -108,7 +108,7 @@ void CheckProject(const std::string &azr) {
   // The same project with the first key's pair at another channel radius (the structure is fixed after set-up: a
   // radius is changed by filling the compound again with the override, as the API's SetRadius does).
   const CompoundSetUp moved =
-      test_setup::WithoutData(cfg, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetChRad() + 0.5}});
+      test_setup::WithoutData(cfg, {{keys.front().pair, compound.GetPair(keys.front().pair)->GetPairRadius() + 0.5}});
   auto changed = ChannelTable::Build(moved.compound.get(), cfg, keys, one.get());
   check("a previous table of another channel radius is not reused", changed->Computed() == changed->Size());
 }

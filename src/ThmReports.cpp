@@ -331,7 +331,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
   out.experiment = name;
   out.pairKey = group->pairKey;
   out.bind = pair->GetBindingEnergy();
-  out.radius = pair->GetChRad();
+  out.radius = pair->GetPairRadius();
   const ThmDwVertex *dw = group->dwVertex.get();
   out.energy = energies;
   if (group->window) {

@@ -89,6 +89,9 @@ struct ExternalRow {
   int cc_exit, cc_group, cc_pathway;  ///< channel capture: the internal pathway it passes through, as positions (exit,
                                       ///< k, m; 1-based); 0 for direct capture
   int cc_row;                 ///< that pathway as an index into EntrancePathways::internal; -1 for direct capture
+  int through_row;            ///< the internal pathway the capture goes through, for direct capture too (whose entrance
+                              ///< and exit channel it is): `ch` is the entrance channel, `chp` the channel of the
+                              ///< wave the radial integral folds
   int photon_channel;         ///< J-group channel of the block's photon channel to the final state (1-based), 0 if none
 };
 

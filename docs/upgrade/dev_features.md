@@ -31,8 +31,9 @@ commits were not read. The hours are estimates of an agent that did not do the w
   lowest level of its group, `--no-transform` input, the ANC-sign and static-moment reports, a zero ANC. dev's
   `tests/formal_ec_final_state` is here since 2026-11-15 (50 checks pass; its README lists the two differences from
   dev that remain open: no analytic derivative of the final state's amplitude, and a refusal where dev warns).
-- **dev's new blocks in an old project file** (`<channelRadii>`, `<isospin>`, spin-operator data types): refused by
-  the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands.
+- **dev's new blocks in an old project file** (`<isospin>`, spin-operator data types): refused by
+  the converter and by the reader with a message, never read past. Each refusal is lifted where its feature lands
+  (`<channelRadii>`: lifted, section 2).
 - **The flight path of a UDR record** is in metres (it was mis-scaled here; repaired).
 
 ## 2. Per-channel radii
@@ -56,6 +57,23 @@ radius; the cache of external-capture integrals knows the entries.
    schema.
 
 Estimate 10–20 h (the refactor 4–6). An unfinished attempt exists (section 8).
+
+*Step 1 is written* on `feature/upgrade-5-dev-channel-radii` (2026-11-15, the owner's session): `AChannel::GetRadius`,
+`PPair::GetChRad` renamed `GetPairRadius`, the radius in the channel table's key. HANDOFF has the entry and what it
+leaves open (THM, the system's merged channels, the two signatures).
+
+*Steps 2, 4 and 5 are written* there too (2026-11-16): the record kind `channel_radius` of `<channelRadii>` (names by
+the PI's decision of 2026-11-16: this branch's), its build and its application at set-up, the converter of dev's
+block, the refusal of an external-capture transition across two radii, the radii in the signature of the capture
+integrals' file, and `tests/channel_radii`. A `channel_radius` on the entrance pair of a THM data set is refused
+(`E_CHANNEL_RADIUS_THM`).
+
+*Step 3 is written* as this branch does a pair's radius (2026-11-16): a session has no method that changes a radius,
+so a channel's own radius is `Project.add("channel_radius", ...)` and a new session, and `AZUREAPI::SetRadius`
+(bound to nothing in pyazr) gains no channel form. What the session gained: `Session.channel_functions` with no
+radius is evaluated at the radius of the pair's channels of that l (refused when records with s or J give them more
+than one). `tests/pyazr/channel_radius_record_test.py`. *Not written:* the radii in the compound-nucleus check's
+report and in `describe` (`Project.describe` of a `channel_radius` says it is not a record that computes).
 
 ## 3. General spin observables
 

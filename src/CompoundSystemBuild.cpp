@@ -83,6 +83,83 @@ int CompoundSystem::FindOrAddNucleus(int z, int a) {
  * input files.  Returns -1 if the files could not be read, and 0 if the files were read successfully.
  */
 
+/*!
+ * External capture needs one radius per transition: the radial integral runs outward from the final channel's a_c,
+ * over the wave of the channel the capture goes through (the entrance channel for direct capture, the exit channel of
+ * the internal pathway for channel capture), and with two radii it is not defined where the external region starts
+ * (DeBoer, 2026-11-10).  A model with a transition whose two channels have different radii is refused; with one radius
+ * per pair there is none.  Throws GSLException, the set-up's error.
+ */
+static void RefuseCaptureAcrossRadii(const CompoundSystem &compound) {
+  for (int aa = 1; aa <= compound.NumPairs(); aa++) {
+    if (!compound.GetPair(aa)->IsEntrance()) continue;
+    const azure2::EntrancePathways &P = compound.Pathways().Entrance(aa);
+    for (const azure2::ExternalRow &x : P.external) {
+      const azure2::InternalRow &through = P.internal[x.through_row];
+      const JGroup *group = compound.GetJGroup(through.group);
+      const AChannel *wave = group->GetChannel(through.chp);
+      const JGroup *finalGroup = compound.GetJGroup(x.final_group);
+      const AChannel *final = finalGroup->GetChannel(x.final_channel);
+      if (wave->GetRadius() == final->GetRadius()) continue;
+      std::ostringstream m;
+      m << "ERROR: external capture across two channel radii: the " << x.rad_type << x.mult << " capture from the channel l = "
+        << wave->GetL() << ", s = " << wave->GetS() << ", J = " << group->GetJ() << " (radius " << wave->GetRadius()
+        << " fm) into the final state's channel l = " << final->GetL() << ", s = " << final->GetS() << ", J = "
+        << finalGroup->GetJ() << " (radius " << final->GetRadius() << " fm) of pair "
+        << compound.GetPair(final->GetPairNum())->GetPairKey()
+        << ".  The radial integral starts at one radius: give the two channels the same radius (<channelRadii>).";
+      throw GSLException(m.str());
+    }
+  }
+}
+
+/*!
+ * The radii of single channels (the `channel_radius` records of <channelRadii>): each particle channel a record names
+ * takes the radius of the most specific record that names it (experiment::ChannelRadiusFor), with its Wigner limit;
+ * every other channel keeps its pair's radius.  After every channel exists (the hard-sphere groups included) and
+ * after a session's override of a pair's radius, which a channel's own radius outlives.  Returns -1 after an error:
+ * a channel named by a record with s only and one with J only (its radius is then not defined).  A record that names
+ * no channel of the model is warned about and changes nothing.
+ */
+int CompoundSystem::ApplyChannelRadii(const Config &configure) {
+  CompoundSystem &compound = *this;
+  if (!configure.project) return 0;
+  const std::vector<azure2::experiment::ChannelRadiusEntry> &entries = configure.project->built.channelRadii;
+  if (entries.empty()) return 0;
+  std::vector<bool> used(entries.size(), false);
+  for (int j = 1; j <= compound.NumJGroups(); j++) {
+    JGroup *group = compound.Group(j);
+    const int twoJ = (int)std::lround(2.0 * group->GetJ());
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      AChannel *channel = group->GetChannel(ch);
+      if (channel->GetRadType() != 'P') continue;
+      const PPair *pair = compound.GetPair(channel->GetPairNum());
+      const int twoS = (int)std::lround(2.0 * channel->GetS());
+      bool ambiguous = false;
+      const azure2::experiment::ChannelRadiusEntry *entry =
+          azure2::experiment::ChannelRadiusFor(entries, pair->GetPairKey(), channel->GetL(), twoS, twoJ, &ambiguous);
+      if (!entry) continue;
+      if (ambiguous) {
+        configure.outStream << "ERROR: <channelRadii>: the channel l = " << channel->GetL() << ", s = " << channel->GetS()
+                            << ", J = " << group->GetJ() << " of pair " << pair->GetPairKey()
+                            << " is named by a channel_radius record with s and by one with J, and by none with both: "
+                               "its radius is not defined.  Add a record with l, s and J for it."
+                            << std::endl;
+        return -1;
+      }
+      used[entry - entries.data()] = true;
+      channel->SetRadius(entry->radius_fm, pair->GetRedMass());
+    }
+  }
+  for (std::size_t i = 0; i < entries.size(); i++)
+    if (!used[i])
+      configure.outStream << "WARNING: channel_radius " << entries[i].record << " (line " << entries[i].line << "; "
+                          << entries[i].Text() << ") gives no channel of the model its radius: no channel matches, or "
+                             "a more specific record names every one that does."
+                          << std::endl;
+  return 0;
+}
+
 int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs &inputs, const std::map<int, double> &radii) {
   inputs = LevelInputs();
   if (configure.relativistic && configure.useHybridMethod) {
@@ -189,7 +266,7 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
 
         // Calculate and set Wigner Limit for the newly created channel
         PPair *channelPair = this->Pair(PairNum);
-        this->Group(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
+        this->Group(JGroupNum)->GetChannel(ChannelNum)->SetRadius(channelPair->GetPairRadius(), channelPair->GetRedMass());
       }
       // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
       // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
@@ -266,15 +343,14 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
     }
     PPair *changedPair = this->Pair(it->first);
     changedPair->SetChRad(it->second);
-    // The Wigner limits above were computed inside the parse loop, i.e. with
+    // The channels' radii and Wigner limits above were set inside the parse loop, i.e. with
     // the radius as written in the .azr.  Redo them for the overridden pair,
-    // or every theta^2 reported after a radius change is against the old limit.
+    // or every channel quantity after a radius change is at the old radius.
     for (int j = 1; j <= this->NumJGroups(); j++) {
       for (int ch = 1; ch <= this->Group(j)->NumChannels(); ch++) {
         AChannel *theChannel = this->Group(j)->GetChannel(ch);
         if (theChannel->GetPairNum() == it->first)
-          theChannel->SetWignerLimit(changedPair->GetRedMass(),
-                                     changedPair->GetChRad());
+          theChannel->SetRadius(changedPair->GetPairRadius(), changedPair->GetRedMass());
       }
     }
   }
@@ -282,6 +358,7 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
   for (int p = 1; p <= this->NumPairs(); p++) this->Pair(p)->SetHybridPotential(configure.potentials.PotentialFor(this->Pair(p)->GetPairKey()));  // a value, none: plain Coulomb
   if (configure.includeAllJPi)
     this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
+  if (this->ApplyChannelRadii(configure) == -1) return -1;
   if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     if (this->ParseExternalCapture(configure, ecPairs, section.rows) == -1) return -1;
@@ -368,7 +445,7 @@ int CompoundSystem::AddHardSphereGroups(const Config &configure, int maxL) {
                 AChannel newChannel(cL, cS, ir, 'P');
                 if (jg->IsChannel(newChannel)) continue;
                 jg->AddChannel(newChannel);
-                jg->GetChannel(jg->NumChannels())->SetWignerLimit(chPair->GetRedMass(), chPair->GetChRad());
+                jg->GetChannel(jg->NumChannels())->SetRadius(chPair->GetPairRadius(), chPair->GetRedMass());
               }
             }
           }
@@ -414,6 +491,7 @@ void CompoundSystem::Initialize(const Config &configure, LevelState &state, Leve
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
   this->BuildPathways(configure, requests);
+  RefuseCaptureAcrossRadii(*this);
   this->SetUpFormalCaptureMasks(configure, state);
   // Everything the last part writes is written; what follows reads it.
   finished_ = true;

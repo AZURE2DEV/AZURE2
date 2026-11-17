@@ -98,11 +98,13 @@ void AChannel::SetBoundaryCondition(double boundaryCondition) {
 }
 
 /*!
- * This function is used to set the Wigner Limit for the channel.
+ * Sets the channel's radius and its Wigner limit.
  * The Wigner Limit (single-particle/sum-rule reduced width) is the standard
  * Lane & Thomas (1958) result: gamma_W^2 = 3 * hbar^2 / (2 * reduced_mass * channel_radius^2).
  */
-void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
+void AChannel::SetRadius(double channelRadius, double reducedMass) {
+  radius_ = channelRadius;
+  hasRadius_ = true;
   // Wigner limit gamma_W^2 = 3 hbar^2 / (2 mu a^2) (MeV), reduced mass in u, radius in fm (physics/Widths.h).
   // No limit (0, skipped by CompoundSystem::FillMnParams) for a channel without a radius, and for a photon or beta
   // channel: a photon pair has mu = 0, so the formula gave infinity whenever its radius was nonzero, and
@@ -120,6 +122,14 @@ void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
  * Returns the Wigner Limit for the channel in MeV.
  * The Wigner Limit represents the energy scale below which the R-Matrix formalism
  * becomes less reliable due to the finite channel radius.
+ */
+double AChannel::GetRadius() const {
+  if (!hasRadius_) throw std::logic_error("AChannel::GetRadius: the channel's radius was not set at set-up");
+  return radius_;
+}
+
+/*!
+ * Returns the Wigner Limit for the channel in MeV.
  */
 double AChannel::GetWignerLimit() const {
   return wigner_limit_;

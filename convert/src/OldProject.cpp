@@ -265,6 +265,53 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     out.hasPotential = true;
   }
 
+  // <channelRadii> of dev (2026-11-10): "<pair key> <l> <radius> [s=<s>] [J=<J>]" a line, as CNuc read it.  A block
+  // whose first line is a `channel_radius` record is format 3 already and is left alone.
+  if (const io::Document::Section *s = doc.Find("channelRadii")) {
+    if (s->close == io::Document::Section::npos) return "<channelRadii> is not closed";
+    bool records = false, first = true;
+    for (const std::string &raw : doc.Body(*s)) {
+      const std::string line = raw.substr(0, raw.find('#'));
+      if (BlankLine(line)) continue;
+      std::istringstream stm(line);
+      std::string word;
+      stm >> word;
+      if (first && word == "channel_radius") records = true;
+      first = false;
+      if (records) break;
+      const std::string bad = "<channelRadii> line \"" + raw + "\" is not \"<pair key> <l> <radius> [s=<s>] [J=<J>]\"";
+      OldProject::ChannelRadiusLine c;
+      c.text = raw;
+      std::istringstream in(line);
+      double radius = 0.0;
+      std::string radiusText;
+      if (!(in >> c.key >> c.l >> radiusText)) return bad;
+      try {
+        std::size_t used = 0;
+        radius = std::stod(radiusText, &used);
+        if (used != radiusText.size()) return bad;
+      } catch (...) {
+        return bad;
+      }
+      if (c.l < 0 || !(radius > 0.0)) return "<channelRadii> line \"" + raw + "\": l must be >= 0 and the radius positive";
+      c.radius = radiusText;
+      std::string token;
+      while (in >> token) {
+        const bool isS = token.compare(0, 2, "s=") == 0, isJ = token.compare(0, 2, "J=") == 0;
+        const std::string value = token.substr(2);
+        bool ok = (isS || isJ) && !value.empty();
+        // <n> or <n>/2
+        const std::size_t slash = value.find('/');
+        const std::string num = value.substr(0, slash);
+        ok = ok && !num.empty() && num.find_first_not_of("0123456789") == std::string::npos &&
+             (slash == std::string::npos || value.substr(slash) == "/2");
+        if (!ok || (isS && !c.s.empty()) || (isJ && !c.J.empty())) return bad + ": \"" + token + "\" is not s=<s> or J=<J>";
+        (isS ? c.s : c.J) = value;
+      }
+      out.channelRadii.push_back(c);
+    }
+  }
+
   // <scatteringLengths>
   if (const io::Document::Section *s = doc.Find("scatteringLengths")) {
     int n = 0;

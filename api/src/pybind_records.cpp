@@ -389,7 +389,7 @@ const std::vector<PairField> &PairFields() {
          return py::float_(q.GetLightExE());
        }},
       {"channel_radius", "fm", "the channel radius",
-       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetChRad()); }},
+       [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object { return py::float_(q.GetPairRadius()); }},
       {"i1i2factor", "", "1 / ((2 J1 + 1)(2 J2 + 1)), the statistical factor's denominator of an entrance pair",
        [](const CompoundSystem &, const WorkingCopy &, const PPair &q, int) -> py::object {
          return py::float_(q.GetI1I2Factor());

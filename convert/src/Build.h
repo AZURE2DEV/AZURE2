@@ -16,7 +16,7 @@ namespace convert {
 
 /// The records of the four format-3 sections, the new texts of the kept sections, and what was noted and asked.
 struct Built {
-  io::RecordSet data, targets, extrapolations, modelData, potentials;
+  io::RecordSet data, targets, extrapolations, modelData, potentials, channelRadii;
   /// Replacement bodies (lines between the tags) of sections that stay: thm, parameterSettings; "" key absent = keep.
   std::map<std::string, std::vector<std::string>> bodies;
   bool hasThm = false;

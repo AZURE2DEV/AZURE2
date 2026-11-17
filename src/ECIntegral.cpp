@@ -23,7 +23,8 @@ extern double DoubleFactorial(int);
  * The memo belongs to the integral's parameters and is cleared at the start of each FW/GW Integrate().
  */
 
-ECIntegral::ECIntegral(const PPair *pPair, const Config &configure) : scratch_(configure.scratch->ForThisThread().ec) {
+ECIntegral::ECIntegral(const PPair *pPair, const Config &configure, double radius)
+    : scratch_(configure.scratch->ForThisThread().ec), radius_(radius) {
   params_.coulFunc = std::make_unique<CoulFunc>(pPair);
   // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
   if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialMemo(&scratch_.radial);
@@ -246,7 +247,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
 
   double sepEnergy = pair()->GetSepE() + pair()->GetExE();
   double outEnergy = inEnergy - sepEnergy;
-  double chanRad = pair()->GetChRad();
+  double chanRad = radius_;
   double redMass = pair()->GetRedMass();
 
   // Just above a charged-particle threshold the open-channel form fails: with eta >~ 110 the penetrability

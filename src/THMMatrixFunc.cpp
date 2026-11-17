@@ -432,7 +432,7 @@ ThmAdjointContext BuildThmAdjointContext(const CompoundSystem *compound, const L
           const PPair *pair = compound->GetPair(c->GetPairNum());
           if (pair->GetPType() != 0) continue;  // only a particle pair has an entrance vertex
           ctx.lowestShiftDeriv[j - 1][ch - 1] =
-              ChannelFunc(pair).ShiftDerivative(c->GetL(), pair->SpinOrbitTwoJ(jg->GetJ()), eMin - (pair->GetSepE() + pair->GetExE()));
+              ChannelFunc(pair, c->GetRadius()).ShiftDerivative(c->GetL(), pair->SpinOrbitTwoJ(jg->GetJ()), eMin - (pair->GetSepE() + pair->GetExE()));
         }
     }
     // lineshape=on: dGamma/dE and dGamma/dgamma_c of every level, by central

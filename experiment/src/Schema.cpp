@@ -565,6 +565,25 @@ RecordKind PotentialKind() {
   return k;
 }
 
+RecordKind ChannelRadiusKind() {
+  RecordKind k;
+  k.kind = "channel_radius";
+  k.sections = {"channelRadii"};
+  k.title = "Channel radius";
+  k.doc = "A radius of their own for some channels of one particle pair, in place of the pair's radius of <levels>: "
+          "every channel of the pair with this l, or only those with the channel spin s or the total J given.  The most "
+          "specific record that names a channel gives its radius (l, s and J; then l and one of them; then l alone).  "
+          "Everything taken at the channel radius follows: penetrability, shift, hard-sphere phase, boundary condition "
+          "and Wigner limit.  A channel no record names keeps its pair's radius.";
+  k.fields = {Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair of <levels> by its label (section 3.5)"),
+              Rare(Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs")),
+              Req("l", "Orbital angular momentum", IntAtLeast(0), "the l of the channels"),
+              Req("radius", "Radius", PositiveWithUnit("length"), "the channel radius a_c of these channels"),
+              Opt("s", "Channel spin", Spec(ValueType::Spin), "only the channels with this channel spin; absent: every s"),
+              Opt("J", "Total J", Spec(ValueType::Spin), "only the channels of this total angular momentum; absent: every J")};
+  return k;
+}
+
 }  // namespace
 
 std::string Grammar(const ValueSpec &spec) {
@@ -674,6 +693,7 @@ const std::vector<std::pair<std::string, std::vector<std::string>>> &Schema::Sec
       {"modelData", {"datum"}},
       {"potentials", {"potential"}},
       {"gammaDecays", {"gamma_decay"}},
+      {"channelRadii", {"channel_radius"}},
   };
   return sections;
 }
@@ -691,7 +711,6 @@ const std::vector<GrammarSection> &Schema::GrammarSections() {
 
 const std::vector<std::pair<std::string, std::string>> &Schema::NewerSections() {
   static const std::vector<std::pair<std::string, std::string>> sections = {
-      {"channelRadii", "radii of single channels, in place of their pair's radius"},
       {"isospin", "isospin ties of levels across compound nuclei"},
   };
   return sections;
@@ -713,7 +732,7 @@ const std::vector<RecordKind> &Schema::Kinds() {
   static const std::vector<RecordKind> kinds = {DatasetKind(),       NormalizationKind(), EnergyScaleKind(),
                                                 ExtrapolationKind(), TargetKind(),        BeamKind(),
                                                 DetectorKind(),      DatumKind(),         PotentialKind(),
-                                                GammaDecayKind()};
+                                                GammaDecayKind(),    ChannelRadiusKind()};
   return kinds;
 }
 

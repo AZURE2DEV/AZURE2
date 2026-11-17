@@ -245,6 +245,7 @@ std::shared_ptr<const PathwayTable> BuildPathwayTable(const SystemOfCompound &st
           r.final_channel = (int)x.final_channel + 1;
           r.channel_capture = x.channel_capture;
           r.cc_row = -1;
+          r.through_row = P.groups[groupRow[x.cc_exit][x.cc_group]].first_internal + (int)x.cc_pathway;
           if (x.channel_capture) {
             r.cc_exit = (int)x.cc_exit + 1;
             r.cc_group = (int)x.cc_group + 1;

@@ -104,8 +104,9 @@ class ThmVertexBoundary {
   /// values, so the call is not const).
   complex OnShellAt(double e);
 
-  /*! S_c of `pair` at a compound-system level energy (MeV); with a memo (the run's per-thread scratch), through it. */
-  static double ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double levelEnergy,
+  /*! S_c of a channel of `pair` (radius a_c in fm) at a compound-system level energy (MeV); with a memo (the run's
+   *  per-thread scratch), through it. */
+  static double ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double radius, double levelEnergy,
                                    ThmShiftMemo *memo = nullptr);
 
  private:

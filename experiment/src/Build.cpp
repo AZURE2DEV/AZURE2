@@ -922,6 +922,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   for (auto &x : out.thm.experiments) std::sort(x.datasetKeys.begin(), x.datasetKeys.end());
   build::BuildEffects(c);
   build::BuildPotentials(c);
+  build::BuildChannelRadii(c);
   if (options.setUpChecks) build::CheckFinalStates(c, levels);
   build::CheckUnboundFinalStates(c, levels);
   NameParameters(c);
