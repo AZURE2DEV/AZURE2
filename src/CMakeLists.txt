@@ -1,7 +1,7 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
 ALevel.cpp LevelInputs.cpp LevelState.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
-AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
+AMatrixFunc.cpp AMatrixFuncTBar.cpp AMatrixFuncAdjoint.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp AZURECalcGradient.cpp AZURECalcJacobian.cpp AZURECalcNuisance.cpp AZURECalcPool.cpp AZURECalcOutput.cpp AZURECalcDiagnostics.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp

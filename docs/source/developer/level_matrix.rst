@@ -31,7 +31,9 @@ The matrix calculation is organized through an inheritance hierarchy:
    The THM (HOES) cross section, which reads elements of the level matrix
    itself (``include/THMMatrixFunc.h``).
 
-**Key files:** ``src/GenMatrixFunc.cpp``, ``src/AMatrixFunc.cpp``,
+**Key files:** ``src/GenMatrixFunc.cpp``, ``src/AMatrixFunc.cpp`` (the forward
+solve; its adjoint: ``src/AMatrixFuncTBar.cpp``, cross section to T cotangents,
+and ``src/AMatrixFuncAdjoint.cpp``, T to the level parameters),
 ``src/RMatrixFunc.cpp``, ``src/ChannelSpace.cpp`` (headers of the same names
 in ``include/``), ``src/EnergyPass.cpp``.
 
