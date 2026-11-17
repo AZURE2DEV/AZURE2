@@ -2,7 +2,9 @@
 """Write docs/source/reference/format3.rst from the table of project format 3.
 
 The table lives in the engine (experiment/src/Schema.cpp, Quantities.cpp, Units.cpp, Diagnostics.cpp); its JSON
-export is committed as tests/schema/schema_v3.json (AZURE2 --schema, check 21).  This script turns that JSON into
+export is committed as tests/schema/schema_v3.json (check 21; regenerate it with
+AZURE2 --schema-out=tests/schema/schema_v3.json, not with a redirect of --schema, which empties the file when the
+binary fails).  This script turns that JSON into
 the reference page, so the page cannot say anything the table does not (docs/upgrade/project_format3.md section
 7.3).  The generated page is committed; repo_consistency check 18 fails when it differs from this script's output.
 

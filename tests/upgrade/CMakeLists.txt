@@ -27,6 +27,19 @@ add_test(NAME physics_level_parameters_of_compound
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(physics_level_parameters_of_compound PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 600)
 
+# The observed-level record carries P, mu and a (docs/upgrade/data_model.md section 10): P equals ParticleChannelValues
+# at the record's energy and is the factor its W was formed with, on T1, T2, T3 and 13N in the three bases.
+add_executable(observed_level_record_test observed_level_record_test.cpp)
+target_link_libraries(observed_level_record_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_observed_level_record
+         COMMAND observed_level_record_test
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T1/T1.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
+                 ${CMAKE_SOURCE_DIR}/tests/13N/13N.azr
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(upgrade_observed_level_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
 # physics/coulomb's default algorithm against GSL's Coulomb functions, an independent algorithm physics/ does not
 # link (docs/upgrade/coulomb.md section 5).
 add_executable(coulomb_gsl_crosscheck_test coulomb_gsl_crosscheck_test.cpp)
@@ -69,6 +82,12 @@ set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
 add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
 target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
 add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)
+
+# The engine's Clebsch-Gordan and Racah coefficients (AngCoeff, those of physics/) against the GSL expressions AngCoeff
+# held before 2026-11-16.
+add_executable(engine_coupling_gsl_test engine_coupling_gsl_test.cpp)
+target_link_libraries(engine_coupling_gsl_test PRIVATE AZURE2Core)
+add_test(NAME physics_engine_coupling_gsl COMMAND engine_coupling_gsl_test)
 
 # Properties of the pathway table checked against the loaded CompoundSystem without the builder's loops, on every .azr under
 # tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1).

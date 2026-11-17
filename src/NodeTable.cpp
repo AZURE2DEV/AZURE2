@@ -19,6 +19,7 @@
 #include "Segment.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -209,7 +210,10 @@ void WorkingCopy::MoveSegmentsToShift(const std::vector<const Segment *> &segmen
         for (int i = 0; i < seg->NumPoints(); i++) seg->UpdatePointEnergyWithShift(*this, t, i, compound, &configure);
       } else {
 #pragma omp parallel for schedule(dynamic, 1)
-        for (int i = 0; i < seg->NumPoints(); i++) seg->UpdatePointEnergyWithShift(*this, t, i, compound, &configure);
+        for (int i = 0; i < seg->NumPoints(); i++) {
+          const azure2::support::ExtendedPrecisionScope fpPrecision;
+          seg->UpdatePointEnergyWithShift(*this, t, i, compound, &configure);
+        }
       }
       for (const Unit &pt : seg->TermPoints(*this, t))
         if (pt.PlanTask() >= 0) moved.push_back(pt.PlanTask());

@@ -48,14 +48,15 @@ total() { awk '/Total-Chi-Squared:/ { print $2 }' "$1" | tail -1; }
 
 # ---- 1. the worked example: --describe and --print-predictions
 setup story "$HERE/models/yield_story.azr"
-(cd "$WORK/story" && "$AZURE2_BIN" --describe m.azr 2> describe.err | sed "s|$WORK/story|<project>|g" |
+(cd "$WORK/story" && "$AZURE2_BIN" --describe m.azr 2> describe.err | tr -d '\r' | tr '\\' '/' |
+  sed -e "s|$WORK/story|<project>|g" -e "s|$(pwd -P)|<project>|g" |
   sed '/^settings of this run and machine (value, source):$/,$d' > describe.txt)  # the description; the rest is this machine's
 if diff -u "$HERE/expected/story_describe.txt" "$WORK/story/describe.txt" > "$WORK/describe.diff"; then
   ok "story: --describe as committed"
 else
   bad "story: --describe differs"; head -30 "$WORK/describe.diff"
 fi
-(cd "$WORK/story" && "$AZURE2_BIN" --print-predictions m.azr > predictions.txt 2> predictions.err)
+(cd "$WORK/story" && "$AZURE2_BIN" --print-predictions m.azr 2> predictions.err | tr -d '\r' > predictions.txt)
 if diff -u "$HERE/expected/story_predictions.txt" "$WORK/story/predictions.txt" > "$WORK/predictions.diff"; then
   ok "story: --print-predictions as committed ($(head -1 "$WORK/story/predictions.txt"))"
 else

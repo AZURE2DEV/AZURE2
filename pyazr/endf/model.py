@@ -419,8 +419,7 @@ def from_session(session, x=None, *, energy_range_eV=(1e-5, 2e7)):
         chans = [(g["channels"][c][0], g["channels"][c][1], int(round(2 * g["channels"][c][2]))) for c in chan_ids]
         try:
             out = _engine().formal_levels_of_block(pairs, int(round(2 * g["J"])), g["parity"], chans, E, gam, [],
-                                                   "amplitudes", basis, bool(opts.get("use_coulomb_table", True)),
-                                                   bool(opts.get("use_gsl_coul", False)))
+                                                   "amplitudes", basis, bool(opts.get("use_coulomb_table", True)))
         except ValueError as e:
             raise _refuse_session(f"spin group {g['jpi']}: no formal parameters correspond ({e})",
                                   "levels whose Brune parameters have a formal equivalent (M positive definite)",

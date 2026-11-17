@@ -146,10 +146,11 @@ case "$last" in "ERROR: Covariance file: "*no_such_cov.txt*) last_ok=1 ;; *) las
   && ok "a covariance file that cannot be read: its ERROR line last, exit 1" \
   || bad "a covariance file that cannot be read: exit $rc (want 1), last line '$last'"
 
-# A project file that does not exist keeps its own message (and exit status 255).
+# A project file that does not exist keeps its own message (and exit status 255; 127 in the MSYS2 shell of the
+# Windows CI, as in tests/cli_option_values).
 dir="$WORK/nofile"; mkdir -p "$dir"
 (cd "$dir" && "$AZURE2_BIN" calculate --no-gui absent.azr > run.log 2>&1); rc=$?
-grep -q "Could not open absent.azr.  Check that file exists." "$dir/run.log" && [ "$rc" = 255 ] \
+grep -q "Could not open absent.azr.  Check that file exists." "$dir/run.log" && { [ "$rc" = 255 ] || [ "$rc" = 127 ]; } \
   && ! grep -q "is refused" "$dir/run.log" \
   && ok "a missing project file: 'Could not open', exit 255" \
   || bad "a missing project file: exit $rc, $(tail -n 1 "$dir/run.log")"

@@ -263,7 +263,7 @@ class ExforData:
         if file_name is None:
             file_name = _safe_name(self.dataset_id, self.author, self.year)
         path = os.path.join(data_dir, file_name + ".dat")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             for row in data:
                 f.write("  ".join(f"{v:.8g}" for v in row) + "\n")
         obs = observable or self._guess_observable()
@@ -314,7 +314,7 @@ class ExforData:
             rows = rows[keep]
         os.makedirs(data_dir, exist_ok=True)
         path = os.path.join(data_dir, (file_name or _safe_name(self.dataset_id, self.author, self.year)) + ".dat")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(f"# EXFOR {self.dataset_id} {self.reaction}: E_lab(MeV) theta_{frame}(deg) ratio error "
                     f"(not converted)\n")
             for row in rows:
@@ -1433,7 +1433,7 @@ def _main(argv=None):
         print(f"# {args.dataset_id}: {len(rows)} points, "
               f"observable {data._guess_observable()}", file=sys.stderr)
         if args.output:
-            with open(args.output, "w") as f:
+            with open(args.output, "w", encoding="utf-8") as f:
                 f.write(text)
         else:
             sys.stdout.write(text)

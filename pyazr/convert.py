@@ -46,7 +46,7 @@ def convert_azr(old, new, overwrite=False, *, to=3, report=None, answers=None, e
     if report is not None:
         if os.path.exists(report) and not overwrite:
             raise FileExistsError(f"{report} exists; pass overwrite=True to replace it")
-        with open(report, "w") as f:
+        with open(report, "w", encoding="utf-8") as f:
             f.write(result["report"])
     if not result["ok"]:
         raise ValueError(f"{old} is not converted: {result['refusal']}")

@@ -122,13 +122,13 @@ class Site {
    * parameter (WorkingCopy::ScreeningEffects), 0 = not screened.  Set by WorkingCopy::ApplyScreening on every
    * point and sub-point of the effect's segments; a new sub-point inherits it (WorkingCopy::AddSubPoint).
    */
-  void SetScreening(double ueMeV, int param) { screen_ue_ = ueMeV; screen_param_ = param; }
+  void SetScreening(double ueMeV, int param) { values_.screen_ue = ueMeV; screen_param_ = param; }
   int GetScreeningParam() const { return screen_param_; }
-  double GetScreeningUe() const { return screen_ue_; }
+  double GetScreeningUe() const { return values_.screen_ue; }
   /// d ln f / d U_e (1/MeV); 0 for a neutral or non-particle entrance pair.
-  double GetScreeningK() const { return screen_k_; }
+  double GetScreeningK() const { return values_.screen_k; }
   /// The factor f applied to this point's cross section (1 when not screened).
-  double ScreeningFactor() const { return (screen_param_ > 0 && screen_k_ != 0.0) ? std::exp(screen_k_ * screen_ue_) : 1.0; }
+  double ScreeningFactor() const { return (screen_param_ > 0 && values_.screen_k != 0.0) ? std::exp(values_.screen_k * values_.screen_ue) : 1.0; }
   /// Unobserved-primary, observed-secondary point?
   bool IsUPOS() const;
   /// Entrance pair key, as written in the input files; not necessarily its PPair position.
@@ -182,37 +182,37 @@ class Site {
   double RowP(int slot, int l) const { return Row(slot)[l]; }
   /// The whole row at slot `slot` (RowP(slot, l) = Row(slot)[l]).
   const double *Row(int slot) const {
-    return (slot > 0 && rowset_) ? rowset_->Row(rowset_at_ + slot - 1) : legendreP_->data();
+    return (slot > 0 && values_.rowset) ? values_.rowset->Row(values_.rowset_at + slot - 1) : values_.legendreP->data();
   }
   /// The row set the reader's slots are read with (RowSet.h), null where it reads no angle-free slots.
-  const azure2::RowSet *RowSetOf() const { return rowset_ ? &*rowset_ : nullptr; }
+  const azure2::RowSet *RowSetOf() const { return values_.rowset ? &*values_.rowset : nullptr; }
   /// The position of the reader's slot `slot` (1-based) in its row set.
-  int RowSetIndex(int slot) const { return rowset_at_ + slot - 1; }
+  int RowSetIndex(int slot) const { return values_.rowset_at + slot - 1; }
   /// Read the slots with the row set `set` from its position `at` (WorkingCopy::BuildRowSets).
   void ReadWithRowSet(SharedTable<azure2::RowSet> set, int at) {
-    rowset_ = std::move(set);
-    rowset_at_ = at;
+    values_.rowset = std::move(set);
+    values_.rowset_at = at;
   }
   /*!
    * The value of this reader's slot `slot` (1-based), the site `site`: the contraction of the evaluation where the
    * reader has a row set (Results::contracted, RowSet.h), else site.ValueFor(*this, slot, r) -- the same number.
    */
   double SlotValue(const Site &site, int slot, const azure2::Results &r) const {
-    if (rowset_) return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 0)];
+    if (values_.rowset) return r.contracted[values_.rowset->ValueIndex(values_.rowset_at + slot - 1, 0)];
     return site.ValueFor(*this, slot, r) / SlotJacobian(slot);
   }
   /// The reader's c.m. angle (deg) at its slot `slot` (1-based; 0: its own): its row set's (RowSet::AngleAt; for data
   /// given at a lab angle theta_cm(E_n; theta_lab)), else its own.
   double SlotAngle(int slot) const {
-    return (slot > 0 && rowset_) ? rowset_->AngleAt(rowset_at_ + slot - 1) : GetCMAngle();
+    return (slot > 0 && values_.rowset) ? values_.rowset->AngleAt(values_.rowset_at + slot - 1) : GetCMAngle();
   }
   /// dOmega_lab/dOmega_cm at the reader's slot `slot` (RowSet::JacobianAt): SlotValue is the contraction divided by
   /// it, 1 but for data given at a lab angle.
-  double SlotJacobian(int slot) const { return (slot > 0 && rowset_) ? rowset_->JacobianAt(rowset_at_ + slot - 1) : 1.0; }
+  double SlotJacobian(int slot) const { return (slot > 0 && values_.rowset) ? values_.rowset->JacobianAt(values_.rowset_at + slot - 1) : 1.0; }
   /// A_y of this reader's slot `slot` (an analysing power; SlotValue is the cross section that weights it).
   double SlotAnalyzingPower(const Site &site, int slot, const azure2::Results &r) const {
-    if (rowset_ && rowset_->valuesPerSlot > 1)
-      return r.contracted[rowset_->ValueIndex(rowset_at_ + slot - 1, 1)];
+    if (values_.rowset && values_.rowset->valuesPerSlot > 1)
+      return r.contracted[values_.rowset->ValueIndex(values_.rowset_at + slot - 1, 1)];
     return site.AnalyzingPowerFor(*this, slot, r);
   }
   /// Whether the point's angular row depends on the energy: Q coefficients on a particle-to-particle reaction that is
@@ -238,7 +238,7 @@ class Site {
   void PoisonObservable(azure2::Results &r) const;
   /// The identical-particle factor of the point's B_L (LegendreSymmetryFactor), by which they exceed the a_k A_0 of
   /// an angular distribution (sigma_int without it); set with the point's Legendre rows (CalcLegendreP).
-  double EntranceSymmetry() const { return entrance_symmetry_; }
+  double EntranceSymmetry() const { return values_.entrance_symmetry; }
   /// Angle in the lab frame.
   double GetLabAngle() const;
   /// Angle in the centre-of-mass frame.
@@ -289,12 +289,12 @@ class Site {
   /// (0-based; ps=...).  0 if not stored.
   complex GetThmFormFactor(int, int, complex, int node) const;
   /// Number of nodes of the point's spectator-momentum window (0: none).
-  int NumThmPsNodes() const { return thm_ps_ ? thm_ps_->nodes : 0; }
+  int NumThmPsNodes() const { return values_.thm_ps ? values_.thm_ps->nodes : 0; }
   /// Normalized weight of node `node` of that window at the point's energy.
-  double GetThmPsWeight(int node) const { return thm_ps_->weight[node]; }
+  double GetThmPsWeight(int node) const { return values_.thm_ps->weight[node]; }
   /// Bytes held by the point's spectator-window table (0 without one; shared
   /// tables are counted by every point that refers to them).
-  size_t ThmPsTableBytes() const { return thm_ps_ ? thm_ps_->Bytes() : 0; }
+  size_t ThmPsTableBytes() const { return values_.thm_ps ? values_.thm_ps->Bytes() : 0; }
   /// Total spin. Phase-shift points only.
   double GetJ() const;
   /// Channel spin of a phase-shift point (< 0: the segment gave none, so a single spin must match).
@@ -306,8 +306,8 @@ class Site {
   /// The lab energy the target thickness was computed at: the nominal one at the set-up (WorkingCopy::
   /// SetUpTargetEffects), the shifted, true one after an energy shift (azure2::MoveTargetToShift), so a fitted density
   /// or stopping scale recomputes it at the same energy (WorkingCopy::FillDensitiesFromParams, FollowStoppingScales).
-  double GetTargetLabEnergy() const { return targetLabEnergy_; }
-  void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }
+  double GetTargetLabEnergy() const { return values_.targetLabEnergy; }
+  void SetTargetLabEnergy(double e) { values_.targetLabEnergy = e; }
   /// Final-state spin. UPOS points only.
   double GetIc() const;
   /// Multipole mixing ratio. UPOS points only.
@@ -409,7 +409,7 @@ class Site {
   std::tuple<int, std::uint64_t, int> ChannelRowsKey(const CompoundSystem *);
   /// Hold the channel rows of `other`, a site with the same ChannelRowsKey whose rows are computed, in place of this
   /// site's own (equal bit for bit, dropped).
-  void TakeChannelRowsOf(const Site &other) { edep_ = other.edep_; }
+  void TakeChannelRowsOf(const Site &other) { values_.edep = other.values_.edep; }
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this site.
   void ChannelKeys(WorkingCopy *data, const CompoundSystem *, std::vector<ChannelTable::Key> &);
   /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.
@@ -417,11 +417,11 @@ class Site {
   /// Recompute those at the current, possibly shifted, energy; nothing while they are at that energy.
   void RecalcEDependentValues(WorkingCopy *data, const CompoundSystem *, const Config &, const ChannelRowSource *rows = nullptr);
   /// Are the energy-dependent values those of the site's present energy?
-  bool EDependentCurrent() const { return eDependentValid_ && this->GetCMEnergy() == eDependentEnergy_; }
+  bool EDependentCurrent() const { return values_.eDependentValid && this->GetCMEnergy() == values_.eDependentEnergy; }
   /// The channel rows the point holds (L_o, sqrt(P), phases per J group and channel; null before they are computed),
   /// and a holder of them (the node table shares them: NodeTable.h).
-  const EDependentTables *ChannelRows() const { return edep_ ? &*edep_ : nullptr; }
-  SharedTable<EDependentTables> ChannelRowsShared() const { return edep_; }
+  const EDependentTables *ChannelRows() const { return values_.edep ? &*values_.edep : nullptr; }
+  SharedTable<EDependentTables> ChannelRowsShared() const { return values_.edep; }
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
   void ClearEDependentRows();
   /// Store an \f$L_o\f$ element at (J-group, channel).
@@ -514,9 +514,13 @@ class Site {
   static void WriteLegendre(double *angular, const vector_r &coefficients);
   static void WriteElastic(double *angular, const ElasticCoefficients &e);
  protected:
+  // The members are in three groups, by who writes them (docs/upgrade/evaluation.md section 7.8): what the set-up
+  // fixes, the values an evaluation's hand-over writes (Values, below), and the place of the result record.
+  //
+  // Fixed at set-up.  No evaluation writes these of a point; a slot's are fixed when the slot is made (at set-up,
+  // or by the evaluation that re-places its grid: the slot is a new site then).
   bool is_sub_point_ = false;
   int segment_key_;
-  double cm_angle_;
   double lab_angle_;       ///< the lab angle the point is calculated at: its row's, a fixed angle, or a parent's
   double nominal_energy_;  ///< a point that is no row: its energy before any shift (MeV)
   /// What the point's term computes (shared, immutable once set up; TermSettings.h).
@@ -525,46 +529,9 @@ class Site {
   const TermSettings *settings_ = nullptr;
   int row_ = -1;            ///< the point's row in its measurement (0-based), -1 for a point that is no row
   int legendre_order_ = -1; ///< the Legendre order k of an angular-coefficient row (and its sub-points), else -1
-  double cm_energy_;
-  double lab_energy_;
-  double excitation_energy_;
-  double geofactor_;
-  double sfactorconv_;
-  double entrance_symmetry_ = 1.0;
-  double screen_k_ = 0.0;
-  double screen_ue_ = 0.0;
-  int screen_param_ = 0;
-  double stoppingPower_;
-  double targetThickness_;
-  double targetLabEnergy_ = 0.0;
-  complex coulombamplitude_;
-  // Direct and exchange Coulomb amplitudes, kept apart only for an identical
-  // pair with spin, whose exchange sign depends on the channel spin.
-  bool spinDependentCoulomb_ = false;
-  complex coulombdirect_ = complex(0., 0.);
-  complex coulombexchange_ = complex(0., 0.);
-  // The Legendre polynomials P_l(cos theta) of the point, by order, and the energy-dependent channel tables (one row
-  // per J group: L_o, sqrt(P), Coulomb and hard-sphere phase factors).  Filled at set-up and rewritten only when the
-  // point's energy or grid changes, so the working copies share them (a copy of a folded project with ~10^6
-  // sub-points held ~7 GB of these rows); every writer goes through MutableEDep() / MutableLegendre(), which give
-  // the point its own copy first if the tables are shared (copy-on-write).
-  SharedTable<vector_r> legendreP_;
-  /// A reader of angle-free slots: the rows it reads them with (RowSet.h) and the position of its first slot there.
-  SharedTable<azure2::RowSet> rowset_;
-  int rowset_at_ = 0;
-  SharedTable<EDependentTables> edep_;
-  /// This point's own, writable tables (copied first if shared with another point).
-  EDependentTables &MutableEDep();
-  /// This point's own, writable Legendre polynomials (copied first if shared).
-  vector_r &MutableLegendre();
-  std::shared_ptr<const ThmPsTable> thm_ps_;
-  /// The THM vertex pieces of the entrance pair's channels (a THM point only; UnitTables.h).
-  std::shared_ptr<const ThmVertexRows> thm_vertex_;
-  // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
-  // a no-op while the point's energy is unchanged (its values depend only on
-  // the energy, the angle and the channel radii).
-  double eDependentEnergy_ = 0.0;
-  bool eDependentValid_ = false;
+  int screen_param_ = 0;    ///< the screening parameter of the point's target effect (SetScreening: the same each time)
+  // The external-capture amplitudes of the set-up and their energies (CalculateECAmplitudes).  A working copy made
+  // by WorkingCopy::Clone starts without them and evaluates at its points' energies (Values::ec_shifted).
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).
@@ -573,8 +540,58 @@ class Site {
     complex amplitude = complex(0.0, 0.0);
     bool valid = false;
   };
-  std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
-  // Where the result record lies (see ResultSlot): no value of an evaluation is held in the point itself.
+  /// What an evaluation writes into a site: the values of the hand-over (the energies and the c.m. angle after an
+  /// energy shift, the channel rows and Coulomb amplitude at that energy, the screening energy, the stopping power
+  /// and target thickness of a fitted density or stopping scale, the rows a re-placed grid is read with) and the
+  /// external-capture amplitude an evaluation computes at a shifted energy.  Each is first written at set-up; the
+  /// set-up's value is the evaluation's until a parameter of the hand-over moves it.  One struct, so that the part of
+  /// a site that belongs to an evaluation is one named thing (section 7.8 has the writer of each member).
+  struct Values {
+    double cm_angle;
+    double cm_energy;
+    double lab_energy;
+    double excitation_energy;
+    double geofactor;
+    double sfactorconv;
+    double entrance_symmetry = 1.0;
+    double screen_k = 0.0;
+    double screen_ue = 0.0;
+    double stoppingPower;
+    double targetThickness;
+    double targetLabEnergy = 0.0;
+    complex coulombamplitude;
+    // Direct and exchange Coulomb amplitudes, kept apart only for an identical
+    // pair with spin, whose exchange sign depends on the channel spin.
+    bool spinDependentCoulomb = false;
+    complex coulombdirect = complex(0., 0.);
+    complex coulombexchange = complex(0., 0.);
+    // The Legendre polynomials P_l(cos theta) of the point, by order, and the energy-dependent channel tables (one
+    // row per J group: L_o, sqrt(P), Coulomb and hard-sphere phase factors).  Filled at set-up and rewritten only
+    // when the point's energy or grid changes, so the working copies share them (a copy of a folded project with
+    // ~10^6 sub-points held ~7 GB of these rows); every writer goes through MutableEDep() / MutableLegendre(), which
+    // give the point its own copy first if the tables are shared (copy-on-write).
+    SharedTable<vector_r> legendreP;
+    /// A reader of angle-free slots: the rows it reads them with (RowSet.h) and the position of its first slot there.
+    SharedTable<azure2::RowSet> rowset;
+    int rowset_at = 0;
+    SharedTable<EDependentTables> edep;
+    std::shared_ptr<const ThmPsTable> thm_ps;
+    /// The THM vertex pieces of the entrance pair's channels (a THM point only; UnitTables.h).
+    std::shared_ptr<const ThmVertexRows> thm_vertex;
+    // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
+    // a no-op while the point's energy is unchanged (its values depend only on
+    // the energy, the angle and the channel radii).
+    double eDependentEnergy = 0.0;
+    bool eDependentValid = false;
+    std::vector<std::vector<ShiftedECAmplitude>> ec_shifted;
+  };
+  Values values_;
+  /// This point's own, writable tables (copied first if shared with another point).
+  EDependentTables &MutableEDep();
+  /// This point's own, writable Legendre polynomials (copied first if shared).
+  vector_r &MutableLegendre();
+  // Where the result record lies (see ResultSlot): no value of an evaluation is held in the point itself.  Laid out at
+  // set-up (WorkingCopy::LayoutResults) and again by an evaluation that re-places a grid.
   std::size_t slot_ = kNoRecord;
   std::uint16_t num_ang_slots_ = 0;
   std::uint16_t num_natural_slots_ = 0;

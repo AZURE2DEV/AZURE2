@@ -20,6 +20,7 @@
 #include "ThmCotangents.h"
 #include "Unit.h"
 #include "WorkingCopy.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -97,6 +98,7 @@ void Forward(const CompoundSystem *compound, const LevelState &state, WorkingCop
   pass.models.assign(n, 0.0);
 #pragma omp parallel for schedule(dynamic, 16)
   for (int k = 0; k < n; k++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     const GradPoint &p = pass.points[k];
     pass.models[k] = EvaluateModelPoint(data, *p.segment, p.pointIdx, compound, state, config, results, LeafValues::Ready);
   }
@@ -112,6 +114,7 @@ bool Cotangents(const CompoundSystem *compound, const LevelState &state, Working
   std::vector<char> failed(n, 0);
 #pragma omp parallel
   {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     GradAccum scratch;
     scratch.Init(compound, state);
 #pragma omp for schedule(dynamic, 4)
@@ -506,6 +509,7 @@ bool EnergyTaskGradient(const CompoundSystem *compound, const LevelState &state,
   std::vector<int> failedTask(chunks, -1);
 #pragma omp parallel for schedule(dynamic, 1)
   for (int c = 0; c < chunks; c++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     chunkAcc[c].Init(compound, state);
     // A scalar pass: the Brune and Park level-matrix adjoints are summed in the formal parameters and resolved once
     // by the caller (AMatrixFunc::ResolveFormalCotangents).
@@ -584,6 +588,7 @@ bool EnergyTaskRows(const CompoundSystem *compound, const LevelState &state, Wor
     std::vector<char> failed(end - begin, 0);
 #pragma omp parallel
     {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       std::vector<int> slotOfRow(n, -1), rowsOf;
       std::vector<GradAccum> rowAcc;
       GradAccum scratch;

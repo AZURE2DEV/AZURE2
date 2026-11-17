@@ -20,7 +20,7 @@
 #include "Config.h"
 #include "ECAmplitudeCache.h"
 #include "JGroup.h"
-#include "LevelParameterLayout.h"
+#include "InferenceTypes.h"
 
 namespace {
 

@@ -33,6 +33,7 @@
 #include "azure2/physics/coulomb/Whittaker.h"
 #include "azure2/physics/transfer/ThmVertex.h"
 #include "pybind_rows.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 namespace phys = azure2::physics;
@@ -339,6 +340,24 @@ std::vector<PhysicsRow> BuildTable() {
                  o[0] = phys::photon_penetrability(a[0], Int(a[1]));
                  return kOk;
                }});
+  t.push_back({"weisskopf_width", "Weisskopf single-particle estimate of a gamma width, Gamma_W(XL) (eV).",
+               "The total radiative width hbar lambda of an electric or magnetic 2^L-pole transition of energy "
+               "E_gamma in a nucleus of mass number A: Gamma_W(EL) = c_EL A^(2L/3) E_gamma^(2L+1), Gamma_W(ML) = "
+               "c_ML A^((2L-2)/3) E_gamma^(2L+1), with the two-digit textbook coefficients for R = 1.2 A^(1/3) fm "
+               "(c_E1..E4 = 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21; c_M1..M4 = 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21 eV "
+               "MeV^-(2L+1); Blatt and Weisskopf 1952), 0.8 to 3.1 % from the closed form they round (M4: 7.2 %).  "
+               "Gamma_gamma / Gamma_W is the strength in Weisskopf units.",
+               "physics/Widths.h: weisskopf_width_eV", "e_gamma",
+               {Real("e_gamma", "MeV", "transition energy").gt(0).example(1).sweep(0.1, 20, Spacing::log),
+                Integer("multipolarity", "multipolarity L").ge(1).le(4).example(1).sweep(1, 4, Spacing::linear),
+                Real("mass_number", "", "mass number A of the emitting nucleus").gt(0).example(13)
+                    .sweep(4, 240, Spacing::linear),
+                Choice("radiation", "electric or magnetic transition", {"E", "M"}, 0)},
+               {{"gamma_W", "eV", "Weisskopf estimate of the width"}},
+               [](const double *a, double *o) {
+                 o[0] = phys::weisskopf_width_eV(a[3] != 0.0, Int(a[1]), a[0], a[2]);
+                 return std::isfinite(o[0]) ? kOk : kFailed;
+               }});
   section("resonance quantities");
   t.push_back({"statistical_factor", "Statistical factor omega = (2J+1)(1+delta_aA)/((2j_a+1)(2j_A+1)).",
                "Of a resonance strength (data_kinds.md eq. 8); spins doubled.", "physics/ResonanceQuantities.h: "
@@ -472,7 +491,7 @@ py::tuple Evaluate(const std::string &name, const std::vector<Column> &columns) 
   double *v = values.mutable_data();
   int *st = status.mutable_data();
   {
-    py::gil_scoped_release release;
+    EngineCallScope engine;
     std::vector<double> a(na), o(no);
     for (py::ssize_t i = 0; i < n; i++) {
       for (std::size_t k = 0; k < na; k++) a[k] = in[k][i];
@@ -509,17 +528,21 @@ py::list Describe() {
 
 void BindStopping(py::module_ &parent);  // pybind_stopping.cpp: stopping/, the submodule _azure2.stopping
 void BindLevelDoors(py::module_ &m);     // pybind_level_doors.cpp: one block's formal <-> observed levels (pyazr.endf)
+void BindCollisionMatrix(py::module_ &m);  // pybind_collision_matrix.cpp: one block's A, U and T at one energy
+void BindOptical(py::module_ &m);          // pybind_optical.cpp: elastic scattering on an optical potential
 
 void BindPhysics(py::module_ &m) {
   BindStopping(m);
   BindLevelDoors(m);
+  BindCollisionMatrix(m);
+  BindOptical(m);
   m.def("physics_functions", &Describe,
         "The table of physics functions, one dict per row: name, summary, doc, library (the function called), axis "
         "(the argument a plot puts on its horizontal axis), group (its section of the table), arguments (name, unit, "
         "doc, kind real / integer / flag / choice, domain in words, lower and upper (None: unbounded), lower_open, "
         "upper_open, choices, default or None, example (a typical value) or None, sweep {lower, upper, spacing "
         "linear / log} (the range of a first plot over it) or None) and returns (name, unit, doc); plain JSON data.  pyazr.physics builds one Python function per row from it.");
-  m.def("physics_evaluate", &Evaluate, py::arg("name"), py::arg("arguments"),
+  m.def("physics_evaluate", &Evaluate, PrecisionGuard(), py::arg("name"), py::arg("arguments"),
         "Row `name` element-wise on equal-length 1-d float arrays, one per argument in the row's order (a choice as "
         "its index, a flag as 0 or 1): (values, status), values of shape (n_returns, n), NaN where status != 0; "
         "status 0 computed, k > 0 argument k (1-based) outside its domain, -2 the arguments together outside the "

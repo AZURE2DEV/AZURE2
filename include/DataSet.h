@@ -15,7 +15,7 @@
 #include "TargetEffect.h"
 #include "ThmGroup.h"
 
-class PriorCovariance;
+#include "InferenceTypes.h"
 
 /*!
  * The data of a project as the set-up leaves it (docs/upgrade/data_structure.md section 1.3): the data sets (segments)

@@ -10,6 +10,7 @@
 #include <stdexcept>
 
 #include "azure2/physics/transfer/SourceProjection.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 /*
  * Numerics (docs/source/theory/thm_implementation.rst, "Distorted-wave
@@ -168,6 +169,7 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     std::vector<std::string> errors(nb);
 #pragma omp parallel for schedule(dynamic)
     for (int b = 0; b < nb; b++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       const double e = eLo + (e0 + b) * gridStep;
       try {
         exits[b] = transfer::SolveSourceExit(plan, dist.LibraryChannel(dist.SfAt(e), dist.EsF(e)));
@@ -181,8 +183,10 @@ std::string ThmDwVertex::Build(const ThmExperiment &x, const ThmDistortion::Kine
     const size_t blockSize = transfer::SourceBlockSize(plan, nb);
     std::vector<complex> blockSums((size_t)nBlocks * blockSize, complex(0.0, 0.0));
 #pragma omp parallel for schedule(dynamic, 1)
-    for (int blk = 0; blk < nBlocks; blk++)
+    for (int blk = 0; blk < nBlocks; blk++) {
+      const azure2::support::ExtendedPrecisionScope fpPrecision;
       transfer::SumSourceBlock(plan, exits, blk, nBlocks, &blockSums[(size_t)blk * blockSize]);
+    }
     std::vector<transfer::SourceAmplitudes> pass = transfer::CombineSourceBlocks(plan, exits, blockSums, nBlocks);
     for (int b = 0; b < nb; b++) amplitudes[e0 + b] = std::move(pass[b]);
   }

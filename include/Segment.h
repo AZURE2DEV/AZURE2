@@ -84,8 +84,6 @@ class Segment {
    * its multivariate Gaussian takes their place (docs/upgrade/objective.md D3), set once at set-up
    * (ReplaceDiagonalPriors, Objective.h).
    */
-  /// The three parts of AddShiftPenalty separately: the constant shift, the sqrt(E) coefficient, the shift function.
-  void ShiftPenaltyParts(const SegmentState &state, double &constant, double &sqrtTerm, double &function) const;
   void ReplaceNormPrior() { normPriorReplaced_ = true; }
   bool IsNormPriorReplaced() const { return normPriorReplaced_; }
   void ReplaceShiftPrior() { shiftPriorReplaced_ = true; }
@@ -289,11 +287,6 @@ class Segment {
   void SetCovarianceGroup(int g) { covGroup_ = g; }
   /// The whole lab-energy shift of the segment's `state` at a point's original lab energy: a + b*sqrt(E) + f(E).
   double TotalEnergyShift(const SegmentState &state, double labEnergy) const;
-  /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
-  /// shift term with sigma != 0, to chi.  The one definition every chi^2 path uses; the
-  /// index form (gradient, curvature, least-squares priors) is ForEachShiftPenalty in
-  /// AZURECalc.cpp and must list the same terms.
-  void AddShiftPenalty(const SegmentState &state, double &chi) const;
   /// Shift function ("shiftfn" block): does this segment's own line declare one?  Such a
   /// segment owns the function's fit parameters (and their penalties).
   bool OwnsShiftFn() const;
@@ -469,13 +462,6 @@ class Segment {
   void SetThicknessGroupFollower(int pos, double n) {
     thicknessLeaderPos_ = pos;
     startThickness_ = n;
-  }
-  /// The prior ((n - n0)/sigma)^2 of a free thickness parameter that owns its value (no follower), 0 otherwise (a
-  /// fixed parameter pays no prior, docs/upgrade/objective.md D5).
-  double ThicknessPenalty(const SegmentState &state) const {
-    if (!IsThicknessVaried() || thicknessPriorReplaced_ || !(thicknessSigma_ > 0.0)) return 0.0;
-    const double d = (state.thickness - thicknessCentre_) / thicknessSigma_;
-    return d * d;
   }
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.

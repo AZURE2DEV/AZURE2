@@ -132,7 +132,7 @@ def write_starlib(path, rate, band, species, label="azr2", flag=""):
     head[52:64] = f"{species['Q']:12.5e}"
     lines = ["".join(head)]
     lines += [f"{t:.3e} {r:.6e} {f:.4e}" for t, r, f in zip(rate.T9, recommended, fu)]
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     return path
 
@@ -141,7 +141,7 @@ def read_starlib(path, entry=0):
     """The entry ``entry`` (0-based) of a STARLIB file: ``{"header", "chapter", "species", "Q", "label", "T9",
     "rate", "fu"}``.  An entry is a header line and the three-column lines after it."""
     entries, current = [], None
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             if not line.strip():
                 continue
@@ -280,7 +280,7 @@ def write_reaclib(path, fit, species, label="azr2", flag="n"):
                   "".join(f"{v:13.6e}" for v in a[4:]) + " " * 35]
     if any(len(ln) != 74 for ln in lines):
         raise RuntimeError("a REACLIB line is not 74 characters")
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     return path
 
@@ -288,7 +288,7 @@ def write_reaclib(path, fit, species, label="azr2", flag="n"):
 def read_reaclib(path):
     """The sets of a REACLIB 1 file: ``[{"chapter", "species", "label", "flag", "reverse", "Q", "a"}]``, read by the
     columns of the format (a set's first line: nuclides in columns 6-35, label 44-47, flags 48-49, Q 53-64)."""
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         lines = [ln.rstrip("\n") for ln in fh]
     out, chapter, i = [], None, 0
     while i < len(lines):

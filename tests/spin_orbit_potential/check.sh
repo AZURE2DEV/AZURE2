@@ -39,7 +39,7 @@ run() {
   [ -e "$WORK/$name/data" ] || ln -s "$(dirname "$model")/data" "$WORK/$name/data"
   cp "$model" "$WORK/$name/m.azr"
   (cd "$WORK/$name" && rm -rf output/* checks/* &&
-     env OMP_NUM_THREADS="$threads" "${envs[@]}" $(guard_command 900) "$AZURE2_BIN" "$command" "${flags[@]}" --no-gui m.azr > run.log 2>&1)
+     env OMP_NUM_THREADS="$threads" ${envs[@]+"${envs[@]}"} $(guard_command 900) "$AZURE2_BIN" "$command" ${flags[@]+"${flags[@]}"} --no-gui m.azr > run.log 2>&1)
 }
 
 # ---- 1. phase shifts against the independent integration

@@ -279,8 +279,10 @@ script's list. So the sentence above, that the same checks pass in the Linux job
 do not exist. Repaired in the twelfth push (the file is copied, the names are gone; 23 checks). Run here with
 the script's file list, GCC and no sanitizer: T2's calculation fails as on the CI before the repair and gives
 its output after it, and the fit of 30 calls ends with exit 0. **T2 has not run under a sanitizer since its
-conversion to format 3**, so every statement of this document about T2 after that date rests on the runs before
-it; the twelfth push's run is the first.
+conversion to format 3** until the twelfth push, so every statement of this document about T2 between those
+dates rests on the runs before the conversion. The twelfth push's run (2026-11-16, clang 18 on the CI's Linux
+machine; thread job 73 minutes, address job 69) is the first with it: both jobs pass, no step fails, and neither
+sanitizer writes a report, T2's calculation and fit included.
 
 ### 4.5 Memory not freed at exit (AZURE2; deliberate; not a leak that grows)
 

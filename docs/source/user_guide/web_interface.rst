@@ -195,8 +195,8 @@ records; each is one entry of the history.
 method's settings with their defaults, the start point (the working parameters, the values of the project text, or
 the best point of a job) and **Run**.  The methods are first the engine's own fitters, one per row of the engine's
 fitter table (``pyazr.kinds()["fitters"]``, the fits of the command-line program): ``engine_migrad`` (the program's
-default fit and the form's), ``engine_gsl-lm``, ``engine_lm``, ``engine_migrad-gradient``; under the method the
-engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow,
+default fit and the form's), ``engine_gsl-lm``, ``engine_lm``, ``engine_migrad-gradient``, and ``engine_nlopt`` in a build with NLopt; under the
+method the engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow,
 whether it honours a call limit, the fitter it falls back to);
 settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
 on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the reaction rate (drawn by the

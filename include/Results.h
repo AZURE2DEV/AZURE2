@@ -85,6 +85,10 @@ struct Results {
     /// written to chiSquared.out whenever it has).
     double modelData = 0.0;
     bool hasModelData = false;
+    /// The gamma_decay records' priors and the wall on a negative remainder (T11), and whether the project has a
+    /// record (the total is written to chiSquared.out whenever it has).
+    double gammaDecay = 0.0;
+    bool hasGammaDecay = false;
   } objective;
 
   /// The scratch of the energy tasks that write this buffer, one per thread (TaskScratch.h): solvers and their

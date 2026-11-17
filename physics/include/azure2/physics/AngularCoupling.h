@@ -7,8 +7,9 @@ namespace physics {
 /*!
  * Angular-momentum coupling coefficients for physics/, which may not use GSL (docs/upgrade/RULES.md section 1,
  * repo_consistency).  All angular momenta and projections are passed doubled (two_j = 2j), as everywhere in
- * physics/, so half-integers are exact.  The phases are those of Condon and Shortley, the same as the engine's
- * AngCoeff.cpp (GSL) uses (docs/source/theory/conventions.rst, "Clebsch-Gordan and Racah coefficients").
+ * physics/, so half-integers are exact.  The phases are those of Condon and Shortley
+ * (docs/source/theory/conventions.rst, "Clebsch-Gordan and Racah coefficients"); the engine's AngCoeff.cpp calls
+ * these functions.
  *
  * The sums are Racah's closed forms (A. R. Edmonds, Angular Momentum in Quantum Mechanics (1957), Eqs. 3.7.3 and
  * 6.3.7), evaluated in long double with factorials from a table.  A symbol whose arguments violate a triangle

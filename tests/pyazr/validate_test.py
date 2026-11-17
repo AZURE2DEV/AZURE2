@@ -157,7 +157,8 @@ with tempfile.TemporaryDirectory() as tmp:
                 text = pyazr.describe(new)
                 check("pyazr.describe: the pair keys and the resolved data file",
                       "entrance pair 1 (p+15N), exit pair 2 (a+12C)" in text and
-                      os.path.join(os.path.dirname(old), "data", "s01_int_thin.dat") in text, text[:400])
+                      os.path.join(os.path.dirname(old), "data", "s01_int_thin.dat").replace("\\", "/")
+                      in text.replace("\\", "/"), text[:400])  # one separator: Windows prints backslashes
                 d = pyazr.describe(new, as_json=True)
                 check("pyazr.describe(as_json=True): the data sets with their parameters",
                       d["datasets"][0]["name"] == "s01_int_thin" and

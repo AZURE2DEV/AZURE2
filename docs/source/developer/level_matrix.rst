@@ -32,8 +32,19 @@ The matrix calculation is organized through an inheritance hierarchy:
    itself (``include/THMMatrixFunc.h``).
 
 **Key files:** ``src/GenMatrixFunc.cpp``, ``src/AMatrixFunc.cpp``,
-``src/RMatrixFunc.cpp``, ``src/ChannelSpace.cpp``, ``src/LevelMatrixSolver.cpp``
-(headers of the same names in ``include/``), ``src/EnergyPass.cpp``.
+``src/RMatrixFunc.cpp``, ``src/ChannelSpace.cpp`` (headers of the same names
+in ``include/``), ``src/EnergyPass.cpp``.
+
+**The arithmetic is in** ``physics/`` (:doc:`physics_core`), as functions of
+arrays that need no engine class: ``CollisionMatrix.h`` (the fill of the level
+matrix, the elements of :math:`U` and :math:`T`, and ``collision_matrix`` for
+a whole block), ``LevelMatrixSolver.h`` (the factorization) and
+``ChannelSolve.h`` (the channel route at one energy).  ``AMatrixFunc``
+gathers a group's arrays from the level state and the site's tables, calls
+them, and keeps what belongs to an evaluation: which route a group takes, the
+memo of an energy, the profile counters.  The unit tests
+``physics/tests/collision_matrix_test.cpp`` and ``channel_solve_test.cpp``
+check the functions against closed forms and against each other.
 
 Computation Pipeline
 --------------------
@@ -162,22 +173,25 @@ otherwise.
 
 **Implementation detail:** Only active levels are stored in the matrix.
 An index map (``level_active_index_``) translates original level indices to
-compact, zero-based indices for dense matrix storage. Gamma values and shift
-functions are pre-cached in buffers to avoid repeated lookups. Channel
-contributions with :math:`|\gamma| < 10^{-12}` are skipped for efficiency.
+compact, zero-based indices for dense matrix storage. ``FillLevelMatrix``
+gathers the group's arrays once per energy (energies, widths, shift functions
+at the level energies, the Lo-matrix elements; ``AMatrixFunc::LevelMatrixGather``)
+and calls ``azure2::physics::fill_level_matrix`` on them
+(``LevelMatrixTables``). Channel contributions with
+:math:`|\gamma| < 10^{-12}` (``kWidthCutoff``) are skipped.
 
 Matrix Factorization: ``LevelMatrixSolver``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 On the level route (below) :math:`A^{-1}` is LU-factored with partial
-pivoting (``LevelMatrixSolver``, reusable storage).  The T-matrix needs only
+pivoting (``azure2::physics::LevelMatrixSolver``, reusable storage).  The T-matrix needs only
 the bilinear forms :math:`g_c^T A\, g_{c'}`, one triangular solve per channel;
 the full inverse is formed only on request (``GetAMatrixElement``).
 
 A level whose widths are all below the cutoff decouples: its row and column of
 :math:`A^{-1}` are zero but for the diagonal :math:`E_\lambda - E`, which
 vanishes at :math:`E = E_\lambda`.  The level contributes nothing at any
-energy, so ``FillLevelMatrix`` puts a unit diagonal there and the matrix stays
+energy, so ``fill_level_matrix`` puts a unit diagonal there and the matrix stays
 regular.  Any other singular matrix leaves the group out at that energy,
 with a warning printed once.
 
@@ -224,13 +238,15 @@ identity
    R_{cc'} = \sum_\lambda \frac{\Gamma_{\lambda c}\Gamma_{\lambda c'}}{e_\lambda - E_\text{in}},
 
 a :math:`c \times c` solve costing :math:`O(n c^2 + c^3)`
-(``AMatrixFunc::SolveChannelSpace``, ``SolveFormal``, ``FColumn``).  For the
+(``azure2::physics::channel_space::solve_channel_space``, ``solve_formal``,
+``f_column``; ``AMatrixFunc::SolveChannelSpace`` gathers the Lo-matrix elements
+and calls).  For the
 standard level matrix :math:`V = 1`.  :math:`N` is :math:`a^T a` for the
 eigenvectors :math:`a` of Brune's transformation, positive definite when the
 parameters have a real standard equivalent.  When it is not, the pencil is
 reduced once to Hessenberg-triangular form, :math:`Q^T K Z = H`,
 :math:`Q^T N Z = T`, and at each energy :math:`R = (Z^T G)^T (H - ET)^{-1} (Q^T G)`
-is an upper Hessenberg solve in real arithmetic (``SolvePencil``): still no
+is an upper Hessenberg solve in real arithmetic (``solve_pencil``): still no
 complex fill and factorization of :math:`A^{-1}`.
 
 Individual elements of :math:`A`, general bilinear forms (channel capture)
@@ -241,7 +257,7 @@ and the solves :math:`A g_c` of the gradient come from
    A = V \left[D^{-1} + D^{-1}\Gamma\, \Lambda (1 - R\Lambda)^{-1}\, \Gamma^T D^{-1}\right] V^T,
    \qquad D = \mathrm{diag}(e_\lambda - E_\text{in})
 
-(``ApplyA``, ``ChannelBilinear``, ``GetAMatrix``).
+(``apply_a``, ``channel_bilinear`` of ``ChannelSolve.h``; ``AMatrixFunc::GetAMatrix``).
 
 **Route of a J-group.**  At each energy each J-group takes the channel route
 or the level route (fill and LU).  The level route is taken
@@ -290,7 +306,12 @@ LU of the level matrix, at every channel-route solve).  The formal
 representation is cached per thread and J-group and rebuilt when a level's
 parameters change (``LevelState::Version``).
 
-**Gradient.**  In the formal representation the adjoint of a bilinear term
+**Gradient.**  The arithmetic of the routines named in this paragraph is in
+``physics/`` (``CollisionMatrixAdjoint.h``, ``ChannelSolveAdjoint.h``:
+functions of a block's arrays that add into a sink the caller hands over,
+tested against finite differences in ``physics/tests/``); the ``AMatrixFunc``
+routines keep the memo of the solves, the free-parameter mask and the choice
+of the route.  In the formal representation the adjoint of a bilinear term
 :math:`\beta F_{ab}` is :math:`O(n c)`: with :math:`u_c = A_f \Gamma_c` and
 :math:`Y = 1 + \Lambda F`,
 :math:`\bar e_\lambda = -\mathrm{Re}(\bar\beta u_{a\lambda} u_{b\lambda})` and
@@ -395,8 +416,11 @@ Thomas at :math:`\rho = k_c a_c`; the hard-sphere phase *shift* is
      T_{cc'} = -\Omega_c\,\Omega_{c'}\; 2i P_c^{1/2} P_{c'}^{1/2}\,\gamma_c^T A\,\gamma_{c'}
 
 with :math:`\gamma_c` the column of reduced widths of channel :math:`c`. In
-the code (``AMatrixFunc::CalculateTMatrix``) ``umatrix`` is the bracket without
-:math:`\delta_{cc'}`, ``uphase`` is :math:`\Omega_c\Omega_{c'}`, and
+the code ``AMatrixFunc::CalculateTMatrix`` walks the pathways and calls the
+element functions of ``CollisionMatrix.h``: ``pathway_amplitude`` is the bracket
+without :math:`\delta_{cc'}` (``umatrix``), ``t_matrix_element`` and
+``collision_element`` apply the phases (``ChannelPhases``; ``uphase`` is
+:math:`\Omega_c\Omega_{c'}`), and
 ``GetExpCoulombPhase`` and ``GetExpHardSpherePhase`` return
 :math:`e^{i\omega_c}` and :math:`e^{-i\phi_c}`. Photon and β-decay channels
 have :math:`\Omega_c = 1`. With ``--use-rmc`` the capture element is
@@ -467,12 +491,25 @@ Cross Section Calculation
 -------------------------
 
 The cross section is computed in ``GenMatrixFunc::CalculateCrossSection()``
-from the T-matrix elements. The calculation depends on the data type:
+from the T-matrix elements. The calculation depends on the data type.
+
+The arithmetic is in ``physics/``
+(``physics/include/azure2/physics/Observables.h``, functions of the T-matrix
+elements and plain numbers, tested alone in
+``physics/tests/observables_test.cpp``): the coherent sums
+(``PartialWaveSums``), ``add_partial_wave_cross_section``, the optical
+theorem (``add_optical_theorem_term``, ``total_cross_section``),
+``phase_shift_degrees``, the Legendre coefficients
+(``add_interference_product``, ``scale_legendre_coefficients``, ``upos_term``),
+the Coulomb-nuclear interference (``CoulombInterference``,
+``elastic_interference``) and the sums of a capture analysing power
+(``add_capture_ay_term``). ``GenMatrixFunc`` walks the pathway table, reads
+the site and writes the site's record.
 
 **Angle-integrated cross section:**
 
 T-matrix elements from pathways with the same :math:`(J, l, l')` values are
-coherently summed (via the ``TempTMatrix`` structure), enabling interference
+coherently summed (``azure2::physics::PartialWaveSums``), enabling interference
 between internal and external capture pathways:
 
 .. math::

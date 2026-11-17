@@ -132,7 +132,8 @@ wheel instead of installing it. The wheel holds:
   vendored plotly);
 - two commands on the ``PATH``: ``pyazr`` (:doc:`../user_guide/pyazr_command_line`;
   the same as ``python -m pyazr``) and the program ``AZURE2`` (its commands,
-  :doc:`../reference/command_line`);
+  :doc:`../reference/command_line`). The program's file is inside the package,
+  ``pyazr/bin/AZURE2``; the command ``AZURE2`` starts it;
 - the licence files: AZURE2's (GPL-3.0), the notice of the SRIM-2013 data
   files, plotly's.
 
