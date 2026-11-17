@@ -78,6 +78,7 @@ def g17(x):
     significant digits (half to even) by the decimal module, written as Python writes a float with ".17g".  An mpf of
     mpmath 1.3.0 has no __format__ (the Windows job's TypeError, 2026-11-16); float(x) would round twice."""
     sign, man, exp, _ = mpmath.mpf(x)._mpf_  # mpmath has no negative zero
+    man, exp = int(man), int(exp)  # with gmpy2 (the Windows job) they are mpz, which Decimal does not take
     with localcontext() as ctx:
         ctx.prec, ctx.Emax, ctx.Emin = 2000, 10**6, -10**6
         exact = Decimal(man) * Decimal(2) ** exp if exp >= 0 else Decimal(man) / Decimal(2) ** -exp
