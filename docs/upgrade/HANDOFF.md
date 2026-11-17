@@ -2,6 +2,15 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-exfor-agent`: the EXFOR user-agent IAEA gave AZURE2
+
+**Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. dev's `9b6ecb17`:
+requests to the EXFOR Web-API (`x4list`, `x4get`) send `Exfor-Azure2/1.0`, the string the IAEA Nuclear Data Section
+asked AZURE2 to send (2026-11-09; the API otherwise answers many clients with a Cloudflare 403); LiveChart, the NNDC
+ENSDF API and Crossref keep `pyazr/nds (research tool)`. `pyazr/sources/nds.py` (`EXFOR_UA`, `_http_get`), ctest
+`pyazr_nds_exfor_user_agent` (dev's test without its check of the GUI client, which this build does not have).
+Offline test; passes here. No number changes.
+
 ## 2026-11-15 (owner's agent) — `feature/upgrade-5-dev-udr-low-energy`: dev's time-of-flight kernels at low energy
 
 **Not merged into `feature/upgrade`.** Cut from `feature/upgrade` at the director's entry below. dev's `a68474f0`
