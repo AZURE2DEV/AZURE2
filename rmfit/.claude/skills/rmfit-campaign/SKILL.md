@@ -18,31 +18,30 @@ python3 -m rmfit.cli <campaign_dir> <command> [options]
 Read this file top to bottom before the first command on a new reaction; for resuming a
 campaign, "Read the state" and "The loop" are enough. The design and its open items are in DESIGN.md.
 
-## 0. This rmfit runs on pyazr 3.0 (project format 3)
+## 0. Two backends: pyazr 2 and pyazr 3
 
-The engine under this copy reads **format-3 projects only**. What that changes for an operator:
+rmfit runs on the pyazr that `AZURE2_ROOT` provides (`rmfit/backend.py` reads its version): pyazr 2 (AZURE2 `dev`,
+`.azr` text projects) or pyazr 3 (AZURE2 `feature/upgrade`, project format 3 only).  A campaign is pinned to one engine
+build, so it stays on the backend it started with.  What pyazr 3 changes for an operator:
 
-- **Convert first.** A format-1/2 `.azr` (the archive's) is converted once, `AZURE2 --convert OLD NEW` or
-  `pyazr.convert_azr(old, new)`; read the converter's report (dropped unused values, `# CONVERTED:` notes).
-  A parameter file of the old project is renamed with `AZURE2 --convert-params OLD.par NEW.par --project OLD.azr`.
-- **Data sets are named records**, numbered in file order for the outputs; rmfit's segment keys are those
-  numbers. Edit a project through `pyazr.Project` (or `rmfit.azr3.Model` for level and data-set moves), never
-  by position in a line.
-- **Normalizations, shifts and their priors are the engine's**: a record's `norm 1 fit prior 1 5%`, a shared
-  `normalization` or `energy_scale` record. rmfit takes every prior from the session's parameter rows, so its
-  penalty rows are the engine's own terms.
-- **The engine folds** target, beam and detector effects itself: such a data set is never split across shards
-  and rmfit has no convolution pieces. An extrapolation is folded only if its own record names a target, a beam
-  or a detector (the old `<targetInt>` trap is gone; the audit reports `extrapolation-folded`).
-- **Model data** (a measured scattering length, a width, a branching ratio in `<modelData>`), a prior
-  covariance (single session only), abundance sums and decay priors are rows of rmfit's objective, taken from
-  the engine.
-- **Not in this copy**: the joint fit of several one-nucleus projects (`rmfit.mixture`; several compound nuclei
-  in one project replace it). `rmfit uq` samples with rmfit's own NUTS (`rmfit/sampling.py`); a grid of
-  `uq.bands` is the fields of an `extrapolation` record plus `quantity_band` and `label`.
-- **Audit codes that changed**: `engine-validate` (the engine's validator: masses, separation energies, data
-  files), `model-setup`, `norm-prior-tight` (was `norm-error-units`), `extrapolation-folded` (was
-  `targetint-test`).
+- **Convert first.** A format-1/2 `.azr` is converted once, `AZURE2 --convert OLD NEW` or `pyazr.convert_azr(old,
+  new)`; read the converter's report.  A parameter file of the old project is renamed with
+  `AZURE2 --convert-params OLD.par NEW.par --project OLD.azr`.
+- **Data sets are named records**, numbered in file order for the outputs; rmfit's segment keys are those numbers.
+  Edit a project through `pyazr.Project` (or `rmfit.azr3.Model` for level and data-set moves), never by position in
+  a line.
+- **Normalizations, shifts and their priors are the engine's** (a record's `norm 1 fit prior 1 5%`, a shared
+  `normalization` or `energy_scale` record); rmfit takes every prior from the session's parameter rows.
+- **The engine folds** target, beam and detector effects: such a data set is never split across shards, and there
+  are no convolution pieces.  An extrapolation is folded only if its own record names a target, a beam or a detector
+  (the audit reports `extrapolation-folded`; the old `<targetInt>` trap is gone).
+- **Model data** (a measured scattering length, a width, a branching ratio), a prior covariance (single session
+  only), abundance sums and decay priors are rows of rmfit's objective, taken from the engine.
+- **Not on pyazr 3**: `rmfit.mixture` (several compound nuclei in one project replace it).  `rmfit uq` samples with
+  rmfit's own NUTS (`rmfit/sampling.py`); a `uq.bands` grid is the fields of an `extrapolation` record plus
+  `quantity_band` and `label`.
+- **Audit codes on pyazr 3**: `engine-validate` (the engine's validator: masses, separation energies, data files),
+  `model-setup`, `norm-prior-tight` (pyazr 2: `norm-error-units`), `extrapolation-folded` (pyazr 2: `targetint-test`).
 
 ## 1. Read the state, never recompute it
 
@@ -79,7 +78,7 @@ Prerequisites (do these in the reaction's fit directory, not in the campaign):
    with a blank external file. Never trust a bake that was "verified" with the `.sav`
    as the external file (that overrides `<levels>`), and never use parameters from a
    running or crashed fit -- only the last completed one. Purge inactive level lines.
-3. Merge any new data sets onto the baked file (`pyazr.Project.add_dataset`), capped
+3. Merge any new data sets onto the baked file (`AzrModel.add_data_segment`), capped
    at the energy range the level scheme covers (`set_segment_energy_range`), with
    normalizations free and a systematic error that reflects the paper. Look at every
    new file: a single negative or spiked cross section can dominate the objective.
@@ -117,7 +116,7 @@ python3 -m rmfit.cli <dir> init --base <dir>/<base>.azr [--sav <base>.sav] --nsh
     --search '{"top_k": 6, "pairs_per_group": 4, "stage1_nfev": 30, "stage2_nfev": 60, "union_nfev": 100}'
 ```
 
-`--flags` is passed straight to `pyazr.Session()`, so the parametrization is chosen there:
+`--flags` is passed straight to `pyazr.azure2()`, so the parametrization is chosen there:
 `"use_brune": true` (Brune, the archive default), `"use_park": true` (Park: the fit vector
 holds the observed reduced width amplitudes, `Gamma = 2 P gamma^2`; see the AZURE2 skill's
 "Park's parametrization"), `"use_brune": false` (standard Lane-Thomas). One basis per
@@ -200,7 +199,7 @@ the stop rules and the **standing decisions** with their owner and date.  Then:
 
     python3 -m rmfit.audit <base>.azr --out AUDIT.md       # pre-flight, no engine session: zero free widths, 1 keV merges,
                                                            # nominal norms != 1, normError as a FRACTION, FLAG columns as
-                                                           # errors, tiny errors, duplicates, spikes, thresholds, folded extrapolations
+                                                           # errors, tiny errors, duplicates, spikes, thresholds, <targetInt>
                                                            # on test segments, legacy .sav names, output path, engine pin
     python3 -m rmfit.cli <dir> init --base ... --spec spec.json   # flags/policy/search/objective/nshards from the spec unless
                                                            # given; HIGH disagreements with the .azr refuse the init
@@ -413,11 +412,12 @@ writes (section 2b).
   segments. A UPOS segment's observable is the secondary gamma, not the primary cross section,
   and no extrapolation reproduces it, so curves, scans and post-hoc tests on it must run in data
   mode on a pseudo-data grid (once 39 UPOS and 138 RATIO segments in one model);
-- normalizations: every `norm ... fit` without a `prior` is a FREE UNPENALIZED norm -- list them
+- normalizations: every `varyNorm 1` with `normError 0` is a FREE UNPENALIZED norm -- list them
   with their fitted values and ask whether each is intended; list fitted norms outside 0.7-1.4;
   check every norm / shift setting against the evaluator's recorded decisions;
-- every data set that names a `target`, a `beam` or a `detector` is folded by the engine: check that the record it
-  names is the intended one (a shared record changes several data sets at once);
+- `<targetInt>` keys bind to the intended segments; in sharded runs a convolved segment must be angle-integrated or at
+  ONE fixed angle (minA == maxA); an angular distribution with a
+  `<targetInt>` line still needs a single session.
 
 **2. Data audit** (every file of an active segment):
 - integrity: non-numeric rows, zero or negative values or errors, duplicated rows;
@@ -510,7 +510,7 @@ uq.json --nprocs 4 --threads 6" run_crc_rmfit`) or as the drive's last state whe
    `target_accept` 0.9.
 4. **GATES**: split R-hat <= 1.01, minimum bulk ESS >= 400, divergences <= 1 %, E-BFMI >= 0.3.  A failure re-runs once
    with 2x the draws (subject to the guards below); after that it is the decision `uq-gates`.
-5. **BANDS** on the spec's `uq.bands` grids or the project's own extrapolation records: the LINEAR band from the
+5. **BANDS** on the spec's `uq.bands` grids or the model's own `<segmentsTest>` energy scans: the LINEAR band from the
    Laplace covariance on the free R-matrix block, the same band times sqrt(chi2/nu) printed beside it and NOT adopted, and
    the SAMPLED band from `band_draws` posterior draws (percentiles 2.5/16/50/84/97.5).
 6. **REPORT**: `UQ.md`.

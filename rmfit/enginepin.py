@@ -181,3 +181,47 @@ def guard_lines_csh(recorded):
             f"  echo \"`date` ENGINE PIN FAILED: $m != {recorded['so_md5']} ({short(recorded)})\"\n"
             f"  exit 1\n"
             f"endif\n")
+
+
+def repin_job_scripts(directory, old, new, log=None):
+    """After a re-pin (``init`` with ``RMFIT_ALLOW_ENGINE_CHANGE=1``), carry the new pin into the campaign's job scripts.
+
+    Every file in ``directory`` that holds the old engine guard exactly as ``guard_lines_csh`` / ``guard_lines_sh`` wrote it
+    gets the new guard in its place; the rest of the script (a drive's wall time, hand edits) is kept.  A file that names
+    the old .so md5 without that block (a hand-written script) is listed with a WARNING, not edited.  Returns
+    ``(rewritten, warned)``, lists of file names.  2026-11-16: before this, a re-pin left every job script checking the
+    old md5, so each job stopped with ENGINE PIN FAILED."""
+    if not old or not old.get("so_md5") or not new or old.get("so_md5") == new.get("so_md5"):
+        return [], []
+    pairs = [(guard_lines_csh(old), guard_lines_csh(new)), (guard_lines_sh(old), guard_lines_sh(new))]
+    rewritten, warned = [], []
+    for name in sorted(os.listdir(directory)):
+        path = os.path.join(directory, name)
+        if not os.path.isfile(path) or os.path.getsize(path) > 1_000_000:
+            continue
+        try:
+            with open(path) as f:
+                text = f.read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if old["so_md5"] not in text:
+            continue
+        new_text = text
+        for a, b in pairs:
+            new_text = new_text.replace(a, b)
+        if new_text != text and old["so_md5"] not in new_text:
+            mode = os.stat(path).st_mode
+            with open(path, "w") as f:
+                f.write(new_text)
+            os.chmod(path, mode)
+            rewritten.append(name)
+        elif name not in ("campaign.json", "campaign.log", "init.log", "LOG.jsonl", "readme", "STATUS.md") \
+                and not name.endswith((".log", ".jsonl", ".md", ".json", ".sqlite")):
+            warned.append(name)
+    if log:
+        if rewritten:
+            log(f"re-pin: engine guard updated in {', '.join(rewritten)}")
+        if warned:
+            log(f"WARNING re-pin: {', '.join(warned)} name the old .so md5 {old['so_md5'][:8]} outside the generated "
+                f"guard block; not edited -- update them by hand")
+    return rewritten, warned

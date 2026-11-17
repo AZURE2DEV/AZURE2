@@ -6,6 +6,10 @@ part 2 on the 13N fixture with the engine (seconds).  Run:  python3 rmfit/tests/
 import os, shutil, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT); os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_photon_bound.py)")
+    sys.exit(77)
 import numpy as np
 from rmfit.keys import ParamKey
 from rmfit.local import BoundsPolicy, default_bounds
@@ -65,7 +69,7 @@ def main():
     from rmfit import AZURE2_ROOT
     from rmfit.engine import SingleSession
     from rmfit.model import single_variant
-    from rmfit.azr3 import Model as AzrModel
+    from pyazr import AzrModel
     tmp = tempfile.mkdtemp(prefix="rmfit_photon_"); work = os.path.join(tmp, "13N")
     shutil.copytree(os.path.join(AZURE2_ROOT, "tests", "13N"), work)
     shutil.rmtree(os.path.join(work, "output"), ignore_errors=True); os.makedirs(os.path.join(work, "output"))

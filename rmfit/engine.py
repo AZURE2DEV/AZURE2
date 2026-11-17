@@ -29,7 +29,12 @@ from . import AZURE2_ROOT  # noqa: F401
 from .keys import ParamKey, index_map, build_keys
 from .model import ShardSpec, build_shards, base_segments, single_variant, plan_balanced, shard_shift_count
 from .covariance import Covariance, NormGroups, RowBlock, has_keyword, load_reference
-from .azr3 import SegmentTable, has_field, without_fields
+from .backend import PYAZR3
+if PYAZR3:
+    from .azr3 import SegmentTable as SegmentSet, has_field, without_fields
+else:
+    from .covariance import norm_field, strip_text
+    from pyazr.datasets import SegmentSet
 
 
 class EvalError(RuntimeError):
@@ -45,17 +50,132 @@ def _rows_key(rows) -> bytes:
     return hashlib.blake2b(np.ascontiguousarray(rows, float).tobytes(), digest_size=16).digest()
 
 
+def _shift_penalty_from_zero() -> bool:
+    """True when the AZURE2 in use measures every energy-shift penalty from 0, ``(shift/shift_error)^2`` (dev,
+    2026-10-25; pyazr ``azure2.SHIFT_PENALTY_FROM_ZERO``); older builds, the frozen per-campaign ones included,
+    measure it from the .azr value.  Follow the engine, so the rows always equal the engine's own penalties."""
+    try:
+        from pyazr.azure2 import azure2 as _engine
+    except Exception:
+        return False
+    return bool(getattr(_engine, "SHIFT_PENALTY_FROM_ZERO", False))
+
+
 @dataclass
 class Penalties:
     """Nominal values and sigmas of the norm / shift penalty rows.
 
-    AZURE2 adds ``((p - centre) / sigma)^2`` for every free nuisance with a prior (a normalization, an energy-shift
-    term, ...); centre and sigma are the engine's own, read from the session's parameter rows
-    (:meth:`from_nuisances`).
+    AZURE2 adds ``((norm - nominal) / (nominal/100 * norm_error))^2`` per
+    segment whose normalization is free with a nonzero error, and
+    ``((shift - nominal) / shift_error)^2`` for a free energy shift, with nominal
+    0 for every shift term (constant, sqrt(E), shift function) since AZURE2 dev
+    2026-10-25 and the .azr value before (_shift_penalty_from_zero).
+
+    pyazr 3: ``((p - centre) / sigma)^2`` for every free nuisance with a prior (a normalization, an energy-shift
+    term, ...), centre and sigma the engine's own, read from the session's parameter rows (:meth:`from_nuisances`).
+    pyazr 2: from the segment table and the .azr (:meth:`from_segments`).
     """
     cols: np.ndarray            # free-vector positions
     nominal: np.ndarray
     sigma: np.ndarray
+
+    @classmethod
+    def from_segments(cls, keys: Sequence[ParamKey], segs: SegmentSet, azr=None):
+        """``azr``: the base .azr path, read for the <abundances> block when a key
+        of kind 'abundance' is present (its Gaussian prior ``((w - w0)/sigma)^2``
+        becomes a row like a norm's).  The engine's sum-to-one term
+        ``((sum w - 1)/abundanceSumSigma)^2`` couples several columns and is not
+        a row here: keep the abundances fixed in rmfit, or accept that only the
+        per-nucleus priors constrain them."""
+        cols, nom, sig = [], [], []
+        abundances = None
+        densities = None
+        dopplers = thicknesses = screenings = None
+        zero = _shift_penalty_from_zero()
+        for j, k in enumerate(keys):
+            if k.kind == "screening":
+                # an electron-screening potential: its prior ((U_e - U_e0)/sigma)^2 from the <targetInt> line
+                if azr is None:
+                    raise ValueError("screening keys need the base .azr to read their priors")
+                if screenings is None:
+                    from pyazr import AzrModel
+                    screenings = AzrModel.from_file(azr).screenings    # {effect: (Ue_eV, vary, sigma_eV)}
+                d = screenings.get(k.effect)
+                if d is None:
+                    raise KeyError(f"{k}: no screening block on active <targetInt> line {k.effect}")
+                if d[2] > 0:
+                    cols.append(j); nom.append(float(d[0])); sig.append(float(d[2]))
+                continue
+            if k.kind in ("doppler", "thickness"):
+                # 2026-11-05: a fitted Doppler temperature ('doppler T vary sigma [Tmax]') or sample thickness
+                # ('transmission|yield n vary sigma'): its prior ((v - v0)/sigma)^2, read from the .azr line
+                if azr is None:
+                    raise ValueError(f"{k.kind} keys need the base .azr to read their priors")
+                from pyazr import AzrModel
+                if k.kind == "doppler":
+                    if dopplers is None:
+                        dopplers = AzrModel.from_file(azr).dopplers
+                    d = dopplers.get(k.effect)
+                    if d is None or not d.get("fit"):
+                        raise KeyError(f"{k}: no fitted doppler block on active <targetInt> line {k.effect}")
+                    if d["sigma"] > 0:
+                        cols.append(j); nom.append(d["temperature"]); sig.append(d["sigma"])
+                else:
+                    if thicknesses is None:
+                        thicknesses = AzrModel.from_file(azr).sample_thicknesses
+                    d = thicknesses.get(k.seg)
+                    if d is None or not d.get("fit"):
+                        raise KeyError(f"{k}: no fitted transmission/yield block on segment {k.seg}")
+                    if d["sigma"] > 0:
+                        cols.append(j); nom.append(d["n"]); sig.append(d["sigma"])
+                continue
+            if k.kind == "density":
+                # a fitted target density: its densityfit prior ((N - N0)/sigma)^2, read from the <targetInt> line
+                if densities is None:
+                    from pyazr import AzrModel
+                    if azr is None:
+                        raise ValueError("density keys need the base .azr to read their priors")
+                    densities = AzrModel.from_file(azr).target_densities
+                d = densities.get(k.effect)
+                if d is None:
+                    raise KeyError(f"{k}: no densityfit block on active <targetInt> line {k.effect}")
+                if d["sigma"] > 0:
+                    cols.append(j); nom.append(d["density"]); sig.append(d["sigma"])
+                continue
+            if k.kind == "abundance":
+                if abundances is None:
+                    from pyazr import AzrModel
+                    if azr is None:
+                        raise ValueError("abundance keys need the base .azr to read their priors")
+                    # {Nucleus(Z, A): (value, vary, sigma)}
+                    abundances = {(n.Z, n.A): v for n, v in AzrModel.from_file(azr).abundances.items()}
+                a = abundances.get(k.nucleus)
+                if a is not None and a[2] > 0:
+                    cols.append(j); nom.append(a[0]); sig.append(a[2])
+                continue
+            if k.kind not in ("norm", "shift", "shift_sqrt", "shift_fn"):
+                continue
+            d = segs.by_key(k.seg)
+            if d is None:
+                raise KeyError(f"no base segment with key {k.seg}")
+            if k.kind == "norm":
+                s = d.norm / 100.0 * d.norm_error
+                if s > 0:
+                    cols.append(j); nom.append(d.norm); sig.append(s)
+            elif k.kind == "shift":
+                if d.vary_shift and d.energy_shift_error:
+                    cols.append(j); nom.append(0.0 if zero else d.energy_shift); sig.append(d.energy_shift_error)
+            elif k.kind == "shift_sqrt":
+                # 2026-10-22: the sqrt(E) coefficient b and the shift-function parameters a_j carry the
+                # engine's penalties ((b - b0)/db)^2 and ((a_j - a_j0)/sigma_j)^2 (pyazr penalties())
+                if d.vary_shift_sqrt and d.energy_shift_sqrt_error:
+                    cols.append(j); nom.append(0.0 if zero else d.energy_shift_sqrt)
+                    sig.append(d.energy_shift_sqrt_error)
+            else:
+                a0, s, vary = d.shift_fn_params[k.term]
+                if vary and s:
+                    cols.append(j); nom.append(0.0 if zero else float(a0)); sig.append(float(s))
+        return cls(np.array(cols, int), np.array(nom, float), np.array(sig, float))
 
     @classmethod
     def from_nuisances(cls, keys: Sequence[ParamKey], rows, key_of=None):
@@ -168,6 +288,93 @@ class ParkWall:
         for j, k in enumerate(keys[:n_rmatrix]):
             by.setdefault(k.level, []).append(j)
         return cls(list(labels), [by.get(lab, []) for lab in labels])
+
+
+def _jpi_text(s: float, parity: int) -> str:
+    """J^pi label of an s-wave channel (J = s), as rmfit level labels write it ("3/2+", "1-")."""
+    t = f"{int(round(2 * s))}/2" if abs(s - round(s)) > 1e-6 else f"{int(round(s))}"
+    return t + ("+" if parity > 0 else "-")
+
+
+@dataclass
+class ScatLenRows:
+    """pyazr 2 only (pyazr 3: :class:`ModelRows`).  Measured s-wave scattering lengths (``<scatteringLengths>``) as residual rows (2026-11-07, the evaluator:
+    "make those rmfit changes so we can proceed").
+
+    The engine adds ``((Re a - value)/sigma)^2`` (and the same for Im a when ``im_sigma`` > 0) per active line
+    to its scalar chi-squared (pyazr ``azure2.scattering_length_chi2``), but rmfit builds its objective from
+    residual rows, and pyazr's ``residual_jacobian`` has no scattering-length rows -- so before this, every
+    residual-path objective (Park mode, convolution pieces, normgroups, covariances, weights) left the term
+    out, and the plain sharded path counted it once per shard (shards kept the block).  Now: shards drop the
+    block (``model.write_shard``), the evaluator adds one row per constrained part here, and a model with
+    active lines always takes the residual path.  ``a`` is the channel spin's a0, or for ``s < 0`` the coherent
+    combination ``sum_s (2s+1) i1i2 a0_s`` of the pair.  a0 depends only on the levels of the J^pi groups of
+    the pair's s-wave channels (``cols``); its Jacobian rows come from the worker's ``scatlen_jac`` (central
+    differences, steps as ``park_jac``).  The rows go after the prior rows and before the Park wall rows, are
+    never weighted, and count in ``penalty``.
+    """
+    lines: list                       # active pyazr ScatteringLengthLine
+    i1i2: Dict[int, float]            # pair key -> 1/((2j1+1)(2j2+1))
+    chans: List[Tuple[int, float]]    # (pair, s) of every row of the worker's scatlen array, in order
+    parts: List[Tuple[int, int]]      # one per residual row: (line index, 0 = Re / 1 = Im)
+    cols: List[int]                   # free R-matrix columns that move a0 of a constrained pair
+
+    @classmethod
+    def build(cls, azr, keys, n_rmatrix, i1i2, sample):
+        """``sample``: the worker's ``scatlen`` array at any vector (channel layout only); None if the
+        model has no active line."""
+        from pyazr import AzrModel
+        lines = [e for e in AzrModel.from_file(azr).scattering_lengths if e.active]
+        if not lines:
+            return None
+        F = np.asarray(sample, float).reshape(-1, 6)
+        chans = [(int(r[0]), float(r[1])) for r in F]
+        parts = []
+        for i, e in enumerate(lines):
+            if e.s < 0:
+                if not any(p == e.pair for p, _ in chans):
+                    raise RuntimeError(f"<scatteringLengths>: pair {e.pair} has no s-wave channel in the model")
+                if e.pair not in i1i2:
+                    raise RuntimeError(f"<scatteringLengths>: no i1i2 factor for pair {e.pair} (pyazr too old?)")
+            elif not any(p == e.pair and abs(s - e.s) < 1e-6 for p, s in chans):
+                raise RuntimeError(f"<scatteringLengths>: pair {e.pair} has no s-wave channel spin {e.s}")
+            if e.sigma > 0:
+                parts.append((i, 0))
+            if e.im_sigma > 0:
+                parts.append((i, 1))
+        pairs = {e.pair for e in lines}
+        jpis = {_jpi_text(float(r[1]), int(r[2])) for r in F if int(r[0]) in pairs}
+        cols = [j for j, k in enumerate(keys[:n_rmatrix]) if str(k.level).split("#")[0] in jpis]
+        return cls(lines, dict(i1i2), chans, parts, cols)
+
+    def _weights(self, i):
+        """Coefficients of the worker's channel rows in line i's length ``a``."""
+        e = self.lines[i]
+        if e.s < 0:
+            w = self.i1i2[e.pair]
+            return np.array([(2 * s + 1) * w if p == e.pair else 0.0 for p, s in self.chans])
+        return np.array([1.0 if (p == e.pair and abs(s - e.s) < 1e-6) else 0.0 for p, s in self.chans])
+
+    def residuals(self, F):
+        F = np.asarray(F, float).reshape(-1, 6)
+        if F.shape[0] != len(self.chans):
+            raise RuntimeError(f"scatlen gave {F.shape[0]} channels, expected {len(self.chans)}")
+        out = np.empty(len(self.parts))
+        for r, (i, part) in enumerate(self.parts):
+            e = self.lines[i]
+            a = float(self._weights(i) @ F[:, 3 + part])
+            out[r] = (a - e.value) / e.sigma if part == 0 else (a - e.im_value) / e.im_sigma
+        return out
+
+    def jacobian(self, D, ncols_total):
+        """``D``: the worker's ``scatlen_jac`` for ``self.cols`` (len(cols), n_channels, 2) -> rows (nrows, nfree)."""
+        Jm = np.zeros((len(self.parts), ncols_total))
+        D = np.asarray(D, float)
+        for r, (i, part) in enumerate(self.parts):
+            e = self.lines[i]
+            sig = e.sigma if part == 0 else e.im_sigma
+            Jm[r, self.cols] = (D[:, :, part] @ self._weights(i)) / sig
+        return Jm
 
 
 @dataclass
@@ -588,9 +795,42 @@ class Evaluator:
             return 0.0
         return float(np.sum(np.asarray(r, float)[-len(self.park.labels):] ** 2))
 
-    scat: Optional["ModelRows"] = None
+    scat: Optional[object] = None          # ScatLenRows (pyazr 2) or ModelRows (pyazr 3)
 
     def _init_scat(self, worker, m_, azr):
+        """The model's rows outside the data and the nuisance priors: pyazr 3 the engine's own model rows
+        (:class:`ModelRows`), pyazr 2 the measured scattering lengths (:class:`ScatLenRows`); None without any."""
+        return self._init_scat_p3(worker, m_, azr) if PYAZR3 else self._init_scat_p2(worker, m_, azr)
+
+    def _scat_rows(self, x, jac=False):
+        """Those rows (and their Jacobian rows) at ``x``."""
+        return self._scat_rows_p3(x, jac) if PYAZR3 else self._scat_rows_p2(x, jac)
+
+    def _init_scat_p2(self, worker, m_, azr):
+        """The measured scattering-length rows of the model (None without an active line)."""
+        from pyazr import AzrModel
+        if not any(e.active for e in AzrModel.from_file(azr).scattering_lengths):
+            self.scat = None
+            return
+        sample = worker.call("scatlen", np.asarray(self.x0, float)[m_])
+        self.scat = ScatLenRows.build(azr, self.keys, self.n_rmatrix, worker.info.get("pair_i1i2", {}), sample)
+        print(f"rmfit: {len(self.scat.parts)} scattering-length row(s) from <scatteringLengths> "
+              f"({len(self.scat.cols)} R-matrix columns move them)", flush=True)
+
+    def _scat_rows_p2(self, x, jac=False):
+        """The measured scattering-length rows (and their Jacobian rows) at ``x``."""
+        x = np.asarray(x, float)
+        w, m_ = self._park_handle()          # a worker holding the whole R-matrix block
+        r = self.scat.residuals(w.call("scatlen", x[m_]))
+        if not jac:
+            return r, None
+        if not self.scat.cols:
+            return r, np.zeros((r.size, x.size))
+        inv = {int(g): s for s, g in enumerate(m_)}
+        D = w.call("scatlen_jac", (x[m_], [inv[c] for c in self.scat.cols]))
+        return r, self.scat.jacobian(D, x.size)
+
+    def _init_scat_p3(self, worker, m_, azr):
         """The engine's own rows of the model (:class:`ModelRows`), None when it has none (or only Park's wall,
         which :class:`ParkWall` carries)."""
         n = int(worker.call("model_rows", (np.asarray(self.x0, float)[m_], False))[0].size)
@@ -609,7 +849,7 @@ class Evaluator:
               f"lengths, a prior covariance, decay priors, abundance sums"
               + (", Park's wall" if self.flags.get("use_park") else "") + ")", flush=True)
 
-    def _scat_rows(self, x, jac=False):
+    def _scat_rows_p3(self, x, jac=False):
         """The engine's model rows (and their Jacobian rows) at ``x``."""
         x = np.asarray(x, float)
         w, m_ = self._park_handle()          # a worker holding the whole R-matrix block
@@ -624,7 +864,7 @@ class Evaluator:
         return r, J
 
     def scat_value(self, r) -> float:
-        """The model rows' share of the objective (they sit just before the Park wall rows)."""
+        """The share of those rows (:meth:`_init_scat`) in the objective (they sit just before the Park wall rows)."""
         if self.scat is None:
             return 0.0
         r = np.asarray(r, float)
@@ -818,8 +1058,13 @@ class SingleSession(Evaluator):
         # a model with data covariances runs WITHOUT the keyword (plain rows, whitened here: see
         # rmfit.covariance); normalization groups stay with the engine
         run_azr = self.azr
-        if has_field(self.azr, "covariance"):
-            run_azr = without_fields(self.azr, os.path.splitext(self.azr)[0] + ".nocov.azr", ("covariance",))
+        if PYAZR3:
+            if has_field(self.azr, "covariance"):
+                run_azr = without_fields(self.azr, os.path.splitext(self.azr)[0] + ".nocov.azr", ("covariance",))
+        elif has_keyword(self.azr, "covariance"):
+            run_azr = os.path.splitext(self.azr)[0] + ".nocov.azr"
+            with open(run_azr, "w") as fh:
+                fh.write(strip_text(open(self.azr).read(), ("covariance",)))
         self.run_azr = run_azr
         self.worker = _Worker(run_azr, self.cwd, self.flags, None, name=name).start()
         info = self.worker.info
@@ -831,13 +1076,25 @@ class SingleSession(Evaluator):
         self.row_ranges = [(k, (int(edges[i]), int(edges[i + 1])))
                            for i, k in enumerate(info["seg_keys"])]
         self.npts = int(edges[-1])
-        self.nuisances = list(info.get("nuisances", []))
-        self.segments = base_segments(self.azr).with_nuisances(self.nuisances)
-        self.penalties = Penalties.from_nuisances(self.keys, self.nuisances)
-        # the engine's rows of the fitted nuisances by free column (prior, limits), for the bounds
-        # (local.default_bounds)
-        self.nuisance_of_col = {int(r["free_index"]): r for r in self.nuisances
-                                if not r["fixed"] and r.get("free_index") is not None}
+        if PYAZR3:
+            self.nuisances = list(info.get("nuisances", []))
+            self.segments = base_segments(self.azr).with_nuisances(self.nuisances)
+            self.penalties = Penalties.from_nuisances(self.keys, self.nuisances)
+            # the engine's rows of the fitted nuisances by free column (prior, limits), for the bounds
+            # (local.default_bounds)
+            self.nuisance_of_col = {int(r["free_index"]): r for r in self.nuisances
+                                    if not r["fixed"] and r.get("free_index") is not None}
+        else:
+            self.segments = base_segments(self.azr)
+            self.penalties = Penalties.from_segments(self.keys, self.segments, self.azr)
+            # fitted target densities: {effect: densityfit info} for the bounds (local.default_bounds)
+            self.density_info = ({} if not any(k.kind == "density" for k in self.keys)
+                                 else __import__("pyazr").AzrModel.from_file(self.azr).target_densities)
+            # fitted Doppler temperatures / sample thicknesses (2026-11-05): their lines, for the bounds
+            self.doppler_info = ({} if not any(k.kind == "doppler" for k in self.keys)
+                                 else __import__("pyazr").AzrModel.from_file(self.azr).dopplers)
+            self.thickness_info = ({} if not any(k.kind == "thickness" for k in self.keys)
+                                   else __import__("pyazr").AzrModel.from_file(self.azr).sample_thicknesses)
         self.wigner_limits = dict(info["wigner"])
         self.level_energy = info["level_energy"]
         self.fixed_amplitudes = list(info.get("fixed_amplitudes", []))
@@ -970,12 +1227,13 @@ class Sharded(Evaluator):
         self.base_azr = os.path.abspath(base_azr)
         self.workdir = os.path.abspath(workdir)
         self.flags = dict(flags or {})
-        import pyazr
-        if pyazr.Project.open(self.base_azr).config().get("priorCovariance"):
-            # a prior covariance couples parameters of several data sets; a shard holds a subset of them and its
-            # file drops the key, so the term would be missing here and present in a single session
-            raise NotImplementedError(f"{os.path.basename(self.base_azr)}: a prior covariance (priorCovariance of "
-                                      f"<config>) is supported in SingleSession only")
+        if PYAZR3:
+            import pyazr
+            if pyazr.Project.open(self.base_azr).config().get("priorCovariance"):
+                # a prior covariance couples parameters of several data sets; a shard holds a subset of them and its
+                # file drops the key, so the term would be missing here and present in a single session
+                raise NotImplementedError(f"{os.path.basename(self.base_azr)}: a prior covariance (priorCovariance of "
+                                          f"<config>) is supported in SingleSession only")
         self.segments = base_segments(self.base_azr)
         # shard files carry neither `covariance` nor `normgroup` (rmfit.model.write_shard): a follower's
         # pieces run at its own fixed norm and are rescaled here, covariance rows are whitened here
@@ -1017,13 +1275,19 @@ class Sharded(Evaluator):
     # -- Jacobian-cost balancing -------------------------------------------------
 
     def _balance_signature(self) -> str:
-        # every record of the project that is not a level: the data sets and what they name (targets, beams, ...)
-        import pyazr
-        records = [r.text for r in pyazr.Project.open(self.base_azr).records().values()]
         nshards, weights, no_split = self._plan_args
         env = {k: os.environ.get(k, "") for k in ("RMFIT_SPLIT_SUM", "RMFIT_CONV_PPS", "RMFIT_BALANCE_PIECE")}
-        blob = json.dumps(dict(records=records,
-                               nshards=nshards, weights=weights, no_split=list(no_split), env=env), sort_keys=True)
+        if PYAZR3:
+            # every record of the project that is not a level: the data sets and what they name (targets, beams, ...)
+            import pyazr
+            records = [r.text for r in pyazr.Project.open(self.base_azr).records().values()]
+            blob = json.dumps(dict(records=records,
+                                   nshards=nshards, weights=weights, no_split=list(no_split), env=env), sort_keys=True)
+        else:
+            from .model import block_lines
+            text = open(self.base_azr).read()
+            blob = json.dumps(dict(seg=block_lines(text, "segmentsData"), tint=block_lines(text, "targetInt"),
+                                   nshards=nshards, weights=weights, no_split=list(no_split), env=env), sort_keys=True)
         return hashlib.md5(blob.encode()).hexdigest()
 
     def _balance_cache_path(self):
@@ -1141,6 +1405,10 @@ class Sharded(Evaluator):
         q_all = np.full(self.npts, np.nan)
         for si, entries in enumerate(self.layout):
             for ei, (p, (sa, sb), (ga, gb), ncol, nominal) in enumerate(entries):
+                if p.kind == "conv":
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        q_all[ga:gb] = p.conv.value / p.conv.error
+                    continue
                 if parts is None:
                     continue
                 d = parts[si]
@@ -1149,7 +1417,8 @@ class Sharded(Evaluator):
                 q_all[ga:gb] = q
                 if p.base_key in self.norm_groups.leader:
                     col, nom = self._norm_owner(p.base_key)
-                    n0 = float(p.norm0 if p.norm0 is not None else 1.0)
+                    n0 = (float(p.norm0 if p.norm0 is not None else 1.0) if PYAZR3
+                          else float(p.tokens[norm_field(p.tokens)]))
                     self.follow[(si, ei)] = (col, nom, n0, np.where(np.isfinite(q), q, 0.0),
                                              np.asarray(d["cross_err"][ei], float) != 0)
         self.cov = None
@@ -1157,7 +1426,10 @@ class Sharded(Evaluator):
             blocks = []
             for entries in self.layout:
                 for p, _, (ga, gb), _, _ in entries:
-                    blocks.append(RowBlock(ga, gb, int(p.base_key), float(p.e_lo), float(p.e_hi), "file"))
+                    if p.kind == "conv":
+                        blocks.append(RowBlock(ga, gb, int(p.base_key), -np.inf, np.inf, "energy"))
+                    else:
+                        blocks.append(RowBlock(ga, gb, int(p.base_key), float(p.e_lo), float(p.e_hi), "file"))
             self.cov = Covariance.build(self.base_azr, os.path.dirname(self.base_azr), self.segments,
                                         blocks, self.npts)
             if self.cov is not None:
@@ -1176,6 +1448,15 @@ class Sharded(Evaluator):
                 raise RuntimeError("shards disagree on the R-matrix parameter block")
         self.n_rmatrix = len(rblocks[0])
         tailset = {k for i in infos for k in i["keys"][i["n_rmatrix"]:]}
+        conv_norm_nominal = {}
+        for s in self.shards:
+            for p in s.pieces:
+                if p.kind == "conv":
+                    d = self.segments.by_key(self.norm_groups.owner(p.base_key))
+                    if d.vary_norm:
+                        k = ParamKey("norm", seg=d.key)
+                        tailset.add(k)
+                        conv_norm_nominal[k] = d.norm
         tail = sorted(tailset, key=lambda k: (k.kind != "norm", k.seg, _TAIL_ORDER.get(k.kind, 0), k.term or 0))
         self.keys = list(rblocks[0]) + tail
         nfree = len(self.keys)
@@ -1187,6 +1468,9 @@ class Sharded(Evaluator):
         x0 = np.zeros(nfree)
         for m_, i in zip(self.maps, infos):
             x0[m_] = i["x0"]
+        for j, k in enumerate(self.keys):
+            if k in conv_norm_nominal:
+                x0[j] = conv_norm_nominal[k]
         self.x0 = x0
         # rows: shard order, piece order inside a shard.  self.layout[s] is a
         # list of (piece, shard_slice, global_slice, norm_col or None, nominal)
@@ -1194,6 +1478,7 @@ class Sharded(Evaluator):
         self.row_ranges = []
         self.shard_rows = []
         self.layout = []
+        self.has_conv = False
         off = 0
         for s, i in zip(self.shards, infos):
             a = off
@@ -1202,35 +1487,48 @@ class Sharded(Evaluator):
             if len(i["npts"]) != len(s.pieces):
                 raise RuntimeError(f"{s.name}: engine reports {len(i['npts'])} segments for {len(s.pieces)} pieces")
             for p, n in zip(s.pieces, i["npts"]):
-                if n != p.npts:
-                    raise RuntimeError(f"{s.name}: piece {p.base_key} [{p.e_lo},{p.e_hi}] loaded {n} points, planned {p.npts}")
-                entries.append((p, (soff, soff + n), (off, off + n), None, None))
-                self.row_ranges.append((int(p.base_key), (off, off + n)))
-                off += n
+                if p.kind == "conv":
+                    if n != p.conv.n_grid:
+                        raise RuntimeError(f"{s.name}: conv piece {p.base_key} grid has {n} points, expected {p.conv.n_grid}")
+                    d = self.segments.by_key(self.norm_groups.owner(p.base_key))
+                    ncol = pos.get(ParamKey("norm", seg=d.key)) if d.vary_norm else None
+                    entries.append((p, (soff, soff + n), (off, off + p.conv.n_data), ncol, d.norm))
+                    self.row_ranges.append((int(p.base_key), (off, off + p.conv.n_data)))
+                    off += p.conv.n_data
+                    self.has_conv = True
+                else:
+                    if n != p.npts:
+                        raise RuntimeError(f"{s.name}: piece {p.base_key} [{p.e_lo},{p.e_hi}] loaded {n} points, planned {p.npts}")
+                    entries.append((p, (soff, soff + n), (off, off + n), None, None))
+                    self.row_ranges.append((int(p.base_key), (off, off + n)))
+                    off += n
                 soff += n
             self.layout.append(entries)
             self.shard_rows.append((a, off))
         self.npts = off
-        # the nuisances of every shard on the global columns and the base model's data-set keys: the priors
-        # (Penalties) and the values of the base table's nuisance fields come from the shards' parameter rows
-        self.nuisances = []
-        for s, m_, i in zip(self.shards, self.maps, infos):
-            smap = s.seg_map
-            for r in i.get("nuisances", []):
-                r = dict(r)
-                if r.get("free_index") is not None:
-                    r["free_index"] = int(m_[int(r["free_index"])])
-                if r.get("segment_key") is not None:
-                    r["segment_key"] = int(smap[int(r["segment_key"])])
-                self.nuisances.append(r)
-        # a normalization-group follower is written into its shard with the fixed norm 1 (model.write_shard): its
-        # row says nothing about the base model, where it follows the group's first member
-        followers = set(self.norm_groups.leader)
-        self.segments.with_nuisances([r for r in self.nuisances
-                                      if not (r["kind"] == "norm" and r.get("segment_key") in followers)])
-        self.penalties = Penalties.from_nuisances(self.keys, self.nuisances)
-        self.nuisance_of_col = {int(r["free_index"]): r for r in self.nuisances
-                                if not r["fixed"] and r.get("free_index") is not None}
+        if PYAZR3:
+            # the nuisances of every shard on the global columns and the base model's data-set keys: the priors
+            # (Penalties) and the values of the base table's nuisance fields come from the shards' parameter rows
+            self.nuisances = []
+            for s, m_, i in zip(self.shards, self.maps, infos):
+                smap = s.seg_map
+                for r in i.get("nuisances", []):
+                    r = dict(r)
+                    if r.get("free_index") is not None:
+                        r["free_index"] = int(m_[int(r["free_index"])])
+                    if r.get("segment_key") is not None:
+                        r["segment_key"] = int(smap[int(r["segment_key"])])
+                    self.nuisances.append(r)
+            # a normalization-group follower is written into its shard with the fixed norm 1 (model.write_shard): its
+            # row says nothing about the base model, where it follows the group's first member
+            followers = set(self.norm_groups.leader)
+            self.segments.with_nuisances([r for r in self.nuisances
+                                          if not (r["kind"] == "norm" and r.get("segment_key") in followers)])
+            self.penalties = Penalties.from_nuisances(self.keys, self.nuisances)
+            self.nuisance_of_col = {int(r["free_index"]): r for r in self.nuisances
+                                    if not r["fixed"] and r.get("free_index") is not None}
+        else:
+            self.penalties = Penalties.from_segments(self.keys, self.segments, self.base_azr)
         self.wigner_limits = dict(infos[0]["wigner"])
         self.level_energy = infos[0]["level_energy"]
         self.fixed_amplitudes = list(infos[0].get("fixed_amplitudes", []))
@@ -1257,7 +1555,7 @@ class Sharded(Evaluator):
     def objective(self, x):
         x = np.asarray(x, float)
         t0 = time.time()
-        if (not self.spec.plain or self.follow or self.cov is not None or self.park is not None
+        if (self.has_conv or not self.spec.plain or self.follow or self.cov is not None or self.park is not None
                 or self.scat is not None):
             r, _ = self.residuals(x, jac=False)
             self.timings.append(time.time() - t0)
@@ -1315,6 +1613,24 @@ class Sharded(Evaluator):
                         for j, gj in enumerate(m_):
                             J[ga:gb, gj] += Js[sa:sb, j]
                     continue
+                c = p.conv
+                f = c.W @ rs[sa:sb]                   # convolved fit at the data energies
+                n = float(x[ncol]) if ncol is not None else float(nominal)
+                e = c.error * n
+                ok = e != 0
+                rr = np.zeros(c.n_data)
+                rr[ok] = (f[ok] - c.value[ok] * n) / e[ok]
+                r[ga:gb] = rr
+                if jac:
+                    Jc = c.W @ Js[sa:sb, :]             # (n_data, n_shard_free)
+                    scale = np.zeros(c.n_data)
+                    scale[ok] = 1.0 / e[ok]
+                    for j, gj in enumerate(m_):
+                        J[ga:gb, gj] += Jc[:, j] * scale
+                    if ncol is not None:
+                        dn = np.zeros(c.n_data)
+                        dn[ok] = -f[ok] / (c.error[ok] * n * n)
+                        J[ga:gb, ncol] += dn
         if self.cov is not None:
             if not np.all(np.isfinite(r)):
                 raise EvalError("non-finite residuals")
@@ -1354,7 +1670,7 @@ class Sharded(Evaluator):
         for entries, d in zip(self.layout, parts):
             exc = d.get("excitation", [])
             for q, (p, (sa, sb), (ga, gb), ncol, nom) in enumerate(entries):
-                if q < len(exc) and len(exc[q]) == gb - ga:
+                if p.kind != "conv" and q < len(exc) and len(exc[q]) == gb - ga:
                     out[ga:gb] = np.asarray(exc[q], float)
         return out
 
@@ -1392,8 +1708,12 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
     (norms and shifts included), and verify the pair by re-evaluating it in a
     fresh session: the objective must agree to ``verify_rtol``.
 
-    The files are written by ``pyazr.Session.save_fit`` (in a worker process); the check is rmfit's own, with
-    rmfit's objective, every session in a process of its own.
+    pyazr 3: the files are written by ``pyazr.Session.save_fit`` in a worker process (:func:`_bake_write_p3`); the
+    check below is rmfit's own.  pyazr 2 (:func:`_bake_write_p2`): this replaces ``pyazr.azure2.save_fit``.  ``save_fit``
+    opens its verification session inside the same process as the fit
+    session, and on a large model that second session has come back
+    with a parameter table that does not match the first (the engine keeps
+    per-process state); here every session is its own process.
 
     Returns ``(azr_path, sav_path, Score)``.
     """
@@ -1434,41 +1754,25 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
         rmask = np.array([k.kind in ("energy", "width") for k in ev.keys])
         want_levels = ev.score(np.where(rmask, xs, ev.x0))   # norms/shifts at nominal
         src_keys = list(ev.keys)
-    # The snapshot is Session.save_fit, in a process of its own on the base model as written (its covariance
-    # fields included; the evaluator above ran a .nocov copy): every level's physical values into the rows they
-    # come from, fixed parameters included (a fixed parameter is fixed in the fit's basis, so its observed value
-    # moves with the other amplitudes of its level), the nuisances left at the file's values (norms="nominal": the
-    # prior centres stay where they are), and the companion parameter file with every parameter and its basis tag.
-    # pyazr's own re-read check is off: the check below does it in fresh processes with rmfit's objective.
-    path = os.path.abspath(path)
-    # save_fit rewrites a snapshot's relative paths for its directory but cannot rewrite those inside a data
-    # covariance file, and refuses such a project in another directory: so the session that writes the snapshot
-    # opens a copy of the base model in the snapshot's own directory (its output in the work directory)
-    from .azr3 import write_variant
-    from .model import link_data_dirs
-    dest = os.path.dirname(path)
-    os.makedirs(dest, exist_ok=True)
-    link_data_dirs(base_azr, dest)
-    save_out = os.path.join(workdir, f"output_{name}_save")
-    os.makedirs(save_out, exist_ok=True)
-    save_src, _ = write_variant(base_azr, os.path.join(dest, f".{name}_save_src.azr"), save_out)
-    w = _Worker(save_src, dest, flags, None, name=f"{name}_save").start()
-    try:
-        xw = take(xs, src_keys, w.info["keys"], np.asarray(w.info["x0"], float))
-        azr_written, sav_written = w.call("save_fit", (path, xw, dict(param_sav=True, verify=False, norms="nominal")))
-    finally:
-        w.stop()
-        if os.path.exists(save_src):
-            os.remove(save_src)
-    sav = os.path.splitext(path)[0] + ".sav"
-    if sav_written and os.path.abspath(sav_written) != sav:
-        os.replace(sav_written, sav)
-    # the snapshot carries the source variant's output directory: give it the caller's, else the base model's
-    import pyazr
-    out = pyazr.Project.open(path)
-    out.set_config(output_dir=(output_dir if output_dir is not None
-                               else pyazr.Project.open(os.path.abspath(base_azr)).config().get("output_dir", "output/")))
-    out.save()
+        if not PYAZR3:
+            snap = ev.worker.call("snapshot", None)
+            # 2026-10-24: every parameter's physical value, fixed ones included.  A fixed parameter is fixed in rwa
+            # space and its observed value moves with the other amplitudes of its level (Brune's 1 + sum gamma^2 dS/dE,
+            # closed channels included), so keeping the seed file's observed value for it is another model on re-read:
+            # one archived candidate failed this check (14 fixed widths of frozen levels with
+            # free ANCs, up to +13 %).  A pyazr without transform_all_rwa_full (before 2026-10-12) writes the free
+            # parameters only, as before.
+            try:
+                phys_all = np.asarray(ev.worker.call("transform_all", xs), float)
+            except Exception as err:
+                phys_all = None
+                print(f"bake: fixed parameters NOT rewritten (this pyazr cannot transform them: "
+                      f"{str(err).strip().splitlines()[-1]}); a level whose free amplitudes moved may fail the check")
+            phys = None if phys_all is not None else np.asarray(ev.transform(xs), float)
+    if PYAZR3:
+        path, sav = _bake_write_p3(base_azr, xs, src_keys, path, flags, workdir, output_dir, name)
+    else:
+        path, sav = _bake_write_p2(base_azr, xs, snap, phys_all, phys, path, flags, output_dir)
     chk = single_variant(path, f"{name}_chk", workdir)
     with SingleSession(chk, cwd=workdir, flags=flags, name=f"{name}_chk", objective=objective) as ev2:
         x2 = take(xs, ev.keys, ev2.keys, ev2.x0)
@@ -1506,6 +1810,87 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
             f"{want_levels.chi2:.6f} (rel {d_lev:.2e}); files removed")
     got.roundtrip = dict(objective_rel=d_obj, levels_rel=d_lev, levels_only_chi2=levels_only.chi2)
     return path, sav, got
+
+
+def _bake_write_p2(base_azr, xs, snap, phys_all, phys, path, flags, output_dir):
+    """bake's files on pyazr 2: the session's physical values written into a copy of the .azr by ``AzrModel``, and the
+    companion .sav (every parameter, basis tag first).  Returns ``(path, sav)``."""
+    from pyazr import AzrModel
+    mdl = AzrModel.from_file(base_azr)
+    if phys_all is not None:
+        mdl.apply_fit(snap["parameters"], phys_all, physical=True, include_fixed=True, pairs=snap["pairs"])
+    else:
+        mdl.apply_fit(snap["parameters"], phys, physical=True, pairs=snap["pairs"])
+    if output_dir is not None:
+        mdl.set_output_dir(output_dir)
+    path = os.path.abspath(path)
+    mdl.write(path)
+    sav = os.path.splitext(path)[0] + ".sav"
+    # 2026-10-22: the keyword blocks rmfit handles itself must survive the write (an older pyazr
+    # drops what it does not know, and the written model would silently be another objective)
+    from .covariance import line_keyword, segment_lines
+    # 2026-10-24: and `total` (a pyazr that does not know it may drop it, and the segment becomes elastic only)
+    kw = lambda f: [(line_keyword(t, "covariance"), line_keyword(t, "normgroup"), line_keyword(t, "total"))
+                    for t in segment_lines(f)]
+    if kw(path) != kw(base_azr):
+        os.remove(path)
+        raise RuntimeError("bake: the written model lost or changed `covariance`/`normgroup`/`total` keywords "
+                           "(pyazr AzrModel of this build); file removed")
+    free_index = {p.index: p.free_index for p in snap["parameters"]}
+    # AZURE2 tags every parameter file with the amplitudes it holds (0 standard,
+    # 1 Brune, 2 Park) and converts on read when a run in the other alternative
+    # basis loads it; an untagged file is taken as Brune's, which would be wrong
+    # for a Park-mode campaign.  The '#' keeps positional (numpy.loadtxt) readers
+    # unaffected.
+    basis = 2 if flags.get("use_park") else (1 if flags.get("use_brune", True) else 0)
+    with open(sav, "w") as fh:
+        fh.write(f"{'#parametrization':>28s} {float(basis): .7e} {0.0: .7e}\n")
+        for i, (nm, fx, v) in enumerate(zip(snap["names"], snap["fixed"], snap["all_rwa"])):
+            fi = free_index.get(i)
+            val = xs[fi] if (not fx and fi is not None and fi < xs.size) else v
+            fh.write(f"{nm:>28s} {float(val): .7e} {0.0: .7e}\n")
+    return path, sav
+
+
+def _bake_write_p3(base_azr, xs, src_keys, path, flags, workdir, output_dir, name):
+    """bake's files on pyazr 3: ``Session.save_fit`` in a worker of its own.  Returns ``(path, sav)``."""
+    from .keys import take
+    # The snapshot is Session.save_fit, in a process of its own on the base model as written (its covariance
+    # fields included; the evaluator above ran a .nocov copy): every level's physical values into the rows they
+    # come from, fixed parameters included (a fixed parameter is fixed in the fit's basis, so its observed value
+    # moves with the other amplitudes of its level), the nuisances left at the file's values (norms="nominal": the
+    # prior centres stay where they are), and the companion parameter file with every parameter and its basis tag.
+    # pyazr's own re-read check is off: the check below does it in fresh processes with rmfit's objective.
+    path = os.path.abspath(path)
+    # save_fit rewrites a snapshot's relative paths for its directory but cannot rewrite those inside a data
+    # covariance file, and refuses such a project in another directory: so the session that writes the snapshot
+    # opens a copy of the base model in the snapshot's own directory (its output in the work directory)
+    from .azr3 import write_variant
+    from .model import link_data_dirs
+    dest = os.path.dirname(path)
+    os.makedirs(dest, exist_ok=True)
+    link_data_dirs(base_azr, dest)
+    save_out = os.path.join(workdir, f"output_{name}_save")
+    os.makedirs(save_out, exist_ok=True)
+    save_src, _ = write_variant(base_azr, os.path.join(dest, f".{name}_save_src.azr"), save_out)
+    w = _Worker(save_src, dest, flags, None, name=f"{name}_save").start()
+    try:
+        xw = take(xs, src_keys, w.info["keys"], np.asarray(w.info["x0"], float))
+        azr_written, sav_written = w.call("save_fit", (path, xw, dict(param_sav=True, verify=False, norms="nominal")))
+    finally:
+        w.stop()
+        if os.path.exists(save_src):
+            os.remove(save_src)
+    sav = os.path.splitext(path)[0] + ".sav"
+    if sav_written and os.path.abspath(sav_written) != sav:
+        os.replace(sav_written, sav)
+    # the snapshot carries the source variant's output directory: give it the caller's, else the base model's
+    import pyazr
+    out = pyazr.Project.open(path)
+    out.set_config(output_dir=(output_dir if output_dir is not None
+                               else pyazr.Project.open(os.path.abspath(base_azr)).config().get("output_dir", "output/")))
+    out.save()
+    return path, sav
 
 
 def verify(base_azr, x, flags, workdir=None, name="verify", objective=None) -> Tuple[Score, List[ParamKey]]:

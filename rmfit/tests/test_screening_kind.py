@@ -18,6 +18,10 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_screening_kind.py)")
+    sys.exit(77)
 from rmfit import AZURE2_ROOT  # noqa: E402
 from rmfit.engine import SingleSession  # noqa: E402
 from rmfit.keys import build_keys  # noqa: E402
@@ -34,11 +38,11 @@ def check(name, ok, detail=""):
 
 
 def main():
-    from pyazr import Session
+    from pyazr import azure2
     src = os.path.join(AZURE2_ROOT, "tests", "electron_screening", "grad.azr")
     if not os.path.exists(src):
         print(f"SKIP: no {src}")
-        return 77
+        return 2
     tmp = tempfile.mkdtemp(prefix="rmfit_screening_")
     try:
         for d in ("output", "checks"):
@@ -56,12 +60,12 @@ def main():
             pen = float(ev.penalties.value(x))
             check("(b) penalty includes ((1100 - 1000)/200)^2", abs((pen - r0) - 0.25) < 1e-9, f"{pen} - {r0}")
             obj = float(ev.objective(x))
-            with Session(azr, cwd=tmp, **ev.flags) as s:
-                ref = float(s.objective()(x))
+            with azure2(azr, cwd=tmp, **ev.flags) as s:
+                ref = float(s.objective(x))
             check("(b) objective = pyazr's objective()", abs(obj - ref) <= 1e-9 * abs(ref), f"{obj} vs {ref}")
             b = default_bounds(ev, ev.x0.copy(), BoundsPolicy())
             check("(c) U_e bounds [0, inf)", b.lb[j] == 0.0 and np.isinf(b.ub[j]) and not b.fixed[j], (b.lb[j], b.ub[j], b.fixed[j]))
-            with Session(azr, cwd=tmp, **ev.flags) as s:
+            with azure2(azr, cwd=tmp, **ev.flags) as s:
                 try:
                     build_keys(s, seg_map={k: k for k in range(1, 20)})
                     check("(d) a shard map is refused", False, "no exception")

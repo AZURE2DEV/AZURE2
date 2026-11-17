@@ -27,6 +27,7 @@ from .model import single_variant, base_segments, rows_in_segment
 from .search import SearchConfig, sign_round, crossover_round, tau_flip
 from .structure import LevelCandidate, add_level_variant, scan_jpi_on_window, classify, JPI_GROUPS, resolve_jpis  # noqa: F401
 from . import enginepin
+from .backend import PYAZR3
 from .spec import FitSpec
 from .decisions import DecisionQueue
 
@@ -211,6 +212,48 @@ class Campaign:
     # -- initialisation -------------------------------------------------------------------
 
     def _seed_vector(self, ev, sav=None):
+        """The start vector of a campaign (sav: a parameter file seeding the free values); pyazr 3 / pyazr 2 versions below."""
+        # through the class: rmfit.drive.Driver calls Campaign._seed_vector with itself as ``self``
+        return (Campaign._seed_vector_p3(self, ev, sav) if PYAZR3 else Campaign._seed_vector_p2(self, ev, sav))
+
+    def _seed_vector_p2(self, ev, sav=None):
+        """The base model's free vector, with the values of a ``.sav`` companion applied."""
+        x = ev.x0.copy()
+        if sav:
+            vals = {}
+            for line in open(sav):
+                t = line.split()
+                if len(t) >= 2:
+                    try:
+                        vals[t[0]] = float(t[1])
+                    except ValueError:
+                        pass
+            snap = ev.worker.call("snapshot", None)
+            # A .sav names level parameters POSITIONALLY (energy_N, width_N_c).  After any
+            # level add/remove those names point at the wrong levels, and seeding from them
+            # produces a garbage vector (an objective about twenty times too large).
+            # The exported <levels> block already carries the fitted R-matrix values, so if
+            # the .sav's level count disagrees with the model's, seed norms/shifts only.
+            sav_levels = {int(k.split("_")[1]) for k in vals if k.startswith("energy_")}
+            model_levels = {int(p.name.split("_")[1]) for p in snap["parameters"]
+                            if p.name.startswith("energy_")}
+            skip_levels = bool(sav_levels) and (max(sav_levels) != max(model_levels | {0}))
+            if skip_levels:
+                self.log(f"init: WARNING {os.path.basename(sav)} indexes {max(sav_levels)} levels but the "
+                         f"model has {max(model_levels | {0})}: a positional .sav is invalid after a level "
+                         f"add/remove, so its level parameters are IGNORED and only norms/shifts are seeded")
+            n = 0
+            for p in snap["parameters"]:
+                if p.fixed or p.free_index is None or p.name not in vals:
+                    continue
+                if skip_levels and not p.name.startswith("segment_"):
+                    continue
+                x[p.free_index] = vals[p.name]; n += 1
+            self.log(f"init: {n} free parameters taken from {os.path.basename(sav)}"
+                     + (" (norms/shifts only)" if skip_levels else ""))
+        return x
+
+    def _seed_vector_p3(self, ev, sav=None):
         """The base model's free vector, with the values of a ``.sav`` companion applied."""
         x = ev.x0.copy()
         if sav:
@@ -245,6 +288,72 @@ class Campaign:
 
     @staticmethod
     def apply_sav_fixed(base_azr, sav, flags, log=print, mode="ignore"):
+        """Reconcile a parameter file's FIXED values with the model (see the backend versions below: _p2 pyazr 2, _p3 pyazr 3)."""
+        return (Campaign.apply_sav_fixed_p3(base_azr, sav, flags, log, mode) if PYAZR3 else Campaign.apply_sav_fixed_p2(base_azr, sav, flags, log, mode))
+
+    @staticmethod
+    def apply_sav_fixed_p2(base_azr, sav, flags, log=print, mode="ignore"):
+        """What the FIXED parameters of a ``.azr`` + ``.sav`` pair mean (2026-11-10).
+
+        AZURE2's parameter-file reader sets every parameter it names, FIXED level energies and widths included
+        (``AZUREParams::ReadUserParameters``; pyazr ``azure2.load_sav``), but ``_seed_vector`` takes only the FREE
+        values from the file and the sharded evaluator takes the fixed ones from the ``.azr``.  When the two disagree
+        there are two models, and the archive uses BOTH conventions: a CLI fit's ``param.sav`` holds the fixed values
+        the fit ran with (in one archived fit the two differed in two dozen fixed background widths by up
+        to 10x, and a benchmark initialised at more than twice the archived objective on the wrong model), while a
+        campaign built by a script (the ``.azr`` carries the frozen block and the added level, the
+        ``.sav`` is the previous export, 125-237 fixed values apart) means the ``.azr`` and uses the file as a seed of
+        the free values only.  So the disagreement is never silent, and which file wins is the caller's:
+        ``mode="ignore"`` (default, the behaviour since the first campaign) keeps the ``.azr``'s fixed values and logs a
+        WARNING with the objective both ways; ``mode="apply"`` (``init --sav-fixed apply``: the pair is a CLI fit) writes
+        ``<stem>_sav.azr`` (+ ``.sav``) beside the base with the file applied (``pyazr.azure2.save_fit``, fresh-session
+        verified) and returns that pair.  Returns ``(azr, sav, note_or_None)``.  A positional ``.sav`` whose level count
+        disagrees with the model is left alone (its level parameters are already ignored by ``_seed_vector``)."""
+        import numpy as np
+        from pyazr import azure2
+        base_azr = os.path.abspath(base_azr); sav = os.path.abspath(sav)
+        vals = {}
+        for line in open(sav):
+            t = line.split()
+            if len(t) >= 2:
+                try:
+                    vals[t[0]] = float(t[1])
+                except ValueError:
+                    pass
+        sav_levels = {int(k.split("_")[1]) for k in vals if k.startswith("energy_")}
+        kw = {k: v for k, v in dict(flags or {}).items() if k in ("use_brune", "use_park", "ignore_externals", "use_long_wavelength")}
+        with azure2(base_azr, data_mode=True, **kw) as m:
+            model_levels = {int(p.name.split("_")[1]) for p in m.parameters if p.name.startswith("energy_")}
+            if sav_levels and max(sav_levels) != max(model_levels | {0}):
+                return base_azr, sav, None
+            cur = np.asarray(m.sess.params_all_rwa(), float).copy()
+            full = m.full_rwa_from_sav(sav)
+            diff = [(p.name, float(cur[p.index]), float(full[p.index])) for p in m.parameters
+                    if p.fixed and 0 <= p.index < full.size
+                    and abs(cur[p.index] - full[p.index]) > 1e-6 * max(1e-6, abs(cur[p.index]), abs(full[p.index]))]   # a .sav holds 8 digits
+            if not diff:
+                return base_azr, sav, None
+            worst = max(diff, key=lambda d: abs(d[2] - d[1]) / max(abs(d[1]), abs(d[2]), 1e-300))
+            free_idx = [p.index for p in m.parameters if not p.fixed and p.index >= 0]
+            obj_azr = float(m.objective(full[free_idx]))         # the .azr's fixed values, the file's free ones (what init seeds)
+            x = m.load_sav(sav)
+            obj_sav = float(m.objective(x))                       # the pair as the CLI reads it
+            head = (f"{len(diff)} FIXED parameter(s) of {os.path.basename(sav)} differ from {os.path.basename(base_azr)} "
+                    f"(largest {worst[0]}: .azr {worst[1]:.6g}, .sav {worst[2]:.6g}); plain objective {obj_azr:.3f} with the .azr's "
+                    f"fixed values, {obj_sav:.3f} with the .sav's (the CLI's reading)")
+            if mode != "apply":
+                note = (head + " -- the .azr's are USED (the .sav seeds the free values only); if this pair is a CLI fit and its "
+                        "param.sav holds the fixed values the fit ran with, re-init with --sav-fixed apply")
+                log("init: WARNING " + note)
+                return base_azr, sav, note
+            out = os.path.splitext(base_azr)[0] + "_sav.azr"
+            azr2, sav2 = m.save_fit(out, x, param_sav=True, verify=True)
+            note = head + f" -- --sav-fixed apply: the campaign's base is {os.path.basename(azr2)} (+ .sav) = the .azr with the .sav applied, fresh-session verified"
+            log("init: WARNING " + note)
+        return azr2, sav2, note
+
+    @staticmethod
+    def apply_sav_fixed_p3(base_azr, sav, flags, log=print, mode="ignore"):
         """What the FIXED parameters of a ``.azr`` + ``.sav`` pair mean (2026-11-10).
 
         AZURE2's parameter-file reader sets every parameter it names, FIXED level energies and widths included
@@ -354,8 +463,10 @@ class Campaign:
         if spec_sha:
             cfg["spec_sha"] = spec_sha
         # engine pin: recorded once at the first init; re-pinned only with RMFIT_ALLOW_ENGINE_CHANGE=1
+        old_pin = prev.get("engine")
         if "engine" not in prev or os.environ.get("RMFIT_ALLOW_ENGINE_CHANGE", "") not in ("", "0"):
             cfg["engine"] = enginepin.fingerprint()
+        repinned = bool(old_pin and old_pin.get("so_md5") and old_pin.get("so_md5") != cfg["engine"].get("so_md5"))
         if cov_reference:
             import shutil
             shutil.copy2(os.path.abspath(cov_reference), os.path.join(directory, "cov_reference.npz"))
@@ -364,7 +475,12 @@ class Campaign:
             json.dump(cfg, f, indent=2)
         c = cls(directory)
         c.log(f"init: engine pinned {enginepin.short(c.cfg['engine'])}" +
-              (" (new pin)" if "engine" not in prev else " (kept)"))
+              (" (new pin)" if "engine" not in prev else
+               f" (re-pinned from {enginepin.short(old_pin)})" if repinned else " (kept)"))
+        if repinned:
+            c.note(f"init: engine re-pinned (RMFIT_ALLOW_ENGINE_CHANGE): {enginepin.short(old_pin)} -> "
+                   f"{enginepin.short(c.cfg['engine'])}; objectives before and after are not comparable")
+            enginepin.repin_job_scripts(directory, old_pin, c.cfg["engine"], log=c.log)
         if cov_reference:
             c.log(f"init: relvector covariance model fixed at the reference {os.path.abspath(cov_reference)} "
                   f"(copied to cov_reference.npz)")
@@ -776,7 +892,7 @@ class Campaign:
         ``levels`` = explicit key labels ("3/2-#1") instead of the automatic choice.  Returns dict(results, n, n_pass,
         n_located, fraction, passed_levels); ledger round "recall"; the child campaigns are kept for inspection."""
         from .structure import LevelCandidate, deactivate_level_variant
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         cid, x, obj, keys = self.incumbent()
         ev = self.sharded
         xs = take(x, keys, ev.keys, ev.x0)
@@ -1075,6 +1191,33 @@ class Campaign:
 
     @staticmethod
     def set_grid_setting(azr_path: str, mult: float, ppw: float) -> int:
+        """Set the sub-point grid of every folded data set for a SCREENING variant (backend versions below).  Returns the number changed."""
+        return (Campaign.set_grid_setting_p3(azr_path, mult, ppw) if PYAZR3 else Campaign.set_grid_setting_p2(azr_path, mult, ppw))
+
+    @staticmethod
+    def set_grid_setting_p2(azr_path: str, mult: float, ppw: float) -> int:
+        """Rewrite the two trailing numbers of every active <targetInt> line --
+        resonanceWidthMultiplier and pointsPerWidth (TargetEffect.cpp:92-102) --
+        for a SCREENING variant.  Measured on a large target-integrated segment:
+        5/20 is 6.7x cheaper than the converged 20/50 for a 0.03% objective
+        shift; 2/x is NOT safe (-0.2..-0.7%, comparable to the width error).
+        Never use on a model whose numbers will be reported.  Returns the
+        number of lines changed."""
+        import re
+        t = open(azr_path).read()
+        m = re.search(r"(<targetInt>\n)(.*?)(</targetInt>)", t, re.S)
+        if not m:
+            return 0
+        lines = m.group(2).split("\n"); n = 0
+        for i, l in enumerate(lines):
+            f = l.split()
+            if len(f) >= 4 and f[0] == "1":
+                f[-2], f[-1] = f"{mult:g}", f"{ppw:g}"; lines[i] = " ".join(f); n += 1
+        open(azr_path, "w").write(t[:m.start()] + m.group(1) + "\n".join(lines) + m.group(3) + t[m.end():])
+        return n
+
+    @staticmethod
+    def set_grid_setting_p3(azr_path: str, mult: float, ppw: float) -> int:
         """Set ``width_multiplier`` and ``per_width`` of the ``quadrature`` field of every active data set that
         has one (the sub-point grid of a folded data set: how far around a narrow level the grid is refined and
         with how many points per width) -- for a SCREENING variant.  Measured on a large target-integrated
@@ -1353,7 +1496,7 @@ class Campaign:
             # would be reported as widths.  They are also not counted in tau's k.
             dead = []
             try:
-                from rmfit.azr3 import Model as AzrModel
+                from .backend import AzrModel
                 photon_pairs = {c.pair for lv in AzrModel.from_file(path).levels for c in lv.channels
                                 if getattr(c, "is_photon", False)}
                 gWw = ev2.wigner_widths(x2)          # particle channels only: photon amplitudes are linear, never "dead"
@@ -1648,7 +1791,7 @@ class Campaign:
             # the competing test (resolution on the driving segments, level removed) is named.
             near = []
             try:
-                from rmfit.azr3 import Model as AzrModel
+                from .backend import AzrModel
                 for lv in AzrModel.from_file(self.base_azr).find(jpi=best.jpi):
                     if lv.channels and all(bool(c.channel_fixed) and float(c.gamma) == 0.0 for c in lv.channels):
                         continue       # a switched-off level (deactivate_level_variant: recall children) is not a neighbour
@@ -1864,7 +2007,7 @@ class Campaign:
         """The file energy of a level label like ``5/2+#9`` (``5/2+#9@23Ne`` with several compound nuclei), for the
         variant builders.  The ordinal counts the ACTIVE levels of that J^pi (and nucleus) in file order, as the
         engine does (pyazr ``AzrModel.engine_level_keys``)."""
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         k = ParamKey("energy", level=str(label))
         try:
             jpi, idx, nuc = k.jpi, k.ordinal, k.nucleus_tag
@@ -1897,9 +2040,15 @@ class Campaign:
         link_data_dirs(self.base_azr, out_dir, src_dir=self.dir)
         base_name = os.path.basename(self.base_azr)
         base_copy = os.path.join(out_dir, base_name)
-        from .azr3 import write_variant
-        os.makedirs(os.path.join(out_dir, "output"), exist_ok=True)
-        write_variant(self.base_azr, base_copy, os.path.join(out_dir, "output"))
+        if PYAZR3:
+            from .azr3 import write_variant
+            os.makedirs(os.path.join(out_dir, "output"), exist_ok=True)
+            write_variant(self.base_azr, base_copy, os.path.join(out_dir, "output"))
+        else:
+            text = open(self.base_azr).read()
+            from .model import set_output_dir_text
+            with open(base_copy, "w") as fh:
+                fh.write(set_output_dir_text(text, os.path.join(out_dir, "output")))
         ev = self.sharded
         xs = take(x, keys, ev.keys, ev.x0)
         rng = np.random.default_rng(seed)

@@ -23,11 +23,23 @@ is for, how it is built and what is still open.  How to use it in a session is i
 
 ## Components
 
+rmfit is one code base on two engine interfaces: pyazr 2 (`.azr` text projects, AZURE2's development line) and pyazr 3
+(project format 3, AZURE2's restructured engine).  `backend.py` reads the version of the pyazr in use; the search, the
+ledger, the driver, the review criteria and the keys are shared, and only the places that touch the engine or the
+project file branch.  The large contact layers have one module per backend: the worker (`_worker_p2.py`,
+`_worker_p3.py`) and the file work of `model.py` (`_model_p2.py`, `_model_p3.py`); `azr3.py` is the only module that
+reads or edits a format-3 project.  On pyazr 3 the objective's rows are the engine's own (data rows, the nuisances'
+priors from the session's parameter rows, and the engine's model rows), shards are record edits, the engine folds
+target, beam and detector effects (no convolution pieces), and `bake` writes with `Session.save_fit`.  The joint fit
+of several one-nucleus projects (`mixture.py`) exists on pyazr 2 only.
+
 | module | role |
 |---|---|
+| `backend.py` | the backend switch (pyazr 2 or 3) and the backend's model editor, data-set table and nucleus classes |
+| `azr3.py` | pyazr 3: the format-3 project as rmfit reads and edits it (data-set table, variants, level and data-set edits) |
 | `engine.py`, `model.py`, `_worker.py` | exact evaluation sharded over single-thread pyazr sessions (chi-squared is additive over segments); Jacobian-cost shard balancing |
 | `local.py` | bounded trust-region polishes in reduced-width-amplitude space with the analytic Jacobian; Wigner-limit caps, energy windows, sign locks; sanity checks |
-| `search.py`, `moves.py` | interference-sign rounds (single, pair, channel, group flips screened by one Gauss-Newton step) and the population stage (sign-perturbed restarts polished to convergence plus crossover between them: the step that crosses basins) |
+| `search.py`, `moves.py`, `mixture.py` | interference-sign rounds (single, pair, channel, group flips screened by one Gauss-Newton step) and the population stage (sign-perturbed restarts polished to convergence plus crossover between them: the step that crosses basins) |
 | `structure.py`, `levelscan.py`, `windows.py` | level add / remove / relocate with a required hypothesis per candidate; residual-driven level search; energy-window variants |
 | `keys.py` | sign-pattern keys and distances between solutions |
 | `covariance.py` | data covariance matrices, normalization groups, shift groups, model-scaled (relative) terms with a fixed reference model |
@@ -35,7 +47,7 @@ is for, how it is built and what is still open.  How to use it in a session is i
 | `audit.py`, `audit_subagent.py` | machine pre-flight checks (pair masses, dead channels, normalization conventions, data integrity, target energies, legacy parameter names, output paths) and templated prompts for three agent audits (input file, data, literature) |
 | `review.py` | the automated "GUI eye": per-point summary, top chi-squared carriers, normalization direction and trends, residual runs, broad levels averaging narrow peaks, levels below the resolution, grid exploitation, close same-J^pi pairs |
 | `drive.py` | the closed loop (state machine, below) |
-| `uq.py` | posterior sampling and uncertainty bands as the last stage |
+| `uq.py`, `sampling.py` | posterior sampling and uncertainty bands as the last stage (`sampling.py`: the NUTS sampler for pyazr 3; on pyazr 2 the sampler of `pyazr.sampling`) |
 | `campaign.py`, `ledger.py`, `cli.py` | campaign directory, SQLite ledger of every candidate, STATUS/REPORT files, command line |
 | `enginepin.py` | engine fingerprint and pin |
 | `bench/` | recovery benchmark: cases, scorer, results |

@@ -29,7 +29,12 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
-FIX = os.path.join(HERE, "fixtures", "shift_fn_groups")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_jac_skip_columns.py)")
+    sys.exit(77)
+from _fixtures import fixture  # noqa: E402  (fixtures/ or fixtures_p3/ by backend)
+FIX = fixture("shift_fn_groups")
 failures = []
 SHIFT_KINDS = ("shift", "shift_sqrt", "shift_fn", "density")
 
@@ -75,6 +80,11 @@ def compare(ev, x, label):
 
 def main():
     import rmfit  # noqa: F401  (puts AZURE2_ROOT on sys.path)
+    import inspect
+    from pyazr import azure2
+    if "skip" not in inspect.signature(azure2.residual_jacobian).parameters:
+        print(f"FAIL: the pyazr at {os.path.dirname(inspect.getfile(azure2))} has no residual_jacobian(skip=)")
+        return 1
     from rmfit.engine import SingleSession, Sharded
     from rmfit.local import polish, default_bounds, BoundsPolicy
     work = tempfile.mkdtemp(prefix="rmfit_jacskip_")
@@ -83,14 +93,14 @@ def main():
         shutil.copytree(FIX, fix)
         os.makedirs(os.path.join(fix, "output"), exist_ok=True); os.makedirs(os.path.join(fix, "checks"), exist_ok=True)
         azr = os.path.join(fix, "sfg.azr")
-        from rmfit.azr3 import Model
-        mdl = Model.from_file(azr)
-        for lv in mdl.levels:
-            if float(lv.energy) in (0.8, 1.0):       # free these levels' energies and widths
-                lv.set_fixed(False)
-                for c in lv.channels:
-                    c.channel_fixed = False
-        mdl.write(azr)
+        lines = open(azr).read().split("\n")
+        i0, i1 = lines.index("<levels>"), lines.index("</levels>")
+        for i in range(i0 + 1, i1):
+            f = lines[i].split()
+            if len(f) > 10 and float(f[2]) in (0.8, 1.0):  # free these levels' energies and widths
+                f[3], f[10] = "0", "0"
+                lines[i] = " ".join(f)
+        open(azr, "w").write("\n".join(lines))
         S = SingleSession(azr, cwd=fix, name="js")
         try:
             x1 = np.array(S.x0, float)

@@ -52,28 +52,147 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-# -- the data-set records (format 3; read through rmfit.azr3) --------------------------
+from .backend import PYAZR3
 
-#: the record field behind each of the old segment-line keywords
-_GROUP_FIELD = {"normgroup": "norm_group", "shiftgroup": "shift_group", "shiftfngroup": "shift_group"}
+# -- segment lines (pyazr 2: the .azr text format; pyazr 3 reads records through rmfit.azr3) -----------------------------------------------------------------
+
+#: The keyword blocks a segment line may end with and their token counts
+#: (pyazr.datasets._KEYWORDS of AZURE2 dev; shiftfn takes a variable number).
+_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "normgroup": 1,
+             "covariance": 1, "shiftfn": None,
+             "shiftfngroup": 1,   # feature/shift-fn-groups (2026-10-22), known ahead so it cannot hide what follows
+             "total": 1}          # optical-theorem total cross section, AZURE2 dev d37d4e6 (2026-10-24)
+
+
+def split_keyword_tail(tokens: Sequence[str]) -> Tuple[List[str], List[Tuple[str, List[str]]]]:
+    """``(positional tokens, [(keyword, its tokens), ...])`` of a segment line, the
+    blocks in their order (the parser of pyazr.datasets, kept here so rmfit reads
+    the keywords with any installed pyazr)."""
+    tokens = list(tokens)
+    first = next((k for k, tok in enumerate(tokens) if tok.lower() in _KEYWORDS), None)
+    if first is None:
+        return tokens, []
+    blocks, k = [], first
+    while k < len(tokens):
+        kw = tokens[k].lower()
+        if kw not in _KEYWORDS:
+            break
+        if kw == "shiftfn":
+            j = k + 1
+            if j < len(tokens) and tokens[j].startswith('"'):
+                while not (len(tokens[j]) > 1 and tokens[j].endswith('"')) and j + 1 < len(tokens):
+                    j += 1
+            try:
+                n = int(tokens[j + 1])
+            except (IndexError, ValueError):
+                raise ValueError("malformed shiftfn block: " + " ".join(tokens))
+            end = j + 2 + 3 * n
+            blocks.append((kw, tokens[k + 1:end]))
+            k = end
+            continue
+        n = _KEYWORDS[kw]
+        if k + 1 + n > len(tokens):
+            raise ValueError(f"{kw} block without its value: " + " ".join(tokens))
+        blocks.append((kw, tokens[k + 1:k + 1 + n]))
+        k += 1 + n
+    return tokens[:first], blocks + ([("", tokens[k:])] if k < len(tokens) else [])
+
+
+def line_keyword(tokens: Sequence[str], kw: str) -> Optional[str]:
+    """The (first) value of keyword block ``kw`` on a segment line, or None."""
+    for name, vals in split_keyword_tail(tokens)[1]:
+        if name == kw and vals:
+            return vals[0].strip('"')
+    return None
+
+
+def strip_keywords(tokens: Sequence[str], drop: Sequence[str] = ("covariance", "normgroup")) -> List[str]:
+    """The segment line without the keyword blocks in ``drop`` (the others verbatim)."""
+    pos, blocks = split_keyword_tail(tokens)
+    out = list(pos)
+    for name, vals in blocks:
+        if name in drop:
+            continue
+        out += ([name] if name else []) + list(vals)
+    return out
+
+
+def norm_field(tokens: Sequence[str]) -> int:
+    """Index of the norm value on a segment line (norm, vary flag and norm error follow)."""
+    return 8 + (2 if int(float(tokens[7])) == 2 else 0)
+
+
+def segment_lines(azr: str) -> List[List[str]]:
+    """The tokens of every non-blank <segmentsData> line; line ``i`` is segment key ``i + 1``."""
+    text = open(azr).read()
+    a = text.find("<segmentsData>")
+    b = text.find("</segmentsData>")
+    if a < 0 or b < 0:
+        raise ValueError(f"{azr}: no <segmentsData> block")
+    body = text[text.index("\n", a) + 1:b]
+    return [l.split() for l in body.splitlines() if l.strip()]
 
 
 def has_keyword(azr: str, kw: str) -> bool:
-    """True when a ``dataset`` record of the project has the field ``kw`` (``covariance``)."""
-    from .azr3 import has_field
-    return has_field(azr, kw)
+    """True when a data segment of ``azr`` carries keyword ``kw`` (pyazr 3: a ``dataset`` record has the field)."""
+    if PYAZR3:
+        from .azr3 import has_field
+        return has_field(azr, kw)
+    return any(line_keyword(t, kw) is not None for t in segment_lines(azr))
+
+
+def strip_text(text: str, drop: Sequence[str] = ("covariance",)) -> str:
+    """``text`` (a whole .azr) with the keyword blocks in ``drop`` removed from its data segment lines."""
+    a = text.find("<segmentsData>")
+    b = text.find("</segmentsData>")
+    if a < 0 or b < 0:
+        return text
+    start = text.index("\n", a) + 1
+    lines = []
+    for l in text[start:b].splitlines():
+        t = l.split()
+        lines.append("  ".join(strip_keywords(t, drop)) if t and any(line_keyword(t, k) for k in drop) else l)
+    return text[:start] + "".join(l + "\n" for l in lines) + text[b:]
+
+
+#: pyazr 3: the record field behind each of the old segment-line keywords
+_GROUP_FIELD = {"normgroup": "norm_group", "shiftgroup": "shift_group", "shiftfngroup": "shift_group"}
 
 
 @dataclass
 class NormGroups:
     """``normgroup`` (or, with ``kw="shiftgroup"``, shift-group) membership of a model:
     ``leader[key]`` is the key whose norm (constant shift) a follower uses -- the group's
-    first ACTIVE data set in file order."""
+    first ACTIVE segment in file order (EData::ResolveNormGroups / ResolveShiftGroups)."""
     leader: Dict[int, int] = field(default_factory=dict)        # follower key -> leader key
     label: Dict[int, str] = field(default_factory=dict)         # member key -> label
 
     @classmethod
     def from_azr(cls, azr: str, kw: str = "normgroup", segments=None) -> "NormGroups":
+        """The groups of model ``azr``.  pyazr 2: the ``normgroup`` / ``shiftgroup`` / ``shiftfngroup`` keyword of
+        its segment lines.  pyazr 3: the data sets whose ``norm`` names one shared ``normalization`` record, or whose
+        ``shift`` one shared ``energy_scale`` record (``segments``: the data-set table, if already read)."""
+        return cls._from_azr_p3(azr, kw, segments) if PYAZR3 else cls._from_azr_p2(azr, kw)
+
+    @classmethod
+    def _from_azr_p2(cls, azr: str, kw: str = "normgroup") -> "NormGroups":
+        out = cls()
+        first: Dict[str, int] = {}
+        for i, t in enumerate(segment_lines(azr), start=1):
+            if not t or int(float(t[0])) != 1:
+                continue
+            lab = line_keyword(t, kw)
+            if lab is None:
+                continue
+            out.label[i] = lab
+            if lab in first:
+                out.leader[i] = first[lab]
+            else:
+                first[lab] = i
+        return out
+
+    @classmethod
+    def _from_azr_p3(cls, azr: str, kw: str = "normgroup", segments=None) -> "NormGroups":
         """The groups of project ``azr``: the data sets whose ``norm`` names one shared ``normalization`` record
         (``kw="normgroup"``), or whose ``shift`` names one shared ``energy_scale`` record (``"shiftgroup"``,
         ``"shiftfngroup"``: in format 3 one record holds the offset, the sqrt(E) coefficient and the shift
@@ -541,13 +660,19 @@ class RowBlock:
     order: str = "file"
 
 
+
 def segment_records(seg, path: str, e_lo: float, e_hi: float, order: str = "file") -> np.ndarray:
     """1-based records of ``path`` that the engine loads for segment ``seg`` restricted
     to ``[e_lo, e_hi]`` (the filter of rmfit.model.rows_in_segment), in point order."""
     rec = read_records(path)
     e, ang = rec[:, 0], rec[:, 1]
     sel = (e >= e_lo) & (e <= e_hi) & (e >= seg.energy_min) & (e <= seg.energy_max)
-    if seg.differential:
+    if PYAZR3:
+        differential = seg.differential
+    else:
+        from .model import DIFFERENTIAL
+        differential = seg.observable in DIFFERENTIAL
+    if differential:
         sel &= (ang >= seg.angle_min - 1e-6) & (ang <= seg.angle_max + 1e-6)
     idx = np.nonzero(sel)[0]
     if order == "energy":
@@ -567,7 +692,15 @@ class Covariance:
     def build(cls, azr: str, cwd: str, segments, blocks: Sequence[RowBlock], npts: int) -> Optional["Covariance"]:
         """The covariance groups of model ``azr`` (paths relative to ``cwd``, where the engine
         would run) on the evaluator rows ``blocks``; None if no active segment names one."""
-        cov_of = {int(s.key): s.covariance for s in segments if s.active and s.covariance}
+        if PYAZR3:
+            cov_of = {int(s.key): s.covariance for s in segments if s.active and s.covariance}
+        else:
+            lines = segment_lines(azr)
+            cov_of = {}
+            for i, t in enumerate(lines, start=1):
+                c = line_keyword(t, "covariance")
+                if c is not None and int(float(t[0])) == 1:
+                    cov_of[i] = c
         if not cov_of:
             return None
         files: Dict[str, CovFile] = {}

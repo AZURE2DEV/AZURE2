@@ -1,8 +1,9 @@
 """rmfit uq -- uncertainty quantification as the standard last stage of a campaign (DESIGN.md Phase 4, 2026-11-10).
 
 export -> saturation check -> Laplace covariance at the mode -> NUTS chains -> convergence gates -> linear vs sampled band.
-Everything engine-side is pyazr: ``pyazr.sampling`` (NUTS, R-hat, ESS, ``AzurePosterior`` = exp(-objective/2) with the
-engine's adjoint gradient and its Gauss-Newton Laplace covariance), ``pyazr.bands`` (linear propagation sigma^2 = g^T C g on
+Everything engine-side is pyazr: ``pyazr.sampling`` on pyazr 2, :mod:`rmfit.sampling` (the same sampler, its posterior on
+``Session.objective()``) on pyazr 3 (NUTS, R-hat, ESS, ``AzurePosterior`` = exp(-objective/2) with the
+engine's adjoint gradient and its Gauss-Newton Laplace covariance), ``pyazr.bands (linear propagation sigma^2 = g^T C g on
 an extrapolation grid).  This module only orders them, holds what must be held, gates the result and writes it down.
 
 Stages (resumable; state in ``<dir>/uq/uq_state.json``, every product under ``<dir>/uq/``):
@@ -48,8 +49,11 @@ Spec section ``uq`` (all optional; ``enabled`` makes the drive run the stage aft
     "uq": {"enabled": true, "chains": 4, "warmup": 1000, "draws": 2000, "target_accept": 0.9, "j_saturated": 0.01,
            "sample_norms": true, "priors": {"<engine parameter name>": [mean, sigma]}, "temper": 1.0,
            "bounds": "policy" | "none", "theta2_cap": null | <one cap for every level>,
-           "bands": [{"reaction": "12C(p,g)13N[total]", "quantity": "sigma", "unit": "b",
-                      "energies": "list 0.01 0.02 ... MeV lab", "quantity_band": "sfactor", "label": "12C(p,g)13N"}],
+           "bands": [{"entrance": 2, "exit": -1, "e_min": 0.01, "e_max": 3.0, "e_step": 0.01, "observable": "total-capture",
+                      "quantity": "sfactor", "label": "12C(p,g)13N"}],
+           # pyazr 3: a band is the fields of an extrapolation record plus quantity_band and label, e.g.
+           # {"reaction": "12C(p,g)13N[total]", "quantity": "sigma", "unit": "b",
+           #  "energies": "list 0.01 0.02 ... MeV lab", "quantity_band": "sfactor", "label": "12C(p,g)13N"}
            "rhat_max": 1.01, "ess_min": 400, "divergent_max_frac": 0.01, "bfmi_min": 0.3, "max_attempts": 2}
 
 What is NOT done here: a change of parametrization (the chains run in the campaign's basis; ``parametrization: park`` in the
@@ -65,6 +69,8 @@ import time
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
+
+from .backend import PYAZR3
 
 DEFAULTS = dict(enabled=False, j_saturated=0.01, sample_norms=True, chains=4, warmup=1000, draws=2000, target_accept=0.9,
                 max_tree_depth=10, start_jitter_sd=0.1, seed=11, temper=1.0, priors=None, bounds="policy", theta2_cap=None,
@@ -102,6 +108,40 @@ def _session_flags(flags: dict) -> dict:
 # SETUP (children)
 
 def _setup_mode(azr, sav, flags):
+    """pyazr 3 / pyazr 2 versions below (rmfit.backend)."""
+    return (_setup_mode_p3(azr, sav, flags) if PYAZR3 else _setup_mode_p2(azr, sav, flags))
+
+def _setup_mode_p2(azr, sav, flags):
+    """Mode vector and bookkeeping from one data-mode session."""
+    from pyazr import azure2
+    cwd = os.path.dirname(azr)
+    with azure2(azr, cwd=cwd, **_session_flags(flags)) as m:
+        x = np.asarray(m.load_sav(sav), float) if sav else np.asarray(m.params_rwa, float)
+        free = sorted((p for p in m.parameters if not p.fixed), key=lambda p: p.free_index)
+        names = [p.name for p in free]
+        kinds = [p.kind for p in free]
+        level_of = [(p.jgroup, p.level) if p.kind in RMATRIX_KINDS else None for p in free]
+        obj = float(m.objective(x))
+        chi2, _ = m.chi2_and_grad(x)
+        r, _ = m.residual_jacobian(x)
+        pen = m.penalties(x)
+        pen = {k: (float(np.sum(v)) if hasattr(v, "__len__") else float(v)) for k, v in pen.items()}
+        lv = []
+        for key, ps in m.parameters.by_physical_level().items():
+            npart = len({(q.pair, q.L, q.S) for q in ps if q.kind == "width" and not q.fixed and q.radiation_type == "P"})
+            lv.append(dict(label=str(key), jgroup=int(getattr(key, "jgroup", ps[0].jgroup)), level=int(getattr(key, "level", ps[0].level)),
+                           energy=float(key.energy if getattr(key, "energy", None) is not None else (ps[0].level_energy if ps[0].level_energy is not None else np.nan)),
+                           names=[q.name for q in ps if not q.fixed], nfree=sum(1 for q in ps if not q.fixed), n_particle_channels=npart))
+        # the Wigner limit gamma_W^2 of every free particle amplitude and its level's excitation energy (the sampling box)
+        try:
+            wigner = {w.name: float(w.wigner_gamma2) for w in m.dimensionless_widths(x).particles if w.wigner_gamma2}
+        except Exception:
+            wigner = {}
+        level_energy = {p.name: float(p.level_energy) for p in free if p.kind in RMATRIX_KINDS and p.level_energy is not None}
+    return dict(x=x.tolist(), names=names, kinds=kinds, level_of=level_of, objective=obj, chi2=float(chi2), npts=int(r.size),
+                penalties=pen, levels=lv, wigner=wigner, level_energy=level_energy)
+
+def _setup_mode_p3(azr, sav, flags):
     """Mode vector and bookkeeping from one data-mode session."""
     from pyazr import Session
     cwd = os.path.dirname(azr)
@@ -265,6 +305,33 @@ class BoundedTarget:
 
 
 def _park_J(azr, x_full, kinds, flags):
+    """pyazr 3 / pyazr 2 versions below (rmfit.backend)."""
+    return (_park_J_p3(azr, x_full, kinds, flags) if PYAZR3 else _park_J_p2(azr, x_full, kinds, flags))
+
+def _park_J_p2(azr, x_full, kinds, flags):
+    """Park's J of every physical level from a Park session on the SAME file.  The .azr's level parameters are physical
+    (basis-free), so the Park session takes them from the file; the norms, shifts and other non-R-matrix parameters come
+    from the Brune session's vector (a .sav is basis-tagged and refused across bases).  The Park objective must then
+    equal the Brune one."""
+    from pyazr import azure2
+    fl = _session_flags(flags)
+    fl.pop("use_brune", None)
+    fl["use_park"] = True
+    cwd = os.path.dirname(azr)
+    with azure2(azr, cwd=cwd, **fl) as P:
+        xP = np.asarray(P.params_rwa, float)
+        xB = np.asarray(x_full, float)
+        if xP.size != xB.size:
+            raise ValueError(f"Park session has {xP.size} free parameters, the Brune session {xB.size}")
+        for j, k in enumerate(kinds):
+            if k not in RMATRIX_KINDS:
+                xP[j] = xB[j]
+        J = np.asarray(P.park_norms(xP), float)
+        keys = [str(k) for k in P.physical_levels()]
+        oP = float(P.objective(xP))
+    return dict(J=J.tolist(), levels=keys, objective_park=oP)
+
+def _park_J_p3(azr, x_full, kinds, flags):
     """Park's J of every physical level from a Park session on the SAME file.  The .azr's level parameters are physical
     (basis-free), so the Park session takes them from the file; the norms, shifts and other non-R-matrix parameters come
     from the Brune session's vector (a .sav is basis-tagged and refused across bases).  The Park objective must then
@@ -290,7 +357,10 @@ def _park_J(azr, x_full, kinds, flags):
 
 def _laplace(azr, flags, idx, x_full, priors, temper, workdir):
     """Gauss-Newton Laplace covariance of the sampled block at the mode (AzurePosterior.laplace_covariance)."""
-    from .sampling import AzurePosterior
+    if PYAZR3:
+        from .sampling import AzurePosterior
+    else:
+        from pyazr.sampling import AzurePosterior
     T = AzurePosterior(azr, flags=_session_flags(flags), sample=list(idx), x_template=np.asarray(x_full, float),
                        priors=priors or None, temper=float(temper), workdir=None)
     th = T.x0
@@ -353,7 +423,10 @@ class Checkpoint:
 
 
 def _run_chains(azr, flags, idx, x_full, priors, temper, C, theta0, cfg, outdir, nprocs, threads, tag, log, lo=None, hi=None, g0=None):
-    from .sampling import AzurePosterior, sample
+    if PYAZR3:
+        from .sampling import AzurePosterior, sample
+    else:
+        from pyazr.sampling import AzurePosterior, sample
     os.environ["OMP_NUM_THREADS"] = str(int(threads))
     T = AzurePosterior(azr, flags=_session_flags(flags), sample=list(idx), x_template=np.asarray(x_full, float),
                        priors=priors or None, temper=float(temper), workdir=os.path.join(outdir, "work"))
@@ -415,7 +488,10 @@ def _chains_from_checkpoints(outdir, tag, n_warmup, n_draws, lo=None, hi=None):
 # GATES
 
 def gates(chains: dict, C: np.ndarray, cfg: dict) -> dict:
-    from .sampling import ess, split_rhat
+    if PYAZR3:
+        from .sampling import ess, split_rhat
+    else:
+        from pyazr.sampling import ess, split_rhat
     X = np.asarray(chains["samples"], float)
     rhat, e = split_rhat(X), ess(X)
     div = np.asarray(chains["stat_divergent"], float)
@@ -450,6 +526,32 @@ def gates(chains: dict, C: np.ndarray, cfg: dict) -> dict:
 # BANDS (child)
 
 def _select_grids(m, cfg):
+    """pyazr 3 / pyazr 2 versions below (rmfit.backend)."""
+    return (_select_grids_p3(m, cfg) if PYAZR3 else _select_grids_p2(m, cfg))
+
+def _select_grids_p2(m, cfg):
+    """Spec grids, else the model's own energy-scan <segmentsTest> entries (one per entrance/exit/observable)."""
+    if cfg.get("bands"):
+        return [dict(g) for g in cfg["bands"]], None
+    chosen, seen = [], set()
+    for s in m.extrapolations:
+        if not s.active or s.energy_step <= 0:
+            continue
+        npts = (s.energy_max - s.energy_min) / s.energy_step + 1
+        if npts < int(cfg["grid_min_points"]):
+            continue
+        k = (s.entrance_key, s.exit_key, s.observable)
+        if k in seen:
+            continue
+        seen.add(k)
+        chosen.append(dict(key=int(s.key), entrance=int(s.entrance_key), exit=int(s.exit_key), e_min=float(s.energy_min), e_max=float(s.energy_max),
+                           e_step=float(s.energy_step), observable=s.observable, quantity=("sfactor" if s.exit_key == -1 or s.observable != "differential" else "cross"),
+                           label=f"{s.name} {s.observable}"))
+        if len(chosen) >= int(cfg["bands_max"]):
+            break
+    return chosen, [g["key"] for g in chosen]
+
+def _select_grids_p3(m, cfg):
     """Spec grids, else the project's own extrapolation records with an energy grid (one per entrance / exit /
     quantity).  A spec grid (``uq.bands``) is the fields of an ``extrapolation`` record
     (``pyazr.Project.add_extrapolation``: reaction, quantity, unit, grid, ...) plus rmfit's own ``quantity_band``
@@ -473,6 +575,80 @@ def _select_grids(m, cfg):
 
 
 def _bands(azr, flags, kinds, x_full, C_full, samples_full, cfg, outdir):
+    """pyazr 3 / pyazr 2 versions below (rmfit.backend)."""
+    return (_bands_p3(azr, flags, kinds, x_full, C_full, samples_full, cfg, outdir) if PYAZR3 else _bands_p2(azr, flags, kinds, x_full, C_full, samples_full, cfg, outdir))
+
+def _bands_p2(azr, flags, kinds, x_full, C_full, samples_full, cfg, outdir):
+    """Linear (Laplace) and sampled bands on the grids; returns per-grid tables (c.m. MeV, values)."""
+    from pyazr import azure2
+    from pyazr.bands import trimmed_model, uncertainty_bands, rmatrix_columns
+    cwd = os.path.dirname(azr)
+    fl = _session_flags(flags)
+    with azure2(azr, cwd=cwd, **fl) as m0:
+        grids, keys = _select_grids(m0, cfg)
+    if not grids:
+        return dict(grids=[], note="no energy-scan grid in <segmentsTest> and no uq.bands in the spec")
+    # pyazr 2.10.0 trimmed_model copies the EC cache into a workdir it has not created (FileNotFoundError when the main
+    # run left an intEC.dat): give it an existing one.  Engine follow-up noted in DESIGN.md.
+    workdir = os.path.join(cwd, "output", "bands", "uq")
+    os.makedirs(workdir, exist_ok=True)
+    if keys is not None:
+        tmp, workdir = trimmed_model(azr, keys=keys, cwd=cwd, workdir=workdir)
+    else:
+        specs = [dict(entrance=g["entrance"], exit=g["exit"], e_min=g["e_min"], e_max=g["e_max"], e_step=g["e_step"], observable=g.get("observable", "total-capture"))
+                 for g in grids]
+        tmp, workdir = trimmed_model(azr, grids=specs, cwd=cwd, workdir=workdir)
+    rm_idx = [j for j, k in enumerate(kinds) if k in RMATRIX_KINDS]
+    x_full = np.asarray(x_full, float)
+    out = dict(grids=[], tmp=tmp)
+    try:
+        with azure2(tmp, cwd=cwd, **fl) as m:
+            m.extrap_mode()
+            cols = rmatrix_columns(m)
+            if len(cols) != len(rm_idx):
+                raise RuntimeError(f"extrapolation session has {len(cols)} free R-matrix parameters, the data-mode vector {len(rm_idx)}")
+            xr = x_full[rm_idx]
+            Cr = np.asarray(C_full, float)[np.ix_(rm_idx, rm_idx)]
+            n = len(grids)
+            by_q = {}
+            for i, g in enumerate(grids):
+                by_q.setdefault(g.get("quantity", "sfactor"), []).append(i + 1)
+            lin = {}
+            for q, ks in by_q.items():
+                lin.update({(k, q): b for k, b in uncertainty_bands(m, keys=ks, params=xr, covariance=Cr, quantity=q).items()})
+            S = np.asarray(samples_full, float)
+            vals = {q: [] for q in by_q}
+            for d in range(S.shape[0]):
+                xs = S[d][rm_idx]
+                for q in by_q:
+                    v = m.calculate_sfactor_rwa(xs) if q == "sfactor" else m.calculate_rwa(xs)
+                    vals[q].append([np.asarray(v[k - 1], float) for k in by_q[q]])
+            for q, ks in by_q.items():
+                for j, k in enumerate(ks):
+                    g = grids[k - 1]
+                    b = lin[(k, q)]
+                    A = np.stack([vals[q][d][j] for d in range(S.shape[0])])
+                    pct = np.percentile(A, [2.5, 16, 50, 84, 97.5], axis=0)
+                    tab = np.column_stack([b.energy, b.value, b.sigma, pct[2], pct[1], pct[3], pct[0], pct[4]])
+                    name = f"uq_band_{k}_{(g.get('label') or 'grid').replace(' ', '_').replace('/', '_').replace('(', '').replace(')', '').replace(',', '')}"
+                    path = os.path.join(outdir, name + ".dat")
+                    np.savetxt(path, tab, header=f"{g.get('label','')}: {q}; columns E_cm(MeV) best sigma_linear median p16 p84 p2.5 p97.5 "
+                                                 f"({S.shape[0]} posterior draws; linear = Laplace covariance)", fmt="%.6e")
+                    half = 0.5 * (pct[3] - pct[1])
+                    rel = half / np.where(np.abs(pct[2]) > 0, np.abs(pct[2]), np.inf)
+                    out["grids"].append(dict(key=int(k), label=g.get("label", ""), quantity=q, npts=int(b.energy.size), table=path,
+                                             e_cm=b.energy.tolist(), best=b.value.tolist(), sigma_lin=b.sigma.tolist(),
+                                             median=pct[2].tolist(), p16=pct[1].tolist(), p84=pct[3].tolist(), p025=pct[0].tolist(), p975=pct[4].tolist(),
+                                             rel_lin_min=float(b.relative.min()), rel_lin_max=float(b.relative.max()),
+                                             rel_sampled_min=float(rel.min()), rel_sampled_max=float(rel.max()),
+                                             ratio_half_to_lin=(half / np.where(b.sigma > 0, b.sigma, np.inf)).tolist(),
+                                             median_offset_sd=((pct[2] - b.value) / np.where(b.sigma > 0, b.sigma, np.inf)).tolist()))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return out
+
+def _bands_p3(azr, flags, kinds, x_full, C_full, samples_full, cfg, outdir):
     """Linear (Laplace) and sampled bands on the grids; returns per-grid tables (c.m. MeV, values)."""
     from pyazr import Session
     from pyazr.bands import trimmed_model, uncertainty_bands, rmatrix_columns
@@ -614,7 +790,7 @@ class UQ:
             obj = None
         # the stage's sessions write under uq/output, never into the campaign's or the fit's output directory; the data
         # files (relative paths in the .azr) are reached through links to the source directory's entries, as AzurePosterior does
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         src_dir = os.path.dirname(os.path.abspath(self.campaign.base_azr if self.campaign is not None else self.azr))
         for e in os.listdir(src_dir):
             if e in ("output", "checks", "uq") or e.endswith(".azr") or e.endswith(".sav"):

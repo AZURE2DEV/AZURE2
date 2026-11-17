@@ -17,11 +17,14 @@ import os, sys, shutil, tempfile, json
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_init_sav_fixed_13n.py)")
+    sys.exit(77)
 import numpy as np
 from rmfit import AZURE2_ROOT
 from rmfit.campaign import Campaign
-from rmfit.azr3 import Model as AzrModel
-from pyazr import Session
+from pyazr import AzrModel, azure2
 failures = []
 FLAGS = dict(use_brune=True)
 
@@ -44,12 +47,13 @@ def main():
     mdl.set_output_dir(os.path.join(tmp, "output"))
     base = mdl.write(os.path.join(tmp, "13N.azr"))
     # a .sav of the model as it is (fixed values equal) and one with the fixed photon width changed
-    with Session(base, **FLAGS) as m:
-        x = np.asarray(m.parameters.x0, float).copy()
+    with azure2(base, data_mode=True, **FLAGS) as m:
+        x = np.asarray(m.params_rwa, float).copy()
         azr_same, sav_same = m.save_fit(os.path.join(tmp, "same.azr"), x, param_sav=True, verify=True)
-        obj_azr = m.objective()(x)
-        name_fixed = next(p.name for p in m.parameters if p.fixed and p.kind == "width" and p.start != 0.0)
+        obj_azr = m.objective(x)
     lines = open(sav_same).read().splitlines()
+    with azure2(base, data_mode=True, **FLAGS) as m:
+        name_fixed = next(p.name for p in m.parameters if p.fixed and p.name.startswith("width_"))
     out = []
     for ln in lines:
         t = ln.split()
@@ -59,8 +63,9 @@ def main():
         out.append(ln)
     sav_diff = os.path.join(tmp, "diff.sav")
     open(sav_diff, "w").write("\n".join(out) + "\n")
-    with Session(base, parameter_file=sav_diff, **FLAGS) as m:
-        obj_sav = m.objective()(m.parameters.x0)
+    with azure2(base, data_mode=True, **FLAGS) as m:
+        xd = m.load_sav(sav_diff)
+        obj_sav = m.objective(xd)
     print(f"   fixed parameter edited: {name_fixed}; objective .azr {obj_azr:.4f}, .azr+.sav {obj_sav:.4f}")
     check("the edited pair evaluates to another objective", abs(obj_sav - obj_azr) > 1e-5 * max(1.0, abs(obj_azr)), f"{obj_sav} vs {obj_azr}")
     # 1. equal pair: untouched

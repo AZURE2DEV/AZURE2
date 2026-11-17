@@ -20,6 +20,8 @@ from typing import Dict, List, Optional, Sequence
 
 import inspect
 import numpy as np
+
+from .backend import PYAZR3
 from scipy.optimize import least_squares
 
 from .engine import Evaluator, EvalError
@@ -260,12 +262,17 @@ _PHOTON_CACHE: Dict[str, frozenset] = {}
 
 
 def photon_pairs(azr_path: str) -> frozenset:
-    """Pair keys of the model's photon (capture) pairs.  Cached per path."""
+    """File pair keys of the model's photon (capture) pairs, from the .azr's channel lines.  Cached per path."""
     if azr_path in _PHOTON_CACHE:
         return _PHOTON_CACHE[azr_path]
     try:
-        from .azr3 import pairs
-        out = frozenset(int(q.key) for q in pairs(azr_path) if q.kind_name == "photon")
+        if PYAZR3:
+            from .azr3 import pairs
+            out = frozenset(int(q.key) for q in pairs(azr_path) if q.kind_name == "photon")
+        else:
+            from pyazr import AzrModel
+            m = AzrModel.from_file(azr_path)
+            out = frozenset(int(c.pair) for lv in m.levels for c in lv.channels if c.is_photon)
     except Exception:
         out = frozenset()
     _PHOTON_CACHE[azr_path] = out
@@ -273,13 +280,19 @@ def photon_pairs(azr_path: str) -> frozenset:
 
 
 def particle_thresholds(azr_path: str) -> tuple:
-    """Excitation energies (MeV) at which the model's particle pairs open (separation energy + the particles'
-    excitation; photon and beta pairs excluded).  Cached per path."""
+    """Excitation energies (MeV) at which the model's particle pairs open, from the .azr's channel
+    lines (separation energy + residual excitation; photon pairs excluded).  Cached per path."""
     if azr_path in _THRESHOLD_CACHE:
         return _THRESHOLD_CACHE[azr_path]
     try:
-        from .azr3 import pairs
-        thr = tuple(sorted({round(float(q.threshold), 6) for q in pairs(azr_path) if q.kind_name == "particle"}))
+        if PYAZR3:
+            from .azr3 import pairs
+            thr = tuple(sorted({round(float(q.threshold), 6) for q in pairs(azr_path) if q.kind_name == "particle"}))
+        else:
+            from pyazr import AzrModel
+            m = AzrModel.from_file(azr_path)
+            thr = tuple(sorted({round(float(c.sep_energy) + float(c.excitation), 6)
+                                for lv in m.levels for c in lv.channels if not c.is_photon}))
     except Exception:
         thr = ()
     _THRESHOLD_CACHE[azr_path] = thr
@@ -457,14 +470,33 @@ def default_bounds(ev: Evaluator, x_ref, policy: BoundsPolicy = BoundsPolicy(),
         elif k.kind == "weight":
             # a mixture member's abundance / stoichiometric weight (rmfit.mixture)
             lb[j], ub[j] = 0.0, max(1.0, 2.0 * x_ref[j])
-        elif k.kind in ("density", "doppler", "screening", "thickness"):
-            # a fitted target density, Doppler temperature, screening potential or sample thickness: the limits
-            # the engine creates the parameter with (its row's ``bounds``: a density between a hundredth of the
-            # record's and the largest its sub-point grids span, a temperature within [T0/4, the layout's], a
+        elif PYAZR3 and k.kind in ("density", "doppler", "screening", "thickness"):
+            # pyazr 3: a fitted target density, Doppler temperature, screening potential or sample thickness: the
+            # limits the engine creates the parameter with (its row's ``bounds``: a density between a hundredth of
+            # the record's and the largest its sub-point grids span, a temperature within [T0/4, the layout's], a
             # potential or a thickness from 0 with no ceiling)
             r = getattr(ev, "nuisance_of_col", {}).get(j)
             if r is not None and r.get("bounds") is not None:
                 lb[j], ub[j] = float(r["bounds"][0]), float(r["bounds"][1])
+        elif k.kind == "density":
+            # a fitted target density: between a hundredth of the line's and the largest its sub-point grids span
+            # (beyond that AZURE2 computes at the end of the range and warns)
+            d = getattr(ev, "density_info", {}).get(k.effect)
+            if d is not None:
+                lb[j], ub[j] = 0.01 * d["density"], d["max"]
+        elif k.kind == "doppler":
+            # a fitted Doppler temperature: the engine's own range [T0/4, the layout temperature its grids span]
+            d = getattr(ev, "doppler_info", {}).get(k.effect)
+            if d is not None:
+                lb[j], ub[j] = 0.25 * d["temperature"], d["max"]
+        elif k.kind == "screening":
+            # an electron-screening potential (eV): the engine's own limits, U_e >= 0, no ceiling
+            lb[j], ub[j] = 0.0, np.inf
+        elif k.kind == "thickness":
+            # a fitted sample thickness (atoms/barn): positive, no ceiling (the engine's limit is 0)
+            d = getattr(ev, "thickness_info", {}).get(k.seg)
+            if d is not None:
+                lb[j], ub[j] = 1.0e-6 * d["n"], np.inf
     floors = []
     if policy.total_width_floor_windows and gWw:
         by_level: Dict[str, list] = {}

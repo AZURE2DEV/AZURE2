@@ -10,10 +10,14 @@ import json, os, shutil, sys, tempfile, types
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 os.environ.pop("JOB_ID", None)
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_drive_dry.py)")
+    sys.exit(77)
 from rmfit import AZURE2_ROOT
 from rmfit import drive as dv
 from rmfit.spec import Finding
-from rmfit.azr3 import Model as AzrModel
+from pyazr import AzrModel
 
 FAILS = []
 
@@ -180,7 +184,7 @@ def main():
     drv = os.path.join(tmp, "13N_drive.azr")
     check("SCALE_ANCHOR wrote the working copy", os.path.exists(drv) and d.state.get("model") == drv, str(d.state.get("model")))
     if os.path.exists(drv):
-        from rmfit.azr3 import SegmentTable as SegmentSet
+        from pyazr.datasets import SegmentSet
         segs = SegmentSet.from_file(drv)
         anchored = [s for s in segs if "meyer_84" in s.data_file]
         check("anchor set's norm fixed in the working copy", anchored and all(not s.vary_norm for s in anchored))

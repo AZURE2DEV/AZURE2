@@ -339,7 +339,7 @@ def nuts(logp_and_grad: Callable, x0, n_draws=1000, n_warmup=1000, inv_metric=No
                 k = w.shape[0]
                 if k > 2:
                     # shrink the window estimate toward the metric in use, weight k/(k+n): a 25-draw window cannot
-                    # estimate a dense n x n covariance (n = 54 on 7Be sent the tree depth from 4 to 9), and a good
+                    # estimate a dense n x n covariance (n = 54 on one archived fit sent the tree depth from 4 to 9), and a good
                     # starting metric (Laplace) should only be refined.  Without a starting metric the first window
                     # shrinks toward its own diagonal.
                     alpha = k / (k + float(n))

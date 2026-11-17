@@ -80,8 +80,39 @@ def test_campaign_refuses(fp):
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_repin_job_scripts(fp):
+    """A re-pin rewrites the generated guard in every job script and keeps the rest; a hand-written mention is only listed."""
+    d = tempfile.mkdtemp(prefix="rmfit_repin_")
+    try:
+        old = dict(fp, so_md5="a" * 32, azure2_root="/nowhere/AZURE2_frozen_old")
+        new = dict(fp)
+        csh = "#!/bin/csh\n#$ -N x\n" + enginepin.guard_lines_csh(old) + "python3 -m rmfit.cli . drive --max-minutes 123\n"
+        sh = "#!/bin/bash\n" + enginepin.guard_lines_sh(old) + "python3 -m rmfit.cli . polish\n"
+        hand = "#!/bin/csh\nif (`md5sum x` != " + old["so_md5"] + ") exit 1\n"
+        for name, text in (("run_crc_rmfit", csh), ("run_slurm_drive", sh), ("run_hand", hand),
+                           ("campaign.log", "pinned " + old["so_md5"] + "\n")):
+            with open(os.path.join(d, name), "w") as f:
+                f.write(text)
+        os.chmod(os.path.join(d, "run_crc_rmfit"), 0o755)
+        logged = []
+        rw, warned = enginepin.repin_job_scripts(d, old, new, log=logged.append)
+        assert rw == ["run_crc_rmfit", "run_slurm_drive"] and warned == ["run_hand"], (rw, warned)
+        t = open(os.path.join(d, "run_crc_rmfit")).read()
+        assert enginepin.guard_lines_csh(new) in t and old["so_md5"] not in t and "--max-minutes 123" in t
+        assert os.stat(os.path.join(d, "run_crc_rmfit")).st_mode & 0o111
+        t = open(os.path.join(d, "run_slurm_drive")).read()
+        assert enginepin.guard_lines_sh(new) in t and old["so_md5"] not in t
+        assert old["so_md5"] in open(os.path.join(d, "run_hand")).read()
+        assert any("WARNING" in m and "run_hand" in m for m in logged), logged
+        assert enginepin.repin_job_scripts(d, new, new) == ([], [])          # same pin: nothing to do
+        print("re-pin of job scripts: ok")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     fp = test_fingerprint()
     test_check(fp)
     test_campaign_refuses(fp)
+    test_repin_job_scripts(fp)
     print("test_enginepin: PASS")

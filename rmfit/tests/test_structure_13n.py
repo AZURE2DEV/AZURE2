@@ -7,6 +7,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_structure_13n.py)")
+    sys.exit(77)
 import numpy as np
 from rmfit import AZURE2_ROOT
 from rmfit.engine import SingleSession
@@ -14,7 +18,7 @@ from rmfit.keys import take
 from rmfit.windows import window_variant, ladder_variants
 from rmfit.structure import (LevelCandidate, add_level_variant, deactivate_level_variant,
                              scan_jpi_on_window, frozen_removal_screen)
-from rmfit.azr3 import Model as AzrModel
+from pyazr import AzrModel
 
 failures = []
 def check(name, ok, detail=""):

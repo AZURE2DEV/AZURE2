@@ -8,6 +8,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_levelscan_13n.py)")
+    sys.exit(77)
 import numpy as np
 from rmfit import AZURE2_ROOT
 from rmfit.engine import SingleSession, Sharded
@@ -16,7 +20,7 @@ from rmfit.local import BoundsPolicy, default_bounds, polish
 from rmfit.levelscan import candidate_energies, template_variant, template_screen, best_per_jpi, to_level_candidate, incumbent_on_variant, dummy_labels
 from rmfit.model import single_variant
 from rmfit.structure import JPI_GROUPS
-from rmfit.azr3 import Model as AzrModel
+from pyazr import AzrModel
 # Brune (observed) parameters: without them the boundary condition of a J^pi group is set by its
 # first level, so inserting a dummy level below the others redefines their formal parameters
 FLAGS = {"use_brune": True}

@@ -21,13 +21,14 @@ hand, on a schedule a script can follow and an LLM agent can resume:
 Process guide (the Claude skill `rmfit-campaign`): `.claude/skills/rmfit-campaign/SKILL.md` in this repository,
 linked as `~/.claude/skills/rmfit-campaign`.  It lived in the AZURE2 repository until 2026-11-07.
 
-**This copy runs on pyazr 3.0** (`Session`, `Objective`, `Evaluation`, `Parameters`, `Project`; project format 3
-only).  It is rmfit of AZURE2 `dev` (527f63de, 2026-11-15) re-written where it touched the engine or the project
-file; the search, the ledger, the driver's logic and the criteria are unchanged.  What differs:
+**Two backends.**  rmfit runs on pyazr 2 (AZURE2 `dev`: `.azr` text projects, `pyazr.azure2`, `AzrModel`) and on
+pyazr 3 (AZURE2 `feature/upgrade`: project format 3 only, `Session`, `Objective`, `Evaluation`, `Parameters`,
+`Project`).  `backend.py` reads the version of the pyazr that `AZURE2_ROOT` provides; everything that does not touch
+the engine or the project file (search, ledger, driver logic, review criteria, keys) is one code, and the contact
+points branch on `backend.PYAZR3`.  On pyazr 3:
 
-- every project is format 3 (`AZURE2 --convert OLD NEW` first); rmfit reads it through `azr3.py` (the data sets
-  from the engine's description and the records' fields, levels and pairs from `pyazr.Project`) and never parses
-  a line of it;
+- every project is format 3 (`AZURE2 --convert OLD NEW` first); rmfit reads it through `azr3.py` and never parses a
+  line of it;
 - the rows are the engine's: data rows from `Objective.residuals`, the priors of normalizations, shifts and the
   other nuisances from the session's parameter rows, and the engine's model rows (model data such as a measured
   scattering length, a prior covariance, Park's wall with them, decay priors, abundance sums) as one block
@@ -36,22 +37,24 @@ file; the search, the ledger, the driver's logic and the criteria are unchanged.
   detector) or one of a shared energy scale is never split, and there are no convolution pieces;
 - `bake` writes its files with `Session.save_fit` and keeps rmfit's own fresh-session check;
 - `audit` takes masses, separation energies and file problems from the engine's validator;
-- `uq` samples with `sampling.py` (dev's NUTS, kept here because pyazr 3.0 has no sampling module);
-- `mixture.py` is gone (superseded by several compound nuclei in one project).
+- `uq` samples with `sampling.py` (pyazr 2's NUTS, kept in rmfit because pyazr 3 has no sampling module; on pyazr 2
+  `uq` uses `pyazr.sampling`);
+- `mixture.py` is pyazr 2 only (superseded by several compound nuclei in one project).
 
-The notes below this table are the history of rmfit on the old project format; where they name
-`<segmentsData>`, `<targetInt>`, `AzrModel` or a segment-line keyword, the format-3 counterpart is the record
-field of the same meaning (`norm`, `shift`, `covariance`, `target`, `beam`, `detector`, a `normalization` or
-`energy_scale` record).
+Tests: a script that is the same on both backends is `tests/test_<name>.py`; where they differ,
+`tests/test_<name>.py` is the pyazr 2 version and `tests/test_p3_<name>.py` the pyazr 3 one, each skipped (exit 77)
+on the other backend.  `tests/fixtures_p3/` holds the fixture models converted to format 3.
 
 Layout (design rationale and roadmap: `DESIGN.md` in this directory; the plan file the first campaign readme cites is gone):
 
 | module | role |
 |---|---|
 | `keys.py` | structured parameter keys (energy, width, norm, shift, shift_sqrt, shift_fn, abundance, density, doppler, thickness, screening) and index maps between model variants; canonical sign patterns; `sign_distance` (minimal flips between two patterns modulo the gauge symmetries) |
-| `azr3.py` | the project as rmfit reads and edits it on pyazr 3.0: `SegmentTable` (data sets), `write_variant`, `Model` (level and data-set edits through `pyazr.Project`) |
-| `model.py` | model variants written as new `.azr` files (shards, single-session copies) |
-| `sampling.py` | NUTS, R-hat and ESS (dev's `pyazr/sampling.py`), `AzurePosterior` on `Session.objective()` |
+| `backend.py` | the backend switch: `PYAZR3`, and `AzrModel` / `SegmentSet` / `Nucleus` of the pyazr in use |
+| `azr3.py` | (pyazr 3) the project as rmfit reads and edits it: `SegmentTable` (data sets), `write_variant`, `Model` (level and data-set edits through `pyazr.Project`) |
+| `model.py` | model variants written as new model files (shards, windows, with/without level): the shared planning here, the file work in `_model_p2.py` (pyazr 2) / `_model_p3.py` (pyazr 3) |
+| `_worker.py` | one engine session per process: `_worker_p2.py` (`pyazr.azure2`) or `_worker_p3.py` (`pyazr.Session`) |
+| `sampling.py` | (pyazr 3) NUTS, R-hat and ESS (pyazr 2's `pyazr/sampling.py`), `AzurePosterior` on `Session.objective()` |
 | `engine.py` | `SingleSession` (authoritative) and `Sharded` evaluators; `ObjectiveSpec` (plain chi2, reduced-chi2 per data set, Sivia loss) |
 | `local.py` | bounded trust-region polishes, staged fits, sanity checks |
 | `ledger.py` | candidate store, rounds, status |
@@ -71,6 +74,7 @@ Layout (design rationale and roadmap: `DESIGN.md` in this directory; the plan fi
 | `audit_subagent.py` | `rmfit audit --kind input\|data\|literature`: the three idle-time reviews of skill section 3b as self-contained subagent prompts (`audits/<kind>/PROMPT.md`, from `templates/audit_*.md`: segment table, data files, machine findings, spec roles and standing decisions, readme head); parser of their `FINDINGS.md` (`--findings`, `--status KIND N confirmed`) |
 | `audit.py` | `rmfit audit`: engine-free pre-flight checks of the model and data -> `AUDIT.md` (zero free widths, 1 keV level merges, nominal norms != 1, normError as a fraction, FLAG columns as errors, tiny errors, duplicates, spikes, cross-file duplicates, thresholds, `<targetInt>` on test segments, legacy .sav names, output path, engine pin) |
 | `covariance.py` | data covariance matrices (`covariance <file>`) and normalization groups (`normgroup <label>`): the engine's whitening redone on the evaluator's rows, the normgroup leader map (2026-10-22) |
+| `mixture.py` | (pyazr 2 only) joint fit of several projects (one compound nucleus each) to data they share -- natural-abundance or compound targets: one worker per member, member-tagged keys, abundance weights (fixed or free with a sum-to-one row), one normalization per shared data set; `freeze_and_exchange` writes every member back as a standalone stage-1 file with the others as `mixture` tables (`python3 -m rmfit.mixture <dir> init|polish|freeze|status`) |
 
 
 Running: `rmfit` is not installed as a package; put its parent on the path:
@@ -82,11 +86,22 @@ were seconds when written (2026-09-05); since the mid-September target-integrati
 session opens in ~5 min and evaluates in ~8 s (about 100 sub-points per point, 370k external-capture
 amplitudes), so the spine test's polish section now runs 1-2 h -- give it a long timeout or a quiet node.
 
-Several compound nuclei in one project (a natural or compound target) are the engine's own: `keys.py`
-knows a parameter kind `abundance` (`ParamKey.nucleus = (Z, A)`), its prior is one of the nuisance rows and
-the engine's abundance-sum term comes with its model rows (`engine.ModelRows`).  The earlier joint fit of
-several one-nucleus projects (`rmfit.mixture`, 2026-10-12; superseded on 2026-10-13 and since then runnable
-only against one old build) is not part of rmfit on pyazr 3.0.  Two 2026-10-13 regressions, both fixed the same day: `from_segments` was first called with
+Joint fits (`rmfit.mixture`): a directory with `mixture.json` naming the member projects
+(`name`, `azr`, `flags`, `weight`, `weight_free`, `weight_sigma`) and the shared data sets
+(`name`, `segments: {member: that member's <segmentsData> key}`); every member's file carries
+the shared data as an ordinary segment (same data file, window and observable, its own
+normalization free and 1).  The model of a shared data set is `sum_k w_k f_k`, its one
+normalization applies to all members, and a member's energy shift of it stays at the file's
+value.  Test (13N and the p+p model sharing a 90-degree elastic set, ~20 min):
+`python3 rmfit/tests/test_mixture_13n_pp.py`.  First use: a natural-neon target, the 20Ne compound with
+the 22Ne and 21Ne admixtures (2026-10-12).  Since 2026-10-13 the mixture feature
+(engine, pyazr API) is not on AZURE2 `dev` but on `feature/multi-compound-nucleus`: run anything that
+imports `rmfit.mixture` with `AZURE2_ROOT` pointing at a build of that branch AT COMMIT bc3bd57 (the last
+one with the mixture pyazr API; the branch moved on to several compound nuclei in one project on
+2026-10-13, which supersedes `rmfit.mixture`).  For that one-file feature, `keys.py` knows a parameter kind
+`abundance` (`ParamKey.nucleus = (Z, A)`) and `Penalties.from_segments(keys, segs, azr)` adds the
+`<abundances>` priors as rows (the sum-to-one term is not a row); on `dev`'s engine neither path is ever
+taken.  Two 2026-10-13 regressions, both fixed the same day: `from_segments` was first called with
 `self.azr` from `Sharded`, which only has `base_azr` (killed five sharded jobs),
 and `sign_distance` enumerated pair nodes without the stage-2 member tag (`KeyError` on every call;
 `keys.py.bak-2026-10-13c`).  Any edit here must pass `tests/test_keys.py` (seconds) and a `Sharded` fixture

@@ -27,7 +27,12 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
-FIX = os.path.join(HERE, "fixtures", "multicn_labels")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_level_labels_multicn.py)")
+    sys.exit(77)
+from _fixtures import fixture  # noqa: E402  (fixtures/ or fixtures_p3/ by backend)
+FIX = fixture("multicn_labels")
 failures = []
 
 
@@ -118,7 +123,7 @@ def main():
         # (e) the removal-variant helpers find the level of the right nucleus
         from rmfit.campaign import Campaign
         from rmfit.structure import deactivate_level_variant
-        from rmfit.azr3 import Model as AzrModel
+        from pyazr import AzrModel
         fake = Campaign.__new__(Campaign)
         fake.base_azr = azr
         e13, e15 = fake._level_energy("3/2-#1@13N"), fake._level_energy("3/2-#1@15N")
@@ -135,22 +140,22 @@ def main():
             check(True, "(e) a level of the other nucleus is not matched")
 
         # (f) one nucleus: labels as before the fix
-        root = os.environ.get("AZURE2_ROOT", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
+        root = os.environ.get("AZURE2_ROOT", os.path.expanduser("~/AZURE2"))
         one = os.path.join(work, "13N")
         shutil.copytree(os.path.join(root, "tests", "13N"), one)
         os.makedirs(os.path.join(one, "output"), exist_ok=True)
         os.makedirs(os.path.join(one, "checks"), exist_ok=True)
-        from pyazr import Session
+        from pyazr import azure2
         S1 = SingleSession(os.path.join(one, "13N.azr"), cwd=one, flags=flags, name="one")
-        E1 = Session(os.path.join(one, "13N.azr"), cwd=one, **flags)
+        E1 = azure2(os.path.join(one, "13N.azr"), cwd=one, **flags)
         try:
             old_level = lambda p: f"{jpi_string(p.J, p.parity)}#{int(p.level)}"     # the pre-fix label
             old = {p.free_index: old_level(p) for p in E1.parameters
                    if p.kind in ("energy", "width") and not p.fixed and p.free_index is not None}
             check(all(S1.keys[j].level == lab for j, lab in old.items()) and old,
                   f"(f) single nucleus: the {len(old)} level keys are the pre-fix labels")
-            old_le = {old_level(k): (0.0 if k.level_energy is None else float(k.level_energy))
-                      for k in E1.parameters.of_kind("energy")}
+            old_le = {old_level(k): (0.0 if k.energy is None else float(k.energy))
+                      for k in E1.parameters.by_physical_level()}
             check(S1.level_energy == old_le, "(f) single nucleus: level_energy identical to the pre-fix table")
             check(not any("@" in l for l in S1.level_energy), "(f) single nucleus: no '@' anywhere")
         finally:

@@ -20,13 +20,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_spine_13n.py)")
+    sys.exit(77)
 
 import numpy as np
 from rmfit import AZURE2_ROOT
 from rmfit.engine import SingleSession, Sharded
 from rmfit.keys import canonical_signs, sign_pattern, flip, take, index_map
 from rmfit.local import polish, default_bounds, BoundsPolicy, sanity, free_mask
-from pyazr import Project, Nuisance
+from pyazr import AzrModel
 
 failures = []
 
@@ -46,10 +50,10 @@ def main(nshards=4):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
     os.makedirs(os.path.join(work, "output"))
     # free two norms so the penalty rows are exercised
-    mdl = Project.open(os.path.join(work, "13N.azr"))
-    mdl.set("meyer_84", norm=Nuisance(1, "fit", prior=(1, "5%")))
-    mdl.set("kettner_55", norm=Nuisance(1, "fit", prior=(1, "10%")))
-    base = mdl.save(os.path.join(work, "base.azr"))
+    mdl = AzrModel.from_file(os.path.join(work, "13N.azr"))
+    mdl.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
+    mdl.set_segment_norm("kettner_55", vary=True, sys_error=10.0)
+    base = mdl.write(os.path.join(work, "base.azr"))
     flags = {}
 
     print("1. single vs sharded")
