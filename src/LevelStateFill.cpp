@@ -1,6 +1,7 @@
 #include <cmath>
 #include <exception>
 #include <mutex>
+#include "azure2/support/FloatingPointPrecision.h"
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -112,7 +113,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (recompute) {
                 // S as everywhere else (ChannelFunc: continuous through threshold).
-                ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), theChannel->GetRadius());
+                ChannelFunc channelFunc(thePair, theChannel->GetRadius());
                 state.SetShift(j, la, ch, channelFunc.Shift(lValue, thePair->SpinOrbitTwoJ(theJGroup->GetJ()), resonanceEnergy));
               }
               if (derivativeChannel && (first || second)) {
@@ -137,7 +138,6 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
 
   // Park: dS/dE and d^2S/dE^2, in parallel (see above); a GSL error is
   // carried out of the parallel region and rethrown.
-  const bool gslCoulomb = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const int numDerivatives = (int)derivatives.size();
   azure2::ShiftDerivativeMemo &memo = configure.scratch->shiftDerivatives;
   std::exception_ptr error;
@@ -145,13 +145,14 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
 #pragma omp parallel for schedule(dynamic, 1) if (numDerivatives > 1 && !omp_in_parallel())
 #endif
   for (int k = 0; k < numDerivatives; k++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     try {
       Derivative &d = derivatives[k];
       if (d.source >= 0) continue;
       const double threshold = d.pair->GetSepE() + d.pair->GetExE();
       const double resonanceEnergy = d.energy - threshold;
-      CoulFunc theCoulombFunction(d.pair, gslCoulomb);
-      const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
+      CoulFunc theCoulombFunction(d.pair);
+      const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
                               theCoulombFunction.UsesTable(), d.pair->FunctionSettings().relativistic, d.pair->GetRedMass(),
                               d.pair->GetM(1) + d.pair->GetM(2), d.radius, threshold, d.energy};
       bool need1 = d.first, need2 = d.second;
@@ -173,7 +174,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
       // dS/dE as everywhere else (ChannelFunc, also BuildShiftDerivTable's
       // under Brune); d^2S/dE^2 from the branch the level is on.
       if (need1) {
-        ChannelFunc channelFunc(d.pair, gslCoulomb, d.radius);
+        ChannelFunc channelFunc(d.pair, d.radius);
         d.d1 = channelFunc.ShiftDerivative(d.l, d.two_j, resonanceEnergy);
       }
       if (need2) {

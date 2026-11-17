@@ -16,6 +16,7 @@
 #include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
+#include "pybind_engine_call.h"
 
 namespace py = pybind11;
 
@@ -84,7 +85,7 @@ py::dict DataRows(const std::string &text, const std::string &projectDir, const 
 }  // namespace
 
 void BindDataRows(py::module_ &m) {
-  m.def("data_rows", &DataRows, py::arg("text"), py::arg("project_dir"), py::arg("name"),
+  m.def("data_rows", &DataRows, PrecisionGuard(), py::arg("text"), py::arg("project_dir"), py::arg("name"),
         "Every data row of the file of data set `name` of the format-3 project `text` (data files relative to "
         "`project_dir`), read as the engine reads it (Measurement.h ReadMeasurementRows): a dict with data_file (as "
         "written), path (as opened), engine_unit (the quantity's), value_factor (engine units per unit of the value "

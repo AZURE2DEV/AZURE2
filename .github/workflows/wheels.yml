@@ -1,10 +1,23 @@
 name: wheels
 
 # Builds and tests the pyazr wheels (pyproject.toml: scikit-build-core, [tool.cibuildwheel]) and keeps them as the
-# run's artifacts.  It publishes nothing: no upload to PyPI, no release, no secret.  Started by hand, and on pull
-# requests that change the packaging.
+# run's artifacts.  It publishes nothing: no upload to PyPI, no release, no secret.  Started by hand, on pull
+# requests that change the packaging, and on a push to feature/upgrade that changes it.  The push trigger is there
+# because GitHub offers "Run workflow" only for a workflow file of the default branch (main), which has none, so on
+# this branch the workflow could not be started at all until 2026-11-16.  Remove it once the file is on main.
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/upgrade]
+    paths:
+      - pyproject.toml
+      - CMakeLists.txt
+      - api/src/CMakeLists.txt
+      - src/CMakeLists.txt
+      - pyazr/datafiles.py
+      - pyazr/coulomb_table.py
+      - tests/pyazr/wheel_smoke.py
+      - .github/workflows/wheels.yml
   pull_request:
     paths:
       - pyproject.toml
@@ -39,9 +52,12 @@ jobs:
             os: ubuntu-24.04-arm
           # The deployment target is the macOS of the runner, that of Homebrew's gsl and libomp bottles, which
           # delocate copies into the wheel.
+          # macos-15, not macos-14: the first run (2026-11-16) was refused with "The configuration
+          # 'macos-14-arm64-us-default' is not supported".  Whether macos-15 is accepted was not known when this was
+          # written; if it is refused too, no arm64 macOS runner is open to this repository.
           - name: macos-arm64
-            os: macos-14
-            macos_target: '14.0'
+            os: macos-15
+            macos_target: '15.0'
           - name: macos-x86_64
             os: macos-15-intel
             macos_target: '15.0'

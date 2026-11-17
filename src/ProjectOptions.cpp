@@ -29,7 +29,6 @@ const std::vector<OptionStorage> &OptionStorages() {
       {"use_long_wavelength", Config::USE_LONGWAVELENGTH_APPROX, nullptr},
       {"ec_convection_current", 0, &Config::ecConvectionCurrent},
       {"use_rmc", Config::USE_RMC_FORMALISM, nullptr},
-      {"use_gsl_coul", Config::USE_GSL_COULOMB_FUNC, nullptr},
       {"use_coulomb_table", 0, &Config::useCoulombTable},
       {"use_ec_table", 0, &Config::useECTable},
       {"replace_grids", 0, &Config::replaceSubPointGrids}};
@@ -159,6 +158,12 @@ bool ApplyProjectOptions(Config &config, const azure2::io::ConfigSection &sectio
     config.outStream << "ERROR: " << d.ToText() << std::endl;
   }
   return config.refusedOptions.empty();
+}
+
+std::string NotAnOptionText(const std::string &name) {
+  const azure2::io::RemovedConfigKey *removed = azure2::io::RemovedConfigKeyNamed(name);
+  if (removed && *removed->flag) return azure2::io::RemovedConfigKeyText(*removed, azure2::io::OptionSpelling::kKeyword);
+  return "'" + name + "' is not an option of the calculation (pyazr.kinds()[\"options\"])";
 }
 
 bool OptionsOfRun(const std::string &projectText, const std::vector<std::string> &args, Config &config) {

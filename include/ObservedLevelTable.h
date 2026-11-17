@@ -21,6 +21,14 @@ struct ObservedLevel {
   vector_r W;                  ///< observed partial width per channel, signed, MeV (physics/ observed_levels)
   vector_r value;              ///< the observed value as a <levels> line holds it (Gamma in eV, C, mu, Q, B)
   std::vector<unsigned char> kind;  ///< azure2::physics::ObservedKind of `value`
+  /// The factor W was formed with, W = s 2 |gamma|^2 P / N, at E (physics/ observed_levels hands it on: no second
+  /// evaluation; docs/upgrade/data_model.md section 10): an open particle channel's penetrability P_l(E_c)
+  /// (dimensionless, at the channel radius, with the run's channel functions); a closed one's mu a / (hbar^2 W_l^2)
+  /// (MeV^-1 fm^-1); 0 at a threshold; a photon channel's (E_gamma / hbar c)^(2L+1) (fm^-(2L+1); 1 with --use-rmc) or
+  /// static moment's factor; 0 for a beta channel.
+  vector_r P;
+  vector_r mu_u;  ///< reduced mass of a particle channel's pair, u (PPair::GetRedMass); 0 for photon and beta channels
+  vector_r a_fm;  ///< radius of a particle channel, fm (AChannel::GetRadius: the pair's unless a channel_radius record sets it); 0 for photon and beta channels
 };
 
 class ObservedLevelTable {

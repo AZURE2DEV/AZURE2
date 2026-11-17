@@ -237,8 +237,6 @@ const std::vector<ConfigKey> &ConfigKeys() {
       Told(Option("use_rmc", "--use-rmc", "", false, "physics",
                   "the Reich-Moore approximation for capture (neutron capture only); needs use_brune off"),
            "Use RMC capture formalism (neutron capture only)", "Runtime options", "0", kOften),
-      Told(Option("use_gsl_coul", "--gsl-coul", "", false, "numerics", "GSL's Coulomb functions instead of AZURE2's own"),
-           "Use GSL Coulomb functions", "Runtime options", "0", kOften),
       Told(Option("use_coulomb_table", "--coulomb-table", "--no-coulomb-table", true, "numerics",
                   "P, S and the hard-sphere phase of charged channels from the universal Coulomb table, exact outside "
                   "it"),
@@ -280,6 +278,42 @@ const std::vector<ConfigOptionContradiction> &ConfigOptionContradictions() {
        "the convection current is a part of the exact EL operator only; with the long-wavelength approximation the "
        "key changes nothing"}};
   return rows;
+}
+
+const std::vector<RemovedConfigKey> &RemovedConfigKeys() {
+  static const std::vector<RemovedConfigKey> rows = {
+      // 2026-11-12: the uniform sub-point grid of a folded point is gone (docs/upgrade/project_format3.md section 3.1)
+      {"useAdaptiveGrid", "",
+       "Every folded point is on the shared mesh of its nucleus, which is never coarser than the uniform grid of the "
+       "same number of points (the uniform grid, useAdaptiveGrid=0, lost narrow resonances and is gone); a value of 1 "
+       "said what is now the only grid."},
+      // 2026-11-16: GSL's Coulomb functions are gone from the engine (docs/upgrade/coulomb.md sections 8 and 9)
+      {"use_gsl_coul", "--gsl-coul",
+       "It chose GSL's Coulomb functions, which are wrong by up to 5 % in the penetrability inside the outer turning "
+       "point (below the Coulomb barrier); AZURE2's own Coulomb functions, which every run without the option "
+       "already used, are the only ones now."}};
+  return rows;
+}
+
+const RemovedConfigKey *RemovedConfigKeyNamed(const std::string &name) {
+  for (const RemovedConfigKey &k : RemovedConfigKeys())
+    if (name == k.name) return &k;
+  return nullptr;
+}
+
+const RemovedConfigKey *RemovedConfigKeyOfFlag(const std::string &flag) {
+  for (const RemovedConfigKey &k : RemovedConfigKeys())
+    if (*k.flag && flag == k.flag) return &k;
+  return nullptr;
+}
+
+std::string RemovedConfigKeyText(const RemovedConfigKey &key, OptionSpelling spelling) {
+  const std::string what = spelling == OptionSpelling::kKey
+                               ? std::string(key.name) + " is no longer a key of <config>: delete the line."
+                               : spelling == OptionSpelling::kFlag
+                                     ? std::string(key.flag) + " is no longer an option of AZURE2: leave it out."
+                                     : std::string(key.name) + " is no longer a keyword of pyazr.Session: leave it out.";
+  return what + "  " + key.why;
 }
 
 namespace {
@@ -416,6 +450,10 @@ bool ConfigEdits(const std::vector<std::string> &lines, const std::string &name,
   }
   const ConfigKey *key = KeyNamed(name);
   if (!key) {
+    if (const RemovedConfigKey *removed = RemovedConfigKeyNamed(name)) {  // said with its reason, not as a misspelling
+      why = "'" + name + "' is not an entry of <config> any more: it is not written.  " + removed->why;
+      return false;
+    }
     std::string list;
     for (const std::string &n : ConfigPositionalNames()) list += (list.empty() ? "" : ", ") + n;
     for (const ConfigKey &x : ConfigKeys()) list += std::string(", ") + x.name;

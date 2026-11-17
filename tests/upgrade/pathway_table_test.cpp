@@ -184,9 +184,11 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     if (fs::is_directory(argv[i])) {
       for (const auto &e : fs::recursive_directory_iterator(argv[i]))
+        // generic_string(): forward slashes on every platform (on Windows string() has backslashes, and the
+        // converter's old originals were then taken as projects: 186 failures in the CI's Windows job)
         if (e.is_regular_file() && e.path().extension() == ".azr" &&
-            e.path().string().find("/output/") == std::string::npos &&
-            e.path().string().find("/convert/fixtures/") == std::string::npos)  // the converter's old originals
+            e.path().generic_string().find("/output/") == std::string::npos &&
+            e.path().generic_string().find("/convert/fixtures/") == std::string::npos)  // the converter's old originals
           files.push_back(fs::absolute(e.path()).string());
     } else {
       files.push_back(fs::absolute(argv[i]).string());

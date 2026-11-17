@@ -310,7 +310,8 @@ void CompoundSystem::TransformToBrune(const Config &configure, Messages messages
 /*!
  * The observed quantities of every level (cnuc_split.md section 8) from its Brune (Park) values in `table`
  * (TransformToBrune) and, with external capture, the external part of its photon amplitudes: physics/
- * observed_levels.  Sets the external amplitude, W and the reported value with its kind in `table`.
+ * observed_levels.  Sets the external amplitude, W and the reported value with its kind in `table`, and the factor P
+ * W was formed with, the pair's reduced mass and channel radius (docs/upgrade/data_model.md section 10).
  */
 
 void CompoundSystem::ObservedWidths(const Config &configure, const LevelState &state, ObservedLevelTable &table) const {
@@ -355,6 +356,13 @@ void CompoundSystem::ObservedWidths(const Config &configure, const LevelState &s
         out.W[k] = obs.W[lb * nc + k];
         out.value[k] = obs.value[lb * nc + k];
         out.kind[k] = (unsigned char)obs.kind[lb * nc + k];
+        out.P[k] = obs.P[lb * nc + k];  // the factor W was formed with (data_model.md section 10)
+        const AChannel *theChannel = theJGroup->GetChannel((int)k + 1);
+        if (theChannel->GetRadType() == 'P') {
+          const PPair *pair = this->GetPair(theChannel->GetPairNum());
+          out.mu_u[k] = pair->GetRedMass();
+          out.a_fm[k] = theChannel->GetRadius();  // the channel's own radius (channel_radius records)
+        }
       }
   }
 }

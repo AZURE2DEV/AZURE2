@@ -30,7 +30,6 @@ struct ThmShiftMemo {
     std::optional<azure2::physics::HybridPotential> potential;
     int l, two_j;
     double e;
-    bool gsl;
     double s;
   };
   static constexpr int kSize = 32;
@@ -107,7 +106,7 @@ class ThmVertexBoundary {
 
   /*! S_c of a channel of `pair` (radius a_c in fm) at a compound-system level energy (MeV); with a memo (the run's
    *  per-thread scratch), through it. */
-  static double ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double radius, double levelEnergy, bool useGSL,
+  static double ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double radius, double levelEnergy,
                                    ThmShiftMemo *memo = nullptr);
 
  private:

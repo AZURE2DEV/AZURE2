@@ -28,7 +28,7 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair,
       two_j_(pair->SpinOrbitTwoJ(jgroup->GetJ())),
       lowest_(0),
       fixed_(jgroup->GetChannel(channel)->GetBoundaryCondition()),
-      channelFunc_(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), jgroup->GetChannel(channel)->GetRadius()) {
+      channelFunc_(pair, jgroup->GetChannel(channel)->GetRadius()) {
   double eMin = 0.0;
   for (int la = 1; la <= jgroup->NumLevels(); la++) {
     const ALevel *level = jgroup->GetLevel(la);
@@ -41,7 +41,7 @@ ThmVertexBoundary::ThmVertexBoundary(const Config &configure, const PPair *pair,
   // (A J group without levels in the R matrix has no level term; its
   // level-free term, if any, takes S_c at the excitation energy 0.)
   if (rule_ == LOWEST_LEVEL_SHIFT)
-    fixed_ = ShiftAtLevelEnergy(pair, l_, two_j_, jgroup->GetChannel(channel)->GetRadius(), eMin, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC),
+    fixed_ = ShiftAtLevelEnergy(pair, l_, two_j_, jgroup->GetChannel(channel)->GetRadius(), eMin,
                                 &configure.scratch->ForThisThread().thmShift);
 }
 
@@ -54,22 +54,21 @@ complex ThmVertexBoundary::OnShellAt(double e) {
 }
 
 double ThmVertexBoundary::ShiftAtLevelEnergy(const PPair *pair, int l, int two_j, double radius, double levelEnergy,
-                                             bool useGSL,
                                              ThmShiftMemo *memo) {
   const double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
   // Continuous through threshold, and at it (ChannelFunc).
-  if (!memo) return ChannelFunc(pair, useGSL, radius).Shift(l, two_j, resonanceEnergy);
+  if (!memo) return ChannelFunc(pair, radius).Shift(l, two_j, resonanceEnergy);
   const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
   const double redmass = pair->GetRedMass();
   const std::optional<azure2::physics::HybridPotential> &potential = pair->GetHybridPotential();
   for (int i = 0; i < memo->filled; i++) {
     const ThmShiftMemo::Entry &m = memo->entries[i];
     if (m.z1 == z1 && m.z2 == z2 && m.redmass == redmass && m.radius == radius && m.potential == potential &&
-        m.l == l && m.two_j == two_j && m.e == resonanceEnergy && m.gsl == useGSL)
+        m.l == l && m.two_j == two_j && m.e == resonanceEnergy)
       return m.s;
   }
-  const double s = ChannelFunc(pair, useGSL, radius).Shift(l, two_j, resonanceEnergy);
-  memo->entries[memo->next] = ThmShiftMemo::Entry{z1, z2, redmass, radius, potential, l, two_j, resonanceEnergy, useGSL, s};
+  const double s = ChannelFunc(pair, radius).Shift(l, two_j, resonanceEnergy);
+  memo->entries[memo->next] = ThmShiftMemo::Entry{z1, z2, redmass, radius, potential, l, two_j, resonanceEnergy, s};
   memo->next = (memo->next + 1) % ThmShiftMemo::kSize;
   if (memo->filled < ThmShiftMemo::kSize) memo->filled++;
   return s;

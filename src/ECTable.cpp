@@ -46,7 +46,6 @@ std::vector<double> TermKey(const PPair *pair, double radius, const Config &conf
           (double)li, (double)lf, si, sf, ji, jf, (double)multL, (double)radType, levelEnergy,
           isChannelCapture ? 1.0 : 0.0,
           (configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1.0 : 0.0,
-          (configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1.0 : 0.0,
           RateMode(configure) ? 1.0 : 0.0,  // the rate integrates on a fixed radial grid
           (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX)) ? 1.0 : 0.0,
           configure.useCoulombTable ? 1.0 : 0.0,
@@ -109,7 +108,7 @@ complex ECTable::Integral(const PPair *finalPair, double radius, const Config &c
   const double threshold = finalPair->GetSepE() + finalPair->GetExE();
   // The channel energy by the channel table's expression, (E - S) - e (docs/upgrade/channel_table.md).
   const double outEnergy = (inEnergy - finalPair->GetSepE()) - finalPair->GetExE();
-  CoulFunc coul(finalPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  CoulFunc coul(finalPair);
   // sqrt(P) at a_c: one more radius of the (l_i, E) block of the integrals (not in the rate mode: energies never recur)
   if (!RateMode(configure)) coul.SetRadialMemo(&configure.scratch->ForThisThread().ec.radial);
   complex reduction;

@@ -62,10 +62,12 @@ under different flags is a different model.
 - Charged-particle fits with bound or subthreshold levels differ from builds before 2026-10-19 (expires: 2027-02-01)
   by up to ~10⁻³ in χ² (exact-route dS/dE corrected; `AZURE_BOUND_SHIFT_NUMERICAL=1` and `AZURE_SHIFT_DE_1EV=1` restore
   the old routes).
-- **`--gsl-coul` trades accuracy for speed.** The default routine (Michel 2007) agrees with mpmath to 10⁻⁹ and is
-  slower; GSL's is faster but wrong by 3–6 % in P and S for 0.1 ≤ η < 10, 1 ≤ ρ < 10. Use it only for timing or
-  exploratory runs where that error is acceptable, never for results; the Coulomb table gives the speed without the
-  error.
+- **`--gsl-coul` is gone.** The flag, the `<config>` key `use_gsl_coul` and the pyazr keyword are refused with the
+  reason: GSL's Coulomb functions are wrong by up to 5 % in P and S inside the outer turning point (below the
+  barrier). The engine's routine (Michel 2007) agrees with mpmath to 10⁻⁹ and is the only one; the Coulomb table
+  gives the speed. Delete the key from an old project, drop the flag or keyword from a script. A result computed
+  with the option differs from builds before 2026-11-16 (expires: 2027-02-01) by up to percent (capture,
+  sub-barrier channels); runs that never used it are unchanged.
 
 ## External-capture energy table
 

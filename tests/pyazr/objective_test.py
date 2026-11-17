@@ -179,6 +179,47 @@ with tempfile.TemporaryDirectory() as tmp:
         if total is not None:
             check("pyazr objective = AZURE2's total", np.isclose(obj, total, rtol=2e-5), f"{obj} vs {total}")
 
+# ---- 6. the engine's chi-squared call takes the data term from the objective --------------------------------------
+# The binding's calculate_chi2_rwa(x) (AZUREAPI::CalculateChi2RWA) is the data chi-squared plus the terms of the model
+# alone (Park's wall, the abundances, the model data, the gamma_decay priors).  Its data part must be the objective's
+# own data term, not a second sum: with no segment prior active (every norm_chi2 and shift_chi2 is 0, asserted, so
+# that the objective's first term holds the data alone), calculate_chi2_rwa(x) equals, bit for bit, the objective's
+# terms "data, normalizations and energy shifts" + "data covariance", plus the model's terms added in the objective's
+# order (each such term adds its value in one step, so the Python sum repeats the engine's).  Until 2026-11-16 the API
+# summed the squares of the pulls, (d/e)^2, where the objective sums d^2/e^2: 11 of these 24 cases differed in the
+# last bits (T1 Brune x0, 13N formal x0, ...).  T1-T3 (tests/upgrade) and 13N, three parametrizations, at the start
+# and at a point with every free level energy and width moved by 1e-4 relative.
+print("\n6. calculate_chi2_rwa = the objective's data term (+ the model's terms), bit for bit")
+MODEL_TERMS = ("Park J > 0", "abundances", "model data", "gamma decay priors")
+with tempfile.TemporaryDirectory() as tmp:
+    for folder, name in (("upgrade/T1", "T1.azr"), ("upgrade/T2", "T2.azr"), ("upgrade/T3", "T3.azr"),
+                         ("13N", "13N.azr")):
+        work = os.path.join(tmp, folder.replace("/", "_"))
+        shutil.copytree(os.path.join(ROOT, "tests", folder), work)
+        for junk in ("output", "checks"):
+            shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
+            os.makedirs(os.path.join(work, junk))
+        for basis, opts in (("Brune", {}), ("formal", {"use_brune": False}), ("Park", {"use_park": True})):
+            with Session(os.path.join(work, name), cwd=work, **opts) as m:
+                x0 = np.asarray(m.parameters.x0, float)
+                x1 = x0.copy()
+                for p in m.parameters.free:
+                    if p.kind in ("energy", "width"):
+                        x1[p.free_index] = x0[p.free_index] * (1.0 + 1e-4)
+                for where, x in (("x0", x0), ("moved", x1)):
+                    ev = m.evaluate(x)
+                    priors = sum(d.norm_chi2 + d.shift_chi2 for d in ev.data)
+                    data = ev.terms["data, normalizations and energy shifts"] + ev.terms["data covariance"]
+                    model = 0.0
+                    for term, value in ev.terms.items():
+                        if term in MODEL_TERMS:
+                            model += value
+                    chi2 = float(m._engine.calculate_chi2_rwa(x))
+                    label = f"{folder} {basis} {where}"
+                    check(f"{label}: no segment prior active", priors == 0.0, repr(priors))
+                    check(f"{label}: calculate_chi2_rwa {chi2!r} = data {data!r} + model {model!r}",
+                          chi2 == data + model, f"difference {chi2 - (data + model)!r}")
+
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
     sys.exit(1)

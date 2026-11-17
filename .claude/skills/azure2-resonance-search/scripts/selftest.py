@@ -66,6 +66,11 @@ def main():
     if not os.environ.get("AZURE2_BIN"):
         print("skip: AZURE2_BIN (the program, for parameters.out) is not set")
         return 77
+    try:
+        import matplotlib  # noqa: F401  (an optional package: pyproject.toml, the extra "examples")
+    except ImportError as e:
+        print(f"skip: matplotlib is not installed ({e}); the self-test draws the blurred map's figure")
+        return 77
     t0 = time.time()
     with tempfile.TemporaryDirectory(prefix="azure2-resonance-search-selftest-") as tmp:
         t3 = os.path.join(tmp, "T3")

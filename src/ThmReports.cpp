@@ -321,7 +321,6 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
     why = "THM experiment '" + name + "': its segments have different entrance pairs";
     return false;
   }
-  const bool useGSL = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const int aa = compound->GetPairNumFromKey(group->pairKey);
   const PPair *pair = compound->GetPair(aa);
   if (pair->GetPType() != 0) {
@@ -382,7 +381,7 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
     if (e + b > 0.0) {
       ThmBesselParts(l, mu, e, b, out.radius, q.jl, q.rhoDjl);
       if (configure.thm.coulombIntegral && pair->GetZ(1) * pair->GetZ(2) != 0)
-        q.coul = ThmCoulombTerm(pair, l, e, ThmRho(mu, e, b, 1.0), useGSL);
+        q.coul = ThmCoulombTerm(pair, l, e, ThmRho(mu, e, b, 1.0));
     }
     return q;
   };

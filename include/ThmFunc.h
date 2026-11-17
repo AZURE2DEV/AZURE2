@@ -95,9 +95,9 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
  * [a, R] is obtained by integrating the Coulomb equation inwards from its
  * asymptotic expansion at R (deep below the barrier, where G_l(ka) may
  * overflow, G_l is integrated inwards from inside the barrier instead); for
- * E < 0 WhitFunc is used.  No library Coulomb function is called, so useGSL
- * has no effect (GSL's G_l/F_l are off by up to ~2% for l >= 2, eta ~ 2,
- * rho ~ 1-4, which would otherwise leak into C_l).  Agrees with an independent
+ * E < 0 WhitFunc is used.  No library Coulomb function is called (GSL's
+ * G_l/F_l are off by up to ~2% for l >= 2, eta ~ 2, rho ~ 1-4, which would
+ * otherwise leak into C_l).  Agrees with an independent
  * mpmath evaluation to ~1e-13 relative (tests/reference/thm_coulomb_term_test);
  * ~0.05-1 ms per call, and repeats of the same (pair, l, E, p) -- one per J
  * group and channel -- come from a small per-thread memo.
@@ -106,8 +106,7 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
  * \param l      orbital angular momentum
  * \param E      entrance c.m. energy (MeV), may be negative
  * \param p      half-off-shell momentum (fm^-1)
- * \param useGSL kept for the interface; has no effect (see above)
  */
-complex ThmCoulombTerm(const PPair *pair, int l, double E, double p, bool useGSL);
+complex ThmCoulombTerm(const PPair *pair, int l, double E, double p);
 
 #endif

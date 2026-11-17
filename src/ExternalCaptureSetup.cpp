@@ -20,6 +20,7 @@
 #include "ExternalCaptureExit.h"
 #include "WorkingCopy.h"
 #include "GSLException.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 const azure2::ExitRow &ExternalCaptureExit(const CompoundSystem &compound, int entrancePair, int exitPair, int segmentKey) {
   const azure2::EntrancePathways &P = compound.Pathways().Entrance(entrancePair);
@@ -244,8 +245,16 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
   // v5 (2026-10-30): the file holds every digit (17 significant, was 6), so every v4 file is recomputed once.
   // v6 (2026-11-09): the Whittaker function of the final state is physics/coulomb's whittaker, not GSL's U
   // (coulomb.md section 1.4); the integrals move at ~1e-10 relative, so every v5 file is recomputed once.
-  hash.Add("AZURE2 EC signature v6");
-  hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
+  // v7 (2026-11-16): the Clebsch-Gordan and Racah coefficients of the amplitudes are those of physics/, not GSL's
+  // 3j and 6j (AngCoeff.cpp); the integrals move at ~1e-14 relative, so every v6 file is recomputed once and a
+  // result does not depend on whether a file from before was found.
+  // v8 (2026-11-16): F of a neutral entrance pair (eta = 0) is the Riccati-Bessel function, no longer an upward
+  // recurrence that was wrong for l >= 2 at rho << 1 (docs/upgrade/coulomb.md section 10); the integrals of a neutral
+  // pair move (by ~1e-15 in the test projects), so every v7 file is recomputed once.
+  hash.Add("AZURE2 EC signature v8");
+  // The place of the option use_gsl_coul, retired on 2026-11-16 (docs/upgrade/coulomb.md section 9.1): a run with the
+  // program's own Coulomb functions hashed 0 here, and they are the only ones now; the constant 0 is kept.
+  hash.Add(0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.
   if (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX))
@@ -490,6 +499,7 @@ int WorkingCopy::CalculateECAmplitudes(const CompoundSystem *compound, const Con
                 bool localStop = false;
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
+                  const azure2::support::ExtendedPrecisionScope fpPrecision;
                   if (configure.stopFlag || localStop) continue;
                   Unit *point = segment->GetPoint(*this, i);
                   // Mapped points compute their own amplitudes too: the
@@ -596,6 +606,7 @@ int WorkingCopy::LeafECAmplitudes(const CompoundSystem *compound, const Config &
                 bool localStop = false;
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
+                  const azure2::support::ExtendedPrecisionScope fpPrecision;
                   if (configure.stopFlag || localStop) continue;
                   Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
                   try {
