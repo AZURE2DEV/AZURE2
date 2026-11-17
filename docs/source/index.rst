@@ -51,6 +51,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    user_guide/pyazr_examples
    user_guide/physics_functions
    user_guide/pyazr_command_line
+   user_guide/rmfit
    user_guide/endf
    user_guide/project_from_python
    user_guide/web_interface
