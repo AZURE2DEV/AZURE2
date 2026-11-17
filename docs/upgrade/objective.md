@@ -157,7 +157,9 @@ the library exists for what needs no engine object, and the writer is audited: `
 `azure2::inference::Term<ObjectiveContext>`, `Objective` holds an `azure2::inference::TermList`, `PriorCovariance`
 is `inference/`'s, and the paths named in sections 1 and 6 are those of their dates.  2026-11-17: the arithmetic of
 T6, T7, T1a and T1b is `inference/`'s too, `ParkWall.h`, `AbundancePriors.h`, `LinearProfile.h`, each called by the
-value, the gradient and the rows from one gather of the engine: `inference.md` section 9.) The MCMC's
+value, the gradient and the rows from one gather of the engine: `inference.md` section 9.  2026-11-17, B4: a term
+states its value, gradient, rows, total and `chiSquared.out` field in its class, and the walks loop over the list:
+`objective_arrays.md` section 8.) The MCMC's
 level-energy spread and its user priors keep their code.
 
 ## 5. T9, the model data (Phase 4 step S15, decision M10)

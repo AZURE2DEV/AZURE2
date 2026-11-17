@@ -223,30 +223,54 @@ the parameter vector is not a set-up fact: it belongs in ``LevelState`` (above).
 A term of the objective
 -----------------------
 
-1. One ``ObjectiveTerm`` subclass in ``src/Objective.cpp``, appended to the
-   term list in the ``Objective`` constructor (``Objective::Terms``).
-   ``ObjectiveTerm`` is ``azure2::inference::Term<ObjectiveContext>``
-   (``inference/include/azure2/inference/TermList.h``): ``Add`` is the term,
-   ``ModelOnly``, ``AddForSampler`` and ``ExcludesForSampler`` have defaults
-   (not of the model alone; the sampler takes the whole term; no point is
-   excluded). A Gaussian prior on one parameter is ``GaussianPriorChi2`` of
-   ``GaussianPrior.h`` and a line of its gather in ``src/DiagonalPriors.cpp``
-   (``include/DiagonalPriors.h``), which gives the term its value and
-   ``ForEachDiagonalPrior`` its gradient, Minuit's :math:`G_2` and its
-   least-squares row. Its
-   gradient beside the others in ``src/AZUREGrad.cpp``, and its residual rows
-   in ``AppendModelRows`` if the Levenberg-Marquardt path needs them. The
-   walk of the engine's objects is a gather in the engine that fills plain
-   arrays; the arithmetic on them (value, gradient, rows) is one header of
-   ``inference/`` with its test in ``inference/tests/`` (``AbundancePriors.h``
-   with ``AbundanceBlockOf``, ``ParkWall.h`` with ``ParkLevelsOf`` are the
-   pattern), which the value, the gradient and the rows call. No term
-   is added anywhere else (check 11).
-2. Tests: the analytic gradient against finite differences
-   (``AZURE_GRAD_CHECK``), the program and ``pyazr`` giving the same
-   :math:`\chi^2` (``tests/pyazr/objective_test.py``).
-3. Its total in ``Results::objective`` and from there in ``chiSquared.out``
-   (``reference/output_files.rst``).
+A term is one class in ``src/Objective.cpp`` and one line in the ``Objective``
+constructor; the walks of the objective (its value, gradient, least-squares
+rows and the fields of ``chiSquared.out``) loop over the terms and name none
+(``docs/upgrade/objective_arrays.md`` section 8).
+
+1. A Gaussian prior on one parameter is not a new term: ``GaussianPriorChi2``
+   of ``GaussianPrior.h`` and a line of its gather in
+   ``src/DiagonalPriors.cpp`` (``include/DiagonalPriors.h``), which gives the
+   term its value and ``ForEachDiagonalPrior`` its gradient, Minuit's
+   :math:`G_2` and its least-squares row.
+2. Otherwise one class deriving from ``ObjectiveTerm`` (``include/Objective.h``;
+   it derives from ``azure2::inference::Term<ObjectiveContext>`` of
+   ``inference/include/azure2/inference/TermList.h``), appended with
+   ``Append<YourTerm>()`` at the end of the list in the ``Objective``
+   constructor. Its place there is its place in the sum and its slot in
+   ``Results::objective``; the walk lists in the constructor are left alone
+   (they state the older terms' orders and visit a new term last). The class
+   states:
+
+   - ``Add``: the value, added once to the running sum, and
+     ``StoreTotal(c, v)`` for its field of ``chiSquared.out``;
+   - ``ModelOnly``: true only for a term of the model alone (then part of
+     ``pyazr``'s ``calculate_chi2`` and its gradient; otherwise of
+     ``objective()`` only);
+   - ``AddGradient``: :math:`\partial\chi^2/\partial\theta` into the
+     ``GradAccum`` (``AddE``, ``AddGamma``, ``AddAbundance``, or
+     ``accum.direct`` with a full index for any parameter), returning
+     ``kAdded``, ``kNone`` or ``kUnavailable`` (finite differences);
+   - ``AppendRows``: its least-squares rows if it is a sum of squares, the
+     same number at every parameter vector;
+   - ``TotalLabel`` and ``WriteTotal``: its field, written only when the
+     project uses the term, so that other projects' files do not change;
+   - ``AddForSampler``, ``ExcludesForSampler``: only if the sampler should
+     not take the whole term.
+
+   The walk of the engine's objects is a gather in the engine that fills plain
+   arrays; the arithmetic on them (value, gradient, rows), when more than a
+   line, is one header of ``inference/`` with its test in ``inference/tests/``
+   (``AbundancePriors.h`` with ``AbundanceBlockOf``, ``ParkWall.h`` with
+   ``ParkLevelsOf`` are the pattern). No term is added anywhere else
+   (checks 11 and 11b).
+3. Tests, with the term non-zero and the start off its minimum:
+   ``AZURE_GRAD_CHECK=exit AZURE2 fit --use-gradient`` compares the analytic
+   gradient with finite differences and the rows' gradient with the adjoint;
+   ``Session.evaluate(x).terms`` against the field of ``chiSquared.out``
+   (``tests/pyazr/evaluation_test.py``).
+4. The field in ``reference/output_files.rst``; the term's line in the list at
+   the top of ``include/Objective.h`` and in ``docs/upgrade/objective.md``.
 
 A record kind or a key of the project format
 --------------------------------------------

@@ -62,12 +62,19 @@ if not os.environ.get("AZURE2_BIN"):
 
 REL = 1e-9  # AZUREOut_* columns: eleven significant digits
 # chiSquared.out's Total- fields that are one term of the engine's objective
-TOTAL_TERMS = {"Total-Park-Chi-Squared:": "Park J > 0", "Total-Abundance-Chi-Squared:": "abundances",
-               "Total-Screening-Chi-Squared:": "screening priors", "Total-Density-Chi-Squared:": "density priors",
-               "Total-Doppler-Chi-Squared:": "Doppler priors", "Total-Thickness-Chi-Squared:": "thickness priors",
-               "Total-Nuisance-Chi-Squared:": "nuisance priors", "Total-Model-Data-Chi-Squared:": "model data",
-               "Total-Gamma-Decay-Chi-Squared:": "gamma decay priors",
-               "Total-Prior-Covariance-Chi-Squared:": "prior covariance"}
+# The fields of chiSquared.out that hold a whole term, and the term: the engine's own table (each term states its
+# label, ObjectiveTerm::TotalLabel; objective_arrays.md section 8), checked against the fields this test knew by hand.
+KNOWN_TOTAL_TERMS = {"Total-Park-Chi-Squared:": "Park J > 0", "Total-Abundance-Chi-Squared:": "abundances",
+                     "Total-Screening-Chi-Squared:": "screening priors", "Total-Density-Chi-Squared:": "density priors",
+                     "Total-Doppler-Chi-Squared:": "Doppler priors", "Total-Thickness-Chi-Squared:": "thickness priors",
+                     "Total-Nuisance-Chi-Squared:": "nuisance priors", "Total-Model-Data-Chi-Squared:": "model data",
+                     "Total-Gamma-Decay-Chi-Squared:": "gamma decay priors",
+                     "Total-Prior-Covariance-Chi-Squared:": "prior covariance"}
+
+
+def total_terms(session, x):
+    raw = session._engine.evaluation_rwa(x)
+    return {label + ":": name for name, label in zip(raw["term_names"], raw["term_labels"]) if label}
 
 
 def copy_project(name, dst):
@@ -160,6 +167,10 @@ with tempfile.TemporaryDirectory() as tmp:
         if "Total-Shift-Chi-Squared:" in totals:
             check(f"{name}: Total-Shift-Chi-Squared = the data sets' shift priors",
                   printed(sum(d.shift_chi2 for d in ev.data), totals["Total-Shift-Chi-Squared:"]))
+        TOTAL_TERMS = total_terms(s, x)
+        missing = {k: v for k, v in KNOWN_TOTAL_TERMS.items() if TOTAL_TERMS.get(k) != v}
+        check(f"{name}: the engine's labels hold every field known by hand ({len(TOTAL_TERMS)} labels)", not missing,
+              missing)
         for label, term in TOTAL_TERMS.items():
             if label in totals:
                 digits = 15 if "Prior-Covariance" in label else 6
