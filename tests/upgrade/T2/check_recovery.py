@@ -98,9 +98,10 @@ def main():
     ap.add_argument("--engine-arg", action="append", default=[], help="extra AZURE2 option for the fit (repeatable)")
     ap.add_argument("--json", help="write the numbers to this file")
     args = ap.parse_args()
-    if not args.binary or not os.access(args.binary, os.X_OK):
+    found = shutil.which(args.binary) if args.binary else None  # which(): on Windows the path may lack its .exe
+    if not found:
         sys.exit("set AZURE2_BINARY or pass --binary path/to/AZURE2")
-    binary = os.path.abspath(args.binary)
+    binary = os.path.abspath(found)
     work = tempfile.mkdtemp(prefix="t2rec.")
     fail = 0
 

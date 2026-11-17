@@ -17,6 +17,7 @@
 #include "Unit.h"
 #include "WorkingCopy.h"
 #include "azure2/support/Environment.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 /*!
  * The channel table of the rows the given sites will compute, built before the threads that fill them start
@@ -93,6 +94,7 @@ int WorkingCopy::FillChannelRows(const std::vector<std::vector<Unit *>> &batches
       const int n = (int)part->size();
 #pragma omp parallel for schedule(dynamic, 16) shared(stop, configure)
       for (int q = 0; q < n; q++) {
+        const azure2::support::ExtendedPrecisionScope fpPrecision;
         if (configure.stopFlag || stop) continue;
         const Entry &e = sites[(*part)[q]];
         try {

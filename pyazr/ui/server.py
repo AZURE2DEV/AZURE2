@@ -773,7 +773,7 @@ def main(project, port=0, threads=1, token=None, *, host="127.0.0.1", root=None,
     url = f"http://{'[::1]' if host == '::1' else host}:{port}/?token={token}"
     url_file = app.state.server.state.ui_path("url")
     fd = os.open(url_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(url + "\n")
     print(url, flush=True)
     config = uvicorn.Config(app, host=host, port=port, log_level="info" if log_requests else "warning",

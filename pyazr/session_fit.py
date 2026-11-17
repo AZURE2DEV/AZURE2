@@ -71,15 +71,28 @@ class EngineFitResult:
     log: str = field(repr=False, default="")
 
 
-def _stop_request(stop):
+def _stop_request(stop, progress):
     """The engine's StopRequest for ``stop`` (None, a StopRequest, or anything with ``is_set()`` such as a
-    threading.Event, watched by a helper thread), and the function that ends the watching."""
+    threading.Event), the progress callable to hand to the engine, and the function that ends the watching.
+
+    The engine reads its own StopRequest only.  Anything else is looked at after every progress record, in the
+    record's thread, so that the evaluations running when it was set are the last ones; a helper thread looks too
+    (every 20 ms), for the time in which no record comes.  The helper alone let further evaluations through where
+    one takes less than its period (seen on the CI's macOS machine: two records after the request)."""
     if stop is None or isinstance(stop, StopRequest):
-        return stop, lambda: None
+        return stop, progress, lambda: None
     if not callable(getattr(stop, "is_set", None)):
         raise TypeError("stop must be a pyazr.session_fit.StopRequest or a threading.Event (has is_set()).")
     request = StopRequest()
     done = threading.Event()
+
+    def record(rec):
+        try:
+            if progress is not None:
+                progress(rec)
+        finally:
+            if stop.is_set():
+                request.set()
 
     def watch():
         while not done.is_set():
@@ -94,7 +107,7 @@ def _stop_request(stop):
     def finish():
         done.set()
         watcher.join()
-    return request, finish
+    return request, record, finish
 
 
 class SessionFit:
@@ -106,15 +119,16 @@ class SessionFit:
 
         Parameters
         ----------
-        method : a fitter of ``pyazr.kinds()["fitters"]`` (the program's switch in brackets): ``"migrad"``
-            (default), ``"migrad-gradient"`` (``--use-gradient``), ``"lm"`` (``--use-lm``), ``"gsl-lm"``
-            (``--use-gsl-lm``), ``"nlopt"`` (``--use-nlopt``, builds with NLopt only).  An unknown name is refused
-            with the list.  The program runs ``migrad-gradient`` for a project with THM data when no switch is
-            given; here the method is the one named.
-        minos : run MINOS after the fit (Up = the session's ``chiVariance``, 1 by default); MIGRAD rows only.
+        method : a fitter of ``pyazr.kinds()["fitters"]`` (the engine's table: each row gives the program's switch
+            ``option``, what the fitter yields and its ``doc``; a build without NLopt has no ``"nlopt"`` row).  The
+            default ``"migrad"`` is the row the program runs without a switch.  An unknown name is refused with the list.  The program
+            runs ``migrad-gradient`` for a project with THM data when no switch is given; here the method is the one
+            named.
+        minos : run MINOS after the fit (Up = the session's ``chiVariance``, 1 by default); for a fitter whose row
+            says ``minos`` only.
         x0 : the start fit vector (default ``parameters.x0``).
         max_calls : the call limit (``--max-calls``) of a fitter that honours one (``call_limit`` of its row in
-            ``pyazr.kinds()["fitters"]``: MIGRAD, NLopt); the others ignore it and say so in ``notices``.  None: no
+            ``pyazr.kinds()["fitters"]``); the others ignore it and say so in ``notices``.  None: no
             limit.
         progress : called with a dict per progress record, from the engine's threads with the GIL taken: ``fitter``,
             ``stage`` ("fit", then "hesse" and "minos" for the error analysis after a MIGRAD row; each stage counts its
@@ -146,9 +160,9 @@ class SessionFit:
         calls = 0 if max_calls is None else int(max_calls)
         if calls < 0:
             raise ValueError("max_calls must be a whole number >= 0 (None: no limit).")
-        request, finish = _stop_request(stop)
+        request, record, finish = _stop_request(stop, progress)
         try:
-            out = self._engine.fit_with_engine(method, bool(minos), start, calls, progress, request)
+            out = self._engine.fit_with_engine(method, bool(minos), start, calls, record, request)
             fixed = np.asarray(self._engine.params_fixed(), bool)
         except ValueError as e:  # the engine's refusal (std::invalid_argument)
             raise EngineError(str(e)) from e

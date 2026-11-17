@@ -21,6 +21,7 @@
 #include <gsl/gsl_errno.h>
 
 #include "CoulFunc.h"
+#include "azure2/support/FloatingPointPrecision.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -215,6 +216,7 @@ bool CoulombTable::Build(const BuildSpec &spec) {
   int threads = std::max(1, spec.threads);
 #pragma omp parallel for schedule(dynamic, 1) num_threads(threads)
   for (int r = 0; r < nrows; r++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
     if (spec.cancel && spec.cancel->load(std::memory_order_relaxed)) continue;
     const int l = r / nx, i = r % nx;
     const double eta = std::pow(10.0, eta_.x0 + i * eta_.dx);

@@ -58,7 +58,6 @@ CASES = [("use_brune", True, None, False), ("use_brune", False, None, True),
          ("ec_convection_current", True, None, False),
          ("ec_convection_current", False, ("use_long_wavelength", False), True),
          ("use_rmc", False, None, False), ("use_rmc", True, ("use_brune", False), True),
-         ("use_gsl_coul", False, None, False), ("use_gsl_coul", True, None, False),
          ("use_coulomb_table", True, None, False), ("use_coulomb_table", False, None, False),
          ("use_ec_table", True, None, False), ("use_ec_table", False, None, False),
          ("replace_grids", True, None, False), ("replace_grids", False, None, False)]
@@ -157,6 +156,47 @@ try:
             check(f"set_config({keys}) refused with E_CONFIG_OPTIONS_CONTRADICT, both keys named, project unchanged",
                   "E_CONFIG_OPTIONS_CONTRADICT" in text and all(w in text for w in words)
                   and p.text.encode("utf-8", "surrogateescape") == base_text, text[:300])
+    # The removed option use_gsl_coul (2026-11-16; until then two rows of CASES, key = keyword for both values): the
+    # keyword with either value, the key in a file and set_config are each refused with the reason and what to do.
+    why = "wrong by up to 5 % in the penetrability inside the outer turning point"
+    for value in (False, True):
+        try:
+            pyazr.Session(base_path, use_gsl_coul=value).close()
+            check(f"Session(use_gsl_coul={value}) refused", False)
+        except TypeError as err:
+            check(f"Session(use_gsl_coul={value}): TypeError saying to leave the keyword out, and why",
+                  "use_gsl_coul is no longer a keyword of pyazr.Session: leave it out." in str(err) and why in str(err), err)
+    try:
+        pyazr.Session(base_path, use_gsl_cool=True).close()
+        check("an unknown keyword refused", False)
+    except TypeError as err:
+        check("an unknown keyword is Python's own TypeError (no reason invented)", "unexpected keyword" in str(err), err)
+    for value in (b"0", b"1"):
+        gsl_path = os.path.join(t1, "gslkey.azr")
+        gsl_text = base_text.replace(b"</config>", b"use_gsl_coul=" + value + b"\n</config>", 1)
+        with open(gsl_path, "wb") as f:
+            f.write(gsl_text)
+        found = [(d.get("code"), d.get("message", "")) for d in pyazr.Project(gsl_text, gsl_path).validate()]
+        check(f"use_gsl_coul={value.decode()} in <config>: Project.validate gives E_CONFIG_KEY_REMOVED alone, with the reason",
+              len(found) == 1 and found[0][0] == "E_CONFIG_KEY_REMOVED" and "delete the line" in found[0][1]
+              and why in found[0][1], found)
+        try:
+            pyazr.Session(gsl_path).close()
+            check(f"a session on a project with use_gsl_coul={value.decode()} refused", False)
+        except pyazr.AZURE2Error as err:
+            check(f"a session on a project with use_gsl_coul={value.decode()}: AZURE2Error E_CONFIG_KEY_REMOVED with the reason",
+                  "E_CONFIG_KEY_REMOVED" in str(err) and why in str(err), err)
+    p = pyazr.Project.open(base_path)
+    try:
+        p.set_config(use_gsl_coul=False)
+        check("set_config(use_gsl_coul=False) refused", False)
+    except ValueError as err:
+        check("set_config(use_gsl_coul=False): ValueError with the reason, project unchanged",
+              "'use_gsl_coul' is not an entry of <config> any more" in str(err) and why in str(err)
+              and p.text.encode("utf-8", "surrogateescape") == base_text, err)
+    check("use_gsl_coul is not in pyazr.kinds()['options'] nor in Session's signature",
+          "use_gsl_coul" not in pyazr.kinds()["options"]
+          and "use_gsl_coul" not in __import__("inspect").signature(pyazr.Session.__init__).parameters)
     brune1 = variant("brune1", use_brune=True)
     try:
         pyazr.Session(brune1, use_rmc=True).close()
@@ -215,8 +255,8 @@ try:
 
     # 5. the one table
     rows = pyazr.kinds()["options"]
-    check("eleven options of the calculation, each its own key", sorted(k for k, o in rows.items() if o["key"]) ==
-          sorted(o["key"] for o in rows.values() if o["key"]) and len(option_keys) == 11)
+    check("ten options of the calculation (eleven until use_gsl_coul was removed), each its own key", sorted(k for k, o in rows.items() if o["key"]) ==
+          sorted(o["key"] for o in rows.values() if o["key"]) and len(option_keys) == 10)
     check("each other option (not project state) has its reason",
           all(o["reason"] for o in rows.values() if not o["key"]) and
           {k for k, o in rows.items() if not o["key"]} == {"extrapolations", "coulomb_table", "cwd"})

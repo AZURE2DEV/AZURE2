@@ -132,3 +132,17 @@ for particle exits, a few per cent off, and changed results even with every Q = 
   multiplied by √J_λ again. Brune and standard runs are unaffected.
 - builds before 2026-10-08 (expires: 2027-02-01): a few builds wrote the tag as a plain `parametrization` row, which
   shifts any positional reader by one line; strip it or prefix it with `#`.
+- builds before 2026-11-17 (expires: 2027-02-10) computed `Session.wigner_widths` (the Γ_W of θ² = Γ/Γ_W in
+  `dimensionless_widths` and `widths_check.py`) from a probe of the transformation, not as 2 P_l(E_r) γ²_W. For a
+  Brune level with fixed non-zero particle widths Γ_W was smaller by 1/(1 + Σ_c γ_c² dS_c/dE) of the fixed
+  channels, so θ² of its free channels was larger by that factor (up to 25 % on the test project T2) and the level
+  norm J = θ²/θ²_formal was too large by it. In the formal basis (`use_brune=False`) Γ_W could be wrong by orders
+  of magnitude. Park sessions and Brune levels whose particle widths are all free are unaffected. Recompute θ² and
+  J with a current build before comparing.
+- builds before 2026-11-17 (expires: 2027-02-10): `dimensionless_widths` left `wigner_width` and `theta2` of a
+  fixed open particle channel `None` (`widths_check.py` then took Γ_W from `pyazr.physics.single_particle_width`
+  with the exact Coulomb functions at the row's energy), and in the formal basis it took `level_energy`, `is_open`
+  and a photon's `e_gamma` (hence its W.u.) at the formal pole energy, not at the physical level energy. A fixed
+  channel's `value` (and its θ², a photon's W.u.) was the value as the session was made, not at the vector asked
+  for (`widths_check.py --params`: the project's value, not the fit's), in every basis; it is right at the
+  session's own start vector. Recompute formal-basis tables and θ² of fixed channels with a current build.

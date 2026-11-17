@@ -229,7 +229,6 @@ Useful flags (`AZURE2 --help` for the full list):
 | `--no-brune`          | Use the standard Lane–Thomas parametrization instead. |
 | `--use-park`          | Fit Park's amplitudes (the observed widths); same cross sections as Brune's. |
 | `--use-lm`            | Levenberg–Marquardt on the analytic Jacobian (falls back to MIGRAD). |
-| `--gsl-coul`          | Use GSL Coulomb functions (faster, less accurate). |
 | `--no-coulomb-table`  | Compute every Coulomb function directly instead of taking charged channels from the table. |
 | `--build-coulomb-table[=FILE]` | Build the Coulomb table (about 5 min, 88 MB) and exit. |
 | `--no-grid-replacement` | Keep the experimental-effect sub-point grids where the file's levels put them, instead of laying them out again at every evaluation. |

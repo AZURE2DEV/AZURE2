@@ -4,7 +4,7 @@
 These describe the external region: everything outside the channel radius, where the interaction is taken to be
 Coulomb only.  The penetrability P_l and shift S_l enter the level matrix, the hard-sphere phase the elastic
 amplitude, F_l and G_l the external-capture integrals.  ``Session.channel_functions(pair, E_cm, l=, radius=)``
-returns them as the session computes them -- the Coulomb table, GSL's routine (``use_gsl_coul=True``) or the
+returns them as the session computes them -- the Coulomb table, the exact routine outside it or the
 Numerov solution through a nuclear potential (the hybrid model) -- with c.m. energies in MeV and the phase in rad.
 
 The script prints a table at a few energies and, with ``--plot FILE``, draws F, G, P and the phase (matplotlib).

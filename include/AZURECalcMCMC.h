@@ -6,7 +6,7 @@
 #include "LevelInputs.h"
 #include "LevelState.h"
 #include "ObservedLevelTable.h"
-#include "ParameterKind.h"
+#include "InferenceTypes.h"
 #include "PosteriorSupport.h"
 #include "StatePool.h"
 #include "WorkingData.h"
@@ -22,7 +22,7 @@
 class Config;
 class WorkingCopy;
 class CompoundSystem;
-class PriorCovariance;
+#include "InferenceTypes.h"
 
 /// A function class to perform MCMC Bayesian calculation of parameters
 
@@ -250,7 +250,7 @@ class AZURECalcMCMC {
   void ReturnPooledData(WorkingData *obj) const;
 
  private:
-  struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMC.cpp)
+  struct Run;  // the state of one RunMCMCSampling call (AZURECalcMCMCRun.h)
   /// The log-likelihood of a filled compound and working copy at the fit's vector p (both returned to the pools).
   double LogLikelihoodOfFilled(WalkerLevels *walker, WorkingData *working, const vector_r &p) const;
   /// The support of the posterior in the parameters (docs/upgrade/objective.md section 6): every varying component of

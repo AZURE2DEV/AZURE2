@@ -638,7 +638,7 @@ def _importable(name):
 def write_checkpoint(path, record):
     """Write ``record`` as JSON to ``path`` atomically (a reader never sees half a file)."""
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(record, f)
     os.replace(tmp, path)
 
@@ -784,7 +784,7 @@ class JobTable:
         os.makedirs(directory, exist_ok=True)
         for name in sorted(os.listdir(directory)):
             if name.endswith(".json"):
-                with open(os.path.join(directory, name)) as f:
+                with open(os.path.join(directory, name), encoding="utf-8") as f:
                     record = json.load(f)
                 if record.get("state") not in FINAL:
                     record["state"] = "interrupted"

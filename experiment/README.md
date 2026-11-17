@@ -172,7 +172,7 @@ Quantity SFactor() {
 To add (the recipes of `CLAUDE.md`): a field is one `FieldDef` row in its kind's function in `Schema.cpp` (and an
 `Allows`/`Requires` in the quantity functions that use it), a quantity one function in `Quantities.cpp` and its entry in
 `Quantities()`, a unit one `Unit` row `{token, dimension, factor}` in `Units.cpp`; then
-`AZURE2 --schema > tests/schema/schema_v3.json` (bump `Schema::kVersion` when the table changes meaning) and
+`AZURE2 --schema-out=tests/schema/schema_v3.json` (bump `Schema::kVersion` when the table changes meaning) and
 `python3 tools/gen_schema_docs.py`. The tests: `experiment_schema` (the note's examples as fixtures in `tests/data/`
 validate with no diagnostic; the JSON equals the committed copy), `experiment_diagnostics` (one case per code),
 `experiment_quantities` (every row's units and required fields), `experiment_parsers` (each value type).

@@ -10,6 +10,7 @@ digraph libraries {
   n_azure2_stopping [label=<<b>azure2_stopping</b><br/><font point-size="12">stopping and<br/>straggling (SRIM-2013)</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2_experiment [label=<<b>azure2_experiment</b><br/><font point-size="12">the format-3 table:<br/>quantities, units,<br/>kernels, specs, frames</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2_experiment_reader [label=<<b>azure2_experiment_reader</b><br/><font point-size="12">reads a format-3<br/>project: document to<br/>validated specs</font>>, shape=box, style="filled", fillcolor="white"];
+  n_azure2_inference [label=<<b>azure2_inference</b><br/><font point-size="12">the parameter vector<br/>as plain data, the<br/>priors, the sums of<br/>the term list</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2_convert_specs [label=<<b>azure2_convert_specs</b><br/><font point-size="12">old lines as set-up<br/>specs (the converter&#x27;s<br/>adaptor)</font>>, shape=box, style="filled", fillcolor="white"];
   n_azure2_convert [label=<<b>azure2_convert</b><br/><font point-size="12">the converter of old<br/>projects to format 3</font>>, shape=box, style="filled", fillcolor="white"];
   n_numcmc [label=<<b>numcmc</b><br/><font point-size="12">the affine-invariant<br/>ensemble sampler</font>>, shape=box, style="filled", fillcolor="white"];
@@ -40,6 +41,7 @@ digraph libraries {
   n_AZURE2Core -> n_azure2_io [style=solid, arrowhead=normal];
   n_AZURE2Core -> n_azure2_experiment [style=solid, arrowhead=normal];
   n_AZURE2Core -> n_azure2_experiment_reader [style=solid, arrowhead=normal];
+  n_AZURE2Core -> n_azure2_inference [style=solid, arrowhead=normal];
   n_AZURE2Core -> n_numcmc [style=solid, arrowhead=normal];
   n_AZUREAPI -> n_AZURE2Core [style=solid, arrowhead=normal];
   n_AZURE2 -> n_AZUREAPI [style=solid, arrowhead=normal];

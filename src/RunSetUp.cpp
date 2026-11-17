@@ -18,7 +18,7 @@
 #include "ECAmplitudeCache.h"
 #include "GSLException.h"
 #include "Objective.h"
-#include "PriorCovariance.h"
+#include "PriorCovarianceFile.h"
 #include "Profile.h"
 #include "WorkingCopy.h"
 
@@ -117,7 +117,7 @@ int SetUpRun(ProgramRun &run) {
       names.push_back(mp.GetName(i));
       fixedFlags.push_back(mp.Parameter(i).IsFixed());
     }
-    if (PriorCovariance::Load(run.configure, names, fixedFlags, AZUREParams::BasisForConfig(run.configure), run.priorCov) < 0)
+    if (LoadPriorCovariance(run.configure, names, fixedFlags, AZUREParams::BasisForConfig(run.configure), run.priorCov) < 0)
       return -1;
   }
   run.data->SetPriorCovariance(run.priorCov);

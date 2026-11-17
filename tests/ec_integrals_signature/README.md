@@ -3,7 +3,7 @@
 `output/intEC.dat` holds the external-capture amplitudes at the sub-point
 energies of one integration grid. Energy straggling, a target thickness, the
 adaptive-grid settings move those energies without changing how many there
-are; a channel radius, a final-state energy, `--gsl-coul` or the hybrid
+are; a channel radius, a final-state energy or the hybrid
 potential change the integrand at the same energies. The count check that
 guarded reuse could see none of this, so a stale file was read back silently
 and gave a wrong chi-squared that looked like physics.
@@ -31,7 +31,8 @@ to keep it short), and checks that
    straggling kernel changes, the sub-point energies do not;
 5. a file with no signature (written before signatures existed) is
    recomputed, with a warning;
-6. `--gsl-coul` invalidates a file computed with the default routine.
+6. the retired option `--gsl-coul` (until 2026-11-16 the other Coulomb routine, which invalidated the file) is
+   refused with its reason, leaves the saved file untouched, and the next run reuses the file.
 
 `run_tests.sh` runs it after the chi-squared comparisons; by hand:
 
