@@ -39,6 +39,7 @@ import time
 from typing import List, Optional
 
 from . import AZURE2_ROOT  # noqa: F401
+from .backend import PYAZR3
 from .spec import FitSpec, Finding, write_findings_md
 
 BUILD_STATES = ["PIN_CHECK", "AUDIT", "REPRODUCE", "SPEC_CHECK", "SCALE_ANCHOR", "SEED_CHANNELS", "PAIR_COMPLETENESS",
@@ -403,10 +404,15 @@ class Driver:
         if fw.get("Ex_MeV"):
             return float(fw["Ex_MeV"][1])
         try:
-            from rmfit.azr3 import SegmentTable as SegmentSet
+            from .backend import SegmentSet
             from .model import rows_in_segment
-            from .windows import pair_separation, cm_conversion
-            text = self.model
+            if PYAZR3:
+                from .windows import pair_separation, cm_conversion
+                text = self.model                  # pyazr 3: both read the project file
+            else:
+                from .model import cm_conversion
+                from .windows import pair_separation
+                text = open(self.model).read()
             segs = SegmentSet.from_file(self.model)
             base = os.path.dirname(self.model)
             top = None
@@ -610,7 +616,7 @@ class Driver:
         prior_sigma as the systematic (percent); excluded -> segments off."""
         if self.campaign is not None:
             return "next", "campaign exists: roles were applied before init"
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         mdl = AzrModel.from_file(self.model)
         changed, rows = 0, []
         for ds in self.spec.data_sets:
@@ -664,7 +670,7 @@ class Driver:
         from .engine import SingleSession, bake
         from .model import single_variant
         from .local import BoundsPolicy
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         frac = float((self.spec.get("model") or {}).get("seed_frac", 0.01))
         eps = float((self.spec.get("bounds") or {}).get("sign_eps", BoundsPolicy().sign_eps))
         flags = self.spec.flags()
@@ -738,7 +744,7 @@ class Driver:
         """First fits item 3 as a check: excited states (ENSDF) of the model's residual nuclei whose partition opens below the
         top of the fit window and has no pair.  Reported and queued (default 'continue'); the pair builder is the
         supervisor's (reaction-specific radii, channel spins, summed segments)."""
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         top = self._ex_top()
         if top is None:
             return "next", "fit-window top unknown: skipped"
@@ -750,8 +756,12 @@ class Driver:
             if bool(getattr(c, "is_photon", False)):
                 continue
             try:
-                z1, m1, z2, m2 = c.Z1, c.M1, c.Z2, c.M2
-                sep, e2 = c.sep_energy, c.heavy_excitation
+                if PYAZR3:
+                    z1, m1, z2, m2 = c.Z1, c.M1, c.Z2, c.M2
+                    sep, e2 = c.sep_energy, c.heavy_excitation
+                else:
+                    z1, m1, z2, m2 = c._get("z1", int), c._get("m1", float), c._get("z2", int), c._get("m2", float)
+                    sep, e2 = c._get("sepE", float), c._get("e2", float)
             except Exception:  # noqa: BLE001
                 continue
             part = (z1, int(round(m1)), z2, int(round(m2)))
@@ -760,7 +770,7 @@ class Driver:
             d["keys"].append(key)
             rows.append(f"pair {key}: {_nuc(z1, m1)} + {_nuc(z2, m2)}(E* {e2:.4f}) threshold Ex {sep + e2:.4f}")
         try:
-            from pyazr import fetch_levels
+            from pyazr import fetch_levels                      # pyazr 2 and 3 alike
         except Exception as err:  # noqa: BLE001
             self._finding_rows("PAIR_COMPLETENESS", rows + [f"ENSDF client unavailable ({err})"])
             return "next", "pyazr.nds unavailable: pairs listed only"
@@ -849,14 +859,14 @@ class Driver:
         if not cn:
             json.dump(dict(candidates=[], note="no compound_nucleus in the spec: empty bank"), open(path, "w"), indent=1)
             return "next", "no compound_nucleus in the spec: empty candidates.json"
-        from rmfit.azr3 import Model as AzrModel
+        from .backend import AzrModel
         top = self._ex_top()
         fw = (self.spec.get("model") or {}).get("fit_window") or {}
         lo = float(fw["Ex_MeV"][0]) if fw.get("Ex_MeV") else 0.0
         mdl = AzrModel.from_file(self.model)
         have = [(lv.jpi, float(lv.energy)) for lv in mdl.active_levels]
         try:
-            from pyazr import fetch_levels
+            from pyazr import fetch_levels                      # pyazr 2 and 3 alike
             levels = fetch_levels(cn.lower())
         except Exception as err:  # noqa: BLE001
             json.dump(dict(candidates=[], note=f"ENSDF fetch failed: {err}"), open(path, "w"), indent=1)
@@ -1424,9 +1434,29 @@ def _nuc(z, m):
 
 
 def _vary_shifts_with_error(mdl) -> int:
-    """Fit the energy shift of every active data set whose shift is fixed with an uncertainty > 0
-    (:meth:`rmfit.azr3.Model.vary_shifts_with_error`).  Returns the count."""
-    return mdl.vary_shifts_with_error()
+    """Set varyShift on every active ``<segmentsData>`` line whose shift uncertainty is > 0 (the fields after dataNorm:
+    varyNorm, normError, shift, shiftError, varyShift; dataNorm sits two fields later for phase-shift lines).  Returns the count."""
+    if PYAZR3:
+        return mdl.vary_shifts_with_error()        # rmfit.azr3.Model: the shift of every data set fixed with an error
+    out, inside, n = [], False, 0
+    for line in mdl._suffix.splitlines():
+        s = line.strip()
+        if s == "<segmentsData>":
+            inside = True
+        elif s == "</segmentsData>":
+            inside = False
+        elif inside and s and not s.startswith("#"):
+            t = line.split()
+            try:
+                i = 8 + (2 if int(t[7]) % 10 == 2 else 0)
+                if t[0] == "1" and float(t[i + 4]) > 0 and t[i + 5] == "0":
+                    t[i + 5] = "1"; n += 1
+                    line = " ".join(t)
+            except (ValueError, IndexError):
+                pass
+        out.append(line)
+    mdl._suffix = "\n".join(out)
+    return n
 
 
 def write_job_script(directory, spec: FitSpec, cfg: Optional[dict], name="run_crc_drive", overwrite=False, max_minutes=600) -> str:

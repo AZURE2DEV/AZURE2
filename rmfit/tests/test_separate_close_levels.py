@@ -6,12 +6,12 @@ sanity's runaway limit) and the transform returns eV.  Run: python3 rmfit/tests/
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_separate_close_levels.py)")
+    sys.exit(77)
 from types import SimpleNamespace as NS
 import numpy as np
-import rmfit.enginepin as _enginepin
-# these checks are the rule for an engine that merges same-J^pi levels within 1 keV on read (before dev e239a12);
-# the engine of this tree keeps them apart (enginepin.keeps_close_levels), where a close pair is only a warning
-_enginepin.keeps_close_levels = lambda *a, **k: False
 from rmfit.local import separate_close_levels, sanity, BoundsPolicy
 
 

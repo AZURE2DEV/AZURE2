@@ -14,6 +14,10 @@ import os, re, shutil, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_data_dirs.py)")
+    sys.exit(77)
 import numpy as np
 
 failures = []
@@ -28,7 +32,7 @@ def check(name, ok, detail=""):
 
 def make_fixture(tmp):
     from rmfit import AZURE2_ROOT
-    fix = next(d for d in (AZURE2_ROOT, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))) if os.path.isdir(os.path.join(d, "tests", "13N")))
+    fix = next(d for d in (AZURE2_ROOT, os.path.expanduser("~/AZURE2")) if os.path.isdir(os.path.join(d, "tests", "13N")))
     src = os.path.join(fix, "tests", "13N")
     orig = os.path.join(tmp, "orig"); moved = os.path.join(tmp, "moved")
     for d in (orig, moved):
@@ -51,8 +55,14 @@ def part_a(orig, moved, tmp):
     check("original model: data only", data_dirs(os.path.join(orig, "13N.azr")) == ["data"], data_dirs(os.path.join(orig, "13N.azr")))
     dd = data_dirs(os.path.join(moved, "13N.azr"))
     check("moved model: data, other, sub", dd == ["data", "other", "sub"], dd)
-    # (pyazr 2 read the directories from the tokens of a segment line, where a "/" inside a shift expression had
-    # to be told apart; the names now come from the records' file fields, so that case cannot arise)
+    # a "/" inside an expression or a non-existent dir is not a data directory
+    p = os.path.join(moved, "expr.azr")
+    t = open(os.path.join(moved, "13N.azr"), encoding="latin-1").read()
+    m = re.search(r"<segmentsData>\n(.*?)\n", t)
+    line = m.group(1)
+    t = t.replace(line, line + '  shiftfn "a0/x+b/c"  1 0 0.02 1  nothere/x.dat', 1)
+    open(p, "w", encoding="latin-1").write(t)
+    check("expressions and missing dirs ignored", data_dirs(p) == ["data", "other", "sub"], data_dirs(p))
     w = os.path.join(tmp, "w1")
     got = link_data_dirs(os.path.join(moved, "13N.azr"), w)
     check("links made", got == ["data", "other", "sub"] and all(os.path.islink(os.path.join(w, s)) for s in got), got)

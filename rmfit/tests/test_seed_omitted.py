@@ -10,9 +10,13 @@ never.  No engine needed.  Run:  python3 rmfit/tests/test_seed_omitted.py
 import os, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_seed_omitted.py)")
+    sys.exit(77)
 from rmfit import AZURE2_ROOT                                   # noqa: E402  (puts pyazr on the path)
 from rmfit.structure import add_level_variant, LevelCandidate   # noqa: E402
-from rmfit.azr3 import Model as AzrModel  # noqa: E402
+from pyazr import AzrModel                                      # noqa: E402
 
 failures = []
 def check(name, ok, detail=""):

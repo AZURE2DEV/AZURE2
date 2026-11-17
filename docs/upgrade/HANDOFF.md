@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (owner's session, dev ports) — `feature/upgrade-5-dev-all` takes the two-backend rmfit
+
+`feature/upgrade-5-dev-rmfit-fold` (`ecb02978`) is merged into `feature/upgrade-5-dev-all` on the owner's word; its
+entry follows. The only conflict was this file. `feature/upgrade` `7b804180` holds the same three pieces (the eleven
+ports, the fold, `1be25e91`) through its own join, which is the one to build on; this branch is the owner's record.
+
+## 2026-11-17 (agentic roadmap session) — rmfit on two backends (the port folded into the one rmfit)
+
+**Branch** `feature/upgrade-5-dev-rmfit-fold`, cut from `feature/upgrade-5-dev-rmfit` (`49adbcf9`); for the owner
+to merge into the port branch, which this session did not write on. The PI's decisions (2026-11-16/17): "one rmfit,
+two backends"; uncertainty quantification on pyazr 3 through `rmfit/sampling.py`; `mixture.py` pyazr 2 only; the
+two-backend rmfit goes to this branch and to `github.com/rdeboer1/rmfit` (`cc41f0e`), not to `dev` (feature
+freeze: `dev`'s rmfit takes fixes only, PR #10 and #11).
+
+**What changed.** `rmfit/` is replaced by the public tree `cc41f0e` (77 files modified, 57 added, none removed): the
+port's pyazr 3 code (`azr3.py` and `sampling.py` unchanged but for one anonymised comment; its worker and model
+layer as `_worker_p3.py` / `_model_p3.py`) beside `dev`'s pyazr 2 code, behind `rmfit/backend.py` (`PYAZR3`, read
+once from the pyazr on the path). Tests: a script the port did not change is shared; where it did, `test_<name>.py`
+(pyazr 2) and `test_p3_<name>.py` (pyazr 3), each exiting 77 on the other backend; `rmfit/tests/CMakeLists.txt`
+matches `p3_` names to the fast list. Design note: `docs/upgrade/rmfit_two_backends.md`. Nothing outside
+`rmfit/` and `docs/upgrade/` was touched.
+
+**Run here** (CRC, GCC 11.5; SGE 1766005, 8 slots, at `49adbcf9` + this tree): build exit 0; `ctest -L rmfit -LE
+slow`: 43 of 43 (37 passed, 6 pyazr 2 versions skipped); `ctest -L slow -R rmfit_ -j4`: 86 of 86 (43 passed, 43
+pyazr 2 versions skipped), the driver end to end (`rmfit_p3_drive_13n`) 1936 s. On pyazr 2 (shared `dev` build
+`b60aed09`, outside this branch): the 13N driver end to end gives the same verified candidates and check lines as
+the single-backend rmfit of `dev` `527f63de`. **Not run:** the full gate (`run_check.sh`); CI.
+
+**Open.** The port's open items stand (which `rmfit-campaign` skill stays, the size ratchet, no CI job for the
+rmfit tests, `W_PARAMETER_SETTING_UNKNOWN` per shard). New: the pyazr 2 halves are code this branch's engine never
+runs (the design note's last section); a worker started with `AZURE2_ROOT` at an upgrade checkout imports that
+checkout's `rmfit/` first, so another rmfit is tested against an upgrade build only through a view without it.
+
+**Later the same day.** CI on `1471fd14` failed as on the base `49adbcf9` (the same tests on every platform; macOS does
+not compile `api/src/pybind_api.cpp` against pybind11 under Python 3.14). Nine of the Linux failures were rmfit's own:
+five f-strings in `enginepin.py` and `review.py` reused their quote inside a replacement field, which only Python
+3.12 accepts, so `import rmfit.campaign` failed on CI's Python 3.10. `rmfit/` is now the public tree `1997494`:
+those lines rewritten (same text out), a fast test `rmfit_py_compat` that flags such fields, and rmfit's
+new dataset-off fix for a normgroup whose leader is switched off (a pyazr 2 change; its test skips on pyazr 3). Still
+open on Windows: `rmfit_enginepin` (the engine module is a `.pyd`), `rmfit_patterns_signs_memory` (no `resource`
+module), `rmfit_site_shell` / `rmfit_site_slurm` (POSIX shell stubs), `rmfit_azure2_root`.
+
 ## 2026-11-17 (owner's session, dev ports) — `feature/upgrade-5-dev-all`: the eleven dev ports on one branch
 
 **Branch** `feature/upgrade-5-dev-all`, cut from `feature/upgrade` `b8ee2219`, for review as one piece. It is the

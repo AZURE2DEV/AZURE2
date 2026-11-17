@@ -192,7 +192,7 @@ class FitSpec:
     # -- checks against a model / campaign ---------------------------------------------------------------
     def check(self, azr_path: str, campaign_cfg: Optional[dict] = None) -> List[Finding]:
         """Disagreements between the spec and the .azr (segments, pairs, flags) / campaign.json.  Nothing is changed."""
-        from rmfit.azr3 import SegmentTable as SegmentSet
+        from .backend import SegmentSet
         out = self.validate()
         segs = SegmentSet.from_file(azr_path)
         # data sets
@@ -242,7 +242,7 @@ class FitSpec:
         pr = (self.data.get("model") or {}).get("pairs_required")
         if pr:
             try:
-                from rmfit.azr3 import Model as AzrModel
+                from .backend import AzrModel
                 keys = set(pair_lines(AzrModel.from_file(azr_path)))
                 for p in pr:
                     k = p.get("key") if isinstance(p, dict) else (p if isinstance(p, int) else None)
@@ -256,7 +256,7 @@ class FitSpec:
         rad = (self.data.get("model") or {}).get("radius_fm") or {}
         if rad:
             try:
-                from rmfit.azr3 import Model as AzrModel
+                from .backend import AzrModel
                 pl = pair_lines(AzrModel.from_file(azr_path))
                 for key, want in rad.items():
                     c = pl.get(int(key))

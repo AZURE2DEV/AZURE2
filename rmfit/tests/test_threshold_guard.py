@@ -3,6 +3,10 @@
 plus particle_thresholds on the 13N fixture."""
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_threshold_guard.py)")
+    sys.exit(77)
 from rmfit.local import keep_off_thresholds, particle_thresholds, BoundsPolicy
 ok = True
 def check(name, cond, detail=""):
@@ -16,7 +20,7 @@ def main():
     check("margin 0 disables the guard", keep_off_thresholds(9.973, 10.573, 10.2730, T, 0.0) == (9.973, 10.573))
     check("several thresholds: the nearest on each side bounds the window",
           keep_off_thresholds(9.4, 10.3, 10.1, (9.4481, 10.0432, 10.1925, 10.273), m) == (10.0462, 10.1895))
-    thr = particle_thresholds(os.path.join(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), "tests", "13N", "13N.azr"))
+    thr = particle_thresholds(os.path.join(os.path.expanduser("~"), "AZURE2", "tests", "13N", "13N.azr"))
     check("13N fixture: one particle threshold, the proton one, photons excluded", len(thr) == 1 and abs(thr[0] - 1.94351) < 1e-4, thr)
     check("BoundsPolicy default margin is 3 keV", abs(BoundsPolicy().threshold_margin_mev - 0.003) < 1e-12)
     print("ALL PASSED" if ok else "FAILED"); return 0 if ok else 1

@@ -3,6 +3,10 @@
 just those near the n1 threshold").  Pure checks of BoundsPolicy.cap_for, then default_bounds on the 13N fixture."""
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_cap_windows.py)")
+    sys.exit(77)
 import numpy as np
 from rmfit.local import BoundsPolicy, default_bounds
 ok = True
@@ -18,7 +22,7 @@ def main():
     check("background pole -> bg cap", p.cap_for(13.0) == 3.0)
     check("default (no windows) unchanged", BoundsPolicy().cap_for(10.2) == 1.0 and BoundsPolicy().cap_for(20.0) == 3.0)
     from rmfit.engine import SingleSession
-    azr = os.path.join(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")), "tests", "13N", "13N.azr")
+    azr = os.path.join(os.path.expanduser("~"), "AZURE2", "tests", "13N", "13N.azr")
     with SingleSession(azr, cwd=os.path.dirname(azr), flags=dict(use_long_wavelength=False, ignore_externals=True, use_brune=True), name="capwin") as ev:
         x = np.array(ev.x0, float); gW = ev.wigner_amplitudes()
         E = sorted({round(v, 4) for v in ev.level_energy.values() if v < 10})

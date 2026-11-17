@@ -4,6 +4,10 @@
 # one fails, 77 when it cannot run here (no AZURE2 binary).  AZURE2_ROOT names this source tree, whose pyazr/ holds
 # the engine module the build made, so the tests exercise this build and not a pyazr elsewhere on the machine.
 #
+# rmfit runs on pyazr 2 and pyazr 3 (rmfit/backend.py).  A script that is the same on both is test_<name>.py; where the
+# two differ, test_<name>.py is the pyazr 2 version and test_p3_<name>.py the pyazr 3 one, and each exits 77 (skipped)
+# on the other backend, so this directory's ctest list holds both and the build's pyazr picks.
+#
 # The scripts that start engine sessions on the 13N project (campaign rounds, polishes, level scans, the sampler)
 # take minutes to tens of minutes each: label slow.  The scripts listed in RMFIT_FAST take seconds and run with
 # `ctest -LE slow`.
@@ -19,17 +23,18 @@ set(RMFIT_FAST
     flip_floor keys ledger_signs new_level_cap nudge_zero_widths pair_family patterns_signs_memory point_weights
     sanity_same_jpi scoring_segments separate_close_levels sign_distance site_mail site_shell site_slurm
     split_evidence template_channels total_width_floor uq_rerun width_bound width_bound_pins width_floor window_delta
-    window_patterns threshold_guard azure2_root spec_decisions seed_omitted audit_subagent)
+    window_patterns threshold_guard azure2_root spec_decisions seed_omitted audit_subagent py_compat)
 
 file(GLOB RMFIT_TEST_SCRIPTS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.py)
 foreach(script ${RMFIT_TEST_SCRIPTS})
     get_filename_component(stem ${script} NAME_WE)
     string(REGEX REPLACE "^test_" "" name ${stem})
+    string(REGEX REPLACE "^p3_" "" base ${name})
     add_test(NAME rmfit_${name} COMMAND ${Python3_EXECUTABLE} ${script})
     set_tests_properties(rmfit_${name} PROPERTIES
                          ENVIRONMENT "AZURE2_ROOT=${CMAKE_SOURCE_DIR};OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>"
                          SKIP_RETURN_CODE 77)
-    list(FIND RMFIT_FAST ${name} fast)
+    list(FIND RMFIT_FAST ${base} fast)
     if(fast EQUAL -1)
         set_tests_properties(rmfit_${name} PROPERTIES LABELS "rmfit;slow" TIMEOUT 3600)
     else()

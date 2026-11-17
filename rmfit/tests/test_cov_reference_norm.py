@@ -26,13 +26,14 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from _fixtures import fixture  # noqa: E402  (fixtures/ or fixtures_p3/ by backend)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 import numpy as np
 from rmfit.engine import SingleSession, Sharded, ObjectiveSpec
 from rmfit.keys import take
 from rmfit.covariance import read_covariance, load_reference, save_reference
 
-FIX = os.path.join(HERE, "fixtures", "relvector_p12c")
+FIX = fixture("relvector_p12c")
 FLAGS = dict(use_brune=True)
 failures = []
 

@@ -10,3 +10,4 @@ tests/**/ledger.sqlite
 tests/**/candidates/
 .installed-*
 bench/work/
+tests/_queue_*/*.out

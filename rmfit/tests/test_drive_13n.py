@@ -7,9 +7,13 @@ import json, os, shutil, sys, tempfile, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_drive_13n.py)")
+    sys.exit(77)
 from rmfit import AZURE2_ROOT
 from rmfit import drive as dv
-from rmfit.azr3 import Model as AzrModel
+from pyazr import AzrModel
 
 FAILS = []
 
@@ -26,15 +30,8 @@ def main():
     src = os.path.join(AZURE2_ROOT, "tests", "13N")
     shutil.copytree(os.path.join(src, "data"), os.path.join(tmp, "data"))
     os.makedirs(os.path.join(tmp, "output"))
-    # the "archived" chiSquared.out REPRODUCE compares with: the fixture as it is, written by a session of this build
-    # (the tree ships no stored output)
-    import pyazr
-    ref = AzrModel.from_file(os.path.join(src, "13N.azr"))
-    ref.set_output_dir(os.path.join(tmp, "output"))
-    ref_azr = ref.write(os.path.join(tmp, "13N_reference.azr"))
-    with pyazr.Session(ref_azr, cwd=tmp) as s_ref:
-        s_ref.write_outputs()
-    os.remove(ref_azr)
+    if os.path.exists(os.path.join(src, "output", "chiSquared.out")):
+        shutil.copy2(os.path.join(src, "output", "chiSquared.out"), os.path.join(tmp, "output", "chiSquared.out"))
     mdl = AzrModel.from_file(os.path.join(src, "13N.azr"))
     mdl.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
     # 2026-11-10: one background channel free at exactly zero -- SEED_CHANNELS must give it a placeholder and seed it (a zero

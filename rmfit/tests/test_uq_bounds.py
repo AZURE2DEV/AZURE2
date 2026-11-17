@@ -4,6 +4,10 @@ back-mapping, and _box from a BoundsPolicy.  Login node, seconds:  python3 rmfit
 import os, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_uq_bounds.py)")
+    sys.exit(77)
 import numpy as np
 from rmfit.uq import BoundedTarget, _box, _chains_from_checkpoints
 from rmfit.local import BoundsPolicy
@@ -90,7 +94,7 @@ def main():
     check("edge mode: the old C / dd^T metric is huge in u", np.sqrt(Cu_old[1, 1]) > 1e3, f"{np.sqrt(Cu_old[1, 1]):.3g}")
     check("edge mode: the Hessian metric's bounded sd <= 1 in u", np.sqrt(Cu_new[1, 1]) <= 1.0 + 1e-9, f"{np.sqrt(Cu_new[1, 1]):.3g}")
     check("edge mode: the unbounded coordinate's sd in u follows the ridge, not the Laplace", np.sqrt(Cu_new[0, 0]) < 10, f"{np.sqrt(Cu_new[0, 0]):.3g} (Laplace {np.sqrt(C_r[0, 0]):.3g})")
-    from rmfit.sampling import nuts, split_rhat
+    from pyazr.sampling import nuts, split_rhat
     xg = np.linspace(-0.8, 0.8, 20001); wg = np.exp(5 * xg)
     m_exact = float((xg * wg).sum() / wg.sum())
     res = []
@@ -108,7 +112,7 @@ def main():
     check("edge mode: NUTS with the Hessian metric mixes (R-hat < 1.05)", rh < 1.05, f"{rh:.3f}")
     check("edge mode: NUTS with the Hessian metric gives the exact mean of x2 within 0.03", abs(m2 - m_exact) < 0.03, f"{m2:.4f} vs {m_exact:.4f}")
     # NUTS on a truncated normal N(0, 1) on [-0.5, 2]: mean and sd against the closed form
-    from rmfit.sampling import nuts
+    from pyazr.sampling import nuts
     from scipy.stats import truncnorm
     T1 = Gauss([0.0], [[1.0]])
     B1 = BoundedTarget(T1, [-0.5], [2.0])

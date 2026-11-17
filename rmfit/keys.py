@@ -1,7 +1,7 @@
 """Structured identities for free parameters, stable across model variants.
 
-pyazr hands back the fit vector ``Session.parameters.x0``, whose order is the project
-file's, and a ``Parameters`` table that names each entry by the engine's own
+pyazr hands back a free vector ``params_rwa`` whose order is the ``.azr``
+file's, and a ``Parameter`` table that names each entry by the engine's own
 numbering: J-group index, level ordinal within the group, engine pair number,
 segment key.  Two of those change between variants of one model (a shard
 holds a subset of segments, so its segment keys are renumbered; a level added
@@ -35,9 +35,11 @@ from typing import Tuple, Dict, List, Optional, Sequence
 
 import numpy as np
 
+from .backend import PYAZR3
+
 
 def jpi_string(J, parity) -> str:
-    """``"5/2+"`` style, the same text ``pyazr.Parameter.jpi`` uses."""
+    """``"5/2+"`` style, the same text :class:`pyazr.azrfile.AzrLevel.jpi` uses."""
     J = float(J)
     j = int(J) if J.is_integer() else f"{int(round(2 * J))}/2"
     return f"{j}{'+' if float(parity) > 0 else '-'}"
@@ -112,8 +114,11 @@ def jgroup_nucleus_tags(m) -> Dict[int, str]:
            for p in m.pairs}
     if len(set(nuc.values())) <= 1:
         return {}
-    from pyazr.system import Nucleus
-    name = lambda za: Nucleus(*za).label
+    try:
+        from .backend import Nucleus                     # pyazr.nuclei (pyazr 2) / pyazr.system (pyazr 3)
+        name = lambda za: Nucleus(*za).label
+    except ImportError:                                  # pyazr 2 without nuclei.py
+        name = lambda za: f"Z{za[0]}A{za[1]}"
     tags: Dict[int, str] = {}
     for p in m.parameters:
         if p.kind == "width" and p.jgroup is not None and p.pair is not None and int(p.pair) in nuc:
@@ -129,7 +134,7 @@ def level_label(J, parity, level, jgroup=None, tags: Optional[Dict[int, str]] = 
 
 
 def build_keys(m, seg_map: Optional[Dict[int, int]] = None) -> List[ParamKey]:
-    """Keys of the fit vector ``m.parameters.x0`` in order.
+    """Keys of ``m.params_rwa`` in order.
 
     ``seg_map`` translates this model's segment keys to the base model's (a
     shard's renumbered lines back to the lines they came from); identity if
@@ -137,7 +142,7 @@ def build_keys(m, seg_map: Optional[Dict[int, int]] = None) -> List[ParamKey]:
     """
     pairkey = {p.number: p.key for p in m.pairs}
     tags = jgroup_nucleus_tags(m)
-    n = len(m.parameters.x0)
+    n = len(m.parameters.x0) if PYAZR3 else len(m.params_rwa)
     keys: List[Optional[ParamKey]] = [None] * n
     for p in m.parameters:
         if p.fixed or p.free_index is None:

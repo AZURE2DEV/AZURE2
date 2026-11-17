@@ -17,12 +17,16 @@ import tempfile
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-sys.path.insert(1, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
+sys.path.insert(1, os.path.expanduser("~/AZURE2"))
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
+if _PYAZR3:
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_levelscan_grid_13n.py)")
+    sys.exit(77)
 
 from rmfit.levelscan import (_patterns, grid_coverage, partition_fractions,
                              pattern_distance, template_variant)
 
-AZURE2_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+AZURE2_ROOT = os.path.expanduser("~/AZURE2")
 BASE = os.path.join(AZURE2_ROOT, "tests", "13N", "13N.azr")
 fails = []
 

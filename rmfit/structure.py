@@ -29,7 +29,7 @@ from .keys import ParamKey, take, jpi_string
 from .local import BoundsPolicy, default_bounds, free_mask, polish, sanity, gn_step
 from .model import single_variant
 from .windows import window_variant
-from .azr3 import Model as AzrModel
+from .backend import AzrModel, PYAZR3
 
 # The half-integer-J list (e.g. a 17O compound nucleus).  Until 2026-11-04 it was the DEFAULT J^pi list of levelscan,
 # structure add and scan_jpi_on_window; on an integer-J compound nucleus (e.g. 14N) that silently built unphysical dummy levels
@@ -157,7 +157,10 @@ def omitted_open_channels(existing, named, energy: float, seed_ev: float = 1.0,
     does not survive bake's write/re-read; two keys were once lost).  Each comes
     back free with a tiny seed ``min(seed_ev, 1% of Gamma_W)`` (theta^2 <= 0.01): enough to
     leave the zero stationary point, not a guess at the strength."""
-    from pyazr.physics import penetrability, wigner_limit
+    if PYAZR3:
+        from pyazr.physics import penetrability, wigner_limit
+    else:
+        from pyazr.transform import penetrability, HBARC, UCONV
     have = {(int(c["pair"]), int(c["L"]), round(float(c["S"]), 3)) for c in named}
     out, seen = [], set()
     for lv in existing:
@@ -168,16 +171,28 @@ def omitted_open_channels(existing, named, energy: float, seed_ev: float = 1.0,
             seen.add(key)
             if bool(getattr(c, "is_photon", False)):
                 continue
-            m1, m2 = c.M1, c.M2
-            e_rel = float(energy) - (c.sep_energy + c.excitation)
-            if e_rel <= 0.0 or m1 <= 0.0 or m2 <= 0.0:
-                continue
-            a = c.channel_radius
-            try:
-                P = float(penetrability(key[1], c.Z1, c.Z2, m1, m2, a, e_rel))
-                gw_ev = 2.0 * P * float(wigner_limit(m1, m2, a)) * 1e6
-            except Exception:
-                continue
+            if PYAZR3:
+                m1, m2 = c.M1, c.M2
+                e_rel = float(energy) - (c.sep_energy + c.excitation)
+                if e_rel <= 0.0 or m1 <= 0.0 or m2 <= 0.0:
+                    continue
+                a = c.channel_radius
+                try:
+                    P = float(penetrability(key[1], c.Z1, c.Z2, m1, m2, a, e_rel))
+                    gw_ev = 2.0 * P * float(wigner_limit(m1, m2, a)) * 1e6
+                except Exception:
+                    continue
+            else:
+                m1, m2 = c._get("m1", float), c._get("m2", float)
+                e_rel = float(energy) - (c._get("sepE", float) + c._get("e2", float))
+                if e_rel <= 0.0 or m1 <= 0.0 or m2 <= 0.0:
+                    continue
+                mu, a = m1 * m2 / (m1 + m2), c._get("chRad", float)
+                try:
+                    P = penetrability(key[1], c._get("z1", int), c._get("z2", int), mu, a, e_rel)
+                except Exception:
+                    continue
+                gw_ev = 2.0 * P * 3.0 * HBARC ** 2 / (2.0 * mu * UCONV * a * a) * 1e6
             if not (gw_ev >= margin * dead_channel_ev):
                 continue
             out.append(dict(pair=key[0], L=key[1], S=float(c.S), gamma=min(seed_ev, 0.01 * gw_ev),
@@ -255,7 +270,7 @@ def add_level_variant(base_azr: str, path: str, cand: LevelCandidate, jpi: str,
         tmpl = mdl.levels[0].channels[0]
         chans = []
         for pair in (1, 2):
-            c = mdl.pair_template(pair)
+            c = mdl.pair_template(pair) if PYAZR3 else mdl._pair_template(pair)
             for L, S in lowest_L(J, par, c.J1, c.parity1, c.J2, c.parity2)[:1]:
                 g = next((float(s.get("gamma", s.get("gamma_eV", s.get("gamma_ev", 0.0)))) for s in cand.channels
                           if int(s["pair"]) == pair and int(s["L"]) == L), 1000.0)
@@ -299,7 +314,25 @@ def dataset_off_variant(base_azr: str, path: str, file_substr: str, output_dir=N
     if output_dir is not None:
         mdl.set_output_dir(output_dir)
     mdl.write(path)
-    return dict(path=path, file=file_substr, segments=n)
+    # a switched-off normgroup leader hands its group to the next active member: keep the group's norm, vary flag
+    # and norm error (rmfit.covariance.carry_group_norms); the caller carries the fitted norm over (``moved``)
+    from .covariance import carry_group_norms
+    moved = carry_group_norms(base_azr, path)
+    return dict(path=path, file=file_substr, segments=n, moved=moved)
+
+
+def carry_moved_norms(x_src, src_keys, x_dst, dst_keys, moved) -> np.ndarray:
+    """``x_dst`` (a copy) with each moved group's fitted norm, ``ParamKey("norm", seg=old)`` of the source vector,
+    placed at ``ParamKey("norm", seg=new)`` (``moved``: dataset_off_variant's ``{old leader: new leader}``).
+    take() alone would start the group from the new leader's own .azr norm field."""
+    out = np.array(x_dst, float, copy=True)
+    pos1 = {k: i for i, k in enumerate(src_keys)}
+    pos2 = {k: j for j, k in enumerate(dst_keys)}
+    for old, new in (moved or {}).items():
+        i, j = pos1.get(ParamKey("norm", seg=int(old))), pos2.get(ParamKey("norm", seg=int(new)))
+        if i is not None and j is not None:
+            out[j] = x_src[i]
+    return out
 
 
 # -- the pinned J^pi scan on a window ------------------------------------------------
