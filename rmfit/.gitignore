@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+attic/
+tests/_mixture_work/
+tests/_queue_*/*.log
+tests/_queue_*/*.o[0-9]*
+tests/**/output/
+tests/**/variants/
+tests/**/ledger.sqlite
+tests/**/candidates/
+.installed-*
+bench/work/
+tests/_queue_*/*.out
