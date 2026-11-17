@@ -81,7 +81,17 @@ of the old format; `tools/check_skills.py` does not look at `rmfit/.claude/skill
 (the wheel does not package `rmfit/`).
 
 **Run here** (CRC, GCC 11.5): build; the consistency test; every script of `rmfit/tests` (a queue job, two at a time, and the
-driver's end-to-end script alone). The full gate: see the end of this entry. **Not run:** CI (the rmfit tests have never run on Windows or macOS).
+driver's end-to-end script alone). The full gate is the last paragraph of this entry. **Not run:** CI (the rmfit tests have never run on Windows or macOS).
+
+**The full gate** (`run_check.sh`, SGE job 1763556, 8 slots, at 104605f9; the same script on the base e8b1fe94,
+job 1763262): consistency, cmake, build and docs exit 0 on both. `tests/run_tests.sh`: 170 passed, 2 failed on both,
+the same two (`capture_ay_coupling`, "a warning for ancai06 inside its range"). `ctest -LE slow -j4`: the base 329 of
+331 (`pyazr_park_dsde`, `pyazr_units_scales`); this branch 365 of 368: the same two, the 37 fast `rmfit_*` tests all
+passing, and `pyazr_evaluation` on its one timing check ("evaluate takes the time of one objective", 104.9 ms against
+58.8 ms) while the rmfit tests shared the node. Run alone in the same build it passed three times of three, and this
+branch changes no file under `pyazr/`, `src/`, `include/` or `tests/pyazr/`: the check is sensitive to load, which
+the 37 added tests raise under `-j4`. **For the director:** either that check wants a wider margin or the rmfit
+tests a `RUN_SERIAL`/resource lock; neither is done here.
 
 ## 2026-11-16 (director, 20:30) — merged: the objective's diagonal priors on one list (slices 1-3)
 
