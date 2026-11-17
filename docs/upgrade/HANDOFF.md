@@ -2,6 +2,53 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-16 (owner's session, dev port) — the capture cascade: `secondary_gamma` on a capture reaction
+
+**Branch** `feature/upgrade-5-dev-capture-cascade`, cut from `feature/upgrade` `84de49da`. dev's change of
+2026-11-15: a data set with `secondary_gamma` whose exit is a capture pair is the secondary gamma ray of the capture
+final state B after an unobserved primary capture photon, A(a, gamma_1)B, B -> C + gamma_2. Before, the fields were
+ignored for a photon exit and the primary photon's distribution was returned without a message.
+
+**The physics.** A photon summed over its direction and both helicities leaves no interference between multipoles
+(L, electric or magnetic) and orients B as a spin-0 particle of orbital angular momentum L would: Eq. (22) of Brune and
+deBoer, PRC 102, 024628 (2020), with l' = L, I_b = 0, s' = s2' = I_B = J_f (the extension its conclusions name).
+Internal and external capture amplitudes of one multipole interfere. Direct feeding of B only; an angle-integrated
+cascade data set is the capture cross section into B.
+
+**Changed.**
+- `src/PathwayTable.cpp` (`AddInterferences`): `z_upos` of two pathways into a photon exit with the same multipole
+  and radiation type, `phys::upos_interference(l1, L, J1, l2, J2, s, J_f, J_f, 0, J_f, k)` (no new function of
+  `physics/`: the cascade is Eq. (22) at those arguments). A row is kept when `z` or `z_upos` is non-zero, as before,
+  so a capture exit can gain rows whose `z` is 0; they add nothing to a capture distribution.
+- `src/GenMatrixFunc.cpp`: `SecondaryRk` (the R_k of the secondary transition, taken out of the particle branch, which
+  now calls it) and the cascade branch of `LegendreCoefficientsOf` (internal and external elements).
+- `src/AMatrixFunc.cpp` (`PointTBar`): the cascade's cotangents; the order-products shortcut is not taken for it.
+- `src/UposChecks.cpp`, `include/UposChecks.h` (new: the two UPOS set-up checks, moved out of `src/WorkingCopy.cpp`,
+  which was at its recorded size): `UPOSAllowed` lets a photon exit through (refused with the RMC formalism and for
+  an analysing power); `UPOSLabNote` is silent for it (a lab angle is converted as for any capture gamma ray).
+- `src/AMatrixFunc.cpp` was at its recorded size too: the particle branch of `PointTBar` now takes R_L from
+  `SecondaryRk` in place of its own copy of the formula.
+- `tests/upgrade/pathway_table_test.cpp`: its statement "every interference has its capture-A_y term" holds for the
+  rows with a coefficient Z1Z2; a row kept for `z_upos` alone has none.
+
+**Tests.** `tests/capture_cascade` (dev's models, converted with 0 notes; dev's `expected/` and `verify.py`): seven
+models against magnetic-substate sums for the secondary and the primary distribution (8e-11), the integrated
+identity, and the gradient against finite differences (9e-9). This engine's values equal dev's on every model
+(1e-10). `tests/upgrade/predictions.txt` regenerated.
+
+**Open.** Feeding of B through higher states (a multi-step cascade) is not modelled (the PI, 2026-11-15: direct
+feeding only for now). No analysing power of the secondary gamma ray. On dev a cascade data set with a line window is
+refused; the line window is on another port branch (`feature/upgrade-5-dev-ec-unbound`), so the refusal of the
+combination has to be added where the two meet.
+
+**Run here** (CRC, GCC 11.5): build; `tests/capture_cascade`, `tests/secondary_gamma`. The full gate: see the end of
+this entry. **Not run:** CI.
+
+**The full gate** (queue job, 8 slots, on the commit before this paragraph): consistency, configure, build and the
+docs clean; ctest 323 of 325, the base's two failing (`pyazr_park_dsde`, `pyazr_units_scales`); the regression suites
+171 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its range"),
+`tests/capture_cascade` passing.
+
 ## 2026-11-16 (owner's session, dev port) — capture into a broad unbound final state: `line_window`
 
 **Branch** `feature/upgrade-5-dev-ec-unbound`, on the entry below (stage 1). dev's stages 2 to 4 (2026-11-15): the

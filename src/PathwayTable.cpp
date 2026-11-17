@@ -104,6 +104,16 @@ void AddInterferences(const phys::System &system, int entrancePair, int maxL, En
               a.two_sp_channel == two_sp && b.two_sp_channel == two_sp2)
             zUpos = phys::upos_interference(a.l, a.lp, a.two_J, b.l, b.two_J, two_s, two_sp, two_sp2,
                                             exitPartition.two_j[0], exitPartition.two_j[1], lOrder);
+          // A capture cascade: the secondary gamma ray of the capture FINAL state after an unobserved primary
+          // capture photon.  A photon summed over its direction and both helicities leaves no interference between
+          // multipoles (L, electric / magnetic), and the orientation it leaves in the final state is that left by a
+          // spin-0 particle of orbital angular momentum L: Eq. (22) with l' = L, I_b = 0 and s' = s2' = I_B = J_f
+          // (the conclusions of Brune and deBoer name this extension).  External-capture pathways are capture
+          // amplitudes of a given multipole like any other and interfere coherently.
+          if (exitPartition.kind == phys::PartitionKind::Photon && a.lp == b.lp && a.w == b.w) {
+            const int two_jf = exitPartition.two_j[1];
+            zUpos = phys::upos_interference(a.l, a.lp, a.two_J, b.l, b.two_J, two_s, two_jf, two_jf, 0, two_jf, lOrder);
+          }
           if (!(std::fabs(z) > 1e-10 || std::fabs(zUpos) > 1e-10)) continue;
           FlatInterference f;
           f.k = k;

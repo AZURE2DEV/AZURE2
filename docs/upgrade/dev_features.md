@@ -207,6 +207,12 @@ rmfit, capture into an unbound final state and fitted secondary γ transitions a
   owner: which copy of the `rmfit-campaign` skill stays (`FOR_THE_OWNER.md` section 8), `tools/check_skills.py`
   for a second package's skills, a CI job.
 
+- **The capture cascade** (dev 2026-11-15: UPOS on a capture pair, the secondary gamma ray of the capture final state
+  after an unobserved primary capture photon) *is written* on `feature/upgrade-5-dev-capture-cascade` (2026-11-16, the
+  owner's session): the pathway table's `z_upos` for a photon exit (pathways of one multipole; `upos_interference`
+  with l' = L, I_b = 0, s' = I_B = J_f), a branch of `GenMatrixFunc::LegendreCoefficientsOf` and of
+  `AMatrixFunc::PointTBar`, the set-up's allowance. `tests/capture_cascade` is dev's test.
+
 ## 8. Three unfinished attempts (not in this branch)
 
 Ports of sections 2, 3 and 4 were started by the upgrade's agents on 2026-11-15 and stopped the same morning by the

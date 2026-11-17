@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "WorkingCopy.h"
+#include "UposChecks.h"
 #include "azure2/support/Environment.h"
 #include "ModelPass.h"
 #include "ECAmplitudeCache.h"
@@ -109,18 +110,6 @@ static bool AnalyzingPowerAllowed(const CompoundSystem *compound, const Segment 
  * (the Coulomb total diverges) of distinguishable particles.  The R-matrix-for-capture formalism defines T
  * differently, so it is refused there.
  */
-/*!
- * A UPOS (secondary-gamma) segment given as a lab differential is converted with the kinematics of particle b, the
- * light ejectile of the exit pair, which is right for a gamma measured in coincidence with it and not otherwise
- * (segments.rst, UPOS).  Say so instead of converting silently (audit 2026-10-25, item 31).
- */
-static void UPOSLabNote(const Segment &segment, int key, bool isTest, const Config &configure) {
-  if (!segment.IsUPOS() || !segment.IsDifferential() || segment.IsCMDifferential() || segment.IsPhase()) return;
-  configure.outStream << "WARNING: " << (isTest ? "test segment #" : "segment #") << key
-                      << " (UPOS, lab differential): the lab angle is converted with the kinematics of particle b, "
-                      << "the light ejectile of the exit pair (not the gamma's); give c.m. angles if that is not meant."
-                      << std::endl;
-}
 
 /*!
  * Total capture is the exit key -1 together with the total-capture data type (3 on a data line, 4 on a test
@@ -147,22 +136,6 @@ static bool TotalCaptureCodeOk(const Segment &segment, int key, bool isTest, con
   return true;
 }
 
-/*!
- * The UPOS coefficient (CompoundSystem, Brune and deBoer 2020 Eq. 22) is written for a secondary gamma ray from the HEAVY
- * partner of the exit pair: its final-state spin is J2.  With the light particle excited (column 32 of the
- * <levels> line, 2026-11-05) the gamma ray would come from the light particle, which that formula does not
- * describe -- refuse instead of computing the heavy partner's correlation silently.
- */
-static bool UPOSAllowed(const CompoundSystem *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
-  if (!segment.IsUPOS() || !compound->IsPairKey(segment.GetExitKey())) return true;
-  const PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(segment.GetExitKey()));
-  if (exitPair->GetLightExE() == 0.) return true;
-  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << " (UPOS): exit pair "
-                      << segment.GetExitKey() << " has an excited light particle (column 32, " << exitPair->GetLightExE()
-                      << " MeV); the secondary-gamma correlation is implemented for the decay of the heavy partner only."
-                      << std::endl;
-  return false;
-}
 
 static bool TotalAllowed(const CompoundSystem *compound, Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
@@ -315,7 +288,7 @@ int WorkingCopy::Fill(const Config &configure, const CompoundSystem *compound, c
           if (!UPOSAllowed(compound, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!ThmVertexAllowsPair(compound, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
-          UPOSLabNote(NewSegment, numTotalSegments, false, configure);
+          UPOSLabNote(compound, NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -460,7 +433,7 @@ int WorkingCopy::MakePoints(const Config &configure, const CompoundSystem *compo
           if (!UPOSAllowed(compound, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!ThmVertexAllowsPair(compound, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
-          UPOSLabNote(NewSegment, numTotalSegments, true, configure);
+          UPOSLabNote(compound, NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
