@@ -12,6 +12,7 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "JGroup.h"
+#include "LineWindow.h"
 #include "ModelPass.h"
 #include "Profile.h"
 #include "Results.h"
@@ -85,6 +86,8 @@ void Forward(const CompoundSystem *compound, const LevelState &state, WorkingCop
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
     const Segment *seg = data.Data().GetSegment(s);
     if (!seg || (seg->IsTHM() && !hoes)) continue;
+    // Every analytic derivative starts here; over a line shape it would be wrong (LineWindow.h): refused, not taken.
+    if (seg->GetLineWindow() > 0.0) throw LineWindowDerivativeRefused(LineWindowDerivativeMessage(seg->GetSegmentKey()));
     pass.segments.push_back(seg);
     for (int p = 0; p < seg->NumPoints(); p++)
       if (Unit *pt = seg->GetPoint(data, p + 1)) pass.points.push_back({seg, s, p, pt});

@@ -27,6 +27,9 @@
 #       through a parameter file gives the cross sections of the project with the level there, within 1e-6.
 #   (h) a capture cascade (`secondary_gamma` on the capture exit) with a line window is refused: the line-shape
 #       integration has no secondary-gamma form (dev's rule; the two features meet on the combined branch only).
+#   (i) a fit of a windowed data set with a fitter that reads the analytic gradient or the residual rows' Jacobian
+#       (its row of Fitters(): lm, gsl-lm, migrad-gradient) is refused at set-up with no output: the adjoint does not
+#       run over the line shape; plain MIGRAD (numerical gradient) fits it and writes its outputs.
 #
 #   ./tests/ec_unbound_broad/check.sh path/to/AZURE2
 
@@ -38,6 +41,7 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/edit_guard.sh"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ec_unbound_broad.XXXXXX")"
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT
@@ -166,6 +170,59 @@ if grep -q "ERROR: .*capture cascade.*not together with a line window" "$WORK/i_
 else
   bad "(h) secondary_gamma with a line window was not refused"
   tail -5 "$WORK/i_cascade/run.log"
+fi
+
+echo "(i) fitters that read the analytic derivatives are refused; plain MIGRAD fits"
+# the windowed project with one data point; the final level's energy fixed (its widths stay free), so that MIGRAD's
+# steps do not move the line centre and rebuild the line's capture integrals (seconds instead of minutes)
+mkdir -p "$WORK/j_fit"
+printf '0.704561  90  1e-6  1e-7\n' > "$WORK/j_fit/lw.dat"
+edited "$HERE/models/a_w1.azr" "$WORK/j_fit/base.azr" awk '$1 == "<data>" {
+  print
+  print "dataset lw"
+  print "    reaction       12C(p,g)13N[2.3655]"
+  print "    quantity       dsigma_domega"
+  print "    unit           b/sr"
+  print "    line_window    39 keV"
+  print "    file           lw.dat"
+  print "    columns        E_lab[MeV] theta_lab[deg] value error"
+  print "    norm           1 fixed"
+  next
+} { print }' || bad "(i) the data set was not added"
+edited "$WORK/j_fit/base.azr" "$WORK/j_fit/t.azr" awk '$1 == "0.5" && $2 == "1" && $3 == "2.3655" && $4 == "0" { $4 = "1" }
+  { print }' || bad "(i) the final level's energy was not fixed"
+# fit_run NAME [SWITCH]: `fit` of $WORK/j_fit/t.azr in $WORK/NAME
+fit_run() {
+  local name="$1" switch="${2:-}"
+  mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
+  cp "$WORK/j_fit/t.azr" "$WORK/j_fit/lw.dat" "$WORK/$name/"
+  (cd "$WORK/$name" && $(guard_command 900) "$AZURE2_BIN" fit $switch --max-calls=40 t.azr < /dev/null > run.log 2>&1)
+}
+help_text="$("$AZURE2_BIN" --help 2>&1)"
+for fitter in "lm --use-lm" "gsl-lm --use-gsl-lm" "migrad-gradient --use-gradient"; do
+  name="${fitter%% *}" switch="${fitter#* }"
+  if ! grep -q -- "$switch" <<< "$help_text"; then
+    echo "  skip  (i) $switch: not in this build"
+    continue
+  fi
+  fit_run "fit_$name" "$switch"
+  status=$?
+  if [ $status -ne 0 ] && grep -q "ERROR: segment #1 .*line window.*the fitter $name ($switch) is not supported" \
+    "$WORK/fit_$name/run.log" && [ ! -s "$WORK/fit_$name/output/param.sav" ]; then
+    ok "(i) $switch is refused, nothing written"
+  else
+    bad "(i) $switch was not refused (exit $status)"
+    grep -a "ERROR" "$WORK/fit_$name/run.log" | sed -n '1,2p' | cut -c1-200
+  fi
+done
+fit_run fit_migrad ""
+status=$?
+if [ $status -eq 0 ] && [ -s "$WORK/fit_migrad/output/param.sav" ] && [ -s "$WORK/fit_migrad/output/chiSquared.out" ] &&
+  ! grep -q "ERROR" "$WORK/fit_migrad/run.log"; then
+  ok "(i) plain MIGRAD fits the windowed data set"
+else
+  bad "(i) plain MIGRAD did not fit (exit $status)"
+  tail -5 "$WORK/fit_migrad/run.log"
 fi
 
 if [ $failures -eq 0 ]; then

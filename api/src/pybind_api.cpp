@@ -36,6 +36,7 @@
 #include "AZUREAPI.h"
 #include "CompoundSystem.h"
 #include "InferenceTypes.h"
+#include "LineWindow.h"
 #include "CommandLineValues.h"
 #include "Config.h"
 #include "GSLException.h"
@@ -645,6 +646,8 @@ void BindErrors(py::module_ &m) {
     } catch (const ParameterVectorError &e) {
       PyErr_SetString(ErrorClass("ParameterVectorError").ptr(), e.what());
     } catch (const AZURE2Error &e) {
+      PyErr_SetString(ErrorClass("AZURE2Error").ptr(), e.what());
+    } catch (const azure2::LineWindowDerivativeRefused &e) {  // an analytic derivative over a line shape (LineWindow.h)
       PyErr_SetString(ErrorClass("AZURE2Error").ptr(), e.what());
     }
   });

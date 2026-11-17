@@ -267,10 +267,19 @@ std::shared_ptr<const LineNodeSet> LineNodesOf(const Site &site, const CompoundS
 std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable, const CompoundSystem *compound,
                               const Config &configure) {
   if (configure.paramMask & Config::USE_RMC_FORMALISM) return "the RMC formalism is not supported";
-  // The fitter of --use-gradient (or of a THM project), as the fitters' bit USE_ANALYTIC_GRADIENT was before the
-  // choice became a row's name (docs/upgrade/fit.md section 5).
-  if (std::string(FitterOfConfig(configure).name) == "migrad-gradient")
-    return "--use-gradient is not supported (its gradient does not run over the line shape); fit without it";
+  // A fitter that reads the analytic gradient or the residual rows' Jacobian (its row of Fitters()): the adjoint
+  // takes the T-matrix at the nominal final state, not over the line shape, so its derivative would be wrong.
+  const FitterRow &fitter = FitterOfConfig(configure);
+  if (fitter.gradient || fitter.residualRows) {
+    std::string allowed;
+    for (const FitterRow &row : Fitters())
+      if (!row.gradient && !row.residualRows)
+        allowed += (allowed.empty() ? "" : ", ") + std::string(row.name) +
+                   (*row.option ? " (" + std::string(row.option) + ")" : " (no switch)");
+    return "the fitter " + std::string(fitter.name) + " (" + fitter.option + ") is not supported: it reads the " +
+           (fitter.gradient ? "analytic gradient" : "analytic Jacobian of the residual rows") +
+           ", which does not run over the line shape; fit with " + allowed;
+  }
   if (otherObservable)
     return "only a capture cross section (angle-integrated or differential) can be integrated over the line shape";
   LineFinal lf;
@@ -290,6 +299,13 @@ std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable
              "Brune parametrization, or switch external capture on for the pair";
   }
   return why;
+}
+
+std::string LineWindowDerivativeMessage(int segmentKey) {
+  return "line_window: segment #" + std::to_string(segmentKey) + " integrates over a final state's line shape, and the analytic derivatives "
+         "(gradient, Jacobian of the residual rows, model sensitivities) do not run over it; values and finite "
+         "differences of them are available, fit with a fitter that reads neither (MIGRAD with its numerical "
+         "gradient)";
 }
 
 std::string LineWindowProblem(const Site &site, const CompoundSystem *compound, const Config &configure) {
