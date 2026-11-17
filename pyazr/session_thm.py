@@ -161,8 +161,9 @@ class SessionTHM:
                       NaN for ``vertex=onshell``, where it is S(E) + iP(E)),
                       ``M2`` (<|M_l|^2> over the window) and ``M2_qf``
                       (|M_l|^2 at p_s = 0) on the grid.
-        ``model``     ``"pw"``, or ``"dw"`` for an experiment with
-                      ``vertexModel=dw``: then the vertex is the surface term of
+        ``model``     ``"pw"``; ``"ff"`` for ``vertexModel=ff`` (``M2`` and
+                      ``M2_qf`` include each level's volume term); or ``"dw"``
+                      for an experiment with ``vertexModel=dw``: then the vertex is the surface term of
                       the prior-form DWBA (docs, "Distorted-wave entrance
                       vertex"), ``M2`` is its average over the nodes the engine
                       uses (the reachable part of the ``ps`` window at each E, or

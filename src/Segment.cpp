@@ -22,6 +22,7 @@
 #include "ThmDistortion.h"
 #include "ThmAngular.h"
 #include "ThmDwVertex.h"
+#include "ThmFormFactor.h"
 
 /*!
  * The observable flags and the model-side options of a data set or an extrapolation (ReactionSpec).  A THM segment
@@ -770,6 +771,7 @@ std::shared_ptr<TermSettings> Segment::MakeOwnSettings() const {
   t->thmWindow = thmWindow_.get();
   t->thmDistortion = thmDistortion_.get();
   t->thmDw = thmDwVertex_.get();
+  t->thmFf = thmFormFactor_.get();
   t->thmAngle = thmAngle_.get();
   t->thmCoherent = thmCoherent_.get();
   return t;
@@ -933,6 +935,11 @@ void Segment::SetThmDistortion(WorkingCopy &data, std::shared_ptr<const ThmDisto
 
 void Segment::SetThmDwVertex(WorkingCopy &data, std::shared_ptr<const ThmDwVertex> v) {
   thmDwVertex_ = v;
+  RefreshOwnSettings(data);
+}
+
+void Segment::SetThmFormFactor(WorkingCopy &data, std::shared_ptr<const ThmFormFactorTable> f) {
+  thmFormFactor_ = f;
   RefreshOwnSettings(data);
 }
 

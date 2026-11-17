@@ -80,7 +80,8 @@ print("(c) every key reads what the table offers")
 SAMPLES = {"spectatorEnergy": "0.1", "beam": "18O", "target": "d", "spectator": "n", "Ebeam": "54",
            "ps": "hulthen:0-40", "psNodes": "8", "distortion": "coulomb", "opticalAA": "plane", "opticalSF": "plane",
            "spectatorAngle": "qf", "distortionRef": "0.5", "boundState": "whittaker", "theta": "all",
-           "spectatorAngles": "0-10", "spectatorAngleNodes": "4", "cbackground": "1-:2"}
+           "spectatorAngles": "0-10", "spectatorAngleNodes": "4", "cbackground": "1-:2",
+           "ffWell": "1.2,0.6", "ffNodes": "1/2+:1"}
 for kind, setter in (("<thm>", lambda q, k, v: q.set_thm(**{k: v})),
                      ("experiment", lambda q, k, v: q.set_thm_experiment(experiment, **{k: v}))):
     for key, f in thm[kind]["fields"].items():

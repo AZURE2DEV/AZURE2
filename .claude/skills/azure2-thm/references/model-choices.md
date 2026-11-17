@@ -123,6 +123,15 @@ everything below except `theta`, `background` and `cbackground`.
   ×2.7 (dw) over 3.64–5.64 fm.
 - `session.thm_vertex` returns `model`, `M2`, `M2_qf` and `M2_pw`. Start-up takes 4–6 s.
 
+**`vertexModel=ff`** (needs `vertex=perlevel` and fixed level energies)
+- The full form factor of each level, W = ⟨φ_λ|V|j_l⟩ (La Cognata et al. ApJ 708 Eqs. 20–22, the
+  groups' conversion): M_l plus the volume term of a Woods–Saxon level function with its node count.
+- Keys: `ffWell=<r0>,<a0>` (1.25, 0.65 fm), `ffNodes=<J><±>[,k<k>][,l<l>]:<n>` (default: the
+  Wildermuth rule for a nucleon on a core), `ffVolume=off` (the pw limit, a check).
+- Vary the node count and the well as model choices; the start-up report lists n_r, V0 and
+  R = 1 + Δ/M_l per level. `pyazr.physics.thm_full_form_factor` plots R against ε.
+- Docs: `thm_implementation.rst`, "Full form factor".
+
 **Optical potentials** `opticalAA=` / `opticalSF=`
 - Global sets: `ancai06`, `daehnick80` (d), `kd03` (n, p), `bg71` (t, ³He), `liang09`
   (³He), `mcfadden66`, `avrigeanu94` (⁴He). Append `:extrapolate` outside the stated
