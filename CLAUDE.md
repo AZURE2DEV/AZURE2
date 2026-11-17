@@ -241,24 +241,45 @@ section (check 34).
    (`tests/pyazr/project_test.py`, `azr_layout_test.py`).
 4. Docs: `reference/data_formats.rst` (records: `reference/format3.rst`, generated).
 
-**A term of the objective** (a prior, a penalty, a constraint).
-1. One `ObjectiveTerm` subclass in `src/Objective.cpp`, appended to the term list in the `Objective` constructor
-   (`docs/upgrade/objective.md` §4; `ObjectiveTerm` is `azure2::inference::Term<ObjectiveContext>`, whose defaults
-   say how the sampler takes a term); its gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in
-   `AppendModelRows` if the Levenberg-Marquardt path needs them. A Gaussian prior on one parameter is not a new
-   formula: `GaussianPriorChi2` / `GaussianPriorGradient` / `GaussianPriorCurvature`
-   (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients,
-   the rows, the sampler and the writer read.
-   The term's walk of the engine's objects is a gather in the engine that fills plain arrays; its arithmetic (value,
-   gradient, rows) is one header of `inference/` with its test in `inference/tests/` (values by hand, the gradient and
-   the rows against central differences), which the value, the gradient and the rows all call: `AbundancePriors.h`
-   with `AbundanceBlockOf`, `ParkWall.h` with `ParkLevelsOf` are the pattern [check 8b: `inference/` uses only its
-   own headers and the standard library]. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
-   [check 11: no term is added outside `src/Objective.cpp`].
-2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
-   the same χ² (`tests/pyazr/objective_test.py`).
-3. Its total goes into `Results::objective` (the evaluation's buffer) and from there to `chiSquared.out`; docs
-   `output_files.rst`.
+**A term of the objective** (a prior, a penalty, a constraint; `docs/upgrade/objective_arrays.md` section 8). The
+whole term is one class in `src/Objective.cpp` and one line in the `Objective` constructor; no walk names a term.
+1. A Gaussian prior on one parameter is not a new term: `GaussianPriorChi2` / `GaussianPriorGradient` /
+   `GaussianPriorCurvature` (`inference/include/azure2/inference/GaussianPrior.h`) and a line in its gather in
+   `src/DiagonalPriors.cpp` (`include/DiagonalPriors.h`), which the term, the gradients, the rows, the sampler and
+   the writer read. Anything else is step 2.
+2. One class deriving from `ObjectiveTerm` (`include/Objective.h`) in `src/Objective.cpp`, appended with
+   `Append<YourTerm>()` at the end of the value's list in the `Objective` constructor (its place there is its slot
+   and its place in the sum; leave the walk lists of the constructor alone: they visit a new term last). Its members:
+   - `Name()`; `Add(c, chi2)`: `chi2 += v` once, with `StoreTotal(c, v)` for its line of `chiSquared.out`.
+   - `ModelOnly()` true only for a term of the model alone (levels, abundances, records): it is then part of pyazr's
+     `calculate_chi2` and its gradient; otherwise of `objective()` only (a term on the norms is not model-only).
+   - `AddGradient(c, pmap, shiftDeriv, accum)`: d chi^2/d theta into the `GradAccum`: `accum.AddE`, `AddGamma`,
+     `AddAbundance`, or `accum.direct.push_back({full index, value})` for any parameter (`pmap.NormIndex(s)` and the
+     like); return `TermGradient::kAdded`, `kNone` when it adds nothing, `kUnavailable` to make the caller take finite
+     differences. The program's gradient (`AZURECalcGradient.cpp`), pyazr's `chi2_and_grad` (model-only terms) and
+     its objective gradient (the others, `AZUREAPIGradient.cpp`) all call it.
+   - `AppendRows(c, rows)` if it is a sum of squares: `rows.Append(r, &accum or nullptr, &direct or nullptr)` per
+     row, the same number of rows at every parameter vector (a row of 0 where the term is inactive); LM, the GSL
+     trust region, the Jacobian-path gradient, G2 and pyazr's `objective_rows` read them.
+   - `TotalLabel()` (`"Total-<Name>-Chi-Squared"`) and `WriteTotal(data, config, results, out)`:
+     `if (<the project uses the term>) WriteStoredTotal(results, out);` -- conditional, so that the file of a project
+     without the term is unchanged byte for byte; the field lands after the existing ones.
+   - `AddForSampler` / `ExcludesForSampler` only if the sampler should not take the whole term (defaults: it does).
+   Its constants live in the class (not in a header other files include). Its walk of the engine's objects is a
+   gather that fills plain arrays; its arithmetic (value, gradient, rows), when more than a line, is one header of
+   `inference/` with its test in `inference/tests/` (values by hand, gradient and rows against central differences),
+   which `Add`, `AddGradient` and `AppendRows` call: `AbundancePriors.h` with `AbundanceBlockOf`, `ParkWall.h` with
+   `ParkLevelsOf` [check 8b; check 11: no term is added outside `src/Objective.cpp`; check 11b: no total, field or
+   model term's arithmetic outside its class].
+3. Tests, with the term non-zero (a temporary non-zero default or a project that sets it) and start values off its
+   minimum: `AZURE_GRAD_CHECK=exit AZURE2 fit --use-gradient --no-gui <project>` (pattern
+   `tests/shift_penalty_zero/check.sh` (b)): its stderr gives the analytic gradient against finite differences and
+   the "Jacobian-path" gradient (the rows) against the adjoint; the latter prints only differences above 1e-2
+   relative, so read the numbers. pyazr: `Session.evaluate(x).terms[<Name>]` equals the field of `chiSquared.out`
+   (`tests/pyazr/evaluation_test.py` reads the labels from the engine). A term non-zero on 13N's norms fails
+   `tests/pyazr/objective_test.py` section 4 by design (it tests that the norm prior is the only norm penalty).
+4. Docs: the field in `docs/source/reference/output_files.rst`; the term's line in the list at the top of
+   `include/Objective.h` and in `docs/upgrade/objective.md` section 1 (T-number).
 
 **A physics function or an observable.**
 1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an
