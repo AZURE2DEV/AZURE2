@@ -25,6 +25,7 @@ class Config;
 struct ThmWeightTable;
 class ThmDistortion;
 class ThmDwVertex;
+class ThmFormFactorTable;
 struct ThmAngleWindow;
 struct ThmCoherentBackground;
 struct ThmLineshape;
@@ -385,6 +386,8 @@ class Segment {
   const ThmDistortion *GetThmDistortion() const { return thmDistortion_.get(); }
   void SetThmDwVertex(WorkingCopy &data, std::shared_ptr<const ThmDwVertex> v);
   const ThmDwVertex *GetThmDwVertex() const { return thmDwVertex_.get(); }
+  void SetThmFormFactor(WorkingCopy &data, std::shared_ptr<const ThmFormFactorTable> f);
+  const ThmFormFactorTable *GetThmFormFactor() const { return thmFormFactor_.get(); }
   /// Attach the angular window of this segment's THM experiment
   /// (theta=thmin-thmax), as SetThmLineshape.
   void SetThmAngleWindow(WorkingCopy &data, std::shared_ptr<const ThmAngleWindow> w);
@@ -549,6 +552,7 @@ class Segment {
   std::shared_ptr<const ThmSpectatorWindow> thmWindow_;
   std::shared_ptr<const ThmDistortion> thmDistortion_;
   std::shared_ptr<const ThmDwVertex> thmDwVertex_;
+  std::shared_ptr<const ThmFormFactorTable> thmFormFactor_;
   std::shared_ptr<const ThmAngleWindow> thmAngle_;
   std::shared_ptr<const ThmCoherentBackground> thmCoherent_;
   double phaseS_ = -1.0;

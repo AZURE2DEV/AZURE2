@@ -145,9 +145,10 @@ const std::vector<ThmOptionKey> &ThmOptionKeys() {
          return ParseWord(value == "real" ? std::string("perlevel") : value, {"onshell", "constant", "perlevel"}, out);
        }},
       {{"kinematics", "enum", {"lacognata", "triple", "kf3body", "lambda32"}, "", "", "lacognata", "", "",
-        "the kinematic factors the model carries, by how the HOES data were extracted: lacognata exit k_f/mu_f (La "
-        "Cognata's working formula); triple exit Gamma_f alone; kf3body exit Gamma_f/(mu_f k_f); lambda32 exit "
-        "Gamma_f, entrance 1/k_i on shell"},
+        "the kinematic factor K(E) the model carries, by how the HOES data were extracted (the experiments divide "
+        "the yield by the Monte Carlo KF |phi|^2, so no further KF is applied): lacognata exit k_f/mu_f (the default; "
+        "Tumino et al. 2021 Eq. 50); triple K = 1; kf3body exit Gamma_f/(mu_f k_f) and lambda32 entrance 1/k_i on "
+        "shell are kept for old projects"},
        false, "lacognata|triple|kf3body|lambda32",
        [](const std::string &value, ThmOptionLine &out) {
          out.kind = ThmOptionLine::KINEMATICS;
@@ -319,13 +320,41 @@ const std::vector<ThmExperimentKey> &ThmExperimentKeys() {
                   "degrees, 0 <= thmin <= thmax <= 180";
          return std::string();
        }},
-      {{"vertexModel", "enum", {"pw", "dw"}, "", "", "pw", "", "",
-        "the entrance vertex: plane wave, or the surface term of the prior-form DWBA"},
+      {{"vertexModel", "enum", {"pw", "dw", "ff"}, "", "", "pw", "", "",
+        "the transfer vertex: pw the plane-wave surface term M_l; dw the surface term of the prior-form DWBA; ff the "
+        "full form factor <phi_lambda|V|j_l> of each level (La Cognata et al. ApJ 708 (2010) Eqs. 20-21: M_l plus the "
+        "volume term of a Woods-Saxon level function with its node count; vertex=perlevel, fixed level energies)"},
        [](const std::string &value, ThmExperiment &x) {
-         if (value != "pw" && value != "dw") return "vertexModel='" + value + "': expected pw or dw";
+         if (value != "pw" && value != "dw" && value != "ff") return "vertexModel='" + value + "': expected pw, dw or ff";
          x.vertexDW = value == "dw";
+         x.vertexFF = value == "ff";
          return std::string();
        }},
+      {{"ffWell", "text", {}, "", "fm", "1.25,0.65", "<r0>,<a0>", "vertexModel",
+        "vertexModel=ff: the Woods-Saxon radius parameter r0 (R = r0 A^(1/3), A the core's mass number) and "
+        "diffuseness a0 of the level functions, fm"},
+       [](const std::string &value, ThmExperiment &x) {
+         std::vector<std::string> f = Split(value, ',');
+         double r0 = 0.0, a0 = 0.0;
+         if (f.size() != 2 || !ReadWholeDouble(f[0], r0) || !ReadWholeDouble(f[1], a0) || !(r0 > 0.0) || !(a0 > 0.0))
+           return "ffWell='" + value + "': expected <r0>,<a0> (fm, > 0): the Woods-Saxon radius parameter and "
+                  "diffuseness of the level functions";
+         x.ffR0 = r0;
+         x.ffA0 = a0;
+         return std::string();
+       }},
+      {{"ffVolume", "enum", {"on", "off"}, "", "", "on", "", "vertexModel",
+        "vertexModel=ff: off drops the volume term, so the vertex is exactly that of vertexModel=pw (a check of the "
+        "limit)"},
+       [](const std::string &value, ThmExperiment &x) {
+         if (value != "on" && value != "off") return "ffVolume='" + value + "': expected on or off";
+         x.ffVolume = value == "on";
+         return std::string();
+       }},
+      {{"ffNodes", "text", {}, "", "", "", "<J><+|->[,k<k>][,l<l>]:<n>[;...]", "vertexModel",
+        "vertexModel=ff: the radial node count n of the level functions of a J^pi group (its k-th level, its entrance "
+        "channels of orbital momentum l); without a term, the Wildermuth rule of a nucleon on the core"},
+       [](const std::string &value, ThmExperiment &x) { return ParseThmFfNodes(value, x.ffNodes); }},
       {{"spectatorAngles", "text", {}, "", "", "", "[cm:]thmin-thmax | [cm:]table:<file>", "",
         "a window of spectator directions (lab polar angles to the beam, or c.m.)"},
        [](const std::string &value, ThmExperiment &x) {

@@ -282,6 +282,10 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     for (const char *key : {"spectatorAngle", "distortionRef", "distortionRatio", "boundState"})
       if (has(key) && !computed)
         return where + key + "= needs distortion=coulomb or distortion=optical; set one, or remove " + key + "=";
+    for (const char *key : {"ffWell", "ffVolume", "ffNodes"})
+      if (has(key) && !x.vertexFF)
+        return where + key + "= belongs to the full form factor: it needs vertexModel=ff; set it, or remove " + key +
+               "=";
     if (x.vertexDW) {
       if (!computed)
         return where + "vertexModel=dw builds the vertex from the distorted waves of a + A and s + F: it needs "
@@ -342,6 +346,89 @@ std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
     }
   }
   return "";
+}
+
+std::string CheckThmFormFactorVertex(const std::vector<ThmExperiment> &experiments, bool perLevel, bool brune) {
+  for (const ThmExperiment &x : experiments) {
+    if (!x.vertexFF) continue;
+    if (!perLevel)
+      return "experiment[" + x.name + "]: vertexModel=ff needs vertex=perlevel: the level function of each level "
+             "carries its own boundary value B_lambda = S_c(E_lambda), which the surface term uses too; vertex=constant "
+             "and vertex=onshell have no level function behind them.  Set vertex=perlevel or vertexModel=pw";
+    if (!brune)
+      return "experiment[" + x.name + "]: vertexModel=ff needs the Brune basis (use_brune, the default): its level "
+             "functions are solved at the observed level energies with B_lambda = S_c(E_lambda)";
+  }
+  return "";
+}
+
+std::string ParseThmFfNodes(const std::string &value, std::vector<ThmFfNodeTerm> &out) {
+  out.clear();
+  const std::string form = "expected <J><+|->[,k<k>][,l<l>]:<n> terms separated by ';' (k: the k-th level of the "
+                           "J^pi group in <levels>, l: the entrance orbital momentum, n: the radial node count)";
+  for (const std::string &item : Split(value, ';')) {
+    const std::string bad = "ffNodes: '" + item + "': ";
+    if (item.empty()) return "ffNodes='" + value + "': an empty term; " + form;
+    size_t colon = item.rfind(':');
+    if (colon == std::string::npos) return bad + form;
+    ThmFfNodeTerm t;
+    const std::string nt = item.substr(colon + 1);
+    if (!ReadWholeInt(nt, t.nodes) || t.nodes < 0 || t.nodes > 20 || nt[0] == '+' || nt[0] == '-')
+      return bad + "the node count is a whole number, 0 to 20";
+    std::vector<std::string> parts = Split(item.substr(0, colon), ',');
+    if (parts.empty()) return bad + form;
+    for (size_t k = 1; k < parts.size(); k++) {
+      const std::string &q = parts[k];
+      int v = -1;
+      const bool number = q.size() >= 2 && ReadWholeInt(q.substr(1), v) && q[1] != '+' && q[1] != '-';
+      if (q[0] == 'k' && number && v >= 1 && t.level == 0)
+        t.level = v;
+      else if (q[0] == 'l' && number && v >= 0 && t.l < 0)
+        t.l = v;
+      else
+        return bad + "after J^pi, ,k<k> (the k-th level of the group, k >= 1) and/or ,l<l> (the entrance l), "
+                     "each once";
+    }
+    const std::string &spec = parts[0];
+    if (spec.size() < 2 || (spec.back() != '+' && spec.back() != '-')) return bad + form;
+    t.parity = spec.back() == '+' ? 1 : -1;
+    if (!ReadSpin(spec.substr(0, spec.size() - 1), t.J)) return bad + "J is 1/2, 3/2, ... or 0, 1, ...";
+    for (const ThmFfNodeTerm &o : out)
+      if (std::fabs(o.J - t.J) < 1.0e-9 && o.parity == t.parity && o.level == t.level && o.l == t.l)
+        return bad + "given twice";
+    out.push_back(t);
+  }
+  if (out.empty()) return "ffNodes='" + value + "': " + form;
+  return "";
+}
+
+std::string FormatThmFfNodes(const std::vector<ThmFfNodeTerm> &terms) {
+  std::string out;
+  for (const ThmFfNodeTerm &t : terms) {
+    if (!out.empty()) out += ";";
+    out += ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-");
+    if (t.level > 0) out += ",k" + std::to_string(t.level);
+    if (t.l >= 0) out += ",l" + std::to_string(t.l);
+    out += ":" + std::to_string(t.nodes);
+  }
+  return out;
+}
+
+const ThmFfNodeTerm *MatchThmFfNodes(const std::vector<ThmFfNodeTerm> &terms, double J, int parity, int level,
+                                     int l) {
+  const ThmFfNodeTerm *best = nullptr;
+  int bestRank = -1;
+  for (const ThmFfNodeTerm &t : terms) {
+    if (std::fabs(t.J - J) > 1.0e-9 || t.parity != parity) continue;
+    if (t.level > 0 && t.level != level) continue;
+    if (t.l >= 0 && t.l != l) continue;
+    const int rank = (t.level > 0 ? 2 : 0) + (t.l >= 0 ? 1 : 0);
+    if (rank > bestRank) {
+      best = &t;
+      bestRank = rank;
+    }
+  }
+  return best;
 }
 
 std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey) {

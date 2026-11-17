@@ -37,7 +37,7 @@ UnitExternalCapture.cpp
 SegmentParameters.cpp
 ShiftFrames.cpp
 ShiftedFold.cpp
-THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp SpinObservableChecks.cpp ChannelFunc.cpp CoulombTable.cpp
+THMMatrixFunc.cpp ThmCotangents.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmBlockEdits.cpp ThmExperiment.cpp ThmKeys.cpp ThmLineshape.cpp ThmDistortion.cpp ThmDwVertex.cpp ThmFormFactor.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovarianceFile.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 ThmReports.cpp
 SystemOfCompound.cpp EngineChannelFunctions.cpp ExternalCaptureAmplitudes.cpp ExternalCaptureFinalStates.cpp LineWindow.cpp UposChecks.cpp LevelReport.cpp CompoundSystemChecks.cpp
 LevelInputMessages.cpp ProjectSetup.cpp

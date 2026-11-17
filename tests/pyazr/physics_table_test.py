@@ -257,6 +257,15 @@ def main():
                 worst_M = max(worst_M, abs(ph.thm_vertex_function(l, p, 5.0, B) - float(ref)))
     row_test("thm_vertex_function", f"(B - 1) j_l(pa) - pa j_l'(pa) (mpmath), l = 0-3, p = 0.05-2.5 fm^-1, a = 5 fm, "
              f"B = -2-1.5: largest abs diff {worst_M:.1e} (<= 1e-9)", worst_M <= 1e-9)
+    # The full form factor against an independent NumPy implementation (Numerov on 1500 steps, trapezoid overlaps; the
+    # 17O(n,alpha) levels of Oliva's thesis, n + 17O, a = 4.64 fm, r0 = 1.25 fm, a0 = 0.65 fm; values copied from its
+    # output): R = W/surface to 1e-4 (the two quadratures differ at that level).
+    ff_cases = [(3, 0, 0.09, -2.982238199989906, 1.0949427822511701), (2, 1, 0.172, -1.9409505703868728, 1.1034710457212777),
+                (1, 1, 0.24, -0.8094598593311532, 1.2120215258735039)]
+    worst_ff = max(abs(ph.thm_full_form_factor(l, n, 0, 8, 1.00866492, 16.99474312, 4.64, e, B, e + 2.224566, 1.25,
+                                               0.65)["R"] / R - 1) for l, n, e, B, R in ff_cases)
+    row_test("thm_full_form_factor", f"17O levels (0f, 1d, 1p) against an independent Numerov calculation: largest "
+             f"relative diff {worst_ff:.1e} (<= 1e-4)", worst_ff <= 1e-4)
     # ------------------------------------------------------------------ widths
     print("widths")
     for label, z1, z2, m1, m2, _, _ in pairs:

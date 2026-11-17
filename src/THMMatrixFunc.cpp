@@ -14,6 +14,7 @@
 #include "ThmDwVertex.h"
 #include "ThmAngular.h"
 #include "ThmExperiment.h"
+#include "ThmFormFactor.h"
 #include "ThmVertexBoundary.h"
 #include <algorithm>
 #include <cmath>
@@ -54,6 +55,31 @@ double ThmFluxFactor(const Config &configure, const PPair *entrancePair, const S
     }
   }
   return fluxFactor;
+}
+
+/*!
+ * The plane-wave vertex of level la of J group j in entrance channel ch at the point (spectator-window node `node`,
+ * -1 without a window), without its width: the surface term M_l(B) = (B - 1) j_l - rho j_l' + C_l
+ * (Site::GetThmFormFactor) and, with vertexModel=ff, the level's volume term Delta_lambda (ThmFormFactor.h).  The one
+ * definition the model (ThmEntranceVertices) and its gradient (THMMatrixFunc's adjoint, d vertex / d gamma) both use.
+ */
+complex ThmLevelVertex(const Config &configure, const LevelState &state, const Site *point, int j, int la, int ch,
+                       complex boundary, int node) {
+  complex vertex = node < 0 ? point->GetThmFormFactor(j, ch, boundary) : point->GetThmFormFactor(j, ch, boundary, node);
+  const ThmFormFactorTable *ff = point->GetThmFormFactorTable();
+  if (!ff) return vertex;
+  const ThmFormFactorTable::Slot *slot = ff->Find(j, la, ch);
+  if (!slot) return vertex;
+  const double eps = node < 0 ? point->GetThmVertexEps() : point->GetThmVertexEps(node);
+  bool resolved = false;
+  vertex += ff->Delta(*slot, eps, state.E(j, la), boundary.real(), &resolved);
+  if (resolved && configure.FirstTime("thm ff resolved " + ff->experiment))
+    configure.outStream << "WARNING: <thm> experiment[" << ff->experiment << "] vertexModel=ff: the energy or boundary "
+                        << "of a level differs from the one its level function was solved at during set-up; the level "
+                           "function is solved again at each point (slow, and the analytic gradient omits its "
+                           "change).  Keep the level energies fixed with vertexModel=ff."
+                        << std::endl;
+  return vertex;
 }
 
 /*!
@@ -118,9 +144,7 @@ void ThmEntranceVertices(const Config &configure, const CompoundSystem *compound
     for (int la = 1; la <= numLevels; la++) {
       const ALevel *level = jg->GetLevel(la);
       if (!level->IsInRMatrix()) continue;
-      complex boundary = boundaryOf.At(la, onShellL);
-      (*pwVertex)[la] += state.Gamma(j, la, ch) * (node < 0 ? point->GetThmFormFactor(j, ch, boundary)
-                                                            : point->GetThmFormFactor(j, ch, boundary, node));
+      (*pwVertex)[la] += state.Gamma(j, la, ch) * ThmLevelVertex(configure, state, point, j, la, ch, boundaryOf.At(la, onShellL), node);
     }
   }
 }
@@ -814,8 +838,12 @@ bool THMMatrixFunc::THMPointAdjoint(Site *point, double fitBar, GradAccum &accum
         const ALevel *level = jg->GetLevel(la);
         if (!level->IsInRMatrix()) continue;
         const complex boundary = boundaryOf.At(la, onShellL);
+        // d vertex / d gamma: the level's whole vertex (with vertexModel=ff its volume term too, ThmLevelVertex);
+        // d vertex / d B: the surface term's, linear in B.  The volume term's dependence on B (through E_lambda) is
+        // not taken: vertexModel=ff needs the energies of its levels fixed (ThmBuildFormFactor).
         const complex m = formFactor(boundary);
-        accum.AddGamma(j, la, ch, std::real(std::conj(vb[la]) * m));
+        accum.AddGamma(j, la, ch,
+                       std::real(std::conj(vb[la]) * ThmLevelVertex(configure(), state(), point, j, la, ch, boundary, b.node)));
         if (!boundaryOf.OnShell())
           routeB(ch, la, lowest,
                  std::real(std::conj(vb[la]) * (state().Gamma(j, la, ch) * (formFactor(boundary + 1.0) - m))));

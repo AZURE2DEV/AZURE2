@@ -11,6 +11,7 @@ struct ThmAngleWindow;
 struct ThmCoherentBackground;
 class ThmDistortion;
 class ThmDwVertex;
+class ThmFormFactorTable;
 
 /*!
  * A THM experiment (<thm> experiment[<name>] ..., ThmExperiment.h) as the
@@ -33,6 +34,8 @@ struct ThmGroup {
   /// Distorted-wave entrance vertex (vertexModel=dw), or null; shared with
   /// its segments.  It replaces R(E): distortion is then null.
   std::shared_ptr<const ThmDwVertex> dwVertex;
+  /// Full form factor (vertexModel=ff, ThmFormFactor.h), or null; shared with its segments.
+  std::shared_ptr<const ThmFormFactorTable> formFactor;
   /// Angular window of the exit pair (theta=thmin-thmax), or null; shared
   /// with its segments.
   std::shared_ptr<const ThmAngleWindow> angle;

@@ -41,6 +41,7 @@ class Config;
 struct ThmWeightTable;
 class ThmDistortion;
 class ThmDwVertex;
+class ThmFormFactorTable;
 struct ThmAngleWindow;
 struct ThmCoherentBackground;
 struct ThmLineshape;
@@ -98,6 +99,7 @@ class Site {
   /// Distorted-wave entrance vertex of the point's THM experiment
   /// (vertexModel=dw), or null (the plane-wave vertex).
   const ThmDwVertex *GetThmDwVertex() const { return settings_->thmDw; }
+  const ThmFormFactorTable *GetThmFormFactorTable() const { return settings_->thmFf; }
   /// Angular window of the point's THM experiment (theta=thmin-thmax), or
   /// null (the angle-integrated observable).  Owned by the parent Segment.
   const ThmAngleWindow *GetThmAngleWindow() const { return settings_->thmAngle; }
@@ -297,6 +299,10 @@ class Site {
   /// The same at node `node` of the point's spectator-momentum window
   /// (0-based; ps=...).  0 if not stored.
   complex GetThmFormFactor(int, int, complex, int node) const;
+  /// eps = E + B_xs + T_s (MeV) of the entrance pair's half-off-shell momentum at the point (ThmVertexRows::eps), and
+  /// at spectator-window node `node` (ThmPsTable::eps); 0 when not stored.
+  double GetThmVertexEps() const;
+  double GetThmVertexEps(int node) const;
   /// Number of nodes of the point's spectator-momentum window (0: none).
   int NumThmPsNodes() const { return values_.thm_ps ? values_.thm_ps->nodes : 0; }
   /// Normalized weight of node `node` of that window at the point's energy.

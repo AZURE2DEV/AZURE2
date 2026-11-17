@@ -23,6 +23,7 @@
 #include "ThmFunc.h"
 #include "ThmLineshape.h"
 #include "ThmReports.h"
+#include "ThmFormFactor.h"
 #include "ThmVertexBoundary.h"
 
 void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Results &results) {
@@ -45,6 +46,28 @@ void WorkingCopy::WriteThmExperiments(const Config &configure, const azure2::Res
     for (size_t k = 0; k < r.segments.size(); k++) out << (k ? "," : " ") << r.segments[k];
     out << "\nbackground: " << r.background << "\npoints: " << r.points << "\nchi2: " << r.chi2
         << "\nstatus: " << r.status << "\n";
+    // An incoherent background stands for a cross section (combinatorial, non-quasi-free, sequential): it cannot be
+    // negative (the review of M. La Cognata, Nov 2026; docs "Background").  The profile does not bound it, so say so
+    // when it is negative inside the experiment's energy range.  The output files are not changed.
+    if (r.background != "none")
+      for (int g = 0; g < Data().NumThmGroups(); g++) {
+        const ThmGroup &group = Data().GetThmGroup(g);
+        if (group.name != r.name || group.segments.empty()) continue;
+        double eLo = 0.0, eHi = 0.0;
+        ThmGroupEnergyRange(*this, group, eLo, eHi);
+        auto b = [&](double e) { return r.value[1] + r.value[2] * e + r.value[3] * e * e; };
+        double eMin = b(eLo) < b(eHi) ? eLo : eHi;
+        if (r.value[3] > 0.0) {
+          const double t = -r.value[2] / (2.0 * r.value[3]);
+          if (t > eLo && t < eHi) eMin = t;
+        }
+        if (b(eMin) < 0.0 && configure.FirstTime("thm negative background " + r.name))
+          configure.outStream << "WARNING: <thm> experiment[" << r.name << "]: the profiled background b(E) is "
+                              << "negative in the experiment's energy range (b = " << b(eMin) << " at E = " << eMin
+                              << " MeV, model units).  A negative background is a negative cross section; use "
+                                 "background=none, or a background that stays non-negative."
+                              << std::endl;
+      }
     const char *names[4] = {"norm", "b0", "b1", "b2"};
     int q = 1 + (r.background == "none" ? 0 : r.background == "const" ? 1 : r.background == "linear" ? 2 : 3);
     for (int i = 0; i < q; i++)
@@ -374,11 +397,13 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
   struct Pieces {
     double jl = 0.0, rhoDjl = 0.0;
     complex coul = complex(0.0, 0.0);
+    double eps = 0.0;  ///< E + B + T_s (MeV), for the volume term of vertexModel=ff
   };
   auto pieces = [&](int l, double e, double es) {
     Pieces q;
     double b = out.bind + es;
     if (e + b > 0.0) {
+      q.eps = e + b;
       ThmBesselParts(l, mu, e, b, out.radius, q.jl, q.rhoDjl);
       if (configure.thm.coulombIntegral && pair->GetZ(1) * pair->GetZ(2) != 0)
         q.coul = ThmCoulombTerm(pair, l, e, ThmRho(mu, e, b, 1.0));
@@ -387,6 +412,8 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
   };
   // vertexModel=dw: the Gram matrices of the DW vertex on the grid.
   std::vector<std::vector<double>> dwG, dwGd;
+  const ThmFormFactorTable *ffTable = group->formFactor.get();
+  if (ffTable) out.model = "ff";
   if (dw) {
     out.model = "dw";
     for (double e : energies) {
@@ -471,7 +498,12 @@ bool WorkingCopy::ThmVertexTable(const std::string &name, const std::vector<doub
             lr.m2pw.push_back(std::norm((B - 1.0) * jl - rho * djl));
             continue;
           }
-          auto m2 = [&](const Pieces &q) { return std::norm((B - 1.0) * q.jl - q.rhoDjl + q.coul); };
+          // vertexModel=ff: the level's volume term (ThmFormFactor.h) is part of its vertex.
+          const ThmFormFactorTable::Slot *slot = ffTable ? ffTable->Find(j, la, ch) : nullptr;
+          auto m2 = [&](const Pieces &q) {
+            const double delta = slot ? ffTable->Delta(*slot, q.eps, state.E(j, la), B.real()) : 0.0;
+            return std::norm((B - 1.0) * q.jl - q.rhoDjl + q.coul + delta);
+          };
           double avg = 0.0;
           for (size_t k = 0; k < out.es[i].size(); k++) avg += out.weight[i][k] * m2(grid[i][k]);
           lr.m2.push_back(avg);

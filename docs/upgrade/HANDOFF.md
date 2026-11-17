@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (analysis machine, almalinux) — `feature/upgrade-5-thm-ff`: the full form factor, THM clean-up
+
+Branch `feature/upgrade-5-thm-ff`, cut from `feature/upgrade` 76875f72, pushed, **not merged** (the director's).
+- de95311a `vertexModel=ff`: the full transfer form factor of each level (La Cognata et al. ApJ 708 Eqs. 20-22), the
+  item the review of M. La Cognata calls central (T4).  Design: `thm_form_factor.md`.  The physics in
+  `physics/transfer/FormFactor.h` (bound to `pyazr.physics.thm_full_form_factor`), a constant per-experiment table
+  built at set-up (`src/ThmFormFactor.cpp`), one level-vertex function for the model and the adjoint
+  (`ThmLevelVertex`, `src/THMMatrixFunc.cpp`).  Needs `vertex=perlevel`, the Brune basis and fixed energies of its
+  levels.  Checks: `physics_transfer_form_factor`, `pyazr_physics_table`, `tests/thm_full_form_factor/check.sh`
+  (pw limit, refusals, threads, AZURE_GRAD_CHECK 1e-10).
+- The clean-up commit: the `kinematics` key's text (the data are divided by the Monte Carlo KF; lacognata the default,
+  triple K = 1, kf3body and lambda32 for old projects); a set-up warning for a THM data set with an energy shift; a
+  run warning when the profiled background is negative in the experiment's range; `thm_implementation.rst` no longer
+  says a negative background is acceptable.  Results unchanged: warnings only (a refusal would change existing
+  projects, e.g. the 19F evaluation's −9.17 keV shift: the PI's decision).
+- Machine: one core, 3 GB.  Verified there: build without warnings in the touched files; the THM pyazr tests
+  (thm_keys, thm_dw_vertex, thm_experiment, thm_adjoint, thm_profiled, thm_vertex_reach, thm_spectator_window,
+  physics_table); `tests/run_tests.sh`: 172 passed, 1 failed (`capture_ay_coupling`: its `verify.py` imports
+  `make_models`, which eaadf220 deleted with the other model generators; not this branch's, not fixed here);
+  consistency.  Not run:
+  the full `ctest -LE slow` (the build was configured without tests), the slow tests, sphinx, macOS, Windows.
+- Open: port `backgroundPositive=on` (thm-review 073fe48) onto `inference/`'s LinearProfile; the double-ratio
+  normalization (C3); the questions for Catania (their well, node counts, normalization inside a).
+
 ## 2026-11-17 (join-page agent) — the small things the dev ports left open, on `0d271891`
 
 **Branch** `feature/upgrade-5-join-page`, cut from `0d271891`; build `work/b-joinpage` (`work/build.sh`, module in
