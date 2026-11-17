@@ -2,7 +2,7 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
-## 2026-11-17 (director, 08:00) — merged: the last long file split, the data term once per call, the recipe's third trial
+## 2026-11-17 (director, 08:00) — merged: the last long file split, the data term once per call
 
 **Merged into `feature/upgrade-4-data`** through rehearsal 109: rehearsal 108 plus
 `feature/upgrade-7-azuregrad-split` (one commit), `feature/upgrade-7-efficiency` (two commits), and three commits
