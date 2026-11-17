@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (owner's session, dev ports) — `feature/upgrade-5-dev-all`: the eleven dev ports on one branch
+
+**Branch** `feature/upgrade-5-dev-all`, cut from `feature/upgrade` `b8ee2219`, for review as one piece. It is the
+merge of the eleven port branches, each of which was first merged with `b8ee2219` and gated alone: `-ec-tests`,
+`-udr-low-energy`, `-exfor-agent`, `-test-races`, `-rmfit`, `-seed`, `-channel-radii`, `-isospin`,
+`-spin-observables`, `-ec-unbound`, `-capture-cascade` (merged in that order). Nothing was pushed to
+`feature/upgrade`. The entries below describe each port; this one describes only what the combination added.
+
+**Where two ports met (hand work).**
+- `-ec-unbound` x `-channel-radii`: the unbound-final-state capture code took the pair's radius; here it takes the
+  channel's. `ECFinalStateFactors(pair, radius, ...)` with `NFIntegral(pair, radius)`; the `ECTable` key and
+  `Reduction` carry the radius; `src/LineWindow.cpp` uses the final channel's `GetRadius()` (4 places); both
+  signature marks are kept in `src/ExternalCaptureSetup.cpp`. **Not covered by a test**: no project here has an
+  unbound final state and a `channel_radius` record together; each port's own tests pass.
+- `-ec-unbound` x `-capture-cascade`: a data set with `secondary_gamma` on a capture exit and a `line_window` is
+  refused (`src/UposChecks.cpp`, dev's rule: the line-shape integration has no secondary-gamma form);
+  `tests/ec_unbound_broad` (h). `secondary_gamma` on an `extrapolation` is not read on this base, so the refusal is
+  reached by a data set only.
+- `-spin-observables` x `-ec-unbound`: both fields kept (`operator`, `line_window`) in the builder, the converter,
+  `SetupSpecs.h`, `Segment`, `Site` and the two experiment tests.
+- `src/CMakeLists.txt`, `docs/upgrade/dev_features.md`, `tests/upgrade/predictions.txt` (three-way by project block)
+  and this file: the union.
+- Sizes: `src/AMatrixFunc.cpp` 1960 lines and `src/WorkingCopy.cpp` 1246, both under their records.
+
+**Open.**
+- dev moved after the `-rmfit` port was cut: `50fc6cd5` (2026-11-17, `rmfit/campaign.py`, `rmfit/enginepin.py`, its
+  test: `rmfit init` rewrites the md5 guard of a campaign's job scripts on an allowed engine change) is not here.
+- A test of an unbound final state with a per-channel radius.
+- The open points of the port entries below stand.
+
+**The full gate** (queue job, 8 slots, on the merge commit `818a0bea`, before the cascade refusal and this entry):
+consistency, configure, build and the docs clean; ctest 376 of 377, the base's one failing (`pyazr_park_dsde`); the
+regression suites 182 pass and 2 fail, the base's two (`capture_ay_coupling`, "a warning for ancai06 inside its
+range"). The base `b8ee2219` in the same queue: ctest all but `pyazr_park_dsde` (and a load-dependent
+`physics_standalone` time-out), suites 170 pass and the same 2 fail. **Not run:** CI.
+
 ## 2026-11-16 (owner's session, dev port) — the capture cascade: `secondary_gamma` on a capture reaction
 
 **Branch** `feature/upgrade-5-dev-capture-cascade`, cut from `feature/upgrade` `84de49da`. dev's change of

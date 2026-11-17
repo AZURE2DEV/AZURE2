@@ -25,6 +25,8 @@
 #       an ERROR;
 #   (g) the line shape follows the final level's CURRENT energy (Brune parametrizations): the level 20 keV higher
 #       through a parameter file gives the cross sections of the project with the level there, within 1e-6.
+#   (h) a capture cascade (`secondary_gamma` on the capture exit) with a line window is refused: the line-shape
+#       integration has no secondary-gamma form (dev's rule; the two features meet on the combined branch only).
 #
 #   ./tests/ec_unbound_broad/check.sh path/to/AZURE2
 
@@ -137,6 +139,33 @@ if paste -d ' ' <(values h_par) <(values d_w1) | awk 'NF == 2 && $2 + 0 != 0 { d
   ok "(g) the 20 keV move changes every cross section by more than 2 %"
 else
   bad "(g) the moved level energy did not change the cross sections"
+fi
+
+echo "(h) not together with a capture cascade"
+mkdir -p "$WORK/i_cascade/output" "$WORK/i_cascade/checks"
+# the windowed project with one data set added: the secondary gamma ray of the same capture, one point
+printf '0.704561  90  1e-6  1e-7\n' > "$WORK/i_cascade/cascade.dat"
+awk '{ print } $1 == "<data>" {
+  print "dataset cascade"
+  print "    reaction        12C(p,g)13N[2.3655]"
+  print "    quantity        dsigma_domega"
+  print "    unit            b/sr"
+  print "    line_window     39 keV"
+  print "    secondary_gamma L 1 Ic 1/2 delta 0"
+  print "    file            cascade.dat"
+  print "    columns         E_lab[MeV] theta_cm[deg] value error"
+  print "    energy_window   0.5 1.0 MeV"
+  print "    angle_window    0 180 deg"
+  print "    norm            1 fixed"
+}' "$HERE/models/a_w1.azr" > "$WORK/i_cascade/t.azr"
+# a data set is read by a calculation, not by an extrapolation
+(cd "$WORK/i_cascade" && $(guard_command 900) "$AZURE2_BIN" calculate t.azr < /dev/null > run.log 2>&1)
+if grep -q "ERROR: .*capture cascade.*not together with a line window" "$WORK/i_cascade/run.log" &&
+  [ ! -s "$WORK/i_cascade/output/AZUREOut_aa=1_R=3.out" ]; then
+  ok "(h) secondary_gamma with a line window is refused"
+else
+  bad "(h) secondary_gamma with a line window was not refused"
+  tail -5 "$WORK/i_cascade/run.log"
 fi
 
 if [ $failures -eq 0 ]; then

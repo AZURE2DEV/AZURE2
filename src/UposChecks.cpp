@@ -41,6 +41,8 @@ bool UPOSAllowed(const CompoundSystem *compound, const Segment &segment, int key
     std::string why;
     if (configure.paramMask & Config::USE_RMC_FORMALISM)
       why = "not with the R-matrix-for-capture formalism (--use-rmc)";
+    else if (segment.GetLineWindow() > 0.0)
+      why = "not together with a line window (the line-shape integration has no secondary-gamma form yet)";
     else if (segment.IsAnalyzingPower())
       why = "an analyzing power of the secondary gamma ray is not implemented";
     if (why.empty()) return true;
