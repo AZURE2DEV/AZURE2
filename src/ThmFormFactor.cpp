@@ -157,7 +157,8 @@ bool ThmBuildFormFactor(WorkingCopy &data, const Config &configure, const Compou
           return false;
         }
         s.Ex = level->FileE();
-        s.B = ThmVertexBoundary::ShiftAtLevelEnergy(pair, s.l, pair->SpinOrbitTwoJ(jg->GetJ()), s.Ex, nullptr);
+        s.B = ThmVertexBoundary::ShiftAtLevelEnergy(pair, s.l, pair->SpinOrbitTwoJ(jg->GetJ()), c->GetRadius(), s.Ex,
+                                                    nullptr);
         s.f = ff::SolveLevel(w, s.l, s.Ex - t->threshold, s.B, s.nodes);
         if (!s.f.ok) {
           configure.outStream << where << "vertexModel=ff: level " << la << " of J = " << jpi << " (l = " << s.l
