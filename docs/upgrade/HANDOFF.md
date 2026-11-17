@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-17 (director, 18:30) — the join with `dev`: the ports, rmfit and the full form factor on one tree
+
+**State: local only, on `feature/upgrade-5-join`; not pushed.** The tree is rehearsal 110 (`76875f72`) plus
+`feature/upgrade` as pushed by the THM session (`1be25e91`, the full form factor), the ten ports of
+`feature/upgrade-5-dev-all` (`c675245a`), rmfit of `feature/upgrade-5-dev-rmfit-fold` (`ecb02978`) and the
+join-page agent's commits (entry below). `dev` (`50fc6cd5`) is then recorded as merged with `git merge -s ours`:
+a plain merge of `dev` gives 93 conflicts and silent wrong merges, and every engine feature of `dev`'s 69
+commits is on this tree as a port (`dev_features.md`). After that merge `dev` can fast-forward to this branch.
+
+- Ten conflicts of the `dev-all` merge resolved by re-applying each port's edit on the split files of rehearsal
+  104 to 110 (`AMatrixFuncTBar.cpp`, `AMatrixFuncAdjoint.cpp`, `AZUREGradThm.cpp`, `WorkingCopyFill.cpp`,
+  `Objective.cpp`); the isospin term sits after the gamma-decay term in the form of rehearsal 108.
+- Where the full form factor met the channel-radii port: `ThmFormFactor.cpp` passes the channel's radius to
+  `ShiftAtLevelEnergy` and takes the pair radius from `GetPairRadius()`; the THM source list of
+  `src/CMakeLists.txt` is the union of both sides.
+- Check (`work/director/verify_join3.out`, base `work/b-trial110`, tag `tab-trial110-1`): 0 warnings. Every
+  output file of the existing projects is identical to rehearsal 110 in the three modes (886, 850, 886 files),
+  except one refusal message (`natural_target/models/bad_level.azr/run.log`, extended by the isospin port).
+  426 new files, all from the ports' and the form factor's projects. Fits: five of eight identical; the three
+  `--use-gradient` fits differ through the MIGRAD seed port and end at the same minimum (13N: 28100.1722989
+  to 28100.1722634). ctest without `slow`: 389 of 390; `rmfit_enginepin` fails (it looks for the engine only
+  under `$AZURE2_ROOT/pyazr`; the decision is the owner's), six rmfit tests skip by design.
+  `tests/run_tests.sh`: 185 of 185.
+- Not run: `ctest -L slow`, the sanitizer builds, Windows and macOS. No `expected/`, golden file or tolerance
+  changed by the join itself.
+
+**Open.** CI of `76875f72`: Linux green; the Windows job is red only on its must-run guard (two tests that skip
+by design there); macOS ran out of time (`pyazr_thm_adjoint`, 2400 s). Both need the PI's word. Not on this
+tree on purpose: the Qt GUI, the fold windows, libcoul.
+
 ## 2026-11-17 (analysis machine, almalinux) — `feature/upgrade-5-thm-ff`: the full form factor, THM clean-up
 
 Branch `feature/upgrade-5-thm-ff`, cut from `feature/upgrade` 76875f72, pushed, **not merged** (the director's).
