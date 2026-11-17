@@ -93,27 +93,8 @@ static bool CoefficientsAllowed(const CompoundSystem *compound, const Segment &s
 
 static bool AnalyzingPowerAllowed(const CompoundSystem *compound, const Segment &segment, int number, bool isTest,
                                   const Config &configure) {
-  if (!segment.IsAnalyzingPower()) return true;
+  if (!segment.IsAnalyzingPower() || segment.GetSpinObservable()) return segment.SpinObservableAllowed(compound, number, isTest, configure);
   const PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
-  if (const azure2::physics::SpinObservable *observable = segment.GetSpinObservable()) {
-    // A general spin observable: particle pairs on both sides, and every particle its operator names with the spin
-    // the operator needs (physics/SpinObservable.h, Check).
-    const char *what = isTest ? "test segment #" : "segment #";
-    const PPair *exitPair = compound->IsPairKey(segment.GetExitKey())
-                                ? compound->GetPair(compound->GetPairNumFromKey(segment.GetExitKey()))
-                                : nullptr;
-    std::string why;
-    if (!exitPair)
-      why = "needs one entrance and one exit pair";
-    else if (entrancePair->GetPType() != 0 || exitPair->GetPType() != 0)
-      why = "needs particle pairs on both sides (for capture only A_y, quantity analyzing_power, is computed)";
-    else
-      observable->Check(entrancePair->GetJ(1), entrancePair->GetJ(2), exitPair->GetJ(1), exitPair->GetJ(2), why);
-    if (why.empty()) return true;
-    configure.outStream << "ERROR: " << what << number << ": spin observable \"" << observable->token << "\": " << why
-                        << "." << std::endl;
-    return false;
-  }
   if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
   configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
                       << ": an analyzing power needs a spin-1/2 projectile; entrance pair " << segment.GetEntranceKey()

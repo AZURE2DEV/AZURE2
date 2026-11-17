@@ -110,6 +110,10 @@ class Segment {
   bool IsAnalyzingPower() const { return isAnalyzingPower_; };
   /// With IsAnalyzingPower: the general spin observable of the data set (ReactionSpec::spinObservable), null for A_y.
   const azure2::physics::SpinObservable *GetSpinObservable() const { return spinObservable_.get(); };
+  /// True when the segment has no general spin observable, or has one that can be computed: particle pairs on both
+  /// sides, and every particle its operator names with the spin the operator needs (physics/SpinObservable.h,
+  /// Check); else false, with the reason on configure.outStream.
+  bool SpinObservableAllowed(const CompoundSystem *compound, int number, bool isTest, const Config &configure) const;
   /// Unobserved-primary, observed-secondary reaction?
   bool IsUPOS() const;
   /// Number of segments summed for total capture; 0 if this is not a total-capture segment.

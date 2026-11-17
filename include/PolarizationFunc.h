@@ -152,6 +152,10 @@ class AmplitudeMatrix {
    */
   double SpinObservableValue(const azure2::physics::SpinObservable &obs) const;
   std::vector<complex> SpinObservableBar(const azure2::physics::SpinObservable &obs) const;
+  /// The reverse mode of the point's polarization observable: that of \p obs, or of A_y when the point has none.
+  std::vector<complex> PolarizationBar(const azure2::physics::SpinObservable *obs) const {
+    return obs ? SpinObservableBar(*obs) : AnalyzingPowerBar();
+  }
   complex PathwayAdjoint(int jNum, int chNum, int chpNum,
                          const std::vector<complex> &bar) const;
 
