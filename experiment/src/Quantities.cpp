@@ -22,7 +22,8 @@
 //     return q;
 //   }
 //
-// Members a row does not set keep the defaults of Quantities.h.
+// Members a row does not set keep the defaults of Quantities.h.  A quantity of record kind datum also sets q.datum
+// (Datum(...): its ModelQuantity, the key of the engine's value, and the build's DatumCheck; data_model.md section 11).
 #include "azure2/experiment/Quantities.h"
 
 #include <utility>
@@ -75,6 +76,13 @@ const Condition kNoAngle = Condition::Of(Condition::AngleAxis, true);
 
 const std::vector<std::string> kDataKinds = {"dataset", "extrapolation"};
 const std::vector<std::string> kDatum = {"datum"};
+
+/// The model-datum code's view of a datum quantity (DatumRule, docs/upgrade/data_model.md section 11): the engine's key
+/// (its case in LevelValue, src/ModelData.cpp), what the build checks beyond the fields (DatumCheck), and the quantity
+/// in the build's messages ("an ANC belongs to a closed channel"), needed by the channel checks.
+DatumRule Datum(ModelQuantity quantity, DatumCheck check = DatumCheck::kNone, const std::string &what = "") {
+  return {true, quantity, check, what};
+}
 
 // ---------------------------------------------------------------- data sets and extrapolations
 
@@ -458,6 +466,7 @@ Quantity ResonanceStrength() {
   q.title = "Resonance strength";
   q.doc = "omega gamma of a level from observed widths at E_r (data_kinds.md section 4.7, eq. 8).";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::ResonanceStrength, DatumCheck::kResonance);
   q.engineUnit = "eV";
   q.units = {OneUnit("eV"), OneUnit("meV"), OneUnit("ueV"), OneUnit("keV")};
   q.reaction = {R::kNoTotal, "one reaction, no [total] exit"};
@@ -474,6 +483,7 @@ Quantity ResonanceEnergy() {
   q.title = "Resonance energy";
   q.doc = "The observed level energy in the stated frame.";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::ResonanceEnergy);
   q.engineUnit = "MeV";
   q.units = {OneUnit("MeV"), OneUnit("keV"), OneUnit("eV")};
   q.fields = {Requires("level"), Requires("J"), Requires("frame"),
@@ -489,6 +499,7 @@ Quantity TotalWidth() {
   q.title = "Total width";
   q.doc = "The observed total width at E_r.";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::TotalWidth);
   q.engineUnit = "eV";
   q.units = {OneUnit("eV"), OneUnit("keV"), OneUnit("MeV")};
   q.fields = {Requires("level"), Requires("J")};
@@ -503,6 +514,7 @@ Quantity PartialWidth() {
   q.title = "Partial width";
   q.doc = "The observed partial width of a pair at E_r.";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::PartialWidth);
   q.engineUnit = "eV";
   q.units = {OneUnit("eV"), OneUnit("keV"), OneUnit("MeV")};
   q.fields = {Requires("level"), Requires("J"), Requires("pair")};
@@ -518,6 +530,7 @@ Quantity BranchingRatio() {
   q.title = "Branching ratio";
   q.doc = "Gamma_b / Gamma of a level.";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::BranchingRatio);
   q.engineUnit = "1";
   q.units = {OneUnit("1"), OneUnit("%")};
   q.reaction = {R::kNoTotal, "one reaction, no [total] exit"};
@@ -532,6 +545,7 @@ Quantity Anc() {
   q.title = "Asymptotic normalization coefficient";
   q.doc = "C of a bound level from its reduced width through the Whittaker function at a_c.";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::Anc, DatumCheck::kClosedChannel, "an ANC");
   q.engineUnit = "fm^-1/2";
   q.units = {OneUnit("fm^-1/2")};
   q.fields = {Requires("level"), Requires("J"), Requires("pair"), Requires("l"), Requires("s")};
@@ -547,6 +561,7 @@ Quantity ScatteringLength() {
   q.doc = "Re and Im of the s-wave scattering length of a particle pair, Coulomb-modified for a charged pair "
           "(include/ScatteringLength.h).";
   q.recordKinds = kDatum;
+  q.datum = Datum(ModelQuantity::ScatteringLength, DatumCheck::kSWavePair);
   q.engineUnit = "fm";
   q.units = {OneUnit("fm")};
   q.fields = {Requires("pair"), Requires("s"), Allows("imag"), Requires("imag_error", Condition::Present("imag"))};

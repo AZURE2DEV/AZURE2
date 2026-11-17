@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "azure2/experiment/Conditions.h"
+#include "azure2/experiment/ModelQuantity.h"
 
 namespace azure2 {
 namespace experiment {
@@ -67,6 +68,25 @@ struct Refusal {
                           ///< engine's set-up: needs the stopping on the sub-point grid) or "importer"
 };
 
+/// What BuildModelData (ModelDatum.cpp) checks of a datum against <levels> beyond the level, the pairs and the channel
+/// its fields name (docs/upgrade/data_model.md section 11).
+enum class DatumCheck {
+  kNone,           ///< nothing more
+  kResonance,      ///< the level lies above the entrance pair's threshold (E_OUT_OF_RANGE), then the warnings
+                   ///< W_BROAD_LEVEL and W_NEARBY_LEVEL of a strength (data_kinds.md section 4.7)
+  kClosedChannel,  ///< the level lies below the pair's threshold (E_FIELD_NOT_APPLICABLE)
+  kOpenChannel,    ///< the level lies above the pair's threshold (E_FIELD_NOT_APPLICABLE)
+  kSWavePair       ///< no level: an s-wave channel spin of a particle pair, or the coherent sum (a scattering length)
+};
+
+/// A datum quantity's place in the model-datum code: the engine's key, the build's rule, its name in the refusals.
+struct DatumRule {
+  bool given = false;  ///< set by every row of record kind datum (experiment_quantities, check 27)
+  ModelQuantity quantity = ModelQuantity::ResonanceStrength;
+  DatumCheck check = DatumCheck::kNone;
+  std::string what;  ///< the quantity in the build's messages ("an ANC belongs to a closed channel ...")
+};
+
 /*!
  * One row of the table.  Quantities.cpp fills each row member by member, in one function per quantity; a member a
  * row does not set keeps the default below (no angle axis, no order or window column, no reaction constraint, no
@@ -94,6 +114,8 @@ struct Quantity {
   std::vector<Refusal> refusals;
   /// Non-empty for a quantity that is no measurable observable: a data set of it gets W_NOT_MEASURABLE with this text.
   std::string datasetWarning;
+  /// A quantity of record kind datum: its key, build rule and words (DatumRule); not set for the others.
+  DatumRule datum;
 };
 
 const std::vector<Quantity> &Quantities();

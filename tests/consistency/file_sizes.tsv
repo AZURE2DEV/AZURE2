@@ -3,10 +3,7 @@
 # lines.  Lower the numbers (never raise them) with
 #   python3 tests/consistency/repo_consistency_test.py --tighten-sizes
 # Entries are added by the director only.
-api/src/pybind_api.cpp	1017
 physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
 pyazr/sources/nds.py	1450
-src/AMatrixFunc.cpp	1966
-src/AZUREGrad.cpp	1108
-src/WorkingCopy.cpp	1273
+src/AZUREGrad.cpp	1083

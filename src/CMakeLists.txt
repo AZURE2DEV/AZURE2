@@ -1,12 +1,12 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
 set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulombWavesAt.cpp ChannelTable.cpp InputFiles.cpp GenMatrixFunc.cpp
 ALevel.cpp LevelInputs.cpp LevelState.cpp LevelStateFill.cpp ObservedLevelTable.cpp PathwayTable.cpp CompoundSystem.cpp CompoundSystemSetUp.cpp CaptureAyRequests.cpp AngCoeff.cpp
-AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
+AMatrixFunc.cpp AMatrixFuncTBar.cpp AMatrixFuncAdjoint.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp AZURECalcGradient.cpp AZURECalcJacobian.cpp AZURECalcNuisance.cpp AZURECalcPool.cpp AZURECalcOutput.cpp AZURECalcDiagnostics.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
 Fitters.cpp FitEvaluations.cpp FitMigrad.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
-WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
+WorkingCopy.cpp WorkingCopyFill.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CompoundSystemBuild.cpp AbundanceSamples.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
@@ -57,6 +57,11 @@ include_directories(${AZURE2_SOURCE_DIR}/include)
 add_library(AZURE2Core STATIC ${AZURE2_CORE_SOURCES})
 target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
 set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# The engine's value of a model datum (LevelValue) is a switch on experiment::ModelQuantity: a value of the enum without
+# its case must not compile (docs/upgrade/data_model.md section 11).
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties(ModelData.cpp PROPERTIES COMPILE_OPTIONS "-Werror=switch")
+endif()
 
 # ProjectCommands.cpp: --convert, --convert-params, --validate, --describe, --schema, --print-predictions (the first
 # two use convert/, linked below); RunPreparation.cpp: a run request into the Config.  RunRequest.cpp (the commands
