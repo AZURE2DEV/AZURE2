@@ -119,17 +119,22 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
+   Answered 2026-11-18: as proposed (the factor 2 stays on every reaction cross section); see OWNER_ANSWERS.md.
 2. `dev` (the branch point and `3e502625` alike) reads that column as the light particle's excitation e1 and moves
    the level's E_x by it. Found on a 12C + 12C model of the PI, not in the repository (`HANDOFF.md`, 2026-11-15).
+   Answered 2026-11-18: as proposed (the THM binding energy); see OWNER_ANSWERS.md.
 3. Observables do not move while the transformation is exact; formal parameters of a group listed out of energy
    order (`param.sav`, `--no-transform` input) belong to another B_c; the run says so. `conventions.rst`.
+   Answered 2026-11-18: as proposed (B_c at the lowest level of the group); see OWNER_ANSWERS.md.
 4. Below the gap the limit takes the mean of the two levels' S′ (and S″), the chord's slope to second order; just
    above 1e-9 MeV the divided difference loses 1e-5 of χ² to round-off, at 1e-6 it loses 4e-10 |S|. One header,
    `physics/include/azure2/physics/LevelPairShift.h`, for the six places that divided by the gap.
    `pyazr_coincident_levels`; `physics_level_parameters_unit`, section 8.
+   Answered 2026-11-18: as proposed (1e-6 MeV with the mean S′, on `dev` too); see OWNER_ANSWERS.md.
 5. Your repair with this branch's own e^z K_n(z) where the continued fractions give up (η ≳ 230): ¹²C + ¹²C, l = 0,
    1 eV–2.5 keV gives S = −9.594 where the old series gave +4.6 to +11.2. At the switch (3.6 keV) S steps by
    2.3e-3 (2.4e-4 relative). Not compared number by number with `dev`'s GSL route. `physics_coulomb_threshold`.
+   Answered 2026-11-18: keep the repair in `physics/coulomb/coulsm` as a listed local change; see OWNER_ANSWERS.md.
 6. `isotope 15N 0.0037 fit prior 0.0036 0.0002` pays its prior from the first evaluation; `dev` centres an
    abundance prior on the value of its line, so fitted values copied into the file move the prior with them.
    `parameter_kinds.md` section 4; `tests/nuisance_prior_centre`.
@@ -138,6 +143,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 8. A folded number moves by the quadrature error it had: of 577 files 542 identical, 33 as close to an eightfold
    refined reference or closer, 2 of `hybrid_potential` (too coarse settings). Accepted when the largest distance is
    ≤ 1.2 times the old engine's and the r.m.s. ≤ 1.03 times (`energy_grid.md` section 7.1).
+    Answered 2026-11-18: as proposed (1.2 times the largest and 1.03 times the r.m.s. distance); see OWNER_ANSWERS.md.
 9. `examples/c12c12_tumino2018`: χ² 111.661 → 117.516 (117.516 again with 8 times the points); a 9.7 eV level in a
    thick layer: mesh 2.18022e-6, uniform grid 2.06e-8 to 5.09e-7 (64 times the points). `tests/shift_sqrt_subpoints`.
 10. `beam_spread_ay`: χ² 3838.66 → 3760.95, one A_y point by 1.5 of its error; equal, bit for bit, to the old engine
@@ -148,11 +154,15 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     resolution 0.4 MeV above the ⁷Li(p,n) threshold at 30° lab was 2.2 % off. `tests/lab_frame_fold`.
 13. `dev` decides external capture from the first term of each reaction only, so such a term runs without its
     external part and without a message (0.54 to 2.9 times the right term). `tests/component_mapping`, case (d).
+    Answered 2026-11-18: as proposed (the external part is computed for every term); see OWNER_ANSWERS.md.
 14. `dev` reads it without a message and one pair's capture loses its external part (×2.2 at the first point).
     Refused here, naming both pairs. `tests/ec_final_state_ambiguous`, case (d).
+    Answered 2026-11-18: as proposed (such a project is refused with a message); see OWNER_ANSWERS.md.
 15. Wrong on `dev` by 0.29 and 1.0 of the largest element against central differences; such gradient fits change.
+    Answered 2026-11-18: as proposed (take the fix); see OWNER_ANSWERS.md.
 16. Minuit2's last accepted state can be the start: T2 with `--max-calls=40` ends at 10910.1338428 before,
     7087.92418676 now, with a notice; `fitStatus.out` has one writer and new keys (`fitter`, `fitter_status`).
+    Answered 2026-11-18: as proposed (end at the lowest objective seen); see OWNER_ANSWERS.md.
 17. The resonance strength stays ω Γ_γ Γ_p / Σ Γ_particle, as on `dev`. New is only the record `gamma_decay` (Γ_γ,
     branchings, mixing ratios; `user_guide/gamma_decay.rst`), which gives the same partial widths as `<levels>`.
 18. The coefficients agree with GSL's within 4.1e-15. External-capture amplitudes move by at most 1.3e-14, a
@@ -348,35 +358,57 @@ then a merge commit of a commit of dev's line records dev as merged. Until then,
 
 **The one request.** Please write the next features (rmfit's merge, capture into unbound states, secondary γ rays)
 against this branch and its recipes, or at least against pyazr 3.0's names (`Session`, `Objective`, `Project`,
-`Parameters`) and format-3 records. Each week of separation adds 40–80 hours of porting at dev's present pace (an
+`Parameters`) and format-3 records. **Answered 2026-11-18: agreed; `dev` gets no further features, new work is cut from `feature/upgrade`; see OWNER_ANSWERS.md.** Each week of separation adds 40–80 hours of porting at dev's present pace (an
 estimate from the 65 commits read, not a measurement).
 
 ## 8. What is asked of the owner (each with this branch's proposal)
 
 - **The Coulomb repair's home**: a listed local change in `physics/coulomb/coulsm` (as now) or pycoulomb.
+  Answered 2026-11-18: keep it in `physics/coulomb/coulsm` as a listed local change; see OWNER_ANSWERS.md.
 - **The coincidence gap**: 1e-6 MeV with the mean S′ (section 3, row 4); proposed for `dev` too.
+  Answered 2026-11-18: as proposed, on `dev` too; see OWNER_ANSWERS.md.
 - **`--gsl-coul` on `dev`**: retired here by the PI (2026-11-16; section 3, row 19): GSL's Coulomb functions are
   wrong by up to 5 % in P below the barrier. Proposed for `dev` too.
+  Answered 2026-11-18: as proposed, retire the flag on `dev` too (a matter of the other branch); see OWNER_ANSWERS.md.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
+  Answered 2026-11-18: the fit's covariance carried through the transformation (not HESSE in a formal-basis session); see OWNER_ANSWERS.md.
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
   `tests/switch_options`, `AZR_DEBUG_GRID` is read by `tests/gamma_decay`; proposed: drop the two print-only
   switches no test reads (`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`) unless you use them.
+  Answered 2026-11-18: drop both; see OWNER_ANSWERS.md.
 - **`rmfit-campaign`**: follow `dev` (the skill lives with rmfit) and drop the ported copy here.
+  Answered 2026-11-18: as proposed; see OWNER_ANSWERS.md. The ported copy is dropped (`.claude/skills/rmfit-campaign`); rmfit's own stays.
 - **The logo**: the original on the web page and in the packages (as now), or `dev`'s new one.
+  Answered 2026-11-18: `dev`'s new logo; see OWNER_ANSWERS.md. It is on the web page and in the packages.
 - **The format of dev's new blocks**: record kinds `channel_radius` and `isospin_*`, the quantity `spin_observable`
   with an operator field; the converter reads the old blocks.
+  Answered 2026-11-18: as proposed (decided 2026-11-16); see OWNER_ANSWERS.md.
 - **The acceptance rule of a quadrature change** (section 3, row 8): 1.2 times the largest and 1.03 times the r.m.s.
   distance of the old engine to a refined reference.
+  Answered 2026-11-18: as proposed; see OWNER_ANSWERS.md.
 - **What an energy shift means for three kernels**: the beam-profile window and its detailed-balance norm, a user's
   resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.
+  Answered 2026-11-18: all three should follow the shifted energy; see OWNER_ANSWERS.md.
 - **Fitted target parameters in the band**: today an areal density or a stopping scale does not widen it.
+  Answered 2026-11-18: include them in the band; see OWNER_ANSWERS.md.
 - **Minuit2's call counter**: two atomic increments in `external/` (not applied; AZURE2 counts its own calls).
+  Answered 2026-11-18: apply the two-line change to the bundled Minuit2; see OWNER_ANSWERS.md.
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the
   proton mass of the M1 capture integral (`include/Constants.h`).
+  Answered 2026-11-18: update both to the current values and accept that results move; see OWNER_ANSWERS.md.
 - **Publishing and CI**: the Coulomb table's address and hash (`pyazr/coulomb_table.py`, `TABLE_URL`, empty); one
   run of `.github/workflows/wheels.yml` (section 10 item 7); a Windows wheel (MinGW or MSVC); SRIM's two data files
-  under their authors' terms (`stopping/data/srim/README.md`); `.github/workflows/build.yml` still passes `USE_READLINE`.
+  under their authors' terms (`stopping/data/srim/README.md`); `USE_READLINE` in `.github/workflows/build.yml`.
+  - Coulomb table: **Answered 2026-11-18: do not publish; users build it locally (about 5 minutes); see
+    OWNER_ANSWERS.md.** `TABLE_URL` and `TABLE_SHA256` are gone; `pyazr coulomb-table build` is the way.
+  - Windows wheel: **Answered 2026-11-18: MinGW, as the Windows program is built now; see OWNER_ANSWERS.md.** The
+    job `wheels-windows` of `wheels.yml` is written and has not run (no Windows machine here).
+  - SRIM's two data files: **the two answers disagree.** The owner's page says "Do not ship them; users supply
+    their own SRIM files"; his letter to the PI says "ship them but cite SRIM". Nothing is changed (they stay in
+    the module, with the citation) until the PI has asked; see OWNER_ANSWERS.md.
+  - `USE_READLINE`: **Answered 2026-11-18: remove it from the workflow; see OWNER_ANSWERS.md.** Removed from
+    `build.yml`, with the readline packages (CMake has no such option any more).
   The CI itself is red on this branch (section 10, the first item).
 
 ## 9. Known defects and limits
@@ -763,10 +795,10 @@ re-read against its design at the hand-over.
      **The third run (43863727165) passes on all four platforms**: every wheel builds and its test passes, the
      installed program on macOS included. On Linux the test's container has a system libgsl, so the test there
      cannot show whether auditwheel repaired the program.
-   No Windows wheel; the Coulomb table's address is empty (`pyazr/coulomb_table.py`); no wheel was installed on
-   a second machine.
+   No Windows wheel (the job `wheels-windows`, MinGW, was added 2026-11-18 and has not run); the Coulomb table is not
+   published (the owner, 2026-11-18: users build it); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
-   environment switches (section 8).
+   environment switches (section 8). **Answered 2026-11-18: remove `numcmc/` and the GSL fitter; see OWNER_ANSWERS.md.**
 9. **pyazr.** Bound since 2026-11-16 (pyazr 3.0.0.dev4): the level matrix with Brune's or Park's parameters and
    photon channels (`pyazr.physics.collision_matrix`, item 5), and elastic scattering on an optical potential
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
@@ -777,7 +809,7 @@ re-read against its design at the hand-over.
    the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
    A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
    for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
-   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.).
+   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.). **Answered 2026-11-18: switch to the closed form; see OWNER_ANSWERS.md.**
    `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2 since the same approval (it was a probe of the
    transformation): P of the session's channel functions at the level's physical energy, gamma_W^2 the engine's
    3 hbar^2 / (2 mu a^2); the name and the return shape are kept. theta^2 of `dimensionless_widths` changes
