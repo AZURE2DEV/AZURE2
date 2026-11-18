@@ -124,8 +124,18 @@ the link lines (``target_link_libraries`` in each ``CMakeLists.txt``).
    jobs (``jobs.py``) and a page of plain JavaScript (``pyazr/ui/static``).
 
 ``external/``
-   Vendored upstream code, built in-tree and never edited: Minuit2
-   (``external/minuit2``).
+   Vendored upstream code, built in-tree: Minuit2 (``external/minuit2``).
+   Edited in one listed place only.
+
+   Local changes of ``external/minuit2``:
+
+   * ``src/MnUserFcn.cxx`` and ``src/MnFcn.cxx``: ``#pragma omp atomic`` before
+     the increment of the call counter ``fNumCall`` (2026-11-18, the owner's
+     answer).  Minuit2's numerical gradient calls the objective from several
+     OpenMP threads at once; the plain increment lost counts, so a fit bounded
+     by ``--max-calls`` could run one more MIGRAD iteration at more threads
+     (``docs/upgrade/fit_threads.md`` section 3).  Test: ``fit_threads``,
+     check 3.
 
 The tools ``azure2-coulomb-table`` (``src/coulomb_table_main.cpp``) and
 ``azure2-stopping`` (``stopping/tools/azure2_stopping.cpp``) are small

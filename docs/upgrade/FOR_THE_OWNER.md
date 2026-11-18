@@ -373,6 +373,7 @@ estimate from the 65 commits read, not a measurement).
   resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.
 - **Fitted target parameters in the band**: today an areal density or a stopping scale does not widen it.
 - **Minuit2's call counter**: two atomic increments in `external/` (not applied; AZURE2 counts its own calls).
+  *Answered 2026-11-18: applied, the listed local change of `external/minuit2` (`developer/architecture.rst`).*
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the
   proton mass of the M1 capture integral (`include/Constants.h`).
 - **Publishing and CI**: the Coulomb table's address and hash (`pyazr/coulomb_table.py`, `TABLE_URL`, empty); one
@@ -400,8 +401,9 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - A project file cannot hold two levels of one J^π at the identical energy: their lines are read as one level, with
   a warning (R). Levels within 1e-6 MeV, and a fit that brings two together, work.
 - A repeated top-level section: the run reads the first and warns; `--validate` passes a repeated empty section (R).
-- `--max-calls` acts on Minuit2's own counter, approximate by a few calls under threads; the `param.fit` snapshot
-  depends on the thread schedule, every other output does not (C; `fit_threads.md` sections 3 and 4).
+- `--max-calls` acts on Minuit2's own counter, exact under threads since its increment is atomic (2026-11-18; R:
+  `fit_threads` check 3, T1 at 1 and 4 threads); the `param.fit` snapshot depends on the thread schedule, every
+  other output does not (`fit_threads.md` sections 3 and 4).
 - Levenberg-Marquardt and GSL's trust region ignore `--refreeze-covariance` without a word (C).
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).

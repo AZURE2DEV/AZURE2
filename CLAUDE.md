@@ -96,7 +96,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `rmfit/` | Global fitting campaigns on pyazr | Pure Python, not in the pip package; runs on pyazr 2 and pyazr 3 (`rmfit/backend.py`, `docs/upgrade/rmfit_two_backends.md`); its own README, DESIGN.md, tests (ctest `rmfit_*`, `rmfit/tests/CMakeLists.txt`) and skill; user guide `docs/source/user_guide/rmfit.rst` |
 | `numcmc/` | Ensemble MCMC sampler | |
-| `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code |
+| `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code. One listed local change (the atomic call counter, `docs/source/developer/architecture.rst`, "Local changes of `external/minuit2`") |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
 | `docs/source/` | Sphinx site, built with `-W` | The user-facing source of truth |
 | `.claude/skills/` | How to *use* AZURE2 | See "Skills" below; `tools/check_skills.py` |

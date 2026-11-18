@@ -7,9 +7,9 @@
 [thread]
 
 # Minuit2 MnUserFcn::operator() increments its call counter (mutable int MnFcn::fNumCall, MnUserFcn.cxx:21)
-# from every thread of the OpenMP numerical gradient (Numerical2PGradientCalculator.cxx:116-163) without
-# synchronization.  A real race in Minuit2 (vendored, not edited here: root CLAUDE.md): increments can be lost, so
-# the call count Minuit2 reports, and the --max-calls bound that uses it, are approximate under threads.  It does
-# not touch the objective, but a fit bounded by --max-calls can run one more MIGRAD iteration at more threads
-# (docs/upgrade/fit_threads.md section 3).  Seen in T1-fit and T3-fit (MIGRAD, Hesse), clang 23.1.4, 8 threads.
+# from every thread of the OpenMP numerical gradient (Numerical2PGradientCalculator.cxx:116-163).  Repaired on
+# 2026-11-18 by the one listed local change of external/minuit2 (an `omp atomic` increment, here and in
+# MnFcn.cxx; docs/source/developer/architecture.rst), so that --max-calls is exact under threads
+# (docs/upgrade/fit_threads.md section 3).  The entry is kept until a ThreadSanitizer run without it has passed
+# (none was run with the repair); then remove it.
 fun:_ZNK4ROOT7Minuit29MnUserFcnclERKNS0_8LAVectorE

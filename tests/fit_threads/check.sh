@@ -8,12 +8,17 @@
 #      (AZURE_TRACE_FCN=fresh, 2 threads).  Before the fix the re-placed sub-point grids kept nodes within 1e-12 of
 #      an earlier grid, so a copy's value depended on the vectors it had evaluated before (26 of 79 fit evaluations
 #      differed in their last bits, the first at evaluation 15);
-#   2. fits at 1 and 4 threads evaluate the same parameter vectors and give, at each, the same objective bit for bit.
-#      The number of evaluations is not compared: Minuit2's call counter is not atomic (MnUserFcn.cxx), so at 4
-#      threads it loses counts and a --max-calls fit may run one more iteration (fit_threads.md section 3).
+#   2. fits at 1 and 4 threads evaluate the same parameter vectors and give, at each, the same objective bit for bit;
+#   3. a fit bounded by --max-calls ends where it ends at 1 thread: tests/upgrade/T1, plain MIGRAD (Minuit2's numerical
+#      gradient, an OpenMP loop), --max-calls=200, at 1 and 4 threads: the same number of evaluations, the same calls
+#      in fitStatus.out, param.sav and chiSquared.out identical.  Minuit2's call counter is incremented atomically
+#      (the listed local change of external/minuit2, MnUserFcn.cxx and MnFcn.cxx); before it, the 4-thread fit lost
+#      counts and ran one more MIGRAD iteration (fit_threads.md section 3: 234 evaluations against 205, chi-squared
+#      462.477 against 462.736).
 #
 # Shown to fail with the tolerance restored in EData::ReplaceSubPointGrids (2026-11-09): item 1 as above, item 2 with
-# 34 of 59 common vectors at different values.  Takes about a minute (three 30-call fits of T2).
+# 34 of 59 common vectors at different values.  Item 3 fails with the engine of the base (Minuit2 unchanged).  Takes
+# about two minutes (three 30-call fits of T2, two 200-call fits of T1).
 #
 #   ./tests/fit_threads/check.sh path/to/AZURE2
 
@@ -61,6 +66,30 @@ if fit t1 1 1 && fit t4 4 1; then
   if [ "$nd" -eq 0 ] && [ "$common" -ge $((n1 - 1)) ] && [ "$n1" -ge 20 ]; then
     ok "1 and 4 threads: $common of the $n1 vectors of the 1-thread fit evaluated at 4 threads too, same bits at each"
   else bad "1 and 4 threads: $common of $n1 vectors in common, $nd with different values"; fi
+fi
+
+# ---- 3. --max-calls is exact under threads ----------------------------------------------------------------------
+bounded() {  # NAME THREADS
+  local dir="$WORK/$1"
+  mkdir -p "$dir/output" "$dir/checks"
+  cp -R "$HERE/../upgrade/T1/T1.azr" "$HERE/../upgrade/T1/data" "$dir/"
+  (cd "$dir" && AZURE_TRACE_FCN=1 OMP_NUM_THREADS="$2" "$AZURE2_BIN" fit --no-gui --no-coulomb-table \
+     --max-calls=200 T1.azr > run.log 2> trace.log)
+  if [ ! -s "$dir/output/param.sav" ] || [ ! -s "$dir/output/fitStatus.out" ]; then
+    bad "$1: the bounded fit wrote no param.sav or fitStatus.out"; tail -5 "$dir/run.log"; return 1
+  fi
+}
+if bounded b1 1 && bounded b4 4; then
+  n1=$(grep -c '^\[fcn\]' "$WORK/b1/trace.log"); n4=$(grep -c '^\[fcn\]' "$WORK/b4/trace.log")
+  c1=$(awk '$1 == "calls" { print; exit }' "$WORK/b1/output/fitStatus.out")
+  c4=$(awk '$1 == "calls" { print; exit }' "$WORK/b4/output/fitStatus.out")
+  if [ "$n1" -eq "$n4" ] && [ "$c1" = "$c4" ] && cmp -s "$WORK/b1/output/param.sav" "$WORK/b4/output/param.sav" &&
+     cmp -s "$WORK/b1/output/chiSquared.out" "$WORK/b4/output/chiSquared.out"; then
+    ok "--max-calls=200 at 1 and 4 threads: $n1 evaluations each, '$c1', param.sav and chiSquared.out identical"
+  else
+    bad "--max-calls=200: $n1 evaluations at 1 thread, $n4 at 4; '$c1' / '$c4'; $(cmp -s "$WORK/b1/output/param.sav" \
+      "$WORK/b4/output/param.sav" && echo 'param.sav equal' || echo 'param.sav differs')"
+  fi
 fi
 
 [ "$failures" -eq 0 ] && echo "fit_threads: all checks passed" || { echo "fit_threads: $failures check(s) FAILED"; exit 1; }
