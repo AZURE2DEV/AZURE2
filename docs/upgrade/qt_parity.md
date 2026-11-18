@@ -7,6 +7,11 @@ dropped on purpose and the reason is written next to it. Each item names the sou
 stays on `dev` and `qt5` for reference; any file can be read with `git show 4bf7aa06:gui/src/<file>` or
 `git show 4bf7aa06:gui/include/<file>`. Files under `tests/gui/` are named by their basename.
 
+The Qt program came back on 2026-11-18 on the facade `azure2::front` (`docs/upgrade/qt_gui.md`). Its checks are
+the lines marked *Qt (2026-11-18): ...* under an item: what `gui_window` (`tests/gui/gui_window_test.cpp`, label
+`gui`) or the screenshots of `work/qt-shots/` showed of the Qt program; a box stays as it was (it records the web
+page). An item without such a line was not checked in the Qt program.
+
 Twenty items are ticked as dropped by the PI's decision of 2026-11-13: Qt-only behaviour, the grammar of format
 1 and 2 that the converter handles, or what a format-3 property replaces; the reason is written under each.
 
@@ -124,11 +129,13 @@ because the engine also searches the whole file for them.
 - [ ] Open + save without edits reproduces the file; checked for segments, `<thm>`, scattering lengths, THM
       opt-in, segment renumbering and the Experimental Effects tail (`segments_roundtrip_test.cpp`,
       `thm_block_test.cpp`, `scattering_lengths_test.cpp`, `thm_opt_in_test.cpp`)
+      *Qt (2026-11-18): verified: T1, T2, T3, 13N saved byte for byte, and again after every record was written back through its form (81 records)*
 - [ ] Inactive lines (levels, segments, effects, scattering lengths) are kept with their flags (`*Model.cpp`)
 - [x] Unknown segment tails are kept only if they start with a whitelisted keyword (`SegmentKeywords.h`)
       *Dropped (the PI, 2026-11-13): format-1/2 write-back artefacts: no rewrite of untouched lines in format 3.*
 - [ ] Numbers are written with the fewest digits (6 or more) that read back to the same double; fixed-width columns
       get a separating space when full (`RoundTripNumber.h`)
+      *Qt (2026-11-18): verified for <levels>: a value not edited keeps its token as read; a new value is written in the shortest form that reads back (LevelsFile.cpp); one width edited changes one row*
 - [ ] Comments: kept in `<thm>` (inline comments of unchanged keys too); dropped in `<scatteringLengths>`,
       `<abundances>` and `<parameterSettings>`, which write their own header comments (`AZURESetupThm.cpp`,
       `ThmSettings.h`)
@@ -148,10 +155,12 @@ because the engine also searches the whole file for them.
 - [ ] Window title `AZURE2 -- <path>`, `-- untitled`, `-- Running`, `-- Running MCMC` (`AZURESetup.cpp`)
 - [ ] Tab order: Particle Pairs, Levels and Channels, Segments, Experimental Effects, Nuclear Potential (only with
       the hybrid method on), Fitting Settings, Calculate, MCMC (MCMC builds), Plot (Qwt builds) (`AZURESetup.cpp`)
+      *Qt (2026-11-18): verified (screenshots): Particle Pairs, Levels and Channels, Segments, Experimental Effects, Nuclear Potential (always shown), THM (new), Fitting Settings, Calculate; MCMC is a command of Calculate; no Plot tab (no Qwt)*
 - [ ] Logo button at the right of the tab bar opens About (`AZURESetup.cpp`)
 - [ ] File > About AZURE2...: version `v<version> (<git describe>)` (`AboutAZURE2Dialog.cpp`)
 - [ ] File > New Project (Ctrl+N): resets every tab, A-matrix, THM off (`AZURESetup.cpp`)
 - [ ] File > Open... (Ctrl+O); a read error resets and shows "Can't Access File" (`AZURESetup.cpp`)
+      *Qt (2026-11-18): verified: an old file is refused with the converter's command (and offered to the converter in the dialog path, not tested)*
 - [ ] File > Open Recent: five most recent files, stored in QSettings, plus Clear (`AZURESetup.cpp`)
 - [ ] File > Save (Ctrl+S; Save As when untitled), Save As... (Shift+Ctrl+S), Quit (Ctrl+Q) (`AZURESetup.cpp`)
 - [ ] Opening sets the working directory to the project's directory (`AZURESetup.cpp`)
@@ -232,6 +241,7 @@ because the engine also searches the whole file for them.
 - [ ] Levels table (sortable except the first two columns): Include?, Fix?, Level Spin (J^π with ⁺/⁻), Energy
       [MeV]; Compound Nucleus column and a nucleus filter only with several nuclei (`LevelsTab.cpp`,
       `LevelsModel.cpp`, `LevelsHeaderView.h`)
+      *Qt (2026-11-18): shown in the screenshot of T2*
 - [ ] `+` Add a Level, `-` delete, double-click Edit a Level (`LevelsTab.cpp`)
 - [ ] Level dialog: Compound Nucleus (several nuclei; fixed on edit), Excitation Energy [MeV], Spin-Parity
       (J^π) list of only the J^π that give channels; Accept disabled until the energy is a number
@@ -241,8 +251,10 @@ because the engine also searches the whole file for them.
 - [ ] Duplicate level refused (`LevelsTab.cpp`)
 - [ ] Channel Configuration: Maximum Orbital Momentum (0-10, default 2), Maximum Gamma Multipolarity (1-10),
       Maximum Gamma Multipolarities Per Decay (1-10) (`LevelsTab.cpp`)
+      *Qt (2026-11-18): shown in the screenshot of T2*
 - [ ] "Hard-sphere scattering in every J^π (levels or not)" (default on, saved as `includeAllJPi`) (`LevelsTab.cpp`)
 - [ ] Missing-J^π line: all covered / hard-sphere only list / red "not in the calculation" list (`LevelsTab.cpp`)
+      *Qt (2026-11-18): shown in the screenshot of T2 (the red list)*
 - [ ] Channel generation rules: particle (l, s) with parity and l ≤ l_max, identical particles l + s even; beta
       Fermi and Gamow-Teller; gamma E/M multipoles with integer/half-integer matching (`LevelsTab.cpp`)
 - [ ] Channels In Selected Level table: Fix?, Channel Pair, s, l (`LevelsTab.cpp`, `ChannelsModel.cpp`)
@@ -253,6 +265,7 @@ because the engine also searches the whole file for them.
       (`ChannelDetails.cpp`)
 - [ ] Wigner Limit button: Γ_W = 2 P γ²_W in eV, or √γ²_W in MeV^1/2 for amplitudes; "N/A" for capture, beta and
       bound channels (`LevelsTab.cpp`)
+      *Qt (2026-11-18): now physics::single_particle_width through the facade; not run in a test*
 - [ ] Fix All Widths, Fix All Energies (`LevelsTab.cpp`)
 - [ ] NDS button: picks the nucleus (several nuclei), opens Import Levels from IAEA Database; reports added and
       skipped duplicates (`LevelsTab.cpp`)
@@ -271,6 +284,7 @@ because the engine also searches the whole file for them.
       Energy Shift [MeV], Groups (`SegmentsTab.cpp`, `SegmentsDataModel.cpp`)
 - [ ] Tooltip on a tied norm or shift: "Not used: segment k takes the ... of segment m" (`SegmentsDataModel.cpp`)
 - [ ] Measured scattering lengths appear as rows after the segments in the same table (`SegmentsTab.cpp`)
+      *Qt (2026-11-18): model data are the Model Data sub-tab of Segments (records of <modelData>)*
 - [ ] Buttons: `+`, `-`, up, down, Check All, Uncheck All, EXFOR; Filter by entrance and exit pair
       (`SegmentsTab.cpp`)
 - [x] Moving or deleting a line renumbers what names segments: effect segment lists (line dropped when empty), THM
@@ -328,6 +342,7 @@ because the engine also searches the whole file for them.
 
 - [ ] Table of effect lines with `+`, `-`, double-click edit; columns include Segment List, Int. Points, flags and
       parameters of each effect, Effects summary (`TargetIntTab.cpp`, `TargetIntModel.cpp`)
+      *Qt (2026-11-18): targets, beams and detectors are records listed and edited by their form (screenshot of T2); a record broken in its form is named by the engine in the diagnostics panel (verified on a data set: E_UNKNOWN_UNIT)*
 - [x] Segments List ("5, 8, 13", "4-12", "3,6,7-14"); Number of Integration Points (`AddTargetIntDialog.cpp`).
       Not to be built: Apply in Energy Ranges, Blend Width, Auto Tolerance (deleted with decision D3: every point of
       a folded data set is folded)
@@ -383,8 +398,10 @@ because the engine also searches the whole file for them.
 
 - [ ] Calculation Type: Calculate Segments From Data, Fit Segments From Data, Calculate Segments Without Data,
       Perform MINOS Error Analysis, Calculate Reaction Rate (`RunTab.cpp`)
+      *Qt (2026-11-18): verified: the engine's commands under the old titles; calculate and fit run from the tab*
 - [ ] Minimizer (fit only): Minuit2, Minuit2 (analytic grad.), Levenberg-Marquardt, GSL Trust-Region, NLopt SBPLX,
       COBYLA, BOBYQA, NEWUOA, PRAXIS, Nelder-Mead (NLopt builds); MINOS forces Minuit2 (`RunTab.cpp`)
+      *Qt (2026-11-18): the engine's fitters (front::Fitters) in the Fitting Settings tab; a call limit verified*
 - [ ] Chi-Sq Variance (MINOS only, default 1.0) (`RunTab.cpp`)
 - [ ] Uncertainty (band) for fit, extrapolation and MINOS; Scale covariance (fit/MINOS with band); Set Wigner
       limits (`RunTab.cpp`)
@@ -398,10 +415,12 @@ because the engine also searches the whole file for them.
       file; angular-distribution coefficients with convolution or target integration (`AZURESetup.cpp`)
 - [ ] Stop AZURE2 sets the engine's stop flag; Run disabled while running; log scrolled to the end (`AZURESetup.cpp`,
       `AZUREMainThread.h`)
+      *Qt (2026-11-18): verified: a fit stopped from the window ends at its best point, fitStatus.out says stopped; run controls disabled while running*
 - [ ] Runtime log pane, `\r` lines overwrite the last line, mouse filtered while running (`FilteredTextEdit.h`)
 - [ ] Files the run writes are the engine's in the output directory (`param.sav`, `parameters.out`,
       `normalizations.out`, `param.errors`, `covariance_matrix.out`, `reactionrates.out`, `ECint.dat`, `AZUREOut_*`)
       (`InTabDocs.cpp`)
+      *Qt (2026-11-18): verified: the files of calculate from the window equal AZURE2 calculate's, 9 of 9 (T1)*
 
 ## 11. MCMC tab (MCMC builds)
 
@@ -475,6 +494,7 @@ because the engine also searches the whole file for them.
 
 - [ ] Runs on a worker thread with its own copy of the Config (every field the GUI sets, including hard-sphere,
       abundance prior, relativistic, prior covariance); output streamed to the log (`AZUREMainThread.h`)
+      *Qt (2026-11-18): verified: front::Run in a QThread; the window's event loop turned during the run; the run reads the saved file*
 - [x] File > Save before every run; runs use the saved file (`AZURESetup.cpp`)
       *Dropped (the PI, 2026-11-13): jobs read the working text; the user's file is written only by Save.*
 - [ ] Pair keys are never typed: drop-downs list "k: label [E MeV]"; a key beyond the list kept as
@@ -483,6 +503,7 @@ because the engine also searches the whole file for them.
 - [ ] File dialogs: Qt's own on macOS, native elsewhere; `AZURE2_NATIVE_DIALOGS=1|0` forces (`FileDialogPolicy.cpp`)
 - [ ] `AZURE2_SCREENSHOT_DIR=<dir>`: open the project, save each tab as `tab<n>_<name>.png` after 1.5 s, quit
       (`main.cpp`, `AZURESetup.cpp`)
+      *Qt (2026-11-18): the grab of every tab verified (saveTabScreenshots, AZURE2_QT_SHOTS in the test); the variable itself not run*
 - [ ] High-DPI scaling; macOS font substitutions (`main.cpp`)
 - [ ] Network fetches: IAEA levels (`nds.iaea.org/relnsd`), EXFOR (`nds.iaea.org/exfor`), website and THM help
       opened in the browser (`IAEALevelData.cpp`, `ExforData.cpp`, `AZURESetup.cpp`, `ThmWorkspace.cpp`)

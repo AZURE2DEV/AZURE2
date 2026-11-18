@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-18/19 (agent qt) — `feature/upgrade-6-qt`: the Qt setup program back, on one facade
+
+**Design** `docs/upgrade/qt_gui.md`. The GUI meets the engine through one plain-C++ header,
+`api/front/include/azure2/front/Engine.h` (`azure2::front`, library `azure2_front`, linking the engine PRIVATE so no
+other engine include directory reaches `gui/`): the project as the engine's lossless `io::Document` edited with the
+engine's grammars (`<config>` `io::ConfigEdits`, `<levels>` `io::LevelRow`/`EditLevelRow`, records
+`io::ReadRecords`/`WriteRecords`); `Validate` = `--validate` (`ValidateProjectBytes`, factored out of
+`src/ProjectCommands.cpp`); `ConvertProject` = `--convert`'s converter; the schema's kinds and fields in order;
+`Run` = the program's run, `RunProgram` (`src/ProgramMain.cpp`: main's run after the process's start-up, moved out
+of `src/AZURE2.cpp` unchanged), with the caller's stream, a stop request and sinks of progress and chi^2
+(`include/ProgramObserver.h`, one pointer `Config::observer`, null for the CLI). A stopped fit ends at its best point
+and skips HESSE, MINOS and the band (the CLI cannot stop: no number of the CLI moves).
+
+**Engine files touched**: `include/Config.h`, `src/Config.cpp` (observer, `StopRequested`), `src/ChannelRowFill.cpp`,
+`src/ExternalCaptureSetup.cpp` (`StopRequested` for `stopFlag`), `include/ProgramRun.h`, `src/ProgramFit.cpp`
+(observer; stopped fit), `src/AZUREMain.cpp`, `src/RunOutputs.cpp` (chi^2 sinks), `src/AZURE2.cpp` (main only;
+`--no-gui` help line), new `src/ProgramMain.cpp`, `include/ProgramMain.h`, `include/ProgramObserver.h`,
+`include/ProjectCommands.h`, `src/ProjectCommands.cpp`, `include/RunRequest.h`, `src/RunRequest.cpp`,
+`include/CommandLineValues.h`, `src/CommandLineValues.cpp` (CommandError/OptionError on a stream),
+`src/CMakeLists.txt` (library `AZURE2Program`), `tests/consistency/repo_consistency_test.py` (parseOptions now in
+ProgramMain.cpp).
+
+**GUI** (`gui/`, Qt 6, `-DBUILD_GUI=ON`, off by default): dev's window ported; tabs Particle Pairs (+ per-channel
+radii records), Levels and Channels (+ gamma decays, isospin records), Segments (From Data, Without Data, Model Data),
+Experimental Effects, Nuclear Potential, THM (`<thm>` as text), Fitting Settings (fitters of `Fitters()`, call limit,
+refreeze, prior covariance, `<parameterSettings>`, `<mcmc>`), Calculate (commands and options from the engine's
+tables, worker `QThread`, Stop, chi^2 table, files written); Diagnostics panel; Configure menu from the `<config>`
+table. Not ported: dev's Plot tab (no Qwt here), the parameter table of Fitting Settings, the MCMC tab's tables (the
+mcmc command and its options are in Calculate), EXFOR import, the Coulomb-table builder, ENDF export (pyazr only).
+
+**Run** (snapshot of 0b6d4c67 in `work/snap-u6-qt`, build `work/b-u6-qt-snap`): build 0 warnings; `ctest -LE slow`
+392 of 393 (`rmfit_enginepin` fails, as on the base: HANDOFF 2026-11-17); `api_front` passes (T1 and 13N: calculate
+through the facade = `AZURE2 calculate`, 9 and 8 files identical; a stopped fit). GUI build `work/b-u6-qt-gui`
+(`-DQT_FORCE_MIN_CMAKE_VERSION_FOR_USING_QT=3.20`, `GUI_LINK_OPTIONS` for conda's libstdc++): 0 warnings in `gui/`;
+`ctest -L gui` 1 of 1 (`gui_window`); screenshots in `work/qt-shots/`.
+
+**Open**: CI has no Qt job (the PI's decision; a job needs Qt 6 Widgets and Network, CMake >= 3.22 or the force
+switch, `-DBUILD_GUI=ON`, `QT_QPA_PLATFORM=offscreen`, `ctest -L gui`). The GUI's tabs of records are forms of the
+schema, not dev's hand-made dialogs: a closed choice, a unit, a file chooser per field, the rest typed in the
+grammar the tool tip shows.
+
 ## 2026-11-18 (agent) — fix/param-duplicate-name: two stopping scales of one name
 
 **Symptom.** `Session(...).objective()` and `AZURE2 calculate` failed with "AZUREParams: N parameters but N+1 records"

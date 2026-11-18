@@ -90,6 +90,22 @@ Coulomb table: [...]
 Coulomb table: 678 lookups, 0 outside the table (exact routine used)
 ```
 
+The Qt setup program (2026-11-18; `docs/upgrade/qt_gui.md`): the old tabs on the engine's facade `api/front/`, built
+only when asked. Qt 6 wants CMake 3.22; this machine has 3.20 and a conda Qt built by a newer g++ than the system's,
+hence the two last options (neither is needed with a matching toolchain):
+
+```
+$ cmake -S . -B build-gui -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -Dpybind11_DIR="$(python3 -m pybind11 --cmakedir)" \
+        -DQT_FORCE_MIN_CMAKE_VERSION_FOR_USING_QT=3.20 "-DGUI_LINK_OPTIONS=-L$CONDA_PREFIX/lib;-Wl,-rpath,$CONDA_PREFIX/lib"
+$ cmake --build build-gui --parallel 4                 # 0 warnings in gui/
+$ build-gui/gui/src/AZURESetup T1.azr                  # File > Open also offers to convert an old project
+$ QT_QPA_PLATFORM=offscreen AZURE2_SCREENSHOT_DIR=shots build-gui/gui/src/AZURESetup T1.azr   # 2.2 s: shots/tab0..7
+$ ctest --test-dir build-gui -L gui                     # gui_window: round trips, runs, stop, screenshots
+```
+
+`Calculate > Save and Run` runs the program's own run (`RunProgram`) in a worker thread: its output files are those
+of `AZURE2 calculate` byte for byte (checked on T1 and 13N), and `Stop AZURE2` ends a fit at its best point.
+
 ## 3. Where the numbers differ from `dev`, and why
 
 `dev` here is the commit where this branch left it (`aab1de0d`) unless a row says otherwise. "Decides": who has to
