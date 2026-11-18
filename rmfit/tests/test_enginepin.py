@@ -100,7 +100,8 @@ def test_repin_job_scripts(fp):
         assert rw == ["run_crc_rmfit", "run_slurm_drive"] and warned == ["run_hand"], (rw, warned)
         t = open(os.path.join(d, "run_crc_rmfit")).read()
         assert enginepin.guard_lines_csh(new) in t and old["so_md5"] not in t and "--max-minutes 123" in t
-        assert os.stat(os.path.join(d, "run_crc_rmfit")).st_mode & 0o111
+        # the executable bit: a Windows file system has none (st_mode there comes from the file's extension)
+        assert os.name == "nt" or os.stat(os.path.join(d, "run_crc_rmfit")).st_mode & 0o111
         t = open(os.path.join(d, "run_slurm_drive")).read()
         assert enginepin.guard_lines_sh(new) in t and old["so_md5"] not in t
         assert old["so_md5"] in open(os.path.join(d, "run_hand")).read()
