@@ -241,9 +241,10 @@ started from a sampler job's best point continues its chain, also a sampler that
 restart of the server (from its chain as last saved, every 50 stored steps): **sample (emcee)…** is offered beside
 it.  A chain shorter than about 50 τ is not quoted
 (:doc:`mcmc`).  **bands (covariance)…** after a fit with a covariance computes the 1σ band of the model of every data
-set and extrapolation at the fit's best point (linear propagation over the level parameters, ``pyazr.bands``);
+set and extrapolation at the fit's best point (linear propagation over the parameters a band spans: the level parameters and free target and apparatus
+parameters, ``pyazr.bands``);
 **bands (draws)…** after a sampler evaluates the model at draws of its chain and takes the 16th, 50th and 84th
-percentiles at each point.  The result says which parameters the band varied (the level parameters for the linear
+percentiles at each point.  The result says which parameters the band varied (the parameters a band spans for the linear
 band, every free parameter for the band from draws) and which were held at the start point.
 
 **Results.**  Everything at the working parameters (the vector of the last edit or Undo), from one answer of the

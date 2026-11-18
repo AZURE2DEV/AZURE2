@@ -21,7 +21,8 @@
 #
 # Checked: every run exits 0 and prints a total chi-squared; in "none" it is the calculation's, digit for digit; in
 # the others the routes end at the same minimum (1e-5 relative; they agree to 1e-7 today); the band is written
-# where a level parameter is free and skipped with a message that says why where none is.  (The --use-lm run of
+# where a parameter the band propagates is free (a level parameter, and since 2026-11-18 a target or apparatus
+# parameter too: "target" and "apparatus" have a band) and skipped with a message that says why where none is.  (The --use-lm run of
 # "target" takes half a minute: only --use-gradient and --use-lm are run there.)  --use-gsl-lm, the fourth route
 # until 2026-11-18, was removed with its fitter.
 # A route whose log says "MIGRAD did NOT converge" is noted and its end point not compared (since 2026-11-15: on the
@@ -110,8 +111,8 @@ fitted() {
       if [ "$n" -gt 0 ] && [ -s "$dir/output/covariance.dat" ]; then ok "$m: $n band file(s) and covariance.dat"
       else bad "$m: $n band files, covariance.dat $([ -s "$dir/output/covariance.dat" ] && echo there || echo missing)"; fi
     else
-      if [ "$n" = 0 ] && grep -q "no free level parameter" "$dir/run.log"; then ok "$m: the band is skipped, the message says why"
-      else bad "$m: $n band files; expected none and 'no free level parameter' in the log"; fi
+      if [ "$n" = 0 ] && grep -q "no free level parameter, THM coherent" "$dir/run.log"; then ok "$m: the band is skipped, the message says why"
+      else bad "$m: $n band files; expected none and 'no free level parameter, THM coherent ...' in the log"; fi
     fi
   done
   [ -n "$first" ] || bad "$label: no route reached a minimum"
@@ -124,10 +125,10 @@ echo "mixed: level parameters and an areal density (tests/layer_yield/models/fit
 fitted mixed "$HERE/../layer_yield/models" fit.azr yes $MODES
 
 echo "target: two areal densities and a stopping scale (tests/stopping_yield/models/fit.azr)"
-fitted target "$HERE/../stopping_yield/models" fit.azr no --use-gradient --use-lm
+fitted target "$HERE/../stopping_yield/models" fit.azr yes --use-gradient --use-lm
 
 echo "apparatus: the width of a detector's resolution alone (tests/rectangular_resolution/models/fit.azr)"
-fitted apparatus "$HERE/../rectangular_resolution/models" fit.azr no $MODES
+fitted apparatus "$HERE/../rectangular_resolution/models" fit.azr yes $MODES
 
 echo
 if [ "$failures" = 0 ]; then echo "fit_modes: all checks passed"; else echo "fit_modes: $failures check(s) FAILED"; fi

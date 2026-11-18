@@ -39,6 +39,7 @@
 #include "LineWindow.h"
 #include "CommandLineValues.h"
 #include "Config.h"
+#include "CovarianceBand.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include <gsl/gsl_errno.h>
@@ -683,6 +684,7 @@ PYBIND11_MODULE(_azure2, m) {
           d["own_prior"] = row.ownPrior;
           d["segment_field"] = row.segmentField;
           d["vary_from_project"] = row.varyFromProject;
+          d["band"] = IsBandParameter(row.kind);
           d["doc"] = row.doc;
           out.append(d);
         }
@@ -690,7 +692,8 @@ PYBIND11_MODULE(_azure2, m) {
       },
       "The kinds of fit parameter (ParameterKind.h), one dict per kind in their order in the vector: key (the "
       "Parameter.kind of pyazr), unit, owner (the record fields that say what it belongs to, "
-      "parameter_record_fields()), own_prior, segment_field, vary_from_project, doc.");
+      "parameter_record_fields()), own_prior, segment_field, vary_from_project, band (the uncertainty band propagates "
+      "it: CovarianceBand.h, IsBandParameter), doc.");
   BindRecordFields(m);  // pybind_records.cpp: parameter_record_fields, pair_record_fields
   m.def("point_output_fields", &PointOutputFields,
         "The numbers a point carries beside its model value (pybind_evaluation.cpp's table): name, unit ('model': the "

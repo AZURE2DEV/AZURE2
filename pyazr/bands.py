@@ -116,18 +116,28 @@ def _model_dir(model):
     return os.path.abspath(model.cwd or os.path.dirname(model.file) or ".")
 
 
-def load_covariance(path="output/covariance.dat", ncols=None):
+def load_covariance(path="output/covariance.dat", ncols=None, names=None):
     """Read AZURE2's saved parameter covariance (a bare ``N x N`` matrix).
 
     ``covariance.dat`` is written by a fit run with the uncertainty band
-    enabled and holds the free **R-matrix** block only, in packed parameter
-    order.  ``ncols``, when given, is the number of free R-matrix parameters
-    the current model has; a mismatch means the covariance belongs to a
-    different model and is refused rather than silently misaligned.
+    enabled and holds the free parameters a band spans (``pyazr.kinds()["parameters"]``' ``band``),
+    in packed parameter order, after a ``#columns`` header that names them.
+    ``ncols``, when given, is the number of such parameters the current model
+    has; a mismatch means the covariance belongs to a different model and is
+    refused rather than silently misaligned -- unless ``names`` (the current
+    model's band columns) are given and the header names each of them: then
+    the matrix is taken on those columns (a session of the extrapolations
+    after a fit with a free target parameter, which that session has not).
     """
     C = np.loadtxt(path, ndmin=2)
     if C.ndim != 2 or C.shape[0] != C.shape[1]:
         raise ValueError(f"{path}: expected a square matrix, got {C.shape}.")
+    if ncols is not None and C.shape[0] != ncols and names is not None and len(names) == ncols:
+        with open(path) as f:
+            header = next((line.split()[1:] for line in f if line.startswith("#columns")), [])
+        if len(header) == C.shape[0] and all(n in header for n in names):
+            pick = [header.index(n) for n in names]
+            C = C[np.ix_(pick, pick)]
     if ncols is not None and C.shape[0] != ncols:
         raise ValueError(
             f"{path} is {C.shape[0]}x{C.shape[0]} but the model has {ncols} "
@@ -138,9 +148,19 @@ def load_covariance(path="output/covariance.dat", ncols=None):
 
 
 _RMATRIX_KINDS = ("energy", "width")
-# What a band spans (the engine's BandPackedColumns): the R-matrix parameters and the THM coherent background, which
-# enters the HOES amplitude (the nuisances -- shifts, abundances, target and apparatus parameters -- do not).
-_BAND_KINDS = ("energy", "width", "cbkg")
+
+
+def _band_kinds():
+    """The kinds of fit parameter a band spans (the engine's ``IsBandParameter``, ``pyazr.kinds()["parameters"]``'s
+    ``band``): the R-matrix parameters, the THM coherent background (``cbkg``) and, since 2026-11-18, the parameters of
+    targets, samples and apparatus that change the model (abundance, screening, density, doppler, thickness,
+    apparatus).  Normalizations and energy shifts move the data, not the model, and are not in it."""
+    return tuple(k["key"] for k in _engine_module().parameter_kinds() if k["band"])
+
+
+def _engine_module():
+    from . import _azure2
+    return _azure2
 
 
 def live_parameters(model):
@@ -167,16 +187,18 @@ def live_parameters(model):
 
 
 def rmatrix_columns(model):
-    """Packed indices of the free R-matrix parameters, in the order of the fit vector.
+    """Packed indices of the free parameters a band spans (``pyazr.kinds()["parameters"]``' ``band``), in the order of the fit vector.
 
     These are the columns ``covariance.dat`` spans: level energies and reduced
-    width amplitudes, and the THM coherent background (``cbackground=``, kind
-    ``cbkg``) when the project has one.  Normalizations and energy shifts are
-    excluded -- no calculated observable depends on them.  Queried live, so the answer is
-    right for the mode the session is in now.
+    width amplitudes, the THM coherent background (``cbackground=``, kind
+    ``cbkg``) when the project has one, and the free target and apparatus
+    parameters (a fitted areal density, a stopping scale, ...; since 2026-11-18).
+    Normalizations and energy shifts are excluded -- they move the data, not the
+    model.  Queried live, so the answer is right for the mode the session is in now.
     """
     kinds, _ = live_parameters(model)
-    cols = [j for j, k in enumerate(kinds) if k in _BAND_KINDS]
+    band = _band_kinds()
+    cols = [j for j, k in enumerate(kinds) if k in band]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
     return cols
@@ -515,7 +537,8 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
         ``{1-based segment key: Band}``.
     """
     kinds, _ = live_parameters(model)
-    cols = [j for j, k in enumerate(kinds) if k in _BAND_KINDS]
+    band = _band_kinds()
+    cols = [j for j, k in enumerate(kinds) if k in band]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
 
@@ -523,7 +546,9 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
     if C is None:
         C = os.path.join(_model_dir(model), "output", "covariance.dat")
     if isinstance(C, (str, os.PathLike)):
-        C = load_covariance(C, ncols=len(cols))
+        free_names = [p.name for p in model.parameters if not p.fixed]
+        C = load_covariance(C, ncols=len(cols),
+                            names=[free_names[j] for j in cols] if len(free_names) == len(kinds) else None)
     C = np.asarray(C, float)
     if C.shape[0] != len(cols):
         raise ValueError(f"the covariance is {C.shape[0]}x{C.shape[0]} but the "

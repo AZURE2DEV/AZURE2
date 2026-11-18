@@ -374,6 +374,8 @@ estimate from the 65 commits read, not a measurement).
 - **What an energy shift means for three kernels**: the beam-profile window and its detailed-balance norm, a user's
   resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.
 - **Fitted target parameters in the band**: today an areal density or a stopping scale does not widen it.
+  *Answered 2026-11-18: included (`output_files.rst`, covariance.dat); a band without such a parameter is unchanged
+  bit for bit.*
 - **Minuit2's call counter**: two atomic increments in `external/` (not applied; AZURE2 counts its own calls).
   *Answered 2026-11-18: applied, the listed local change of `external/minuit2` (`developer/architecture.rst`).*
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the

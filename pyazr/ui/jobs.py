@@ -416,7 +416,7 @@ def bands_covariance(tracker, x0, settings, names):
     sigma = sigma_data + sigma_grids
     tracker.count(1, None, x0)
     how = (f"linear, from the covariance of job {tracker.source['id']} at its best point: the model +- sigma, "
-           "sigma^2 = g^T C g over the level parameters (pyazr.bands)")
+           "sigma^2 = g^T C g over the parameters a band spans (pyazr.bands)")
     bands = _band_entries(every, values, [v - s_ for v, s_ in zip(values, sigma)],
                           [v + s_ for v, s_ in zip(values, sigma)], how)
     return "finished", how, {"bands": bands, "source": tracker.source["id"], "varied": varied,

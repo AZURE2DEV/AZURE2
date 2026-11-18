@@ -3,7 +3,12 @@
 #include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "Config.h"
+#include "LevelState.h"
+#include "Segment.h"
+#include "Unit.h"
+#include "ModelPass.h"
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <cmath>
 #include <map>
@@ -46,14 +51,79 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
 
 }  // namespace
 
+bool IsApparatusBandParameter(ParamKind kind) {
+  switch (kind) {
+    case ParamKind::Abundance:
+    case ParamKind::Screening:
+    case ParamKind::Density:
+    case ParamKind::Doppler:
+    case ParamKind::Thickness:
+    case ParamKind::Apparatus: return true;
+    default: return false;
+  }
+}
+
+bool IsBandParameter(ParamKind kind) {
+  return IsRMatrixParameter(kind) || kind == ParamKind::ThmCoherent || IsApparatusBandParameter(kind);
+}
+
 std::vector<int> BandPackedColumns(const ParamIndexMap &pmap) {
   std::vector<int> cols;
   const int n = pmap.NumPacked();
-  for (int a = 0; a < n; a++) {
-    ParamKind k = pmap.Desc(pmap.PackedToFull(a)).kind;
-    if (IsRMatrixParameter(k) || k == ParamKind::ThmCoherent) cols.push_back(a);
-  }
+  for (int a = 0; a < n; a++)
+    if (IsBandParameter(pmap.Desc(pmap.PackedToFull(a)).kind)) cols.push_back(a);
   return cols;
+}
+
+void AddApparatusSensitivities(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs,
+                               WorkingCopy *data, const Config &config, const ParamIndexMap &pmap, const vector_r &full,
+                               std::map<Unit *, vector_r> &fullGrad) {
+  std::vector<int> cols;
+  for (int a : BandPackedColumns(pmap))
+    if (IsApparatusBandParameter(pmap.Desc(pmap.PackedToFull(a)).kind)) cols.push_back(a);
+  if (cols.empty()) return;
+  // The model of every unit at a vector, on copies (as AZURECalc::WriteIterationOutput evaluates a snapshot): the
+  // caller's state and data keep the best fit's values and grids.
+  LevelState ls(state);
+  std::unique_ptr<WorkingCopy> copy(data->Clone());
+  azure2::Results results;
+  // The points with a model record: those of the data set's own segments (WorkingCopy::LayoutResults), in one order
+  // in the copy and in `data`.
+  std::vector<Unit *> points;
+  for (const Segment &seg : data->Data().GetSegments())
+    for (Unit &point : seg.GetPoints(*data)) points.push_back(&point);
+  auto modelAt = [&](const vector_r &p, std::vector<double> &values) {
+    compound->FillCompoundFromParams(p, ls);
+    copy->FillNormsFromParams(p);
+    copy->FillEnergyShiftsFromParams(p, results, compound, &ls, &inputs, &config);
+    if (config.paramMask & Config::USE_BRUNE_FORMALISM) compound->CalcShiftFunctions(config, ls);
+    azure2::EvaluateModel(*copy, compound, ls, config, results, azure2::LeafValues::Calculate);
+    values.clear();
+    for (const Segment &seg : copy->Data().GetSegments())
+      for (const Unit &point : seg.GetPoints(*copy)) values.push_back(point.GetModelValue(results));
+  };
+  const int nPacked = pmap.NumPacked();
+  std::vector<double> plus, minus;
+  for (int a : cols) {
+    const int f = pmap.PackedToFull(a);
+    if (f < 0 || f >= (int)full.size()) continue;
+    const double h = 1.0e-6 * (std::fabs(full[f]) + 1.0);
+    vector_r p = full;
+    p[f] = full[f] + h;
+    modelAt(p, plus);
+    p[f] = full[f] - h;
+    modelAt(p, minus);
+    for (std::size_t i = 0; i < points.size() && i < plus.size() && i < minus.size(); i++) {
+      const double d = (plus[i] - minus[i]) / (2.0 * h);
+      std::map<Unit *, vector_r>::iterator it = fullGrad.find(points[i]);
+      if (it == fullGrad.end()) {
+        if (d == 0.0) continue;
+        it = fullGrad.emplace(points[i], vector_r(nPacked, 0.0)).first;
+      }
+      if ((int)it->second.size() < nPacked) it->second.resize(nPacked, 0.0);
+      it->second[a] = d;
+    }
+  }
 }
 
 BandCovariance BuildBandCovarianceFromMinuit(const std::vector<double> &covData,
@@ -107,12 +177,20 @@ bool LoadBandCovariance(const std::string &path, BandCovariance &cov) {
   if (!in) return false;
   cov.cols.clear();  // plain matrix carries no column identities
   cov.M.clear();
+  cov.names.clear();
 
   // Read every non-empty line as a row of doubles ('#' header lines are skipped).  The file must be square.
   std::string line;
   while (std::getline(in, line)) {
     const size_t k = line.find_first_not_of(" \t");
-    if (k != std::string::npos && line[k] == '#') continue;
+    if (k != std::string::npos && line[k] == '#') {
+      if (line.compare(k, 8, "#columns") == 0) {
+        std::istringstream names(line.substr(k + 8));
+        std::string name;
+        while (names >> name) cov.names.push_back(name);
+      }
+      continue;
+    }
     std::istringstream iss(line);
     std::vector<double> row;
     double v;
@@ -185,7 +263,7 @@ double BandData::dXS(const std::vector<double> &g) const {
 
 bool BuildBandData(const CompoundSystem *compound, LevelState &state, const LevelInputs &inputs, WorkingCopy *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
-                   const std::vector<bool> *fixedMask) {
+                   const std::vector<bool> *fixedMask, const vector_r *full) {
   out.compound = compound;
   out.M.clear();
   out.grad.clear();
@@ -211,15 +289,35 @@ bool BuildBandData(const CompoundSystem *compound, LevelState &state, const Leve
   const int m = (int)rc.size();
 
   // A covariance loaded from covariance.dat has no column identities; its
-  // dimension must then equal the number of free band parameters.
-  if (savedCov.cols.empty() && savedCov.size() != m) {
+  // dimension must then equal the number of free band parameters, or its "#columns" header must name every band
+  // column of this run (an extrapolation after a fit with a free target parameter, whose column this run has not:
+  // its sensitivity here is zero, so dropping its row and column is exact).
+  BandCovariance byName;
+  if (savedCov.cols.empty() && savedCov.size() != m && (int)savedCov.names.size() == savedCov.size()) {
+    std::map<std::string, int> savedIndex;
+    for (int a = 0; a < savedCov.size(); a++) savedIndex[savedCov.names[a]] = a;
+    std::vector<int> pick;
+    for (int a = 0; a < m; a++) {
+      std::map<std::string, int>::const_iterator it = savedIndex.find(tp.GetMinuitParams().GetName(pmap.PackedToFull(rc[a])));
+      if (it == savedIndex.end()) break;
+      pick.push_back(it->second);
+    }
+    if ((int)pick.size() == m) {
+      byName.M.assign(m, std::vector<double>(m, 0.0));
+      for (int a = 0; a < m; a++)
+        for (int b = 0; b < m; b++) byName.M[a][b] = savedCov.M[pick[a]][pick[b]];
+    }
+  }
+  const BandCovariance &useCov = byName.empty() ? savedCov : byName;
+  if (useCov.cols.empty() && useCov.size() != m) {
     const bool coherent = data->Data().NumThmCoherentParams() > 0;
     config.outStream << "Data covariance size mismatch: covariance.dat has "
                      << savedCov.size() << " rows/columns but the model has " << m
                      << (coherent ? " free R-matrix and THM coherent-background parameters (level energies, "
                                     "reduced widths and cbkg values; "
                                   : " free R-matrix parameters (level energies and reduced widths; ")
-                     << "normalizations and energy shifts are excluded). "
+                     << "with target and apparatus parameters where free; normalizations and energy shifts are "
+                        "excluded), and its #columns header does not name each of them. "
                         "Skipping the uncertainty band."
                      << std::endl;
     return false;
@@ -233,7 +331,7 @@ bool BuildBandData(const CompoundSystem *compound, LevelState &state, const Leve
     sdp = &shiftDeriv;
   }
 
-  out.M = RemapCovarianceToParamMap(savedCov, pmap);  // m x m, BandPackedColumns order
+  out.M = RemapCovarianceToParamMap(useCov, pmap);  // m x m, BandPackedColumns order
 
   // ComputeModelGradients yields full packed rows; reduce each to the band
   // columns so the sensitivities line up with the covariance.
@@ -250,9 +348,10 @@ bool BuildBandData(const CompoundSystem *compound, LevelState &state, const Leve
   // (ComputeTHMRows' J_m and ds/dp; a fixed THM norm has ds/dp = 0 and the band
   // is that of m).  The overall scale of the THM model, arbitrary in THM, thus
   // gets no band: a change of the parameters that only rescales m leaves q put.
+  const vector_r projectVector = tp.GetMinuitParams().Params();
+  const vector_r &fullVector = (full && full->size() == projectVector.size()) ? *full : projectVector;
   {
-    const vector_r full = tp.GetMinuitParams().Params();
-    std::vector<THMRows> thm = ComputeTHMRows(compound, state, inputs, data, results, config, full, pmap);
+    std::vector<THMRows> thm = ComputeTHMRows(compound, state, inputs, data, results, config, projectVector, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
       const Segment *seg = data->Data().GetSegment(tr.segment);
@@ -273,6 +372,8 @@ bool BuildBandData(const CompoundSystem *compound, LevelState &state, const Leve
       }
     }
   }
+  // The apparatus columns (a fitted density, stopping scale, ...): central differences of the model at the best fit.
+  AddApparatusSensitivities(compound, state, inputs, data, config, pmap, fullVector, fullGrad);
   for (std::map<Unit *, vector_r>::const_iterator it = fullGrad.begin();
        it != fullGrad.end(); ++it) {
     const vector_r &f = it->second;

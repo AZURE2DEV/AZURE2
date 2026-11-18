@@ -74,7 +74,8 @@ The covariance is the linear (Gaussian) approximation at x̂. It fails near a li
 saturated background poles (`azure2-check`), and for widths whose sign is not determined: profile or sample.
 
 **CLI.** A fit with the band on (`--covariance-band`) writes `output/covariance.dat` (free level energies and
-amplitudes, `param.sav` order); `--scale-covariance` multiplies it by χ²/ν when that exceeds 1 (Birge ratio);
+amplitudes, and free target and apparatus parameters such as an areal density or a stopping scale, `param.sav`
+order; not norms or shifts); `--scale-covariance` multiplies it by χ²/ν when that exceeds 1 (Birge ratio);
 MINOS writes asymmetric errors to `param.errors` (`docs/source/reference/output_files.rst`).
 `pyazr.bands.load_covariance(path)` reads `covariance.dat`; `s.fit_with_engine(method).covariance` is the same
 from Python.
@@ -126,8 +127,8 @@ from pyazr import Session, uncertainty_bands, extrapolation_bands
 s = Session("model.azr")
 bands = uncertainty_bands(s, keys=[3, 7])         # {data set number: Band}; params default to output/param.sav
 lo, hi = bands[3].interval(1.0)                   # also .relative
-bands = uncertainty_bands(s, keys=[5], params=x, covariance=C)   # a point and a matrix of your own (R-matrix
-                                                  # parameters only, e.g. F^-1 of fisher.py)
+bands = uncertainty_bands(s, keys=[5], params=x, covariance=C)   # a point and a matrix of your own (the band's
+                                                  # columns: pyazr.rmatrix_columns(s), e.g. F^-1 of fisher.py)
 ext = extrapolation_bands("model.azr", keys=[1])  # trimmed private model: cost scales with what you ask for
 ```
 

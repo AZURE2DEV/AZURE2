@@ -145,8 +145,8 @@ add_test(NAME pyazr_endf_write_tabulated
 set_tests_properties(pyazr_endf_write_tabulated PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
                      LABELS slow TIMEOUT 3000)
 
-# MF=32 (LRF=7, LCOMP=1): the covariance of MF=2's formal parameters from HESSE in a formal-basis session at T1's
-# MIGRAD minimum, written and read back, the refusals (about 40 s).
+# MF=32 (LRF=7, LCOMP=1): the fit's covariance carried through the transformation to MF=2's formal parameters at T1's
+# MIGRAD minimum (J against differences), written and read back, the refusals (about 45 s).
 add_test(NAME pyazr_endf_covariance
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/endf_covariance_test.py)
@@ -1246,6 +1246,12 @@ set_tests_properties(pyazr_wheel PROPERTIES LABELS slow PROCESSORS 2 TIMEOUT 720
 # (slow), and its controls -- the fitter table, progress records, the stop request.
 add_test(NAME pyazr_fit_with_engine COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_with_engine_test.py)
 set_tests_properties(pyazr_fit_with_engine PROPERTIES LABELS slow
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# A fitted areal density in the uncertainty band (tests/layer_yield/models/fit.azr): covariance.dat names it, the band
+# equals a direct propagation of the curve's differences with covariance.dat, and fixing the density narrows it.
+add_test(NAME pyazr_band_target_parameters
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/band_target_parameters_test.py)
+set_tests_properties(pyazr_band_target_parameters PROPERTIES SKIP_RETURN_CODE 77
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 # The engine's ensemble sampler on a session (docs/upgrade/pyazr3.md section 12): sample_with_engine against the
 # program's command mcmc (the chain number for number at 1 and 2 sampler threads, both bases, Park, a parameter file

@@ -157,7 +157,12 @@ The minimizer selection is only available for fitting modes.
    Compute the analytic cross-section uncertainty band from the fitted
    parameter covariance (CLI ``--covariance-band``): at the data energies for
    a fit, on the extrapolation grid for "Calculate Segments Without Data",
-   from the covariance a previous fit saved (``covariance.dat``).
+   from the covariance a previous fit saved (``covariance.dat``).  The band
+   propagates every free parameter that changes the model: the level
+   parameters and, since 2026-11-18, a fitted areal density, stopping scale or
+   other target or apparatus parameter (``covariance.dat`` in
+   :doc:`../reference/output_files`); normalizations and energy shifts are not
+   in it.
    **Scale covariance** inflates the covariance by the reduced chi-squared
    when it exceeds 1 (``--scale-covariance``).
 
