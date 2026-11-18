@@ -825,8 +825,9 @@ page works without it: plots are replaced by their data table and CSV export, so
 action reachable by keyboard and listed in a `?` overlay; light and dark themes following the system, switchable;
 numbers right-aligned with units in the column head; the engine's own words for every description and message.
 
-**The original's face.** The header and the browser tab show the original program's icon
-(`pyazr/ui/static/azure2_icon.png`, byte-identical to `packaging/icons/azure2_icon.png`: consistency check 57).
+**The original's face.** The header and the browser tab show `dev`'s new logo (the owner's
+answer of 2026-11-18; `pyazr/ui/static/azure2_icon.png`, byte-identical to `packaging/icons/azure2_icon.png`, which is
+`gui/images/azure2_icon.png` of `dev`: consistency check 57).
 The colour tokens of `style.css` are built on the icon's measured colours: its blue `#004293` is the accent, its red
 `#990000` the error colour, its green `#04800d` (darkened to `#04720c` for 4.5:1 on every panel) the success colour;
 the dark theme uses lighter tints of the same hues (`#79aef0`, `#ff8f8a`, `#6fd27a`). A state is never said by its

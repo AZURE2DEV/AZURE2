@@ -14,6 +14,7 @@ Exits 0 when everything agrees, 1 with one line per problem otherwise.
 """
 
 import glob
+import hashlib
 import os
 import re
 import stat
@@ -1547,13 +1548,20 @@ for _rel, _line, _kind, _detail in comparison_scan.scan_tree(ROOT):
                     "(check 56)")
 _comparison_scripts = len(comparison_scan.scanned_files(ROOT))
 
-# 57. The web page's icon is the original program's (docs/upgrade/web_ui.md section 7): pyazr/ui/static/azure2_icon.png,
-#     which the wheel carries, is byte-identical to packaging/icons/azure2_icon.png (no second drawing of it).
+# 57. The web page's icon is the new logo (`dev`'s gui/images/azure2_icon.png, the owner's answer of 2026-11-18;
+#     docs/upgrade/web_ui.md section 7): pyazr/ui/static/azure2_icon.png, which the wheel carries, is byte-identical
+#     to packaging/icons/azure2_icon.png (the AppImage's icon; no second drawing of it), and both are that file
+#     (SHA-256 below).  A newer logo of the owner replaces both files and this hash.
 _page_icon, _original_icon = "pyazr/ui/static/azure2_icon.png", "packaging/icons/azure2_icon.png"
+_logo_sha256 = "3ff3ac25565408a21dfa3f85a99fed44a7c6853f415144348c3a3b6c7455e155"
 try:
     with open(os.path.join(ROOT, _page_icon), "rb") as _a, open(os.path.join(ROOT, _original_icon), "rb") as _b:
-        if _a.read() != _b.read():
-            problems.append(f"{_page_icon} differs from {_original_icon}: copy the original's icon (check 57)")
+        _bytes_a, _bytes_b = _a.read(), _b.read()
+    if _bytes_a != _bytes_b:
+        problems.append(f"{_page_icon} differs from {_original_icon}: copy the logo's file (check 57)")
+    elif hashlib.sha256(_bytes_a).hexdigest() != _logo_sha256:
+        problems.append(f"{_page_icon} is not the new logo (gui/images/azure2_icon.png of dev, SHA-256 {_logo_sha256}) "
+                        "(check 57)")
 except OSError as e:
     problems.append(f"check 57: {e}")
 
@@ -1822,7 +1830,7 @@ print(f"repository consistent: {len(flags)} CLI flags, test registration, check.
       f"{len(_rows)} physics rows tested, {len(_cli.COMMANDS)} pyazr commands, {len(_scheme_rows)} boxes of the class scheme, "
       f"{len(_fitter_rows)} fitters, {_wheel_data} data files of the wheel, "
       f"{_pipefail_scripts} shell scripts under pipefail without a pipe into an early reader, "
-      f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the original's, "
+      f"{_comparison_scripts} test scripts whose comparisons can fail, the page's icon the new logo's, "
       f"{len(_example_files)} examples run and listed, no CNuc in {_compound_files} engine files, "
       f"{_precision_regions} parallel regions and {_bindings} binding functions in the x87 precision scope or "
       "listed")

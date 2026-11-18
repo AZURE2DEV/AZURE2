@@ -9,7 +9,7 @@
 - no module of the page names a record kind, quantity or parameter kind of the engine outside the layout hints;
 - the page's own sources keep the repository's measures (lines of at most 120 columns, files of about 500 lines);
   the vendored directory is the stated exception (minified third-party code);
-- the page shows the original program's icon (the file of packaging/icons, served as a PNG, the tab's icon and the
+- the page shows the new logo of `dev` (the file of packaging/icons, served as a PNG, the tab's icon and the
   header's), its colour tokens give every text at least 4.5:1 on its backgrounds in both themes, and its About box
   cites what the documentation's front page cites.
 """
@@ -232,7 +232,7 @@ if __name__ == "__main__":
 ICON = "azure2_icon.png"
 
 
-def test_icon_is_the_original_programs(tmp_path):
+def test_icon_is_the_new_logo(tmp_path):
     with open(os.path.join(STATIC, ICON), "rb") as a, open(os.path.join(uitest.ROOT, "packaging", "icons", ICON),
                                                            "rb") as b:
         assert a.read() == b.read(), "the page's icon is not packaging/icons/azure2_icon.png"
