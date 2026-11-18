@@ -8,7 +8,9 @@ stays on `dev` and `qt5` for reference; any file can be read with `git show 4bf7
 `git show 4bf7aa06:gui/include/<file>`. Files under `tests/gui/` are named by their basename.
 
 Twenty items are ticked as dropped by the PI's decision of 2026-11-13: Qt-only behaviour, the grammar of format
-1 and 2 that the converter handles, or what a format-3 property replaces; the reason is written under each.
+1 and 2 that the converter handles, or what a format-3 property replaces; the reason is written under each. The
+navigation of 2026-11-19 (`web_navigation.md`) ticks two (the logo's About, File › About) and notes under the
+items of sections 2, 3, 4, 5 and 10 where the page now offers them.
 
 ## 1. The .azr file
 
@@ -148,12 +150,24 @@ because the engine also searches the whole file for them.
 - [ ] Window title `AZURE2 -- <path>`, `-- untitled`, `-- Running`, `-- Running MCMC` (`AZURESetup.cpp`)
 - [ ] Tab order: Particle Pairs, Levels and Channels, Segments, Experimental Effects, Nuclear Potential (only with
       the hybrid method on), Fitting Settings, Calculate, MCMC (MCMC builds), Plot (Qwt builds) (`AZURESetup.cpp`)
-- [ ] Logo button at the right of the tab bar opens About (`AZURESetup.cpp`)
-- [ ] File > About AZURE2...: version `v<version> (<git describe>)` (`AboutAZURE2Dialog.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): the first six tabs in this order and with these names (Fitting
+      Settings and Calculate are one tab, Calculate and Fit; MCMC is its sampler; no Nuclear Potential tab), then Rate
+      and ENDF, Physics and THM, Covariances and Project.*
+- [x] Logo button at the right of the tab bar opens About (`AZURESetup.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): the logo at the left of the top bar opens About.*
+- [x] File > About AZURE2...: version `v<version> (<git describe>)` (`AboutAZURE2Dialog.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): File › About AZURE2… and Help › About AZURE2…: the version of the
+      program and of pyazr, the reference, the documentation.*
 - [ ] File > New Project (Ctrl+N): resets every tab, A-matrix, THM off (`AZURESetup.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): File › New project from this one… (a new file with the pairs and
+      levels, no data; POST /api/project/new); an empty project is `pyazr ui new.azr`.*
 - [ ] File > Open... (Ctrl+O); a read error resets and shows "Can't Access File" (`AZURESetup.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): File › Open… (a .azr of the folder, POST /api/project/open); a
+      refusal is shown in the dialog. No Ctrl+O (the browser's).*
 - [ ] File > Open Recent: five most recent files, stored in QSettings, plus Clear (`AZURESetup.cpp`)
 - [ ] File > Save (Ctrl+S; Save As when untitled), Save As... (Shift+Ctrl+S), Quit (Ctrl+Q) (`AZURESetup.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): File › Save (Ctrl+S) and Save as… (a file of the folder); Quit is
+      closing the browser tab and Ctrl-C on the server.*
 - [ ] Opening sets the working directory to the project's directory (`AZURESetup.cpp`)
 - [ ] First non-`--` command-line argument is opened as the project (`main.cpp`)
 - [x] After open: a non-modal warning when the last run used GSL Coulomb functions, with "Use the default
@@ -163,7 +177,10 @@ because the engine also searches the whole file for them.
 - [ ] Documentation > Show Documentation For Current Tab (Ctrl+D): HTML help by tab index 0-5 (Pairs, Levels,
       Segments, Effects, Calculate, Plot). The indices predate the Nuclear Potential and Fitting tabs, so on
       Fitting it shows the Calculate text and on Calculate the Plot text (`AZURESetup.cpp`, `InTabDocs.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): Help › Documentation for this tab (F1): the user guide's section of
+      the open tab (`web_interface.rst`, "The tabs").*
 - [ ] Documentation > Open AZURE Website... opens https://azure.nd.edu (`AZURESetup.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): Help › Documentation opens the documentation site.*
 - [x] Status bar message after a segment renumbering removes effect lines or THM experiments (`AZURESetup.cpp`)
       *Dropped (the PI, 2026-11-13): no renumbering: records are named.*
 
@@ -171,6 +188,8 @@ because the engine also searches the whole file for them.
 
 - [ ] Formalism > A-Matrix / R-Matrix (exclusive); R-Matrix refused while "Ignore external width" is on
       (`AZURESetup.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): the Configure menu's Run settings… opens the run settings
+      (formalism, checks, directories, runtime options) of the Project tab.*
 - [ ] Checks...: eight drop-downs None / Screen / File: Compound Nucleus, Boundary Conditions, Data, L-Matrix/Phases/
       Penetrabilities, Legendre Polynomials, Coulomb Amplitudes, Reaction Pathways, Angular Distributions
       (`EditChecksDialog.cpp`)
@@ -199,6 +218,8 @@ because the engine also searches the whole file for them.
       hidden column 15 is Light Excitation since the dev merge (comment says "THM binding energy"), so B shows and
       the light E_x does not: probably a regression (`PairsTab.cpp`, `PairsModel.h`)
 - [ ] `+` opens Add a Particle Pair; `-` deletes the selected pair; double-click edits (`PairsTab.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): Add pair and Remove pair at the table, the selected pair's numbers
+      beside it.*
 - [ ] Pair dialog fields: Particle Pair Type (Particle, Particle / Particle, Gamma / Beta Decay); light and heavy J
       (validated), parity (- / +), Z, M (atomic mass, u); Heavy Excitation [MeV]; Light Excitation [MeV] (particle
       pairs only); Separation Energy [MeV]; Channel Radius [fm] (`AddPairDialog.cpp`)
@@ -233,6 +254,8 @@ because the engine also searches the whole file for them.
       [MeV]; Compound Nucleus column and a nucleus filter only with several nuclei (`LevelsTab.cpp`,
       `LevelsModel.cpp`, `LevelsHeaderView.h`)
 - [ ] `+` Add a Level, `-` delete, double-click Edit a Level (`LevelsTab.cpp`)
+      *Web page (2026-11-19, `web_navigation.md`): Add level and Remove level at the table (Remove level new: the page
+      had no control), the selected level and its channels beside it.*
 - [ ] Level dialog: Compound Nucleus (several nuclei; fixed on edit), Excitation Energy [MeV], Spin-Parity
       (J^π) list of only the J^π that give channels; Accept disabled until the energy is a number
       (`AddLevelDialog.cpp`)
@@ -398,6 +421,7 @@ because the engine also searches the whole file for them.
       file; angular-distribution coefficients with convolution or target integration (`AZURESetup.cpp`)
 - [ ] Stop AZURE2 sets the engine's stop flag; Run disabled while running; log scrolled to the end (`AZURESetup.cpp`,
       `AZUREMainThread.h`)
+      *Web page (2026-11-19, `web_navigation.md`): Stop in the job's panel and in the status line on every tab.*
 - [ ] Runtime log pane, `\r` lines overwrite the last line, mouse filtered while running (`FilteredTextEdit.h`)
 - [ ] Files the run writes are the engine's in the output directory (`param.sav`, `parameters.out`,
       `normalizations.out`, `param.errors`, `covariance_matrix.out`, `reactionrates.out`, `ECint.dat`, `AZUREOut_*`)

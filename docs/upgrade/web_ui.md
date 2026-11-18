@@ -1973,6 +1973,17 @@ row cannot show them.  `Project.set_channel(width=0.45)` writes the width back t
 the old program's beyond the fields above, and a second walk of the screens one by one (the counts after are the
 routes' and the boxes', not clicks measured in a browser).
 
+### 11.19 The navigation of the Qt program (2026-11-19)
+
+The PI found the page hard to find one's way in compared with the Qt program. Measured and changed in
+`docs/upgrade/web_navigation.md` (what was hard, the clicks per task before and after). In short: the two depths of
+11.11 keep their fields and columns but no longer change the tabs; one tab row in the Qt order and names (Particle
+Pairs, Levels and Channels, Segments, Experimental Effects, Calculate and Fit, Plot), then the groups Rate and ENDF,
+Physics and THM, Covariances (a second row) and Project (`layout.js` `FIRST_VIEW` with `group`); a menu bar and the
+status line's job and validator marks (`shell.js`); the table with Add / Remove at it and the selected row beside it
+in Particle Pairs and Levels and Channels (`tabs/levels.js`: a level's panel and the new level's form); the page
+opens on Particle Pairs, with an overview on a first visit. No route changed.
+
 ## 12. What pyazr 3.0's design lacks for the UI (findings)
 
 None of these changes the decided objects; each is a call or a field to add:

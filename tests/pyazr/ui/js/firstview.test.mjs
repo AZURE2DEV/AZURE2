@@ -1,4 +1,4 @@
-// The page's first view (docs/upgrade/web_ui.md section 6, the two depths): its tabs are the old program's path,
+// The page's navigation (docs/upgrade/web_navigation.md): its tabs are the old program's path, then a few groups,
 // each a view of a tab of the page, a route marks the view it belongs to; a form folds the fields the engine's
 // table marks rare unless the record sets them; the next step of a project; Calculate's comparison of two
 // calculations (the engine's numbers, subtracted).
@@ -14,17 +14,27 @@ const project = await mod("tabs/project.js");
 const schema = engineSchema();
 const skipNoSchema = schema ? false : "the engine's schema was not given (AZURE2_UI_SCHEMA)";
 
-const TABS = ["project", "nucleus", "data", "fit", "results", "physics", "thm", "endf", "rate"]
+const TABS = ["project", "nucleus", "data", "fit", "results", "physics", "thm", "endf", "rate", "covariance", "prior"]
   .map((id) => ({ id, title: id }));
 
-test("the first view is the old program's path; the expert's is the page's tabs as they are", () => {
-  const first = layout.shownTabs(false, TABS);
-  assert.deepEqual(first.map((t) => t.title), ["Project", "Particle Pairs", "Levels and Channels", "Segments",
-    "Experimental Effects", "Fit", "Plot", "Physics", "THM", "ENDF", "Reaction Rate"]);
-  // Physics and THM only where the project has THM content (app.js shows a view with `when` by its condition)
-  assert.deepEqual(first.filter((t) => t.when).map((t) => [t.title, t.when]), [["Physics", "thm"], ["THM", "thm"]]);
-  for (const t of first) assert.ok(t.row && t.hash.startsWith(`#/${t.tab}`), t);
-  assert.deepEqual(layout.shownTabs(true, TABS).map((t) => t.tab), TABS.map((t) => t.id));
+test("the tabs are the old program's path, then a few groups; the same in both depths", () => {
+  const shown = layout.shownTabs(false, TABS);
+  assert.deepEqual(layout.mainTabs(shown).map((t) => t.title), ["Particle Pairs", "Levels and Channels", "Segments",
+    "Experimental Effects", "Calculate and Fit", "Plot", "Rate and ENDF", "Physics and THM", "Covariances",
+    "Project"]);
+  assert.deepEqual(layout.mainTabs(shown).filter((t) => t.group).map((t) => [t.title, t.members.map((m) => m.title)]),
+    [["Rate and ENDF", ["Reaction Rate", "ENDF"]], ["Physics and THM", ["Physics functions", "THM"]],
+      ["Covariances", ["Data covariance", "Parameter prior"]]]);
+  // THM only where the project has THM content (app.js shows a view with `when` by its condition)
+  assert.deepEqual(shown.filter((t) => t.when).map((t) => [t.title, t.when]), [["THM", "thm"]]);
+  // every tab of the page has a view, each view a tab of the page, and a sentence for the overview
+  assert.deepEqual([...new Set(shown.map((t) => t.tab))].sort(), TABS.map((t) => t.id).sort());
+  for (const t of shown) assert.ok(t.row && t.hash.startsWith(`#/${t.tab}`) && t.doc, t);
+  assert.deepEqual(layout.shownTabs(true, TABS), shown);
+  // a page opened without a route opens the first tab of the work
+  assert.equal(layout.START, "#/nucleus/pair");
+  assert.equal(layout.mainTitleOf(shown.find((t) => t.tab === "thm")), "Physics and THM");
+  assert.equal(layout.mainTitleOf(shown.find((t) => t.tab === "results")), "Plot");
 });
 
 test("a route marks the view it belongs to", () => {
@@ -37,10 +47,24 @@ test("a route marks the view it belongs to", () => {
   assert.equal(on("data", ["tgt"], "targets"), "Experimental Effects");
   assert.equal(on("data", ["s01"], "data"), "Segments");
   assert.equal(on("data", [], "a_new_section"), "Segments");
+  assert.equal(on("fit", ["job", "3"]), "Calculate and Fit");
   assert.equal(on("results", []), "Plot");
-  assert.equal(on("physics", []), "Physics");
+  assert.equal(on("physics", []), "Physics functions");
   assert.equal(on("endf", ["check"]), "ENDF");
   assert.equal(on("rate", []), "Reaction Rate");
+  assert.equal(on("covariance", ["s01"]), "Data covariance");
+  assert.equal(on("prior", []), "Parameter prior");
+});
+
+test("the arrow keys move along a tab row, around the ends", () => {
+  const links = ["a", "b", "c"];
+  assert.equal(layout.tabByArrow(links, 0, "ArrowRight"), "b");
+  assert.equal(layout.tabByArrow(links, 0, "ArrowLeft"), "c");
+  assert.equal(layout.tabByArrow(links, 2, "ArrowRight"), "a");
+  assert.equal(layout.tabByArrow(links, 1, "Home"), "a");
+  assert.equal(layout.tabByArrow(links, 1, "End"), "c");
+  assert.equal(layout.tabByArrow(links, 1, "x"), null);
+  assert.equal(layout.tabByArrow([], 0, "Home"), null);
 });
 
 test("the Data tab's views split its groups; a group the schema gains goes to Segments", () => {

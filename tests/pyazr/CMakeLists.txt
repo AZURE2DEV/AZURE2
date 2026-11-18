@@ -1161,6 +1161,13 @@ endforeach()
 add_test(NAME pyazr_ui_smoke COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/smoke_test.py)
 set_tests_properties(pyazr_ui_smoke PROPERTIES LABELS browser
                      ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+# The navigation walked by clicks in headless Chrome over its DevTools protocol (tests/pyazr/ui/navigation_test.py:
+# the tab row in the old program's order, each main tab's table, a level chosen into the address, Reload and Back,
+# Calculate, the validator's list, a fit followed and stopped from the status line; about 60 s; skipped without
+# Chrome or the package websockets).
+add_test(NAME pyazr_ui_navigation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ui/navigation_test.py)
+set_tests_properties(pyazr_ui_navigation PROPERTIES LABELS browser SKIP_RETURN_CODE 77
+                     ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # A fit continued from its written values computes the fit it continues (docs/upgrade/parameter_kinds.md section 4):
 # tests/nuisance_prior_centre/continued.sh, whose part (5) needs the module (save_fit, the layouts the sessions report).
