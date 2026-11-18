@@ -336,11 +336,15 @@ jobs:
           echo "unit tests: at most $((LEFT / 60)) min for the step, 40 min for a test without its own TIMEOUT"
           LIMIT=()
           [ -z "$TIMEOUT_CMD" ] || LIMIT=("$TIMEOUT_CMD" -k 60 "$LEFT")
-          # Two tests at a time.  One at a time the step took 98 min on Linux, 81 on Windows and more than the 181
-          # the job had left on macOS (run 44165462036 of 7b804180: stopped with 329 of 389 tests ended, none
-          # failed).  The runners have 4 cores (macos-15-intel, ubuntu-22.04, windows-latest); the tests set
-          # OMP_NUM_THREADS=2 and declare PROCESSORS where they need more, which ctest counts against -j.
-          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -j 2 -LE "slow|browser" 2>&1 \
+          # Two tests at a time on macOS only.  One at a time the step took 98 min on Linux, 81 on Windows and up
+          # to the 181 the job had left on macOS (run 44165462036 of 7b804180: stopped with 329 of 389 tests ended,
+          # none failed); two at a time macOS took 109 min (run 44267568056).  Linux and Windows stay one at a
+          # time: two at a time saved a third there (63 and 54 min), but physics_standalone, 110 s alone on
+          # Windows, then ran into its own 300 s limit beside a heavier test (run 44289111374).  The runners have
+          # 4 cores; the tests set OMP_NUM_THREADS=2 and declare PROCESSORS where they need more.
+          JOBS=1
+          [ "${{ matrix.name }}" != "macos" ] || JOBS=2
+          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -j "$JOBS" -LE "slow|browser" 2>&1 \
             | tee unit-tests.log || rc=$?
           # The slowest tests, always (a notice): which tests take the time on each platform.
           awk '/^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { for (i = 1; i <= NF; i++) if ($i == "sec") print $(i - 1), $4 }' \
