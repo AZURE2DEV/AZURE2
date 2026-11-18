@@ -2,6 +2,55 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-18 (agent) — feature/upgrade-6-house: the owner's housekeeping answers
+
+Seven commits on `feature/upgrade-6-house`, one per answer of `OWNER_ANSWERS.md` that is housekeeping. No engine file
+changed; no number moves.
+
+- **CI test sets** (`build.yml`, `tests/pyazr/CMakeLists.txt`): seven pyazr tests carry the ctest label `long`
+  (`pyazr_thm_adjoint`, `pyazr_thickness`, `pyazr_session_isolation`, `pyazr_doppler`, `pyazr_thm_model_average`,
+  `pyazr_ui_curves`, `pyazr_ui_utilities`; 87 min of test time on the macOS runner and 39 on Windows by the last
+  measured run). Linux runs `ctest -LE "slow|browser"` as before (391 tests); Windows and macOS run
+  `-LE "slow|browser|long"` (384), macOS still `-j 2`. All physics regression scripts run everywhere. Each area keeps a
+  test: the other `pyazr_thm_*`, `pyazr_session_*` and `pyazr_ui_*` tests, and for Doppler and the sample thickness the
+  regression scripts `tests/doppler_fgm` and `tests/transmission_yield` (the pyazr views of those two are `long`).
+  The new macOS time was not measured: by the sums it drops about 44 min of the step at two at a time. Documents:
+  `tests/CLAUDE.md` (Portability), `CLAUDE.md` (the test commands), `FOR_THE_OWNER.md` section 10 item 1.
+- **`USE_READLINE`**: removed from `build.yml` with the readline packages of the three jobs. CMake has not known the
+  option since the run menu and readline were removed (`CMakeLists.txt` has no `USE_READLINE`). `packaging/docker/
+  Dockerfile.windows` still passes `-DUSE_READLINE=OFF` and installs `mingw64-readline`: not touched (not the
+  workflow).
+- **Line endings**: the Windows job already runs `git config --global core.autocrlf false` before the checkout. No change.
+- **`rmfit-campaign`**: `.claude/skills/rmfit-campaign` (SKILL.md, three references) removed; `rmfit/.claude/skills/
+  rmfit-campaign/SKILL.md` stays. `tools/check_skills.py` lets a repository skill link a skill of
+  `rmfit/.claude/skills` by name (test added); README, CLAUDE.md, RULES.md §3, rmfit README and DESIGN, the rmfit user
+  guide, `rmfit_two_backends.md`, `skills_migration.md` and two figures say where the skill lives.
+- **Logo**: `dev`'s `gui/images/azure2_icon.png` (b4be0500) is `pyazr/ui/static/azure2_icon.png` and
+  `packaging/icons/azure2_icon.png` (256 px; the AppImage's icon path is `hicolor/256x256`); its `azure2.ico` is
+  `packaging/icons/azure2.ico` (the Windows program's resource); `azure2_logo.svg` is added as the source. The `.icns`
+  and the polarized variants are Qt/macOS-app files and were not taken. Consistency check 57 compares the page's icon
+  with the packaging icon and with the logo's SHA-256. The page's colour tokens (the old icon's measured blue, red,
+  green) and `static_test.py`'s `test_accent_is_the_icons_blue` are unchanged: whether the new logo wants other
+  colours is for the page's own work.
+- **Coulomb table**: `TABLE_URL` and `TABLE_SHA256` removed; `fetch` needs the URL and SHA-256 the user gives (the
+  command and its options are user-visible, so kept); `where()` keeps its keys `url` and `sha256`, always empty. Code,
+  help texts and documents say: build it once, `pyazr coulomb-table build` (about 5 minutes).
+- **Windows wheel**: job `wheels-windows` in `wheels.yml` (python.org CPython 3.10-3.13, MSYS2 UCRT64 gcc, cmake, ninja,
+  gsl as in `build.yml`; `pip wheel` with scikit-build-core, delvewheel `--no-mangle-all`, `wheel_smoke.py` on the
+  installed wheel). `pyazr/program.py` runs `pyazr/bin/AZURE2.exe` as a child with `pyazr.libs` on its PATH on Windows.
+  **UNTESTED until CI runs it** (no Windows machine here). First things to look at: MinGW's linker with python.org's
+  `python3XX.lib`, delvewheel finding the DLLs in `/ucrt64/bin`, the program's start.
+- **`FOR_THE_OWNER.md`**: every answered question carries its answer in place. The items other branches implement
+  (constants, three kernels, band, MF=32, Minuit2 counter, numcmc and the GSL fitter, the two debug switches, Weisskopf
+  units) say only the answer. SRIM's two data files: the owner's page and his letter to the PI disagree; noted, nothing
+  changed.
+
+Left alone: SRIM's two data files; `--gsl-coul` on `dev` and "new features against feature/upgrade" (the other branch).
+
+**Run:** the build (0 warnings), `repo_consistency_test.py`, `check_skills.py` and its unit test, `ctest -LE slow -j4`
+(392 listed with the one browser test, which ran: 385 passed, 6 rmfit tests skipped, 1 failed: `rmfit_enginepin`, which looks for `_azure2*.so` in the in-tree `pyazr/` and finds none because this build keeps the module in `pyazr-out`; no file it reads changed here (only two rmfit documents did); 1350 s), `ctest -N -L long`, `-LE long`; YAML of both workflows loaded with Python. **Not run:**
+the regression scripts (no engine or expected file changed), the workflows themselves, `ctest -L slow`, the browser test.
+
 ## 2026-11-18 (agent) — fix/param-duplicate-name: two stopping scales of one name
 
 **Symptom.** `Session(...).objective()` and `AZURE2 calculate` failed with "AZUREParams: N parameters but N+1 records"
