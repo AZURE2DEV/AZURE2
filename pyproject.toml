@@ -79,7 +79,8 @@ input = "pyazr/__init__.py"
 regex = '(?m)^__version__ = [\x27"](?P<value>[^\x27"]+)[\x27"]'
 
 [tool.cibuildwheel]
-# Linux and macOS (.github/workflows/wheels.yml); Windows is not built (docs/upgrade/pyazr3.md section 2.9).
+# Linux and macOS (.github/workflows/wheels.yml); the Windows wheel is that file's own job (MinGW, delvewheel; not
+# cibuildwheel, which compiles with MSVC), docs/upgrade/pyazr3.md section 2.9.
 build = "cp310-* cp311-* cp312-* cp313-*"
 skip = "*-musllinux_* *_i686"
 build-verbosity = 1

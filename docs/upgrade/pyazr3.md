@@ -634,9 +634,12 @@ shipped. `cli.py`'s `REFERENCE_PAGE` (the docs page) is written by the consisten
   pull requests that touch the packaging files) that builds, repairs and tests the wheels and uploads them as the
   run's artifacts only: no PyPI, no release, no secret. The wheel's test command is `tests/pyazr/wheel_smoke.py`:
   import, `pyazr.describe()`, T1-T3 through a session against χ² stored in the script, the program on T1.
-  **Windows** is left out: cibuildwheel builds with MSVC, the engine is built with MinGW (MSYS2) in `build.yml`;
-  a wheel needs either a MinGW build of the module against the python.org interpreter (its own step, delvewheel for
-  the runtime DLLs) or an MSVC port of the engine (OpenMP 2.0, GSL from vcpkg, no `<unistd.h>`). The owner decides.
+  **Windows**: cibuildwheel builds with MSVC and the engine is built with MinGW (MSYS2) in `build.yml`. The owner
+  decided on 2026-11-18: MinGW, as the Windows program is built. The job `wheels-windows` of `wheels.yml` builds a MinGW
+  module against the python.org interpreter (pip and scikit-build-core with Ninja and GCC from MSYS2 UCRT64),
+  repairs it with delvewheel (`--no-mangle-all`, DLLs in `pyazr.libs`) and runs `wheel_smoke.py` on the installed
+  wheel; `pyazr/program.py` runs `pyazr/bin/AZURE2.exe` with `pyazr.libs` on its PATH. **Not run yet**: written
+  without a Windows machine; the first run of the job is its test.
 - Tests: `pyazr_wheel` (slow): a wheel built from the worktree into the build directory, the source left clean
   (`git status`), unpacked and imported by a fresh interpreter with the in-tree package out of reach; describe,
   T2's χ² equal bit for bit to the in-tree build's, stopping, the web page's files, `--help`, the program on T1,
@@ -822,7 +825,7 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    **Done** (branch `feature/upgrade-8-pyazr3-packaging`; section 2.9 is the plan). As built, and where it differs:
    `USE_MCMC` stays ON in the wheel (the module's `SamplerLogProbability` needs the vendored, static sampler);
    `wheel.exclude` applies to what CMake installs as well, so it cannot drop a stale in-tree module: the wheel's
-   configuration stops while `pyazr/_azure2*` exists; Windows is left out of the workflow. Decision 7 as built:
+   configuration stops while `pyazr/_azure2*` exists; the Windows job of the workflow came on 2026-11-18 (untested). Decision 7 as built:
    `pyazr coulomb-table fetch` (URL and SHA-256 as two named constants, empty; removed 2026-11-18, the table is not published),
    `build` (the engine's `CoulombTable::BuildFile`, bound as `build_coulomb_table`, with `l_max` and `per_decade` for
    a small table), `where`; the table is not built on first use without being asked. The wheel on this machine

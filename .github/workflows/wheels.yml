@@ -16,6 +16,7 @@ on:
       - src/CMakeLists.txt
       - pyazr/datafiles.py
       - pyazr/coulomb_table.py
+      - pyazr/program.py
       - tests/pyazr/wheel_smoke.py
       - .github/workflows/wheels.yml
   pull_request:
@@ -26,6 +27,7 @@ on:
       - src/CMakeLists.txt
       - pyazr/datafiles.py
       - pyazr/coulomb_table.py
+      - pyazr/program.py
       - tests/pyazr/wheel_smoke.py
       - .github/workflows/wheels.yml
 
@@ -42,8 +44,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      # Windows is not built: cibuildwheel compiles with MSVC and the engine is built with MinGW (build.yml); see
-      # docs/upgrade/pyazr3.md section 2.9.
+      # Windows is the job below (wheels-windows): cibuildwheel compiles with MSVC and the engine is built with
+      # MinGW (build.yml), so the Windows wheel is built by hand with the MinGW toolchain of build.yml's Windows job.
       matrix:
         include:
           - name: linux-x86_64
@@ -84,5 +86,104 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.name }}
+          path: wheelhouse/*.whl
+          retention-days: 14
+
+  # The Windows wheel, built with the MinGW (MSYS2 UCRT64) toolchain that the Windows job of build.yml builds the
+  # program with (the owner's answer of 2026-11-18: "MinGW, as the Windows program is built now").  The interpreter
+  # is the python.org CPython of actions/setup-python, the one a user's pip installs the wheel into; only the
+  # compiler, CMake, Ninja and GSL come from MSYS2.  NOT RUN YET: written without a Windows machine, the first run
+  # of this job is its test (docs/upgrade/HANDOFF.md).  What to look at first: whether MinGW's linker accepts
+  # python.org's import library python3XX.lib, whether delvewheel finds libgsl, libgomp and the MinGW run time in
+  # MSYS2's /ucrt64/bin, and the program's own start (the last step; pyazr/program.py runs it with pyazr.libs on
+  # its PATH).
+  wheels-windows:
+    name: windows-x86_64-cp${{ matrix.python }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The CPython versions of [tool.cibuildwheel] build.
+        python: ['3.10', '3.11', '3.12', '3.13']
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The runner's Git writes CRLF at checkout; the test projects are read byte for byte (as in build.yml).
+      - name: Check out with the committed line endings
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The same packages as build.yml's Windows job, less Python (python.org's is used) and readline (gone).
+      - name: Set up MSYS2 (MinGW)
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-gsl
+
+      # python.org's interpreter as a Windows path, for the MSYS2 shell below (where the PATH holds MSYS2 only), and
+      # the build tools of the wheel (the build env of pip installs scikit-build-core and pybind11 itself).
+      - name: The interpreter and the repair tool
+        run: |
+          PY="$(cygpath -m "$(command -v python)")"
+          "$PY" -c 'import sys, struct; print(sys.executable, sys.version, struct.calcsize("P") * 8, "bit")'
+          "$PY" -m pip install --quiet --upgrade pip wheel delvewheel
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
+          echo "UCRT_BIN=$(cygpath -m '${{ steps.msys2.outputs.msys2-location }}')/ucrt64/bin" >> "$GITHUB_ENV"
+
+      # pip runs scikit-build-core, which runs the MSYS2 CMake with the Ninja generator and GCC (it would pick
+      # Visual Studio otherwise).  Two build threads: the runners are small.
+      - name: Build the wheel (MinGW)
+        shell: msys2 {0}
+        env:
+          CMAKE_GENERATOR: Ninja
+          CC: gcc
+          CXX: g++
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
+          set -o pipefail
+          "$PYAZR_PYTHON" -m pip wheel . --no-deps -w wheelhouse-raw -v 2>&1 | tee wheel-build.log
+          ls -l wheelhouse-raw
+
+      # delvewheel copies the DLLs of the module (GSL, the OpenMP runtime, the MinGW runtime) into pyazr.libs and
+      # points the module at them.  --no-mangle-all keeps their names: the program pyazr/bin/AZURE2.exe, which
+      # delvewheel does not patch, loads the same DLLs by their own names, from the PATH pyazr/program.py gives it.
+      - name: Repair the wheel (delvewheel)
+        run: |
+          "$PYAZR_PYTHON" -m delvewheel repair --add-path "$UCRT_BIN" --no-mangle-all -w wheelhouse wheelhouse-raw/*.whl
+          ls -l wheelhouse
+
+      # The installed wheel, outside the source tree, in a fresh virtual environment: the same test as the other
+      # platforms (pyproject.toml, [tool.cibuildwheel] test-command).
+      - name: Test the wheel
+        run: |
+          "$PYAZR_PYTHON" -m venv "$RUNNER_TEMP/wheel-venv"
+          VPY="$RUNNER_TEMP/wheel-venv/Scripts/python.exe"
+          "$VPY" -m pip install --quiet wheelhouse/*.whl
+          cd "$RUNNER_TEMP"
+          "$VPY" "$GITHUB_WORKSPACE/tests/pyazr/wheel_smoke.py" "$GITHUB_WORKSPACE"
+
+      - name: The wheels' files
+        run: |
+          for w in wheelhouse/*.whl; do
+            echo "== $w ($(wc -c < "$w") bytes)"
+            python -m zipfile -l "$w"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-x86_64-cp${{ matrix.python }}
           path: wheelhouse/*.whl
           retention-days: 14
