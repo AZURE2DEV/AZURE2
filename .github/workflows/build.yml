@@ -42,7 +42,6 @@ jobs:
             # like a broken download rather than a distro floor.  22.04 carries
             # glibc 2.35 and covers those; the build is otherwise identical.
             os: ubuntu-22.04
-            use_readline: 'ON'
             pyazr_engine: 'ON'
           - name: macos
             # Intel runner, kept from the Qt builds (Homebrew's qt@5 bottles
@@ -52,11 +51,9 @@ jobs:
             # retired, and a label with no runners behind it queues forever
             # rather than failing.)
             os: macos-15-intel
-            use_readline: 'ON'
             pyazr_engine: 'ON'
           - name: windows
             os: windows-latest
-            use_readline: 'ON'
             pyazr_engine: 'ON'
 
     defaults:
@@ -88,7 +85,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build pkg-config \
-            libgsl-dev libreadline-dev \
+            libgsl-dev \
             python3-dev python3-venv
           # pybind11, numpy and scipy from pip in a venv rather than apt: the
           # image's packages (pybind11 2.9, numpy 1.21) are older than what
@@ -114,7 +111,7 @@ jobs:
       - name: Install dependencies (macos)
         if: matrix.name == 'macos'
         run: |
-          brew install ninja gsl readline libomp
+          brew install ninja gsl libomp
           # GNU tools for the two test steps only.  The test scripts added by the upgrade were written and run
           # against GNU tools and fail with the BSD ones of macOS (sed -i FILE, "\n" in a sed replacement, the
           # padded output of wc, a newline in an awk -v value) or without timeout (tools/run_one.sh; the shell
@@ -164,7 +161,6 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-pkg-config
             mingw-w64-ucrt-x86_64-gsl
-            mingw-w64-ucrt-x86_64-readline
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-python-numpy
             mingw-w64-ucrt-x86_64-python-scipy
@@ -216,7 +212,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DUSE_API=ON \
             -DUSE_MCMC=ON \
-            -DUSE_READLINE=${{ matrix.use_readline }} \
             "${EXTRA[@]}" 2>&1 | tee configure.log; then
             bash scripts/ci_first_errors.sh configure.log "${{ matrix.name }} configure"
             exit 1
@@ -451,7 +446,7 @@ jobs:
           echo "--- packaged ---"
           ls -R dist | head -60
 
-      # The bare executable.  It loads GSL, readline and libomp from
+      # The bare executable.  It loads GSL and libomp from
       # Homebrew; a self-contained macOS package of the command-line program
       # is not designed yet (the Qt .app/.dmg was removed with the GUI).
       - name: Package (macos)
