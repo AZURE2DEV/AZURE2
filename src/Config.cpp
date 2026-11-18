@@ -8,6 +8,7 @@
 #include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
+#include "ProgramObserver.h"
 #include "azure2/io/ConfigSection.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/ProjectFormat.h"
@@ -304,3 +305,5 @@ int Config::CheckForInputFiles() {
   return 0;
 }
 #endif
+
+bool Config::StopRequested() const { return stopFlag || (observer && observer->stop && observer->stop->load()); }

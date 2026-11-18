@@ -95,7 +95,7 @@ int WorkingCopy::FillChannelRows(const std::vector<std::vector<Unit *>> &batches
 #pragma omp parallel for schedule(dynamic, 16) shared(stop, configure)
       for (int q = 0; q < n; q++) {
         const azure2::support::ExtendedPrecisionScope fpPrecision;
-        if (configure.stopFlag || stop) continue;
+        if (configure.StopRequested() || stop) continue;
         const Entry &e = sites[(*part)[q]];
         try {
           e.site->Site::CalcEDependentValues(this, compound, configure, &rows,
@@ -108,7 +108,7 @@ int WorkingCopy::FillChannelRows(const std::vector<std::vector<Unit *>> &batches
           }
         }
       }
-      if (configure.stopFlag || stop) return -1;
+      if (configure.StopRequested() || stop) return -1;
     }
   }
   return 0;

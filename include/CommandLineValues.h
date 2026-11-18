@@ -1,6 +1,7 @@
 #ifndef AZURE2_COMMANDLINEVALUES_H
 #define AZURE2_COMMANDLINEVALUES_H
 
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,8 @@ std::string ThreadsJson(const ThreadsInForce &threads);
 /// The CLI's refusal of a flag or variable: "ERROR: <message>" and the usage line on standard output; returns 2, the
 /// exit status.
 int OptionError(const std::string &message);
+/// The same on `out` (the run's stream of a front end in its own process, ProgramMain.h).
+int OptionError(std::ostream &out, const std::string &message);
 
 }  // namespace azure2
 

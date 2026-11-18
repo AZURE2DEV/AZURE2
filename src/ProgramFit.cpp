@@ -17,13 +17,19 @@
 #include "FitErrors.h"
 #include "FitEvaluations.h"
 #include "Fitters.h"
+#include "ProgramObserver.h"
 #include "ParameterLabel.h"
 #include "WorkingCopy.h"
 
-ProgramProgress::ProgramProgress(AZURECalc &objective, std::ostream &out) : objective_(objective), out_(out) {
-  runControl_.progress = [this](const FitProgress &record) { Print(record); };
+ProgramProgress::ProgramProgress(AZURECalc &objective, std::ostream &out, const ProgramObserver *observer)
+    : objective_(objective), out_(out), observer_(observer) {
+  runControl_.progress = [this](const FitProgress &record) {
+    Print(record);
+    if (observer_ && observer_->progress) observer_->progress(record);
+  };
   runControl_.checkpoint = [this](const std::vector<double> &p) { objective_.WriteIterationOutput(p); };
-  observer_.evaluated = [this](long evaluation, double value, const std::vector<double> &p, bool errorAnalysis) {
+  if (observer_) runControl_.stop = observer_->stop;
+  evaluationObserver_.evaluated = [this](long evaluation, double value, const std::vector<double> &p, bool errorAnalysis) {
     FitProgress record;
     record.evaluation = evaluation;
     record.objective = value;
@@ -31,7 +37,8 @@ ProgramProgress::ProgramProgress(AZURECalc &objective, std::ostream &out) : obje
     record.x = &p;
     HandOverEvaluation(runControl_, record);
   };
-  objective_.Observe(&observer_);
+  evaluationObserver_.stop = runControl_.stop;
+  objective_.Observe(&evaluationObserver_);
 }
 
 ProgramProgress::~ProgramProgress() { objective_.Observe(nullptr); }
@@ -282,7 +289,11 @@ void RunFitStage(ProgramRun &run, const ProgramProgress &progress) {
   FitResult result = RunFitter(fitter, *run.objective, run.params, control);
   WriteFitStatus(configure, fitter, result, control);
 
-  if (result.fellBackToMigrad) {
+  if (result.status == "stopped") {
+    // Stopped by the caller (ProgramObserver::stop, a front end in the same process; the command line has no stop):
+    // every later evaluation of the objective would return 0, so neither HESSE nor MINOS nor the band runs.
+    configure.outStream << "The fit was stopped on request: no error analysis and no band covariance." << std::endl;
+  } else if (result.fellBackToMigrad) {
     // A least-squares row without its analytic Jacobian ran MIGRAD: its matrix for the band, no HESSE, no MINOS.
     CaptureMinuitCovariance(run, result.minimum->UserCovariance().Data(), run.params);
   } else if (fitter.minos) {

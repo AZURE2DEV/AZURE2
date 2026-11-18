@@ -158,17 +158,12 @@ std::vector<azure2::experiment::TargetEffectSpec> TargetEffectSpecs(const azure2
   return out;
 }
 
-int validateProject(const std::string &file, bool json) {
-  std::string bytes;
-  if (!ReadFileBytes(file, bytes)) {
-    std::cout << "ERROR: --validate: cannot read " << file << std::endl;
-    return 1;
-  }
-  const std::string refusal = azure2::io::NotFormat3Message(bytes, file);
-  if (!refusal.empty()) {
-    std::cout << "ERROR: " << refusal << std::endl;
-    return 3;
-  }
+}  // namespace
+
+ProjectValidation ValidateProjectBytes(const std::string &bytes, const std::string &file) {
+  ProjectValidation v;
+  v.notFormat3 = azure2::io::NotFormat3Message(bytes, file);
+  if (!v.notFormat3.empty()) return v;
   azure2::experiment::Format3ReadOptions read;
   read.fileName = file;
   read.projectDir = azure2::experiment::ProjectDirectoryOf(file);  // data files relative to the project, as a run
@@ -177,19 +172,39 @@ int validateProject(const std::string &file, bool json) {
   const StoppingReport stopping = ReportTargetStoppings(c.Ok() ? TargetEffectSpecs(c) : std::vector<azure2::experiment::TargetEffectSpec>(),
                                                         read.projectDir);
   for (const azure2::experiment::Diagnostic &d : stopping.refusals) c.diagnostics.push_back(d);
-  const std::string note = "note: " + std::to_string(c.buildChecksSkipped) +
+  v.diagnostics = c.diagnostics;
+  v.stoppingText = stopping.text;
+  v.checksSkipped = c.buildChecksSkipped;
+  v.ok = c.Ok();
+  return v;
+}
+
+namespace {
+
+int validateProject(const std::string &file, bool json) {
+  std::string bytes;
+  if (!ReadFileBytes(file, bytes)) {
+    std::cout << "ERROR: --validate: cannot read " << file << std::endl;
+    return 1;
+  }
+  const ProjectValidation v = ValidateProjectBytes(bytes, file);
+  if (!v.notFormat3.empty()) {
+    std::cout << "ERROR: " << v.notFormat3 << std::endl;
+    return 3;
+  }
+  const std::string note = "note: " + std::to_string(v.checksSkipped) +
                            " check(s) skipped (the build checks need a valid project and its <levels>).";
   if (json) {
     std::cout << "[";
-    for (std::size_t i = 0; i < c.diagnostics.size(); i++) std::cout << (i ? ",\n " : "\n ") << c.diagnostics[i].ToJson();
-    std::cout << (c.diagnostics.empty() ? "]" : "\n]") << std::endl;
+    for (std::size_t i = 0; i < v.diagnostics.size(); i++) std::cout << (i ? ",\n " : "\n ") << v.diagnostics[i].ToJson();
+    std::cout << (v.diagnostics.empty() ? "]" : "\n]") << std::endl;
     std::cerr << note << std::endl;
   } else {
-    for (const azure2::experiment::Diagnostic &d : c.diagnostics) std::cout << d.ToText() << std::endl;
-    std::cout << stopping.text << note << std::endl;
-    std::cout << file << ": " << c.diagnostics.size() << " diagnostic(s), " << (c.Ok() ? "valid" : "not valid") << "." << std::endl;
+    for (const azure2::experiment::Diagnostic &d : v.diagnostics) std::cout << d.ToText() << std::endl;
+    std::cout << v.stoppingText << note << std::endl;
+    std::cout << file << ": " << v.diagnostics.size() << " diagnostic(s), " << (v.ok ? "valid" : "not valid") << "." << std::endl;
   }
-  return c.Ok() ? 0 : 2;
+  return v.ok ? 0 : 2;
 }
 
 /// The expression tree of every data set and extrapolation of `file`, one line each; 0, or 1 (with the set-up's

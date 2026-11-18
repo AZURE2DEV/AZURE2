@@ -7,6 +7,7 @@
 // from standard input.  A new command is a row of RunCommands() and its case in SelectCalculation
 // (src/RunPreparation.cpp); a new option is a member of RunRequest and a row of RunQuestions().
 
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -133,6 +134,8 @@ std::string NoCommandRefusal();
 std::string CommandOptionWithoutCommand(const RunQuestion &question);
 /// A refused command line: "ERROR: <message>" and the commands' usage line on standard output; returns 2.
 int CommandError(const std::string &message);
+/// The same on `out` (the run's stream of a front end in its own process, ProgramMain.h).
+int CommandError(std::ostream &out, const std::string &message);
 
 /// The commands and their options for --help.
 std::string RunCommandsHelp();
