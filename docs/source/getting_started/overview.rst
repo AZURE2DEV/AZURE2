@@ -17,8 +17,8 @@ A project is one ``.azr`` file (:doc:`../reference/data_formats`), written with
 command line (:doc:`../reference/command_line`) or from Python. The user-guide
 pages follow the blocks of the file in the order they are entered: particle
 pairs, levels and channels, segments, experimental effects, fitting, the
-calculation. This version has no graphical setup utility
-(:doc:`../user_guide/graphical_interface`).
+calculation. The Qt setup program ``AZURESetup`` and the browser page
+edit and run the same files (:doc:`../user_guide/graphical_interface`).
 
 Project Files
 -------------

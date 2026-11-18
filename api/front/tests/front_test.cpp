@@ -138,6 +138,14 @@ int main(int argc, char **argv) {
   Check(calculate && fit, "the commands calculate and fit");
   Check(!front::Options().empty() && !front::Fitters().empty(), "the options and the fitters");
   Check(front::ConfigTableJson().find("\"use_brune\"") != std::string::npos, "the <config> table names use_brune");
+  {
+    bool reaction = false;
+    for (const front::KindInfo &k : front::RecordKinds())
+      if (k.kind == "dataset" && !k.fields.empty() && k.fields[0].key == "reaction") reaction = k.fields[0].required;
+    Check(reaction, "the record kinds in the schema's order: dataset's first field the required reaction");
+    const std::vector<std::string> units = front::QuantityUnits("sfactor");
+    Check(!units.empty() && units[0] == "MeV*b", "the units of the S factor");
+  }
 
   // (b) round trips and edits
   const std::vector<fs::path> projects = {source / "tests/upgrade/T1/T1.azr", source / "tests/upgrade/T2/T2.azr",

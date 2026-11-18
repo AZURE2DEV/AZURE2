@@ -3,8 +3,8 @@ Installation
 
 AZURE2 is built with CMake. The command-line program and the ``pyazr``
 Python module come from one source tree; the README of the repository has the
-platform-specific package lists. This version has no graphical setup utility
-(:doc:`../user_guide/graphical_interface`).
+platform-specific package lists. The Qt setup program ``AZURESetup`` and the browser page
+edit and run the same files (:doc:`../user_guide/graphical_interface`).
 
 Dependencies
 ------------

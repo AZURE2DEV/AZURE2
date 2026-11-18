@@ -84,7 +84,7 @@ void printHelp() {
                "without one):" << std::endl
             << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl;
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "the Qt setup program is AZURESetup, a program of its own." << std::endl;
   printOptionFlags();
   std::cout << std::setw(25) << std::left << "\t--threads=N:" << std::setw(0)
             << "The OpenMP threads of the run (N >= 1), over OMP_NUM_THREADS; printed by the run and by --describe."

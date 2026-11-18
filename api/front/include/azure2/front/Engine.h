@@ -14,6 +14,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace azure2 {
@@ -149,6 +150,41 @@ class Project {
 /// The table of project format 3 as JSON (AZURE2 --schema): sections, record kinds and their fields with titles,
 /// docs, types, closed choices and units, quantities, units, diagnostic codes.
 std::string SchemaJson();
+/// One field of a record kind (the schema's row, in the kind's order): what a form needs to offer it.
+struct FieldInfo {
+  std::string key;
+  std::string title;
+  std::string type;      ///< the value type ("enum", "number_with_unit", "nuisance", "path", "structured", ...)
+  std::string grammar;   ///< the value's grammar, for a placeholder
+  std::string doc;
+  bool required = false; ///< required wherever the field applies (a conditional requirement is "requiredWhen")
+  std::string requiredWhen;  ///< in words, "" when unconditional
+  std::string appliesWhen;   ///< in words, "" when the field applies to every record of the kind
+  bool byQuantity = false;   ///< the record's quantity decides whether it applies
+  bool rare = false;     ///< set rarely: a form shows it one click away unless the record sets it
+  bool repeatable = false;
+  std::string defaultText;
+  std::vector<std::string> values;  ///< enum: the words; reference: the kinds it names
+  std::vector<std::string> units;   ///< the units of its dimension; for "@quantity" those of the record's quantity
+  bool unitOfQuantity = false;      ///< units come from the record's quantity (QuantityUnits)
+};
+/// One record kind: its sections, title, doc and fields in the schema's order.
+struct KindInfo {
+  std::string kind;
+  std::string title;
+  std::string doc;
+  std::vector<std::string> sections;
+  std::vector<FieldInfo> fields;
+};
+std::vector<KindInfo> RecordKinds();
+/// The sections of records and the kinds each holds, in the schema's order.
+std::vector<std::pair<std::string, std::vector<std::string>>> RecordSections();
+/// The quantities a record kind may use (names, schema order), and the units of one quantity.
+std::vector<std::string> QuantityNames(const std::string &kind);
+std::vector<std::string> QuantityUnits(const std::string &quantity);
+/// The diagnostic codes and their meaning.
+std::vector<std::pair<std::string, std::string>> DiagnosticCodes();
+
 /// The <config> keys and positional entries as JSON: [{"name", "kind", "title", "group", "doc", "values",
 /// "positional", "option", "flag", "negation", "default", "rare", "absent"}] from io::ConfigPositionals() and
 /// io::ConfigKeys() in their order.
@@ -232,6 +268,11 @@ RunResult Run(const RunRequest &request, RunObserver &observer, const std::atomi
 /// AZURE2 --convert OLD NEW (format 1 or 2 to format 3, with the side files): false with `report` saying why.
 /// `report` holds the converter's notes and questions either way.
 bool ConvertProject(const std::string &from, const std::string &to, std::string &report);
+
+/// The single-particle (Wigner-limit) width Gamma_sp = 2 P_l(E) gamma_W^2 of a particle channel, in MeV: charges
+/// z1, z2, reduced mass mu (u), orbital momentum l, channel radius a (fm), c.m. energy E > 0 (MeV).  The engine's
+/// function (physics::single_particle_width), not a copy; NaN where it is not defined (E <= 0).
+double SingleParticleWidth(int z1, int z2, double mu_u, int l, double a_fm, double E_MeV);
 
 /// The engine's version string ("2.1.0").
 std::string Version();

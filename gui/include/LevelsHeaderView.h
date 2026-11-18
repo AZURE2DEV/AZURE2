@@ -1,0 +1,35 @@
+#ifndef LEVELSHEADERVIEW_H
+#define LEVELSHEADERVIEW_H
+
+#include <QHeaderView>
+#include <QMouseEvent>
+
+/*!
+ * Header for the levels table that lets a column be clicked to toggle every fixed flag in it.
+ */
+class LevelsHeaderView : public QHeaderView {
+ public:
+  LevelsHeaderView(Qt::Orientation orientation, QWidget *parent) :
+    QHeaderView(orientation, parent) {
+    setSectionsClickable(true);
+  };
+
+ protected:
+  virtual void mouseMoveEvent(QMouseEvent *e) {
+    int pos = orientation() == Qt::Horizontal ? (int)e->position().x() : (int)e->position().y();
+    int section = logicalIndexAt(pos);
+    if (section > 1) QHeaderView::mouseMoveEvent(e);
+  };
+  virtual void mousePressEvent(QMouseEvent *e) {
+    int pos = orientation() == Qt::Horizontal ? (int)e->position().x() : (int)e->position().y();
+    int section = logicalIndexAt(pos);
+    if (section > 1) QHeaderView::mousePressEvent(e);
+  };
+  virtual void mouseReleaseEvent(QMouseEvent *e) {
+    int pos = orientation() == Qt::Horizontal ? (int)e->position().x() : (int)e->position().y();
+    int section = logicalIndexAt(pos);
+    if (section > 1) QHeaderView::mouseReleaseEvent(e);
+  };
+};
+
+#endif
