@@ -257,7 +257,10 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
   // v8 (2026-11-16): F of a neutral entrance pair (eta = 0) is the Riccati-Bessel function, no longer an upward
   // recurrence that was wrong for l >= 2 at rho << 1 (docs/upgrade/coulomb.md section 10); the integrals of a neutral
   // pair move (by ~1e-15 in the test projects), so every v7 file is recomputed once.
-  hash.Add("AZURE2 EC signature v8");
+  // v9 (2026-11-18): the M1 amplitudes take the proton mass of CODATA 2018 (physics/ kProtonMass_MeV, 938.27208816 MeV,
+  // 1.007276466617 u; was 1.00727638 u, 8.6e-8 lower; the owner's answer of 2026-11-18), so every v8 file is
+  // recomputed once.
+  hash.Add("AZURE2 EC signature v9");
   // The place of the option use_gsl_coul, retired on 2026-11-16 (docs/upgrade/coulomb.md section 9.1): a run with the
   // program's own Coulomb functions hashed 0 here, and they are the only ones now; the constant 0 is kept.
   hash.Add(0);

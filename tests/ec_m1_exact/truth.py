@@ -42,7 +42,7 @@ from sympy.physics.wigner import wigner_3j, wigner_6j
 import make_models as mm
 
 HBARC, UCONV, ALPHA = 197.3269804, 931.49410242, 1 / 137.035999084
-MPROTON = 1.00727638 * UCONV
+MPROTON = 938.27208816   # MeV, CODATA 2018: the engine's physics/ kProtonMass_MeV (1.00727638 u until 2026-11-18)
 X, W = np.polynomial.legendre.leggauss(24)
 
 

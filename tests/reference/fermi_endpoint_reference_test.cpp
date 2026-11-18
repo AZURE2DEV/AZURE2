@@ -10,6 +10,7 @@
 //   f ~ T0^3 at the end point: f / T0^3 changes by less than 2 % between T0 = 1e-5 and 1e-1 keV;
 //   no end point (T0 <= 0) gives 0.
 #include "IntegratedFermiFunc.h"
+#include "azure2/physics/Constants.h"
 #include <gsl/gsl_errno.h>
 #include <cmath>
 #include <cstdio>
@@ -18,7 +19,9 @@ static void check(bool ok, const char *what) {
   std::printf("  %s  %s\n", ok ? "ok  " : "FAIL", what);
   if (!ok) failures++;
 }
-static double W0of(double keV) { return 1. + keV * 1e-3 / 0.510998903; }
+// W0 = 1 + T0 / m_e c^2, as the engine forms it (ChannelTables.cpp; m_e of CODATA 2018 since 2026-11-18, CODATA 2002
+// before: the reference values below move by at most 3e-7 relative, within their 1e-6).
+static double W0of(double keV) { return 1. + keV * 1e-3 / azure2::physics::kElectronMass_MeV; }
 int main() {
   gsl_set_error_handler_off();
   IntegratedFermiFunc f(-1);

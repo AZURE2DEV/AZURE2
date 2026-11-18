@@ -442,23 +442,21 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "convert")):
 
 
 # 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,
-#     alpha and m_e; any other copy in the engine, the API, io/ or pyazr must carry the same value (comments aside),
+#     alpha, m_e and m_p; any other copy in the engine, the API, io/ or pyazr must carry the same value (comments aside),
 #     so that a constant changed in one place cannot leave a stale copy that only some results use.  KNOWN lists the
 #     copies that differ on purpose, each with its reason; each is a decision for the maintainers, not drift.
 consts_src = read("physics/include/azure2/physics/Constants.h")
 CONSTANTS = {}
 for name, prefix in (("kHbarC_MeV_fm", "197.32"), ("kAtomicMassUnit_MeV", "931.49"), ("kElectronMass_MeV", "0.51099"),
-                     ("kFineStructure", "137.03")):
+                     ("kFineStructure", "137.03"), ("kProtonMass_MeV", "938.27")):
     m = re.search(name + r"\s*=\s*(?:1\.0*\s*/\s*)?([0-9.]+)", consts_src)
     if not m:
         problems.append(f"physics Constants.h: {name} not found; update this test")
         continue
     CONSTANTS[prefix] = (name, float(m.group(1)))
-KNOWN = {
-    # m_e of CODATA 2002 in the beta-decay Fermi-function argument, named and kept on purpose (maintainers' decision
-    # 2026-11-10: no result moves; one line to change); CODATA 2018 moves beta-delayed outputs (~1e-7).
-    ("include/Constants.h", "0.510998903"),
-}
+# The copies that differ on purpose, each with its reason.  None since 2026-11-18: the m_e of CODATA 2002 that the
+# beta-decay Fermi function's argument kept is gone (the owner's answer, docs/upgrade/OWNER_ANSWERS.md section 8).
+KNOWN = set()
 for top in ("src", "include", "api", "io", "pyazr"):
     for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
         for name in sorted(files):

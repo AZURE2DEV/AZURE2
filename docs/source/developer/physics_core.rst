@@ -20,8 +20,14 @@ Rules
 - Public headers are in ``physics/include/azure2/physics/`` (included as
   ``"azure2/physics/X.h"``), sources in ``physics/src/``, tests in
   ``physics/tests/``. Everything is in the namespace ``azure2::physics``.
-- One set of constants (``Constants.h``, CODATA 2018); the engine's
-  ``include/Constants.h`` takes its values from there (check 10).
+- One set of constants (``Constants.h``, CODATA 2018: ħc, u, α, the
+  electron mass m_e c² = 0.51099895 MeV and the proton mass
+  m_p c² = 938.27208816 MeV); the engine's ``include/Constants.h`` takes its
+  values from there (check 10). The argument W₀ = 1 + T₀/m_e c² of the
+  β-decay Fermi function and the M1 external-capture amplitude (its nuclear
+  magneton ħc/2m_p c² and its orbital g factor) read these two masses; until
+  2026-11-18 they kept CODATA 2002's m_e (0.510998903 MeV) and
+  m_p = 1.00727638 u, 1e-7 below the present values.
 - Energies in MeV, lengths in fm, masses in u; each header states the frame
   (c.m. or lab) of what it takes.
 
