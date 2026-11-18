@@ -236,7 +236,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3p
 
 /* the Physics tab: the list of functions beside the form and its plots */
 .physics { display: grid; grid-template-columns: minmax(170px, 230px) 1fr; gap: 12px; align-items: start; }
-.physics-list { position: sticky; top: 0; max-height: calc(100vh - 140px); overflow: auto; font-size: 13px; }
+.physics-list { position: sticky; top: 112px; max-height: calc(100vh - 140px); overflow: auto; font-size: 13px; }
 .physics-list input { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
 .physics-list .group-title { font-weight: 600; color: var(--muted); margin-top: 6px; }
 .physics-list a.fn { display: block; padding: 1px 6px; color: var(--fg); text-decoration: none;
@@ -312,7 +312,8 @@ span.severity.note { color: var(--muted); }
 
 /* the navigation (docs/upgrade/web_navigation.md): the menu bar, the two tab rows, the status line's marks, the
    table with its detail beside it, the overview */
-header.top { position: sticky; top: 0; z-index: 5; }
+.top-frame { position: sticky; top: 0; z-index: 5; }  /* the top bar and the tab rows stay in view */
+[data-show] { scroll-margin-top: 120px; }
 .project { display: inline-flex; align-items: baseline; gap: 8px; }
 button.brand { border: none; background: none; padding: 0 4px 0 0; }
 nav.menubar { display: inline-flex; gap: 0; }
@@ -327,7 +328,7 @@ button.menu-item { display: flex; justify-content: space-between; gap: 18px; wid
   border: none; border-radius: 0; padding: 4px 14px; background: none; }
 button.menu-item:hover:not(:disabled), button.menu-item:focus-visible { background: var(--row-hover); }
 button.menu-item kbd { font-size: 11px; color: var(--muted); }
-nav.tabs { flex-wrap: wrap; position: sticky; top: 41px; z-index: 4; }
+nav.tabs { flex-wrap: wrap; }
 a.tab .tab-key { font-size: 10px; color: var(--muted); margin-right: 5px; font-variant-numeric: tabular-nums; }
 a.tab .group-mark { font-size: 10px; color: var(--muted); }
 nav.subtabs-row { position: static; background: var(--accent-soft); border-bottom: 1px solid var(--line); }

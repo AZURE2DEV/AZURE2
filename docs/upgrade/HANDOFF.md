@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-19 (agent) — feature/upgrade-6-web: the web page's navigation after the Qt program's
+
+**Why.** The PI: the page is "in-intuitive and difficult to navigate into, with respect to the old Qt". Walked as a
+new user first (headless Chrome over its DevTools protocol, T1 and T2; screenshots `work/web-shots/before/`,
+outside the repository), then changed; what was hard and the clicks per Qt task before and after:
+`docs/upgrade/web_navigation.md`.
+**What changed (the page only; no `/api` route changed).** One tab row in the Qt order and names (Particle Pairs,
+Levels and Channels, Segments, Experimental Effects, Calculate and Fit, Plot), then the groups Rate and ENDF, Physics
+and THM, Covariances (second row) and Project; the same tabs in both depths (the expert's depth: fields and columns
+only). Menu bar File / Edit / Configure / View / Help (Open, New project from this one, Save as, Write the output
+files: routes that had no control). Top bar with Save, Validate, Calculate. Status line: the engine's message, the
+job that runs (Stop) or ran, the validator's verdict with its list linking to the rows. Pairs and levels: table on
+the left with Add / Remove, the selection beside it; Remove level (new control); a new level's channels offered as
+typed and the level opened after Add. Channel radii and isospin records moved from Segments to the levels' "More".
+The page opens on Particle Pairs (the address shows it), with a dismissible overview on a first visit. Modules:
+`layout.js` (`FIRST_VIEW` with `group`, `doc`), new `shell.js`, new `tabs/levels.js` (out of `tabs/nucleus.js`).
+The logo: its file and both references (`static/azure2_icon.png` in `index.html` and `app.js`, the About box now in
+`shell.js` with the same `src`) untouched; the brand in the top bar became a button (opens About).
+**Tests.** New `tests/pyazr/ui/navigation_test.py` (ctest `pyazr_ui_navigation`, label browser; needs `websockets`):
+the walk by clicks; passes here, fails on the page of 98a4cf60 at its first assertion. New `js/shell.test.mjs`;
+`js/firstview.test.mjs` and `smoke_test.py` adapted where the tabs moved (their titles; THM listed exactly with THM
+content; the tab row the same in both depths; the validator mark on every view).
+**Run.** `ctest -LE slow -j4` on `work/b-u6-web` (392 tests, before the last fixes): 390 passed, `pyazr_ui_smoke`
+failed (its printed-URL case expected the address without a route; adapted: the page now shows the first tab's
+route) and `rmfit_enginepin` failed (its fingerprint looks for `pyazr/_azure2*.so` in the package; the tests run
+with `PYAZR_ENGINE_DIR`, none is there; no rmfit or pyazr Python file changed here). After the fixes:
+`ctest -R pyazr_ui -LE browser` 19/19, `pyazr_ui_smoke` passed, `pyazr_ui_navigation` passed 4 times out of 4;
+node 102+ tests; sphinx -W; the consistency test.
+**Not run.** `tests/run_tests.sh` (the engine is untouched: no C++ or pyazr Python changed); `ctest -L slow`.
+**Open.** THM and ENDF take one click more than before (second row). No Ctrl+O / Open Recent; New project needs a
+nuclear part (the route's); Segments keeps its form below the list (the table is too wide to sit beside it).
+
 ## 2026-11-18 (agent) — fix/param-duplicate-name: two stopping scales of one name
 
 **Symptom.** `Session(...).objective()` and `AZURE2 calculate` failed with "AZUREParams: N parameters but N+1 records"

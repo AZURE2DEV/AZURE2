@@ -413,9 +413,11 @@ def test_printed_url_followed_from_another_site_opens_the_page(tmp_path):
     threading.Thread(target=other.serve_forever, daemon=True).start()
     try:
         page = f"http://127.0.0.1:{server.port}/"
+        # the page opened without a route shows the first tab's in its address (layout.js START), the token gone
+        opened = f"{page}#/nucleus/pair"
         url, title = opened_tab(tmp_path, f"http://localhost:{other.server_address[1]}/",
-                                lambda tab: tab["url"] == page and tab["title"].endswith("— AZURE2"))
-        assert (url, title) == (page, "T1.azr — AZURE2"), f"the click ended at {url!r} with the title {title!r}"
+                                lambda tab: tab["url"] == opened and tab["title"].endswith("— AZURE2"))
+        assert (url, title) == (opened, "T1.azr — AZURE2"), f"the click ended at {url!r} with the title {title!r}"
         url, title = opened_tab(tmp_path, page, lambda tab: "token" in tab["title"])
         assert (url, title) == (page, "AZURE2 — token needed"), f"without the token: {url!r}, title {title!r}"
     finally:

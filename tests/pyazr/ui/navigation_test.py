@@ -146,7 +146,8 @@ async def walk(port, url):
                       90, "Calculate's Plot tab and the χ² in the status line")
         assert (await p.js("document.querySelector('button.validation').textContent")) == "✓ valid"
         await p.click("button[data-action='validate']")
-        await p.until("!document.querySelector('.diag-panel').hidden", what="the validator's list")
+        await p.until("!document.querySelector('.diag-panel').hidden && document.querySelector('.diag-panel .diag-head "
+                      "button')", what="the validator's list")
         await p.shot("calculated")
         await p.click(".diag-panel button", "Close")
         # a fit: started on Calculate and Fit, followed on another tab by the status line, stopped there

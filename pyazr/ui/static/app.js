@@ -355,7 +355,7 @@ function build() {
   for (const row of [ctx.tabBar, ctx.subBar]) row.addEventListener("keydown", onTabRowKey);
   ctx.main = h("main.content", { id: "main", tabindex: "-1" });
   ctx.statusLine = h("div.status", { role: "status", "aria-live": "polite" }, "");
-  root.append(header, ctx.tabBar, ctx.subBar, ctx.main, ctx.validation.panel,
+  root.append(h("div.top-frame", {}, header, ctx.tabBar, ctx.subBar), ctx.main, ctx.validation.panel,
     h("footer.statusbar", {}, ctx.statusLine, h("span.spacer"), ctx.jobMarkEl, ctx.validation.mark));
 }
 

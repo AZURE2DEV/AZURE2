@@ -240,18 +240,19 @@ export function validationMark(ctx) {
   async function fill() {
     const [records, levels] = await Promise.all([ctx.api.get("/api/project/records", { quiet: true }).catch(() => []),
       ctx.api.get("/api/project/levels", { quiet: true }).catch(() => [])]);
-    panel.textContent = "";
-    panel.append(h("div.diag-head", {}, h("strong", {}, `The engine's validator: ${validationView(problems).text}`),
-      h("span.spacer"), button("Close", "Close the list (Esc)", () => toggle(false), "quiet")));
-    if (!problems.length) panel.appendChild(h("p.ok", {}, "The engine's validator reports nothing."));
+    // drawn whole, then swapped in at once (two fills in flight never leave the list half drawn)
+    const parts = [h("div.diag-head", {}, h("strong", {}, `The engine's validator: ${validationView(problems).text}`),
+      h("span.spacer"), button("Close", "Close the list (Esc)", () => toggle(false), "quiet"))];
+    if (!problems.length) parts.push(h("p.ok", {}, "The engine's validator reports nothing."));
     for (const d of problems) {
       const route = diagnosticRoute(d, records, ctx.schema, levels);
       const line = diagnosticLine({ ...d, record: "" });
       if (d.record) {
         line.prepend(h("a.diag-link", { href: route, title: "go to the row it is about" }, d.record), " ");
       }
-      panel.appendChild(line);
+      parts.push(line);
     }
+    panel.replaceChildren(...parts);
   }
   async function toggle(on = panel.hidden) {
     panel.hidden = !on;
