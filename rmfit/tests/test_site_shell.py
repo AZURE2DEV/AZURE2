@@ -14,6 +14,13 @@
 Engine-free, seconds.  Run:  python3 rmfit/tests/test_site_shell.py"""
 import json, os, re, shutil, signal, subprocess, sys, tempfile, time
 
+# The generated job scripts are POSIX shell for a Linux cluster or login node, and this test runs them.  On Windows
+# "bash" from a native Python resolves to the WSL launcher in System32 ("Windows Subsystem for Linux has no installed
+# distributions", the CI runner 2026-11-17), and signals, locks and md5sum differ: skipped there.
+if os.name == "nt":
+    print("skip: rmfit's job scripts are POSIX shell; not run on Windows")
+    sys.exit(77)
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from rmfit import site                                     # noqa: E402
 

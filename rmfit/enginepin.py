@@ -63,7 +63,8 @@ def _keep_marker_hash(pyazr_dir):
 
 
 def so_path(pyazr_dir):
-    cands = sorted(glob.glob(os.path.join(pyazr_dir, "_azure2*.so")))
+    # the engine module: _azure2*.so, on Windows _azure2*.pyd
+    cands = sorted(glob.glob(os.path.join(pyazr_dir, "_azure2*.so"))) or sorted(glob.glob(os.path.join(pyazr_dir, "_azure2*.pyd")))
     return cands[0] if cands else None
 
 
