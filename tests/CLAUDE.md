@@ -10,7 +10,7 @@ and how to keep the references honest.
 | Physics regression | `tests/<name>/<name>.azr` + `data/` + `expected/chiSquared.out` | Pinning a whole evaluation's total χ², per-segment χ² and point counts | Automatic (`tests/run_tests.sh` finds every `.azr`) |
 | Behavioural check | `tests/<name>/check.sh` (must be executable) | Sequences of runs, caches, CLI modes, error messages, fits that must recover known parameters, gradients vs finite differences | Automatic, *only if* `chmod +x` (`git update-index --chmod=+x`) |
 | Reference | `tests/reference/<x>_test.cpp` | A quantity computed a second way: a closed form or an independent implementation. **The only kind that shows a number is right, not just unchanged.** | `tests/reference/CMakeLists.txt` |
-| pyazr | `tests/pyazr/<x>_test.py` | Python reader/writer round trips; pyazr against the engine | `tests/pyazr/CMakeLists.txt` (`LABELS slow` if > 1 min) |
+| pyazr | `tests/pyazr/<x>_test.py` | Python reader/writer round trips; pyazr against the engine | `tests/pyazr/CMakeLists.txt` (`LABELS slow` if > 1 min; `LABELS long` if it takes minutes on the CI's Windows and macOS runners) |
 | Consistency | `tests/consistency/` | Repository drift: CLI flags vs help/docs, test registration, modes | `tests/consistency/CMakeLists.txt` |
 
 A new feature usually needs a regression project or `check.sh` and a pyazr
@@ -92,10 +92,14 @@ run there too. Before pushing:
    `grep -P`); macOS runs BSD tools. awk and perl are portable.
 3. A pyazr test imports numpy and pyazr inside its skip guard
    (`try: ... except: print("skip: ..."); sys.exit(77)`).
-4. CI runs `ctest -LE slow`. A test that takes minutes gets `LABELS slow` in
-   `tests/pyazr/CMakeLists.txt`; run `ctest -L slow` locally (the longest,
-   `park_gradient`, takes about 40 min) when the pyazr or engine paths those
-   tests cover change.
+4. CI runs `ctest -LE "slow|browser"` on Linux and `ctest -LE "slow|browser|long"` on Windows and macOS (the
+   owner's answer of 2026-11-18: everything on Linux, a shorter set elsewhere; the physics regression scripts run
+   on all three). A test that takes minutes gets `LABELS slow` in `tests/pyazr/CMakeLists.txt`; run
+   `ctest -L slow` locally (the longest, `park_gradient`, takes about 40 min) when the pyazr or engine paths
+   those tests cover change. `LABELS long` is for a test that runs in CI but takes minutes there (the seven
+   listed in that file, 87 min on the macOS runner in all): Linux runs it, Windows and macOS do not. Give it
+   only to a test whose area has another test that stays in the short set, and re-measure from the run's
+   notice of the 15 slowest tests. `ctest -N -L long` lists them, `ctest -N -LE long` the rest.
 
 Job logs need a GitHub token; annotations are public but capped at 10 per step.
 Pushing a change to `.github/workflows/` needs the token's `workflow` scope.
@@ -113,7 +117,8 @@ right, stop and ask.
 
 ```bash
 ./tests/run_tests.sh build/src/AZURE2              # all regression projects + check.sh
-ctest --test-dir build -LE slow --output-on-failure
+ctest --test-dir build -LE slow --output-on-failure   # what Linux CI runs, less browser
+ctest --test-dir build -LE "slow|browser|long"          # what Windows and macOS CI run
 ctest --test-dir build -R pyazr_norm_group -V      # one test, full output
 python3 tests/pyazr/norm_group_test.py             # pyazr tests also run directly
 tests/norm_groups/check.sh build/src/AZURE2        # one check.sh directly

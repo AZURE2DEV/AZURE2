@@ -1284,6 +1284,17 @@ if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
 
+# The label "long" (owner's answer of 2026-11-18, docs/upgrade/OWNER_ANSWERS.md): the tests that take the time on the
+# CI's Windows and macOS runners, measured there in seconds (macOS / Windows, last CI run before 2026-11-18): thm_adjoint 2177 /
+# 996, thickness 1175 / 702, session_isolation 483 / 269, ui_curves 459 / -, doppler 433 / 260, ui_utilities 278 / -,
+# thm_model_average 221 / 103.  Linux runs them; Windows and macOS run `ctest -LE "slow|browser|long"`
+# (.github/workflows/build.yml).  Each area keeps a test there: the THM kernels by the other pyazr_thm_* tests,
+# sessions by pyazr_session_records and pyazr_session_functions, the web page by the other pyazr_ui_* tests;
+# Doppler and the sample thickness by the physics regression scripts tests/doppler_fgm and tests/transmission_yield,
+# which every platform runs.  A test goes in only when it takes minutes on a CI machine and its area has another test.
+set_tests_properties(pyazr_thm_adjoint pyazr_thickness pyazr_session_isolation pyazr_doppler pyazr_thm_model_average
+                     pyazr_ui_curves pyazr_ui_utilities PROPERTIES LABELS long)
+
 # The words and units of pyazr's answers (the defects the example scripts met): the level scheme's pairs by key and
 # kind, the units of the external-capture integrals, of an extrapolation's model values and of a gamma_decay
 # parameter.

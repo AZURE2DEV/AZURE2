@@ -671,8 +671,11 @@ re-read against its design at the hand-over.
    list above. macOS: the list above; one run takes five hours.
    Every build of the upgrade outside the CI was made on one machine (GCC 11.5, GNU Make, Python 3.12, numpy 2,
    pybind11 3.1, a Coulomb table file given by the environment). Look at the newest run of the branch before
-   trusting it. Which tests the CI should run on each platform (the unit-test step is one to two hours) is left
-   to the owner and the PI.
+   trusting it. Which tests the CI should run on each platform: **Answered 2026-11-18: everything on Linux, a shorter set on
+   Windows and macOS; see OWNER_ANSWERS.md.** Windows and macOS run all the physics regression scripts and the unit
+   tests without the ctest label `long` (seven pyazr tests, 87 min on the macOS runner and 39 on Windows by the
+   last measured run; Linux runs them); macOS keeps `ctest -j 2`. Each engine area keeps a test in the short set
+   (`tests/CLAUDE.md`, "Portability"). The new macOS time was not measured: it needs a run.
 2. **The web page was not compared with the Qt program item by item.** `qt_parity.md` lists 201 behaviours of the
    Qt program; 20 are dropped by the PI's decision, the other 181 are not ticked. The gate of Phase 9 ("every item
    of the Qt parity checklist") is not met. The page's tests are the `/api` tests and one smoke test in a headless

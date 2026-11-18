@@ -308,6 +308,9 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # The pyazr tests labelled slow (tests/pyazr/CMakeLists.txt) take 5-40 min
         # each; run them locally (ctest -L slow) when changing pyazr.
+        # The tests labelled long (seven, tests/pyazr/CMakeLists.txt: together 87 min on the macOS runner, 39 on
+        # Windows, as measured) run on Linux only: Windows and macOS run the shorter set (the owner, 2026-11-18).  All the
+        # physics regression scripts run on every platform, and so does at least one test of each area.
         # The test labelled browser (the page in a headless Chrome, minutes) is
         # run locally too (ctest -L browser): it has never run on a CI machine.
         run: |
@@ -339,7 +342,11 @@ jobs:
           # 4 cores; the tests set OMP_NUM_THREADS=2 and declare PROCESSORS where they need more.
           JOBS=1
           [ "${{ matrix.name }}" != "macos" ] || JOBS=2
-          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -j "$JOBS" -LE "slow|browser" 2>&1 \
+          # The labels left out: slow and browser everywhere; long too on Windows and macOS (Linux runs it).
+          EXCLUDE="slow|browser"
+          [ "${{ matrix.name }}" = "linux" ] || EXCLUDE="slow|browser|long"
+          echo "unit tests: ctest -LE \"$EXCLUDE\", $JOBS at a time"
+          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -j "$JOBS" -LE "$EXCLUDE" 2>&1 \
             | tee unit-tests.log || rc=$?
           # The slowest tests, always (a notice): which tests take the time on each platform.
           awk '/^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { for (i = 1; i <= NF; i++) if ($i == "sec") print $(i - 1), $4 }' \

@@ -118,6 +118,7 @@ ctest --test-dir build -LE slow --output-on-failure   # unit, reference, pyazr, 
 ./tests/run_tests.sh build/src/AZURE2                 # physics regression: χ² of every tests/<name>/ (tens of minutes)
 ctest --test-dir build -R <name> --output-on-failure  # a single test
 ctest --test-dir build -L slow                        # long pyazr tests: run when you change pyazr fitting/bands
+# CI: Linux runs every label but slow and browser; Windows and macOS also leave out the label long (7 tests)
 sphinx-build -W --keep-going -b html docs/source docs/_build/html   # docs, warnings are errors (as CI)
 ctest --test-dir build -R docs_build                  # the same build as a test (skipped without Sphinx)
 ```
