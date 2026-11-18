@@ -884,7 +884,12 @@ for Ta\ :sub:`2`\ O\ :sub:`5` with :sup:`18`\ O active the stopping per formula
 unit over 5.  ``scale <s> fixed|fit [prior <s> <width>]`` on the ``stopping`` field
 is the stopping-scale nuisance (:math:`\varepsilon \to s\,\varepsilon`): one
 parameter ``stopping_scale.<material>.<projectile>`` per material and projectile,
-shared by every target of that material (targets that share it write it alike); left
+shared by every target of that material (targets that share it write it alike).  The
+``<material>`` of an evaluation is the composition's formula (``C``, ``C5H4O2``), with
+``_solid`` or ``_gas`` when ``phase`` is written and ``_C<c>`` for a compound
+correction, so ``phase solid`` and a phase left out are two materials of two scales;
+of a table or a formula, the target's name.  Two scales of one name are refused
+(``E_STOPPING_SCALE_CONFLICT``).  Left
 out it is fixed at 1 (a formula has none); ``fit`` without a prior takes SRIM's
 stated accuracy for the projectile class (H 4.0 %, He 3.9 %, Li 4.8 %, heavier
 5.8 %).  The run's log, ``--validate`` and ``--describe`` print where each target's

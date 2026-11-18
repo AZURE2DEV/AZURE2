@@ -393,7 +393,10 @@ void ScaleOf(const ValidatedRecord &t, const PairInfo &p, StoppingSpec &s) {
   switch (s.source) {
     case StoppingSpec::Source::Evaluation:
       key << "evaluation|" << s.material << "|" << s.phase << "|" << s.compoundCorrection;
-      material = s.material + (s.phase == "gas" ? "_gas" : "");
+      // The label carries every part of the key: a phase written ("solid" or "gas") is a suffix, so a target that
+      // writes the default phase and one that leaves it out have scales of two names, as of two keys (this layer
+      // does not know stopping/'s DefaultPhase).  "B" and "B_solid" were both "B" (2026-11-18).
+      material = s.material + (s.phase.empty() ? "" : "_" + s.phase);
       if (s.compoundCorrection != 1.0) {
         std::ostringstream cc;
         cc << s.compoundCorrection;
@@ -417,14 +420,25 @@ void ScaleOf(const ValidatedRecord &t, const PairInfo &p, StoppingSpec &s) {
 }
 
 // The targets that share a stopping scale must write it alike (one parameter, one start value, one prior); where its
-// fitted value is written: the first of them.
+// fitted value is written: the first of them.  Two scales of one name are refused: the engine's parameter vector holds
+// one parameter per name (AZUREParams::Add), and a table target named as an evaluated material's formula, or two
+// compound corrections equal to the label's six digits, would give one.
 void SharedScales(Context &c, const std::vector<Combination> &combos, SpecList<TargetEffectSpec> &out) {
-  std::map<std::string, std::size_t> first;
+  std::map<std::string, std::size_t> first, named;
   for (std::size_t i = 0; i < out.items.size(); i++) {
     const StoppingSpec &s = out.items[i].spec.stopping;
     if (!s.hasScale || s.scaleKey.empty()) continue;
     auto it = first.emplace(s.scaleKey, i).first;
     if (it->second == i) {
+      auto byName = named.emplace(s.scaleName, i).first;
+      if (byName->second != i) {
+        c.Error(codes::kStoppingScaleConflict, *combos[i].target, "stopping",
+                "its stopping scale is named " + s.scaleName + ", as the scale of target " +
+                    combos[byName->second].target->name +
+                    ", which is another (material, phase, compound correction or table): two parameters cannot have one "
+                    "name; rename the target or write the two materials alike");
+        continue;
+      }
       c.out_.parameterSources[s.scaleName] = {combos[i].target->name, "stopping", 0, "scale", ""};
       continue;
     }

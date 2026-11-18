@@ -2,6 +2,21 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-18 (agent) — fix/param-duplicate-name: two stopping scales of one name
+
+**Symptom.** `Session(...).objective()` and `AZURE2 calculate` failed with "AZUREParams: N parameters but N+1 records"
+on projects that `--validate` called valid: one C target with `phase solid` (Kashy 1961) beside a C target without a
+phase (13C(p,n), Ramstroem 1979), protons on both; or a 10B target with `phase solid` beside the other 10B targets.
+**Cause.** The scale's key (`ScaleOf`, `experiment/src/BuildEffects.cpp`) holds the phase as written, its label only
+`_gas`: two keys, one name `stopping_scale.C.1H`; Minuit2 refused the second parameter with a warning, the record
+was kept. **Repaired:** the label carries a written phase (`C_solid`, `B_solid`; `_gas` as before); `SharedScales`
+refuses two keys of one name (`E_STOPPING_SCALE_CONFLICT`, also in `--validate`); `AZUREParams::Add` throws on a
+duplicate name, naming both owners. Tests `duplicate_parameter`, `stopping_scale_names`. No number moves.
+**Open (the PI):** `B` and `B_solid` are the same material (solid is boron's default) but two scales, not one (D6):
+sharing them needs stopping/'s `DefaultPhase` in `experiment/` (a dependency it has not got) or the gas list in
+`physics/`. A param.sav naming `stopping_scale.C.1H` for a target that writes `phase solid` no longer sets it (a
+partial match, a warning).
+
 ## 2026-11-17 (director, 18:30) — the join with `dev`: the ports, rmfit and the full form factor on one tree
 
 **State: local only, on `feature/upgrade-5-join`; not pushed.** The tree is rehearsal 110 (`76875f72`) plus
