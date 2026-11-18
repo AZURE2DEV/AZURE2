@@ -20,11 +20,13 @@ import subprocess
 import sys
 import tempfile
 
-#: objective()(x0) of the test projects (the engine's exact Coulomb routines, no table), Linux x86-64.
+#: objective()(x0) of the test projects (the engine's exact Coulomb routines, no table), Linux x86-64.  T1 and T3
+#: re-recorded on 2026-11-18 for the CODATA 2018 m_p of the M1 capture and m_e of the Fermi function (were
+#: 482.27523957308824, 1.6e-9 higher, and 518.713434718418, 1.9e-8 lower).
 OBJECTIVE_AT_START = {
-    "T1": 482.27523957308824,
+    "T1": 482.27523879169445,
     "T2": 10910.13380363804,
-    "T3": 518.713434718418,
+    "T3": 518.7134446833464,
 }
 #: How far a platform's objective may be from the stored Linux x86-64 value (relative).  It was 1e-9 until the
 #: wheels' first runs on other platforms (2026-11-16, GitHub run 43859564660), which gave

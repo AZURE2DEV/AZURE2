@@ -66,7 +66,7 @@ ROWS = [
     Row("fit_engine", [T1, "--out", "{out}"],
         "objective of the saved project as it stands: 462.273511 (the fit: 462.273511)", slow=True),
     Row("fit_iminuit", [T3], "MIGRAD: objective 509.31", needs=("iminuit",)),
-    Row("fit_scipy", [T3], "least_squares: objective 509.31249", needs=("scipy",)),
+    Row("fit_scipy", [T3], "least_squares: objective 509.31248", needs=("scipy",)),
     # uncertainties
     Row("fit_emcee", [T3, "--steps", "60", "--rate", "2", "1", "--draws", "5", "--out", "{out}/chain.npy"],
         "objective at the start 518.713: data 509.684", needs=("emcee",)),
