@@ -19,8 +19,34 @@ ROOT::Minuit2::MnUserParameters &AZUREParams::GetMinuitParams() {
   return params_;
 }
 
+namespace {
+
+// What a parameter belongs to, for a message: its kind and the record fields its ParamKindTable() row names.
+std::string OwnerText(const ParameterRecord &r) {
+  std::ostringstream s;
+  s << r.Row().key;
+  if (r.levelNumber > 0) s << " of level " << r.levelNumber << " (J group " << r.jGroup << ", level " << r.level << ")";
+  if (r.channel > 0 && r.kind != ParamKind::ThmCoherent) s << ", channel " << r.channel;
+  if (r.segment > 0) s << " of data segment " << r.segment << " (key " << r.segmentKey << ")";
+  if (r.fnTerm >= 0) s << ", term a" << r.fnTerm;
+  if (r.sample > 0) s << " of sample " << r.sample << " '" << r.sampleName << "', nucleus Z=" << r.nucleusZ << " A=" << r.nucleusA;
+  if (r.kind == ParamKind::ThmCoherent) s << " of THM experiment '" << r.thmExperiment << "', term " << r.thmTerm;
+  if (r.effect > 0) s << " of target effect " << r.effect;
+  for (const auto &part : r.owner) s << ", " << part.first << " " << part.second;
+  if (!r.decayRecord.empty()) s << ", gamma_decay " << r.decayRecord << " " << r.decayPart;
+  return s.str();
+}
+
+}  // namespace
+
 void AZUREParams::Add(const std::string &name, double value, double step, ParameterRecord record) {
   if (kindCount_.size() < ParamKindTable().size()) kindCount_.assign(ParamKindTable().size(), 0);
+  // Minuit2 refuses a second parameter of a name with a warning only, and the record below would then describe a
+  // parameter that does not exist (2026-11-18: two stopping scales of one name).
+  const int other = IndexOfName(name);
+  if (other >= 0)
+    throw std::logic_error("AZUREParams: two parameters named '" + name + "': the " + OwnerText(records_.at(other)) +
+                           " and the " + OwnerText(record) + " (each parameter needs its own name)");
   record.ordinal = ++kindCount_[(int)record.kind];
   params_.Add(name, value, step);
   records_.push_back(record);

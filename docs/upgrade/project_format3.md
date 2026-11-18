@@ -364,10 +364,12 @@ the material, `eV/1e15atoms/cm2` or `MeV*cm2/g`), `#` comments, the units in the
 ε_active = 10⁻²¹ ε_atom / f_active, f_active the atom fraction of the active nucleus's element in the composition
 (`E_STOPPING_ACTIVE` when it is absent); the isotopic part of the active fraction is the `isotope` line. `scale`: the
 stopping-scale nuisance s (ε → s ε), one parameter `stopping_scale.<material>.<projectile>` per material (composition,
-phase, C; a table: its target) and projectile; targets that share it write it alike (`E_STOPPING_SCALE_CONFLICT`); left
-out, fixed at 1 (a formula: no scale); `fit` without a prior takes SRIM's stated accuracy for the projectile class (H
-4.0 %, He 3.9 %, Li 4.8 %, heavier 5.8 %), printed at set-up. Set-up refusals: `E_STOPPING_DATA` (no SRIM data files, a
-table that cannot be read), `E_STOPPING_RANGE` (an energy outside the table).
+phase, C; a table: its target) and projectile, `<material>` the formula with `_solid`/`_gas` for a written phase and
+`_C<c>` for a compound correction (`B`, `B_solid`, `CH4_gas`), two scales of one name refused; targets that share it
+write it alike (`E_STOPPING_SCALE_CONFLICT`); left out, fixed at 1 (a formula: no scale); `fit` without a prior takes
+SRIM's stated accuracy for the projectile class (H 4.0 %, He 3.9 %, Li 4.8 %, heavier 5.8 %), printed at set-up.
+Set-up refusals: `E_STOPPING_DATA` (no SRIM data files, a table that cannot be read), `E_STOPPING_RANGE` (an energy
+outside the table).
 
 **Epochs.** A target that changes during a campaign (carbon build-up, loss) has one `areal_density` per epoch; the
 stoichiometry, stopping and isotopes are shared. A data set names `target C13A@run2`. The parameter is
