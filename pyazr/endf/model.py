@@ -306,6 +306,56 @@ def _full_values(session, x):
     return [float(x[p.free_index]) if not p.fixed else float(p.start) for p in P]
 
 
+def _level_groups(rows, values):
+    """The session's level parameters by J^pi group (``rows``: ``Parameter.to_dict()`` of every parameter, ``values``
+    their values): {jgroup: {J, parity, jpi, levels {level: {E, gamma {channel: value}, label, index, gamma_index
+    {channel: row}}}, channels {channel: (pair key, l, s)}}} with the particle channels only (radiation type P);
+    ``index`` and ``gamma_index`` are the rows of ``rows`` (the session's parameters) each value came from."""
+    groups = {}
+    for i, r in enumerate(rows):
+        if r["kind"] == "energy":
+            g = groups.setdefault(r["jgroup"], {"J": r["J"], "parity": r["parity"], "jpi": r["jpi"], "levels": {},
+                                                "channels": {}})
+            g["levels"][r["level"]] = {"E": values[i], "gamma": {}, "label": r["level_label"], "index": i,
+                                       "gamma_index": {}}
+    for i, r in enumerate(rows):
+        if r["kind"] == "width" and r["radiation_type"] == "P":
+            g = groups[r["jgroup"]]
+            g["channels"][r["channel"]] = (r["pair_key"], r["L"], r["S"])
+            g["levels"][r["level"]]["gamma"][r["channel"]] = values[i]
+            g["levels"][r["level"]]["gamma_index"][r["channel"]] = i
+    return groups
+
+
+def _block_of(g):
+    """The inputs of door 1 for one group of :func:`_level_groups` with a particle channel: ``lev_ids``,
+    ``chan_ids``, ``chans`` (pair key, l, 2s), ``E`` per level and ``gam`` per level and channel (level-major), and
+    ``rows``: the session's parameter row of each input (``E`` first, then ``gam``; None for a width the project
+    does not list)."""
+    chan_ids = sorted(g["channels"])
+    lev_ids = sorted(g["levels"])
+    E = [g["levels"][l]["E"] for l in lev_ids]
+    gam = [g["levels"][l]["gamma"].get(c, 0.0) for l in lev_ids for c in chan_ids]
+    chans = [(g["channels"][c][0], g["channels"][c][1], int(round(2 * g["channels"][c][2]))) for c in chan_ids]
+    rows = [g["levels"][l]["index"] for l in lev_ids] + \
+        [g["levels"][l]["gamma_index"].get(c) for l in lev_ids for c in chan_ids]
+    return {"lev_ids": lev_ids, "chan_ids": chan_ids, "chans": chans, "E": E, "gam": gam, "rows": rows}
+
+
+def formal_levels(session, pairs, g, chans, E, gam):
+    """Door 1 (``formal_levels_of_block``) on one J^pi group of ``session`` (Brune or Park basis): the formal E,
+    gamma and B_c of the levels E, gam in the session's basis; refused when no formal parameters correspond."""
+    basis = "park" if session.basis == 2 else "brune"
+    try:
+        return _engine().formal_levels_of_block(pairs, int(round(2 * g["J"])), g["parity"], chans, list(E), list(gam),
+                                                [], "amplitudes", basis,
+                                                bool(session.options.get("use_coulomb_table", True)))
+    except ValueError as e:
+        raise _refuse_session(f"spin group {g['jpi']}: no formal parameters correspond ({e})",
+                              "levels whose Brune parameters have a formal equivalent (M positive definite)",
+                              "the engine refuses the same set in the formal basis; change the levels") from None
+
+
 def from_session(session, x=None, *, energy_range_eV=(1e-5, 2e7)):
     """The particle channels of ``session``'s nucleus at the fit vector ``x`` (default its start) as an
     :class:`~pyazr.endf.resonances.LRF7` record in the formal basis (KRM=4, IFG=1, KRL=0; the engine's
@@ -385,45 +435,25 @@ def from_session(session, x=None, *, energy_range_eV=(1e-5, 2e7)):
     values = _full_values(session, x)
     physical = session.transform(session.parameters.x0 if x is None else np.asarray(x, float))
     rows = [p.to_dict() for p in session.parameters]
-    groups = {}
-    for i, r in enumerate(rows):
-        if r["kind"] == "energy":
-            g = groups.setdefault(r["jgroup"], {"J": r["J"], "parity": r["parity"], "jpi": r["jpi"], "levels": {},
-                                                "channels": {}})
-            g["levels"][r["level"]] = {"E": values[i], "gamma": {}, "label": r["level_label"]}
+    groups = _level_groups(rows, values)
     photon_widths = []
     for i, r in enumerate(rows):
-        if r["kind"] != "width":
-            continue
-        g = groups[r["jgroup"]]
-        if r["radiation_type"] == "P":
-            g["channels"][r["channel"]] = (r["pair_key"], r["L"], r["S"])
-            g["levels"][r["level"]]["gamma"][r["channel"]] = values[i]
-        elif r["radiation_type"] in ("E", "M") and physical[i] != 0.0:
+        if r["kind"] == "width" and r["radiation_type"] in ("E", "M") and physical[i] != 0.0:
+            g = groups[r["jgroup"]]
             lev = g["levels"][r["level"]]
             photon_widths.append((g["jpi"], lev["E"], r["pair_key"], r["radiation_type"], r["L"], float(physical[i])))
     spin_groups = []
-    basis = "park" if session.basis == 2 else "brune"
     ent_pair = endf_pairs[0]
     scale = amplitude_scale(ent_pair)
     f_lab = lab_factor(ent_pair)
     for gk in sorted(groups):
         g = groups[gk]
-        chan_ids = sorted(g["channels"])
-        if not chan_ids:
+        if not g["channels"]:
             lost.append(f"spin group {g['jpi']}: no particle channel (photon channels only)")
             continue
-        lev_ids = sorted(g["levels"])
-        E = [g["levels"][l]["E"] for l in lev_ids]
-        gam = [g["levels"][l]["gamma"].get(c, 0.0) for l in lev_ids for c in chan_ids]
-        chans = [(g["channels"][c][0], g["channels"][c][1], int(round(2 * g["channels"][c][2]))) for c in chan_ids]
-        try:
-            out = _engine().formal_levels_of_block(pairs, int(round(2 * g["J"])), g["parity"], chans, E, gam, [],
-                                                   "amplitudes", basis, bool(opts.get("use_coulomb_table", True)))
-        except ValueError as e:
-            raise _refuse_session(f"spin group {g['jpi']}: no formal parameters correspond ({e})",
-                                  "levels whose Brune parameters have a formal equivalent (M positive definite)",
-                                  "the engine refuses the same set in the formal basis; change the levels") from None
+        block = _block_of(g)
+        chan_ids, chans, E = block["chan_ids"], block["chans"], block["E"]
+        out = formal_levels(session, pairs, g, chans, E, block["gam"])
         nc = len(chan_ids)
         channels = tuple(Channel(ppi[c[0]], c[1], c[2] / 2, out["B"][k], by_key[c[0]]["channel_radius"] /
                                  FM_PER_ENDF_LENGTH, by_key[c[0]]["channel_radius"] / FM_PER_ENDF_LENGTH)

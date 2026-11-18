@@ -586,7 +586,7 @@ COMMANDS = (
                            Arg("--elastic-form", "choice", "charged-particle elastic scattering as the nuclear "
                                "amplitude expansion (LTP=1) or tabulated (LTP=12) (default: pyazr.endf.writer.ELASTIC_FORM)",
                                choices=("amplitudes", "tabulated")),
-                           Arg("--covariance", "flag", "write MF=32: HESSE in a formal-basis session"),
+                           Arg("--covariance", "flag", "write MF=32: the fit's covariance (HESSE at x) carried through the transformation"),
                            Arg("--overwrite", "flag", "replace NEW if it exists")),
             "pyazr.endf.write",
             "The model as an ENDF-6 material: MF=1, MF=2 (LRF=7, formal basis), MF=3 and MF=6 from the engine "

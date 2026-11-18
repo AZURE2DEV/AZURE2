@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""MF=32 of pyazr.endf (ENDF-102, 2023 edition, pp. 253-259; docs/upgrade/endf.md section 13.13): the covariance of
-MF=2's formal parameters from HESSE in a formal-basis session at the transformed best fit, written and read back.
+"""MF=32 of pyazr.endf (ENDF-102, 2023 edition, pp. 253-259; docs/upgrade/endf.md section 13.13): the fit's
+covariance carried through the transformation to MF=2's formal parameters, J C J^T, written and read back.
 
-On T1 fitted by the engine's MIGRAD:
-(a) the formal-basis session's objective at its start equals the fit's at x (the same model; to 1e-9);
-(b) the covariance is symmetric and positive semi-definite; the fixed parameters of the listed resonances have zero
-    rows; taken to the Brune basis through the Jacobian of the engine's door 2 (formal levels with B_c -> Brune
-    levels, central differences), J C J^T is printed beside the Brune fit's own covariance (not compared: each
-    session fixes the project's fixed parameters in its own basis, endf.md 13.13);
-(c) T1 written with covariance="hesse": the own format check has no error; MF=32 read back (Material.covariance)
-    equals the written matrix to the number form's digits (1e-6 of the largest element of a row) and its parameters
-    are exactly MF=2's, each name a spin group and resonance of MF=2; MF=1 names MF=32;
-(d) refused with what, allowed, fix: the fit's own covariance (Brune basis) as covariance=, a session of the
-    extrapolations;
+On T1 fitted by the engine's MIGRAD, C = the fit's covariance (EngineFitResult.covariance):
+(a) the Jacobian J of the transformation (door 1 per J^pi group, central differences, the file's units) equals the
+    central differences of the whole writer's transformation, from_session(s, x)'s ER and GAM, in every free
+    parameter, at three times the step: to 1e-6 of each row's largest element.  A J assembled with a wrong column, a
+    wrong unit or a wrong level order fails it;
+(b) the matrix is J C J^T, symmetric and positive semi-definite, with zero rows exactly where J has a zero row; taken
+    back to the Brune basis through the Jacobian of the engine's door 2 (formal levels with B_c -> Brune levels,
+    central differences), it is the fit's own covariance of its free level parameters to 1e-4 of sigma_i sigma_j
+    (HESSE in a formal-basis session, the method before 2026-11-18, differed from it by up to 3.9 sigma_i sigma_j);
+(c) T1 written with covariance="hesse" (HESSE of the fit's objective by iminuit, carried through): the own format
+    check has no error; MF=32 read back (Material.covariance) equals the written matrix to the number form's digits
+    (1e-6 of the largest element of a row) and its parameters are exactly MF=2's, each name a spin group and
+    resonance of MF=2; MF=1 names MF=32;
+(d) the fit's covariance as covariance= of write gives the matrix of (b); refused with what, allowed, fix: a matrix
+    of the wrong shape, a word other than "hesse", HESSE asked of a session of the extrapolations;
 (e) with AZURE2_ENDF_UTILITIES set, CHECKR, FIZCON and PSYCHE on the written file: every finding printed.
 Exits 77 (skipped) without the compiled engine module or iminuit.  Run from anywhere.
 """
@@ -55,20 +59,107 @@ os.chdir(d)
 s = pyazr.Session("T1.azr")
 fit = s.fit_with_engine("migrad")
 print(f"T1 fitted: {fit.status}, objective {fit.objective:.10g}")
-cov = E.formal_covariance(s, fit.x)
-# (a)
-rel = abs(cov.objective_formal - cov.objective_fit) / cov.objective_fit
-check("the formal-basis session's objective = the fit's to 1e-9", rel < 1e-9, (cov.objective_fit, cov.objective_formal))
+cov = E.formal_covariance(s, fit.x, covariance=fit.covariance)
+record, _ = E.from_session(s, fit.x)
+# (a) J against central differences of the transformation at the written B_c: for each free level parameter the
+# formal levels at theta +- h (three times the module's step) are found by Newton's iteration on door 2 with MF=2's
+# B_c (door 2 of them = the session's Brune levels of the group to 1e-11), and differenced
+from pyazr.endf import model as endf_model
+from pyazr.endf.resonances import amplitude_scale
+e_scale, g_scale = lab_factor(record.pairs[0]) * 1e6, amplitude_scale(record.pairs[0])
+ent = next(p.to_dict() for p in s.pairs if p.is_entrance)
+s_ent = ent["sep_energy"] + ent["excitation"]
+pairs = [p.to_dict() for p in s.pairs]
+free_of = {i: p.free_index for i, p in enumerate(s.parameters) if not p.fixed}
+rows_all = [p.to_dict() for p in s.parameters]
+
+
+def blocks_at(x):
+    groups = endf_model._level_groups(rows_all, endf_model._full_values(s, x))
+    return [(gk, groups[gk], endf_model._block_of(groups[gk])) for gk in sorted(groups) if groups[gk]["channels"]]
+
+
+def door2(g, chans, f, B, n_lev):
+    out = pyazr._azure2.observed_levels_of_block(pairs, int(round(2 * g["J"])), g["parity"], chans, list(f[:n_lev]),
+                                                 list(f[n_lev:]), list(B), 1e-13)
+    return np.concatenate([np.asarray(out["E"], float), np.asarray(out["gamma"], float)])
+
+
+def formal_at(gi, g, block, B, f0, D):
+    target = np.array(list(block["E"]) + list(block["gam"]), float)
+    n_lev = len(block["E"])
+    f = np.array(f0, float)
+    for _ in range(30):
+        r = target - door2(g, block["chans"], f, B, n_lev)
+        f = f + np.linalg.solve(D, r)
+        if np.max(np.abs(r)) < 1e-11:
+            break
+    return f
+
+
+J_fd = np.zeros_like(cov.jacobian)
+row_of = {p: k for k, p in enumerate(cov.parameters)}
+base_blocks = blocks_at(fit.x)
+for gi, (gk, g, block) in enumerate(base_blocks):
+    sg = record.groups[gi]
+    n_lev, nch = len(block["E"]), len(block["chan_ids"])
+    B = [c.boundary for c in sg.channels]
+    f0 = np.array([lv.energy / e_scale + s_ent for lv in sg.levels] + [v / g_scale for lv in sg.levels for v in lv.gam])
+    steps = [3e-5 * (abs(t) + 1.0) if k < n_lev else 3e-5 * max(abs(t), 1e-3) for k, t in enumerate(f0)]
+    D = np.array([(door2(g, block["chans"], f0 + h * np.eye(len(f0))[k], B, n_lev) -
+                   door2(g, block["chans"], f0 - h * np.eye(len(f0))[k], B, n_lev)) / (2 * h)
+                  for k, h in enumerate(steps)]).T
+    for slot, r in enumerate(block["rows"]):
+        if r is None or r not in free_of:
+            continue
+        k = free_of[r]
+        v = fit.x[k]
+        h = 3 * (E.covariance.ENERGY_STEP * (abs(v) + 1.0) if slot < n_lev else
+                 E.covariance.AMPLITUDE_STEP * max(abs(v), 1e-3))
+        outs = []
+        for sign in (1, -1):
+            xs = np.array(fit.x, float)
+            xs[k] += sign * h
+            _, g2, block2 = blocks_at(xs)[gi]
+            outs.append(formal_at(gi, g2, block2, B, f0, D))
+        dfdx = (outs[0] - outs[1]) / (2 * h)
+        for li in range(n_lev):
+            J_fd[row_of[(gi, li, 0)], k] = dfdx[li] * e_scale
+            for c in range(nch):
+                J_fd[row_of[(gi, li, 1 + c)], k] = dfdx[n_lev + li * nch + c] * g_scale
+row_max = np.maximum(np.max(np.abs(J_fd), axis=1), 1e-300)
+dj = float(np.max(np.abs(cov.jacobian - J_fd) / row_max[:, None]))
+print(f"      J: {cov.jacobian.shape[0]} parameters of MF=2 x {cov.jacobian.shape[1]} free parameters; against "
+      f"differences of the inverse of door 2 at MF=2's B_c: {dj:.2e} of each row's largest element")
+check("J = central differences of the transformation at the written B_c (Newton on door 2, 3x the step) to 1e-5 of "
+      "each row's largest element", dj < 1e-5, dj)
+# door 1 alone (B_c = S_c(E_1) following the levels: what from_session does at each x) is another Jacobian; printed
+J_door1 = np.zeros_like(cov.jacobian)
+for k, p in enumerate(p for p in s.parameters if not p.fixed):
+    if p.to_dict()["kind"] not in ("energy", "width"):
+        continue
+    h = 3e-5 * (abs(fit.x[k]) + 1.0)
+    xp, xm = np.array(fit.x, float), np.array(fit.x, float)
+    xp[k] += h
+    xm[k] -= h
+    vals = [np.array([(lambda lv: lv.energy if col == 0 else lv.gam[col - 1])(rec.groups[gi].levels[li])
+                      for gi, li, col in cov.parameters]) for rec in (E.from_session(s, xp)[0], E.from_session(s, xm)[0])]
+    J_door1[:, k] = (vals[0] - vals[1]) / (2 * h)
+M1 = J_door1 @ fit.covariance @ J_door1.T
+sig = np.sqrt(np.clip(np.diag(cov.matrix), 1e-300, None))
+print(f"      J C J^T with door 1's Jacobian (B_c following E_1) differs from it by up to "
+      f"{np.max(np.abs(M1 - cov.matrix) / np.outer(sig, sig)):.2f} sigma_i sigma_j (printed, not compared)")
 # (b)
 M = cov.matrix
-free = [k for k, f in enumerate(cov.fixed) if not f]
-sub = M[np.ix_(free, free)] / np.outer(cov.sigma[free], cov.sigma[free])
+check("the matrix is J C J^T", np.allclose(M, cov.jacobian @ fit.covariance @ cov.jacobian.T, rtol=1e-12,
+                                             atol=1e-14 * np.max(np.abs(M))))
+listed = [k for k, f in enumerate(cov.fixed) if not f]
+sub = M[np.ix_(listed, listed)] / np.outer(cov.sigma[listed], cov.sigma[listed])
 eig = np.linalg.eigvalsh(sub)
 zero_rows = [k for k, f in enumerate(cov.fixed) if f]
-check("symmetric, positive semi-definite, the fixed parameters' rows zero",
+check("symmetric, positive semi-definite, zero rows exactly where J's row is zero",
       np.allclose(M, M.T, rtol=0, atol=0) and all(np.all(M[k] == 0) for k in zero_rows) and
-      eig.min() > -1e-9 * eig.max(), (eig.min(), zero_rows))
-record, _ = E.from_session(s, fit.x)
+      all(np.any(cov.jacobian[k] != 0) for k in listed) and eig.min() > -1e-9 * eig.max(), (eig.min(), zero_rows))
 # the formal covariance taken to the Brune basis through the engine's door 2 (formal levels with B_c -> Brune levels):
 # J C J^T against the Brune fit's own HESSE covariance of the level parameters (two numerical Hessians of one
 # objective in two coordinates: equal to the step of the differences, not to rounding)
@@ -144,12 +235,13 @@ for p_ in cov.parameters:
             scale_ = np.sqrt(fit.covariance[brune_index[na], brune_index[na]] * fit.covariance[brune_index[nb],
                                                                                               brune_index[nb]])
             worst = max(worst, abs(predicted[par_index[p_], par_index[q_]] - ref) / scale_)
-print(f"      the formal covariance through door 2's Jacobian against the Brune fit's HESSE: largest difference "
+print(f"      the formal covariance through door 2's Jacobian against the Brune fit's covariance: largest difference "
       f"{worst:.2e} of sigma_i sigma_j")
-# not a check: the two covariances hold different parameters fixed (the project's fixed level energies and widths are
-# fixed in the basis of each session), so they differ (docs/upgrade/endf.md 13.13); the number is printed for the report
+check("taken back through door 2, the fit's covariance of its free level parameters to 1e-4 of sigma_i sigma_j",
+      0.0 < worst < 1e-4 or (worst == 0.0 and len(listed) == 0), worst)
 # (c)
 out = os.path.join(d, "T1.endf")
+w_cov = E.formal_covariance(s, fit.x)  # covariance="hesse": iminuit's HESSE at x, carried through
 w = E.write(s, out, fit.x, covariance="hesse", header={"AUTH": "pyazr tests"})
 report = E.check_format(out)
 check("written with MF=32: the own format check has no error", not report.errors and (32, 151) in
@@ -157,11 +249,11 @@ check("written with MF=32: the own format check has no error", not report.errors
 m = E.read(out)
 back = m.covariance()
 res = m.resonances()
-n = len(cov.parameters)
-scale = np.maximum(np.max(np.abs(cov.matrix), axis=1), 1e-300)
-dm = np.max(np.abs(back.matrix - cov.matrix) / scale[:, None]) if n else 0.0
-dv = np.max(np.abs(back.values - cov.values) / np.maximum(np.abs(cov.values), 1.0))
-mf2 = [(lv.energy, *lv.gam) for gi in cov.groups for li in cov.levels[gi] for lv in [res.groups[gi].levels[li]]]
+n = len(w_cov.parameters)
+scale = np.maximum(np.max(np.abs(w_cov.matrix), axis=1), 1e-300)
+dm = np.max(np.abs(back.matrix - w_cov.matrix) / scale[:, None]) if n else 0.0
+dv = np.max(np.abs(back.values - w_cov.values) / np.maximum(np.abs(w_cov.values), 1.0))
+mf2 = [(lv.energy, *lv.gam) for gi in w_cov.groups for li in w_cov.levels[gi] for lv in [res.groups[gi].levels[li]]]
 same_mf2 = np.allclose(np.concatenate([np.atleast_1d(r) for r in mf2]), back.values, rtol=0, atol=0)
 print(f"      MF=32 read back: {n} parameters ({len(back.names)} names, e.g. {back.names[:3]}), matrix to {dm:.1e}, "
       f"values to {dv:.1e}")
@@ -169,14 +261,25 @@ check("MF=32 read back = the written covariance to 1e-6 of each row's largest el
       "10 digits) and the values exactly MF=2's", len(back.names) == n and dm < 1e-6 and same_mf2, (dm, dv, same_mf2))
 check("each name a spin group and a resonance of MF=2", all("#" in x and (x.endswith(".ER") or ".GAM" in x)
                                                             for x in back.names) and
-      list(back.groups) == list(cov.groups), (back.names, back.groups))
+      list(back.groups) == list(w_cov.groups), (back.names, back.groups))
 text = " ".join(" ".join(m.header.text).split())
-check("MF=1 names MF=32 and the fixed parameters", "MF=32 (LCOMP=1, one block)" in text and
-      (not zero_rows or "zero rows" in text), text[-400:])
+check("MF=1 names MF=32 and the zero rows", "MF=32 (LCOMP=1, one block)" in text and
+      (not [k for k, f in enumerate(w_cov.fixed) if f] or "zero rows" in text), text[-400:])
+dh = np.max(np.abs(w_cov.matrix - cov.matrix) / np.outer(cov.sigma, cov.sigma).clip(1e-300))
+print(f"      covariance=\"hesse\" (iminuit's HESSE at x) against the engine fit's covariance: {dh:.2e} of "
+      "sigma_i sigma_j (two numerical Hessians; printed, not compared)")
 # (d)
-for what, call in (("the Brune fit's covariance", lambda: E.write(s, os.path.join(d, "r.endf"), fit.x,
-                                                                   covariance=fit.covariance)),
-                   ("a session of the extrapolations", lambda: E.formal_covariance(
+w2 = E.write(s, os.path.join(d, "T1_fitcov.endf"), fit.x, covariance=fit.covariance)
+back2 = E.read(os.path.join(d, "T1_fitcov.endf")).covariance()
+scale2 = np.maximum(np.max(np.abs(cov.matrix), axis=1), 1e-300)
+d2 = np.max(np.abs(back2.matrix - cov.matrix) / scale2[:, None]) if len(cov.parameters) else 0.0
+check("the fit's covariance as covariance= of write: MF=32 is J C J^T of (b) to the number form's digits",
+      back2.matrix.shape == cov.matrix.shape and d2 < 1e-6, d2)
+for what, call in (("a matrix of the wrong shape", lambda: E.write(s, os.path.join(d, "r.endf"), fit.x,
+                                                                   covariance=np.eye(2))),
+                   ("a word other than hesse", lambda: E.write(s, os.path.join(d, "r.endf"), fit.x,
+                                                               covariance="formal")),
+                   ("HESSE asked of a session of the extrapolations", lambda: E.formal_covariance(
                        pyazr.Session("T1.azr", extrapolations=True)))):
     try:
         call()

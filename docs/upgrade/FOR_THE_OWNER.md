@@ -359,6 +359,8 @@ estimate from the 65 commits read, not a measurement).
   wrong by up to 5 % in P below the barrier. Proposed for `dev` too.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
+  *Answered 2026-11-18: the fit's covariance carried through the transformation, built (`endf.md` 13.13); on T1
+  MF=32 moves by up to 3.9 sigma_i sigma_j and lists 14 parameters instead of 10.*
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
   `tests/switch_options`, `AZR_DEBUG_GRID` is read by `tests/gamma_decay`; proposed: drop the two print-only
   switches no test reads (`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`) unless you use them. *Answered 2026-11-18:
@@ -807,7 +809,7 @@ re-read against its design at the hand-over.
     against FRESCO (`transfer.md`).
 12. **Conventions.** No project key states the angular-momentum convention; the invariance test is at the level of
     parameters only; the relative sign of internal and external capture has no independent check.
-13. **ENDF.** The method of the covariance written to MF=32 is the owner's decision (section 8).
+13. **ENDF.** The method of the covariance written to MF=32: answered and built (2026-11-18, section 8).
 14. **Not audited at the hand-over:** β-delayed spectra and the optical-theorem total among the observables per
     mesh energy; the analytic derivative of a kernel in its own parameters; the comparison of lab-frame data in
     the frame of the data; THM against `THM.md` sections 1–2; the second round of validation of the project format;

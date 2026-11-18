@@ -309,16 +309,23 @@ Write an evaluation
   energies and angles to 3e-3 (LAW=2 and photons) and 5e-3 (elastic scattering) of the cross section, or to the
   tolerance the file states where CHECKR's limits thinned a section.
 
-- **MF=32** (pp. 253-259), when asked (``write(..., covariance="hesse")``): the covariance of MF=2's parameters
-  (ER and GAM as MF=2 lists them, eV and eV^1/2) in the general form LCOMP=1, one block. It is HESSE (iminuit) of
-  the fit's objective in a session of the formal basis opened at ``x`` (the fit written as a project and opened with
-  ``use_brune=False``); the norms and other parameters of the fit and the photon channels are marginalised. A
-  resonance whose parameters were all fixed is not listed; a fixed parameter of a listed resonance has a zero row.
-  The formal session holds the project's fixed parameters fixed in the formal basis, which is not the fit's
-  constraint where a level energy or width is fixed (on T1 the two covariances differ by up to 3.9 sigma_i sigma_j;
-  ``docs/upgrade/endf.md`` 13.13). ``Material.covariance()`` reads MF=32 back: names ``"<J^pi>#<k>.ER"`` and
-  ``"<J^pi>#<k>.GAM<c>"``, values, matrix, ``sigma``, ``correlation``. The fit's covariance in its own basis
-  (``EngineFitResult.covariance``) is refused as ``covariance=``: MF=32 holds the formal parameters.
+- **MF=32** (pp. 253-259), when asked: the covariance of MF=2's parameters (ER and GAM as MF=2 lists them, eV and
+  eV^1/2) in the general form LCOMP=1, one block. It is the fit's covariance C of the session's free parameters, in
+  the fit's own basis and with its own fixed parameters, carried through the transformation to MF=2's parameters:
+  C_32 = J C J^T, with J_ak the derivative of MF=2's parameter p_a (ER or GAM) in the fit's free parameter
+  theta_k at the written boundary values. ``covariance="hesse"`` takes C from HESSE (iminuit, errordef 1) of the
+  fit's objective at ``x``; ``covariance=fit.covariance`` (an ``EngineFitResult``'s matrix, the session's free
+  parameters in their order) takes the engine fit's own. J holds the boundary values B_c the file writes (BND),
+  because a reader varies ER and GAM with BND fixed: per J^pi group it is the inverse of the Jacobian of the
+  formal-to-Brune conversion at MF=2's levels and B_c (times that of the Brune parameters in a Park session's), by
+  central differences. Taken back to the Brune basis, C_32 is the fit's covariance of its level parameters (on T1 to
+  1.2e-6 sigma_i sigma_j). Norms, shifts, target parameters and the photon widths are marginalised (zero columns of
+  J). The conversion mixes the levels of a group, so a resonance is listed when any parameter of its group was free
+  in the fit; a parameter that does not move (the formal energy of a group's lowest level when its Brune energy is
+  fixed) has a zero row, which MF=1 names. Until 2026-11-18 MF=32 was HESSE in a formal-basis session, which holds
+  the project's fixed parameters fixed in the formal basis; on T1 the two differ by up to 3.9 sigma_i sigma_j, with
+  14 parameters listed instead of 10 (``docs/upgrade/endf.md`` 13.13). ``Material.covariance()`` reads MF=32 back:
+  names ``"<J^pi>#<k>.ER"`` and ``"<J^pi>#<k>.GAM<c>"``, values, matrix, ``sigma``, ``correlation``.
 
 Listed in MF=1 and in the answer (``w.losses``, ``w.not_written``), each only when the project has it: every
 section a reaction of the project needs and the file does not hold, with the reason; the photon channels (their
