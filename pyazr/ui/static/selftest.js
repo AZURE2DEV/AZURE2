@@ -183,6 +183,17 @@ export function selftest(ctx, tabs, draw) {
     await record(route, s);
   }
 
+  /** A tab link's title (its key number and group mark left out). */
+  function titleOf(a) {
+    if (!a) return "";
+    return [...a.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim();
+  }
+  /** The tab shown: a group's member where one is active, else the main tab. */
+  function activeTab() {
+    return titleOf(document.querySelector("nav.subtabs-row:not([hidden]) a.tab.active")
+      || document.querySelector("nav.tabs:not(.subtabs-row) a.tab.active"));
+  }
+
   async function record(route, s) {
     {
       const plot = document.querySelector(".plot[data-drawn]");
@@ -196,10 +207,14 @@ export function selftest(ctx, tabs, draw) {
         tables: [...document.querySelectorAll(".physics-out table[data-table], .physics-out .table-wrap")].length,
         facts: document.querySelectorAll("dl.function-facts dd").length,
         tabListed: !document.querySelector('a.tab[data-tab="thm"]')?.hidden,
-        tabsShown: [...document.querySelectorAll("a.tab:not([hidden])")].map((a) => a.textContent),
+        // the main row's tabs and every group's tabs as listed (a group's own row shows under its main tab)
+        tabsShown: [...document.querySelectorAll("nav.tabs a.tab:not([hidden])")].map((a) => titleOf(a)),
+        mainTab: titleOf(document.querySelector("nav.tabs:not(.subtabs-row) a.tab.active")),
         jobKinds: [...document.querySelectorAll('[aria-label="job kind"] option')].map((o) => o.value),
         moreKinds: Boolean(document.querySelector('[data-action="more-kinds"]')),
-        depth: document.documentElement.dataset.depth, tab: document.querySelector("a.tab.active")?.textContent || "",
+        depth: document.documentElement.dataset.depth, tab: activeTab(),
+        hash: location.hash, statusMarks: { job: document.querySelector(".job-mark:not([hidden]) a")?.textContent
+          || "", validation: document.querySelector("button.validation")?.textContent || "" },
         folded: document.querySelectorAll("details.form-more").length,
         changes: document.querySelectorAll('[aria-label^="changes"]').length,
         errorBoxes: [...document.querySelectorAll(".error-box")].map((b) => b.textContent.slice(0, 300)) });
@@ -236,7 +251,7 @@ export function selftest(ctx, tabs, draw) {
     Object.assign(edit, { calc_chi2: ctx.calculations.slice(-2).map((c) => c.chi2),
       calc_total: document.querySelector(".tab-panel section.panel strong")?.textContent || "",
       calc_first: document.querySelector('[aria-label^="changes"] tr td')?.textContent || "",
-      calc_tab: document.querySelector("a.tab.active")?.textContent || "" });
+      calc_tab: activeTab() });
     ctx.undoButton.click();
     edit.undone = await until(() => ctx.statusLine.textContent.startsWith("undo: done"));
     Object.assign(edit, { chi2_back: ctx.evaluation?.chi2, rev_back: ctx.project.rev });

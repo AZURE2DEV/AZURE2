@@ -10,13 +10,21 @@ import { pathOf } from "../api.js";
 import { renderTable } from "../tables.js";
 import { button, drawPlot, h, section, themeColours, withFiles } from "../ui.js";
 
-/** The tab is reached from a data set; it has no link of its own in the header. */
-export const shown = () => false;
+/** The tab is reached from a data set ("Covariance…") or from its own link (Covariances › Data covariance), which
+ * lists the data sets that can have one. */
+export const shown = () => true;
 
 export async function render(ctx, el, args) {
   const name = args[0];
   if (!name) {
-    el.appendChild(h("p.hint", {}, "Open the builder from a data set: Data tab, a data set, \"Covariance…\"."));
+    // the data sets whose kind has a covariance field: each a link to its builder
+    const records = await ctx.api.get("/api/project/records");
+    const sets = records.filter((r) => ctx.schema.records[r.kind]?.fields?.covariance);
+    el.appendChild(section("Data covariance", h("p.hint", {}, "The covariance of a data set's points built from "
+      + "parts (a common normalisation, a correlated systematic, the statistics). Choose the data set:"),
+    sets.length ? h("ul.covariance-sets", {}, sets.map((r) => h("li", {}, h("a", { href: `#/covariance/`
+      + `${encodeURIComponent(r.name)}` }, r.name), r.fields.covariance ? ` (now: ${r.fields.covariance})` : "")))
+      : h("p.hint.empty", {}, "No data set yet: add one in Segments.")));
     return;
   }
   const views = ctx.covarianceViews || (ctx.covarianceViews = {});

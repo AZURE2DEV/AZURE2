@@ -7,9 +7,10 @@ import { renderForm } from "../formview.js";
 import { button, diagnosticLine, errorBox, h } from "../ui.js";
 import { pathOf } from "../api.js";
 
-/** The sections of the project file the Nucleus tab shows (by the schema's section names); the Data tab shows all
- * the others, so a new section of the schema becomes a group of the Data tab with no edit here. */
-export const NUCLEUS_SECTIONS = ["potentials", "gammaDecays"];
+/** The sections of the project file the Nucleus tab shows (by the schema's section names: what belongs to the
+ * levels, their channels and the pairs); the Data tab shows all the others, so a new section of the schema becomes a
+ * group of the Data tab with no edit here. */
+export const NUCLEUS_SECTIONS = ["potentials", "gammaDecays", "channelRadii", "isospin"];
 
 /** The tab that shows a record of `kind`: "nucleus" for the kinds of NUCLEUS_SECTIONS, "data" otherwise. */
 export function tabOfKind(schema, kind) {

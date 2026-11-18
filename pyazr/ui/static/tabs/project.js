@@ -24,7 +24,7 @@ export function nextStep(counts, evalError, firstView = FIRST_VIEW) {
   if (!counts.data) return { text: "Add the data: a segment from data (a data file) or without data (a grid).",
     label: "Segments", hash: view("Segments") };
   if (evalError) return { text: `The engine does not calculate the project yet: ${evalError.what}`,
-    label: "Problems", hash: null };
+    label: "Problems", hash: "#/project?show=problems" };
   return { text: "Calculate shows every data set against the model; Fit adjusts the free parameters.",
     label: "Calculate", hash: "calculate" };
 }
@@ -39,6 +39,14 @@ export async function render(ctx, el) {
   const send = (entries) => ctx.edit("set <config>", () => ctx.api.patch("/api/project/config", { entries }), msg)
     .catch(() => {});
   const settings = settingsSection(ctx, ctx.kinds.config?.fields || {}, config, send, configSection(ctx, config, msg));
+  // the places the menus open (#/project?show=settings: Configure › Run settings, ...)
+  const tag = (name, part) => { part.dataset.show = name; return part; };
+  tag("settings", settings);
+  const optionsSection = (c) => tag("options", optionsPart(c));
+  const historySection = (c, x) => tag("history", historyPart(c, x));
+  const textSection = (c, m) => tag("text", textPart(c, m));
+  const engineSection = (c) => tag("engine", enginePart(c));
+  const problemsSection = (c, p, r) => tag("problems", problemsPart(c, p, r));
   if (!ctx.expert) {
     // the first view: the next step, the problems, the run's settings; the rest one click away
     el.appendChild(await nextSection(ctx, records));
@@ -69,8 +77,8 @@ async function nextSection(ctx, records) {
     : step.hash ? () => ctx.navigate(step.hash) : null;
   return section("Next step", h("p", {}, step.text, " ", go ? button(step.label, step.text, go, "primary") : null),
     h("p.hint", {}, `This project: ${counts.pairs} pairs, ${counts.levels} levels, ${counts.data} segments (from `
-      + "data, without data, model data). The tabs follow the old program's order; the expert's view (top right) "
-      + "shows every tab and field."));
+      + "data, without data, model data). The tabs follow the old program's order; View › Every field and column "
+      + "(the expert's depth) shows every field."));
 }
 
 function fileSection(ctx, msg) {
@@ -118,7 +126,7 @@ function configSection(ctx, config, msg) {
 }
 
 /** The session's options as GET /api/describe reports them: keyword, value in use, its source, default, flag, doc. */
-function optionsSection(ctx) {
+function optionsPart(ctx) {
   const opts = ctx.describe?.session_options || {};
   const rows = Object.entries(opts).map(([k, o]) => ({ name: k, value: o.value, source: o.source, default: o.default,
     flag: [o.flag, o.negation].filter(Boolean).join(" / "), doc: o.doc, type: o.type }));
@@ -132,7 +140,7 @@ function optionsSection(ctx) {
 }
 
 /** The problems of Project.validate(), each with a link to the record or level it names. */
-function problemsSection(ctx, problems, records) {
+function problemsPart(ctx, problems, records) {
   const s = section(`Problems (${problems.length})`);
   if (!problems.length) s.appendChild(h("p.ok", {}, "The engine's validator reports nothing."));
   const byName = Object.fromEntries(records.map((r) => [r.name, r]));
@@ -145,7 +153,7 @@ function problemsSection(ctx, problems, records) {
   return s;
 }
 
-function historySection(ctx, history) {
+function historyPart(ctx, history) {
   const rows = history.slice().reverse().map((e) => ({ ...e, when: new Date(e.time * 1000).toLocaleTimeString(),
     now: e.current ? "◀ current" : "" }));
   const table = renderTable(document, { rows, rowKey: (r) => String(r.rev), withFilter: false, label: "history",
@@ -160,7 +168,7 @@ function historySection(ctx, history) {
 }
 
 /** The project's text, read-only; "Replace text" opens it for an edit of the whole (validated by the engine). */
-function textSection(ctx, msg) {
+function textPart(ctx, msg) {
   const pre = h("pre.project-text");
   const details = h("details", {}, h("summary", {}, "Show the text"), pre);
   details.addEventListener("toggle", () => {
@@ -182,7 +190,7 @@ function textSection(ctx, msg) {
 }
 
 /** The engine: versions, build options, threads, Coulomb table, stopping and mass data, the compute budget. */
-function engineSection(ctx) {
+function enginePart(ctx) {
   const pkg = ctx.describe?.package || {};
   const e = pkg.engine || {};
   const b = pkg.build || {};

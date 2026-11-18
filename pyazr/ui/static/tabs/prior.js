@@ -12,7 +12,7 @@ import { parameterRows } from "../fitting.js";
 import { formatNumber } from "../tables.js";
 import { button, h, section, themeColours } from "../ui.js";
 
-/** The tab is reached from the Fit tab; it has no link of its own in the header. */
+/** The tab is reached from the Fit tab's link and from Covariances › Parameter prior (its link is always shown). */
 export const shown = () => false;
 
 export async function render(ctx, el) {

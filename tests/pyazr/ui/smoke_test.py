@@ -65,7 +65,9 @@ VIEWS = ("project", "nucleus", "nucleus/level/{label}", "nucleus/{record}", "dat
          # the free parameters as check boxes
          ("first-fit", "fit"), ("fit-minos", "fit?job=minos&method=iminuit"),
          # the form of a new pair: the partners' fields and the pair's in pyazr's words, the parity a choice
-         ("first-new-pair", "nucleus/pair/+new"),
+         ("first-new-pair", "nucleus/pair/+new"), ("new-level", "nucleus/level/+new"),
+         # the Covariances group: the data sets that can have a covariance built
+         ("data-covariance", "covariance"),
          # the prior builder (the Fit tab's link "Prior on the parameters…")
          ("prior", "prior"),
          # a level's prior and limits on its energy (the level's "Prior / limits…": set_parameter_setting)
@@ -207,14 +209,21 @@ def test_selftest_and_screenshots(name, tmp_path):
         # set fields folded, Calculate on the Plot tab
         first = [s for s in result["steps"] if s["depth"] == "first"]
         titles = [s["tab"] for s in first if not s["route"].startswith("#/data/") and s["route"] != "Calculate"]
-        assert titles == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
-                          "Plot", "Physics", "THM", "ENDF", "Reaction Rate"], titles
-        # Physics and THM are in the first view's tab bar exactly where the project has THM content (T2, not T1)
+        assert titles == ["Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects",
+                          "Calculate and Fit", "Plot", "Reaction Rate", "ENDF", "Physics functions", "THM",
+                          "Data covariance", "Parameter prior", "Project"], titles
+        # the main row in the old program's order, then the groups; THM is listed exactly where the project has THM
+        # content (T2, not T1), the Physics functions always (the tabs are the same in both depths)
         shown = first[-1]["tabsShown"]
         with_thm = label != "T1"
-        assert shown == ["Project", "Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects", "Fit",
-                         "Plot", *(["Physics", "THM"] if with_thm else []), "ENDF", "Reaction Rate"] \
-            or label not in ("T1", "T2"), shown
+        assert shown == ["Particle Pairs", "Levels and Channels", "Segments", "Experimental Effects",
+                         "Calculate and Fit", "Plot", "Rate and ENDF", "Physics and THM", "Covariances", "Project",
+                         "Reaction Rate", "ENDF", "Physics functions", *(["THM"] if with_thm else []),
+                         "Data covariance", "Parameter prior"] or label not in ("T1", "T2"), shown
+        assert all(s["tabsShown"] == shown for s in result["steps"] if s["route"] == "#/project"), \
+            "the tabs differ between the depths"
+        # the status line's validator mark is drawn on every view
+        assert all(s["statusMarks"]["validation"] for s in result["steps"]), result["steps"][0]
         assert all(s["depth"] == "expert" for s in result["steps"] if s not in first), "a view not in its depth"
         # the Fit tab's two depths (the PI's decision): a fit first, the other kinds one click away; all in the expert's
         fit_first = next(s for s in first if s["route"] == "#/fit")

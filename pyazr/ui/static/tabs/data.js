@@ -46,21 +46,19 @@ export async function render(ctx, el, args) {
   const current = ctx.route.params.section || (selected ? sectionOf(selected.kind) : null) || every[0][0];
   ctx.section = current;  // the first view marks its tab by the group drawn
   const kinds = ctx.schema.sections[current] || [];
-  // the expert's view: every group; the first view: the groups of the tab the group drawn belongs to
-  const sections = ctx.expert ? every : sectionsOfView(every, firstViewOf(current));
-  const title = (s) => (ctx.expert ? s : SECTION_TITLES[s] || s);
+  // the groups of the tab the group drawn belongs to (Segments or Experimental Effects), in the old program's words
+  const sections = sectionsOfView(every, firstViewOf(current));
+  const title = (s) => SECTION_TITLES[s] || s;
 
   // the group bar: one button per section with its number of records
   const bar = h("div.group-bar", { role: "toolbar", "aria-label": "sections" });
   for (const [s, ks] of sections) {
     const n = records.filter((r) => ks.includes(r.kind)).length;
-    const a = h("a.group", { href: `#/data?section=${s}`, title: ks.join(", ") }, `${title(s)} `,
+    const a = h("a.group", { href: `#/data?section=${s}`, title: `${s}: ${ks.join(", ")}` }, `${title(s)} `,
       h("span.count", {}, n));
     if (s === current) a.classList.add("active");
     bar.appendChild(a);
   }
-  bar.append(h("span.spacer"), button("+ new", `Add a record of ${kinds.join(", ")}`,
-    () => ctx.navigate(`#/data/+new?section=${current}`)));
   el.appendChild(bar);
 
   // one list per record kind of the group, in words (lists.js): the data sets first, then the records they name
@@ -69,7 +67,13 @@ export async function render(ctx, el, args) {
   const [described, references] = await Promise.all([describedRecords(ctx), ctx.api.get(
     "/api/project/references", { quiet: true }).catch(() => [])]);
   const users = usersOf(references);
-  const list = h("section.panel.list");
+  // Add at the table (the old program's +); the selected record's Duplicate, Rename and Delete head its panel
+  const add = button(`Add to ${title(current)}`, `Add a record of ${kinds.join(", ")}`,
+    () => ctx.navigate(`#/data/+new?section=${current}`), "primary");
+  add.dataset.action = "tool-add-record";
+  const list = h(`section.panel.list${selected || args[0] === "+new" ? ".with-detail" : ""}`, {},
+    h("div.table-tools", {}, add, h("span.hint", {}, selected ? `${selected.name} below: Duplicate, Rename and `
+      + "Delete at its head" : "select a row: its form opens below the list")));
   const mine = records.filter((r) => kinds.includes(r.kind));
   for (const kind of listKinds(ctx.schema, kinds)) {
     const rows = mine.filter((r) => r.kind === kind).map((r) => ({ ...r, problems: problemsOf(r.name).length || "" }));
