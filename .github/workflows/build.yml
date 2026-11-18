@@ -4,7 +4,8 @@ name: build
 # rather than at release time. Tags additionally publish a draft release.
 on:
   push:
-    branches: ['**']
+    # the diagnostic branches run their own short workflow (diag-fold-memory.yml), not this one
+    branches: ['**', '!feature/upgrade-5-diag-**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:

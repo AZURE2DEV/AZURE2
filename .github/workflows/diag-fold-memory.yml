@@ -1,0 +1,79 @@
+name: diag-fold-memory
+
+# Diagnostic, this branch only, not for merging: why tests/upgrade/fold_memory_test.py reports 131.3 MiB on macOS
+# against 99.8 MiB on Linux (bound 125 MiB).  Builds the AZURE2 program alone and runs that one test under several
+# settings of the macOS allocator, then times the two runs with /usr/bin/time -l, which prints the peak resident
+# size next to the peak memory footprint (the footprint leaves out freed pages the allocator keeps for reuse).
+on:
+  push:
+    branches: ['feature/upgrade-5-diag-**']
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install ninja gsl readline libomp
+          echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
+          sw_vers; sysctl -n hw.memsize hw.ncpu; python3 --version
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_API=OFF -DUSE_MCMC=ON -DUSE_READLINE=ON \
+            -DOpenMP_ROOT="$LIBOMP" \
+            -DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include" \
+            -DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include" \
+            -DOpenMP_C_LIB_NAMES=omp -DOpenMP_CXX_LIB_NAMES=omp \
+            -DOpenMP_omp_LIBRARY="$LIBOMP/lib/libomp.dylib"
+
+      - name: Build AZURE2
+        run: cmake --build build --parallel --target AZURE2
+
+      - name: fold_memory under allocator settings
+        run: |
+          export OMP_NUM_THREADS=1 AZURE2_ROOT="$PWD"
+          run() {
+            echo "=== $1"
+            shift
+            env "$@" python3 tests/upgrade/fold_memory_test.py --binary build/src/AZURE2 2>&1 | grep -E "peak|MiB|failure|skip|Error|error" || true
+          }
+          run "as the test runs in CI"              DIAG=0
+          run "again (repeatability)"               DIAG=0
+          run "MallocLargeCache=0"                  MallocLargeCache=0
+          run "MallocNanoZone=0"                    MallocNanoZone=0
+          run "MallocMediumZone=0"                  MallocMediumZone=0
+          run "MallocAggressiveMadvise=1"           MallocAggressiveMadvise=1
+          run "MallocLargeCache=0 MallocMediumZone=0" MallocLargeCache=0 MallocMediumZone=0
+          run "all four"                            MallocLargeCache=0 MallocMediumZone=0 MallocNanoZone=0 MallocAggressiveMadvise=1
+
+      - name: Resident size against memory footprint
+        run: |
+          export OMP_NUM_THREADS=1 AZURE2_ROOT="$PWD"
+          out=$(python3 tests/upgrade/fold_memory_test.py --binary build/src/AZURE2 --keep 2>&1 || true)
+          echo "$out"
+          work=$(echo "$out" | sed -n 's/^scratch kept: //p')
+          [ -d "$work" ] || { echo "no scratch directory"; exit 0; }
+          BIN="$PWD/build/src/AZURE2"
+          cd "$work"
+          for n in unfolded folded; do
+            for set in "DIAG=0" "MallocLargeCache=0" "MallocLargeCache=0 MallocMediumZone=0"; do
+              echo "=== $n   $set"
+              env $set /usr/bin/time -l "$BIN" extrapolate --no-gui $n.azr < /dev/null > $n.log 2> $n.time || true
+              grep -E "real|maximum resident|peak memory footprint|page reclaims|page faults" $n.time || tail -5 $n.time
+            done
+          done
+          echo "=== vmmap summary of the folded run just before it exits (sampled while running)"
+          "$BIN" extrapolate --no-gui folded.azr < /dev/null > folded2.log 2>&1 &
+          pid=$!
+          best=""
+          while kill -0 $pid 2>/dev/null; do
+            s=$(vmmap -summary $pid 2>/dev/null | grep -E "^(MALLOC|TOTAL|Physical footprint|DefaultMallocZone|MallocHelperZone)" || true)
+            [ -n "$s" ] && best="$s"
+            sleep 2
+          done
+          echo "$best"
