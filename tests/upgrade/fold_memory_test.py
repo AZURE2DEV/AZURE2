@@ -10,7 +10,10 @@ baseline.  `AZURE2 extrapolate` runs both at one thread; the peak resident memor
 baseline (getrusage of the child, the same program and Coulomb table in both) is what the folds hold.
 
 The bound, 125 MiB: measured 97.6 MiB on Linux (repeated runs agree to 0.1 MiB; 97 MiB without a Coulomb table),
-with about 25 % left for another allocator or C++ library.  What it catches (each measured on this project): the THM
+with about 25 % left for another allocator or C++ library; 100.4 MiB on macOS, where the runs have libmalloc's
+cache of freed large blocks switched off (MallocLargeCache=0), because the peak resident memory counts the blocks
+that cache keeps: 31 MiB of them here, the setup's vectors grown by push_back and freed again.
+What it catches (each measured on this project): the THM
 vertex pieces stored for every channel of the compound instead of the entrance pair's, 139 MiB; every slot computing
 and holding its own channel rows instead of one table per compound energy (WorkingCopy::FillChannelRows), 229 MiB;
 the build before both, 334 MiB.
@@ -81,6 +84,10 @@ def peak_kb(binary, directory, name):
     """Run `extrapolate` on name.azr in `directory`; the largest peak resident memory of the children so far (kB)
     and the exit status."""
     env = dict(os.environ, OMP_NUM_THREADS="1")
+    if sys.platform == "darwin":
+        # libmalloc keeps freed blocks above its small sizes resident for reuse (the large cache), and the peak
+        # resident memory counts them: 131.3 MiB there against 100.4 MiB with the cache off (macOS 15.7, Intel).
+        env["MallocLargeCache"] = "0"
     with open(os.path.join(directory, name + ".log"), "w") as log:
         rc = subprocess.run([binary, "extrapolate", "--no-gui", name + ".azr"], cwd=directory, stdout=log,
                             stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, timeout=900).returncode
