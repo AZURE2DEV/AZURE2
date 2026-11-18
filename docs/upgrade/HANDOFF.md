@@ -28,7 +28,7 @@ content; the tab row the same in both depths; the validator mark on every view).
 failed (its printed-URL case expected the address without a route; adapted: the page now shows the first tab's
 route) and `rmfit_enginepin` failed (its fingerprint looks for `pyazr/_azure2*.so` in the package; the tests run
 with `PYAZR_ENGINE_DIR`, none is there; no rmfit or pyazr Python file changed here). After the fixes:
-`ctest -R pyazr_ui -LE browser` 19/19, `pyazr_ui_smoke` passed, `pyazr_ui_navigation` passed 4 times out of 4;
+`ctest -R pyazr_ui -LE browser` 19/19, `pyazr_ui_smoke` passed, `pyazr_ui_navigation` passed 3 times out of 3 (once failed before the fix of the validator's list);
 node 102+ tests; sphinx -W; the consistency test.
 **Not run.** `tests/run_tests.sh` (the engine is untouched: no C++ or pyazr Python changed); `ctest -L slow`.
 **Open.** THM and ENDF take one click more than before (second row). No Ctrl+O / Open Recent; New project needs a
