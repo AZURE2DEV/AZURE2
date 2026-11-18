@@ -78,8 +78,6 @@ enum class Switch : int {
   kEcTableCheck,
   kTraceFcn,
   kDumpNonFinite,
-  kGradDebug,
-  kChannelDebug,
   kDebugGrid,
   kPoisonResults,
   // test

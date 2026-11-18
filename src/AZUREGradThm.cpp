@@ -4,7 +4,6 @@
 #include "AZUREGrad.h"
 #include "Objective.h"
 #include "RunDiagnostics.h"
-#include "azure2/support/Environment.h"
 #include "GradEnergyTasks.h"
 #include "ModelPass.h"
 #include "Profile.h"
@@ -213,9 +212,6 @@ std::vector<THMRows> ComputeTHMRows(const CompoundSystem *lc, LevelState &state,
     if (bail) {
       analytic = false;
       for (size_t t = 0; t < rows.size(); t++) std::fill(rows[t].Jm.begin(), rows[t].Jm.end(), 0.0);
-      if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug))
-        std::cerr << "[grad] THM adjoint: a point outside its path (a target effect with an automatic "
-                     "tolerance, RMC, ...) -> central differences for the THM rows" << std::endl;
     }
   }
 

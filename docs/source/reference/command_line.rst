@@ -754,9 +754,7 @@ in the same way.  Two environment variables control and report this:
        No cost when unset.
 
 ``AZURE_CHANNEL_VERIFY=1`` (slow) compares every channel-space solve with the
-level matrix and reports the largest difference seen so far;
-``AZURE_CHANNEL_DEBUG=1`` reports the formal representation of each group
-(and why a group has none).
+level matrix and reports the largest difference seen so far.
 
 Analytic-gradient diagnostics (``--use-gradient`` and the pyazr Jacobian):
 ``AZURE_GRAD_CHECK=1`` compares sampled analytic derivatives, and the residual
@@ -765,9 +763,7 @@ Jacobian, with central finite differences computed from the single-threaded
 ``AZURE_GRAD_CHECK_N``, ``AZURE_GRAD_CHECK_IDX``, ``AZURE_GRAD_CHECK_SEGS`` and
 ``AZURE_GRAD_CHECK_H`` choose the number of sampled parameters, which
 parameters or segments, and the step); ``AZURE_GRAD_TIMING=1`` reports the time
-per gradient call; ``AZURE_GRAD_DEBUG=1`` names the segment and the reason when
-the adjoint gradient is unavailable and the fit falls back to finite
-differences; ``AZURE_GRAD_ADJOINT=1`` forces the adjoint gradient instead of the
+per gradient call; ``AZURE_GRAD_ADJOINT=1`` forces the adjoint gradient instead of the
 Jacobian path; ``AZURE_TE_WEIGHTS_CHECK=1`` and ``AZURE_TE_WEIGHTS_FD=1`` check
 the target-effect combiner weights; ``AZURE_POOL_CHECK=1`` compares the pooled,
 parallel :math:`\chi^2` with a fresh serial one; ``AZURE_SERIAL_CHI2=1``
@@ -1015,14 +1011,6 @@ run and machine (value, source):``: the threads in force (``--threads=N``,
      - none
      - prints
      - dumps an evaluation whose chi-squared is not finite or above the threshold
-   * - ``AZURE_GRAD_DEBUG``
-     - none
-     - prints
-     - why the gradient falls back to differences
-   * - ``AZURE_CHANNEL_DEBUG``
-     - none
-     - prints
-     - the formal representation of each J group
    * - ``AZR_DEBUG_GRID``
      - none
      - prints

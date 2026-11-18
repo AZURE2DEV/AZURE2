@@ -1,5 +1,4 @@
 #include "ChannelSpace.h"
-#include "azure2/support/Environment.h"
 #include "AChannel.h"
 #include "ALevel.h"
 #include "Config.h"
@@ -201,11 +200,6 @@ namespace {
 
 /// Smallest Cholesky pivot of N accepted (N has unit diagonal for Brune).
 const double kMinOverlapPivot = 1.0e-4;
-
-bool Debug() {
-  static const bool on = azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kChannelDebug);
-  return on;
-}
 
 /// Width with the cutoff the level-matrix fill applies (AMatrixFunc::FillMatrices).
 inline double Cut(double g) { return std::fabs(g) < 1.0e-12 ? 0.0 : g; }
@@ -598,12 +592,6 @@ bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<
     Nd = N;
   }
   if (!finite || !GeneralizedEigen(K, N, n, e, V, minPivot)) {
-    if (Debug())
-      std::cerr << "[channel-space] J-group " << jg->GetJ() << (jg->GetPi() < 0 ? "-" : "+") << " (" << n
-                << " levels, " << m << " channels): " << (finite ? "overlap matrix N not positive definite, pivot "
-                                                                 : "non-finite K or N (equal level energies?)")
-                << (finite ? std::to_string(minPivot) : std::string())
-                << (finite ? "; pencil route" : "; level-space route") << std::endl;
     f.adjointOK = false;
     if (!finite) {
       f.usable = false;
@@ -657,12 +645,6 @@ bool Update(const JGroup *jg, const LevelState &state, int j, const std::vector<
   }
   f.V.resize((size_t)n * n);
   for (size_t k = 0; k < V.size(); k++) f.V[k] = (double)V[k];
-  if (Debug()) {
-    double vmax = 0.0;
-    for (double v : f.V) vmax = std::max(vmax, std::fabs(v));
-    std::cerr << "[channel-space] J " << jg->GetJ() << (jg->GetPi() < 0 ? "-" : "+") << " n " << n << ": N min pivot "
-              << minPivot << ", e " << (double)e.front() << " .. " << (double)e.back() << ", max|V| " << vmax << std::endl;
-  }
   // Gamma = V^T G over the active channels, in extended precision.
   f.gamma.assign((size_t)n * m, 0.0);
   {

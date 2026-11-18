@@ -361,7 +361,8 @@ estimate from the 65 commits read, not a measurement).
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
   `tests/switch_options`, `AZR_DEBUG_GRID` is read by `tests/gamma_decay`; proposed: drop the two print-only
-  switches no test reads (`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`) unless you use them.
+  switches no test reads (`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`) unless you use them. *Answered 2026-11-18:
+  both dropped (switch table, readers and manual).*
 - **`rmfit-campaign`**: follow `dev` (the skill lives with rmfit) and drop the ported copy here.
 - **The logo**: the original on the web page and in the packages (as now), or `dev`'s new one.
 - **The format of dev's new blocks**: record kinds `channel_radius` and `isospin_*`, the quantity `spin_observable`
