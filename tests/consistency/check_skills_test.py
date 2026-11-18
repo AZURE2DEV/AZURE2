@@ -120,6 +120,15 @@ class CheckSkillsTest(unittest.TestCase):
         self.t.skill("t", "Use `azure2-gone` for that.\n", desc="Unique text.")
         self.assertEqual(self.rules(self.t.run()), ["R6"])
 
+    def test_r6_skill_that_lives_with_rmfit(self):
+        self.t.skill("s", "Use `azure2-far` for that.\n")
+        self.assertEqual(self.rules(self.t.run()), ["R6"])
+        path = os.path.join(self.t.root, "rmfit", ".claude", "skills", "azure2-far", "SKILL.md")
+        os.makedirs(os.path.dirname(path))
+        with open(path, "w") as f:
+            f.write("---\nname: azure2-far\n---\n")
+        self.assertEqual(self.t.run(), [])
+
     def test_r6_user_level_collision(self):
         self.t.skill("s")
         with tempfile.TemporaryDirectory() as user:

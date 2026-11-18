@@ -11,7 +11,7 @@ Rules enforced (numbers as in RULES.md §3):
   R6  one owner per task: each skill directory has a SKILL.md whose `name` equals the
       directory name; names and descriptions are unique among the repository skills and
       do not repeat a user-level skill (directory $CLAUDE_USER_SKILLS_DIR, default
-      ~/.claude/skills when it exists); a skill named in backticks (`azure2-...`) exists.
+      ~/.claude/skills when it exists); a skill named in backticks (`azure2-...`) exists, here or in rmfit/.claude/skills/ (not checked).
   R7  description at most 600 characters.
   R8  no personal absolute paths (/groups/, /Users/, /users/, /home/, /afs/, ~/...; ~/.azure2 and ~/.claude are allowed).
   Links: every docs/... path and every relative Markdown link in a skill resolves, and so
@@ -240,6 +240,11 @@ class Checker:
         skill_dirs = sorted(d for d in os.listdir(self.skills_dir) if os.path.isdir(os.path.join(self.skills_dir, d)))
         self.load_removed_names()
         skill_names = set(skill_dirs)
+        # Skills that live with another code of the repository (rmfit/.claude/skills/) are not checked here, but a
+        # repository skill may link them by name.
+        elsewhere = os.path.join(self.root, "rmfit", ".claude", "skills")
+        if os.path.isdir(elsewhere):
+            skill_names |= {d for d in os.listdir(elsewhere) if os.path.isfile(os.path.join(elsewhere, d, "SKILL.md"))}
         names, descriptions = {}, {}
         for d in skill_dirs:
             sdir = os.path.join(self.skills_dir, d)

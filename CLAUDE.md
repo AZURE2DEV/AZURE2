@@ -118,6 +118,7 @@ ctest --test-dir build -LE slow --output-on-failure   # unit, reference, pyazr, 
 ./tests/run_tests.sh build/src/AZURE2                 # physics regression: χ² of every tests/<name>/ (tens of minutes)
 ctest --test-dir build -R <name> --output-on-failure  # a single test
 ctest --test-dir build -L slow                        # long pyazr tests: run when you change pyazr fitting/bands
+# CI: Linux runs every label but slow and browser; Windows and macOS also leave out the label long (7 tests)
 sphinx-build -W --keep-going -b html docs/source docs/_build/html   # docs, warnings are errors (as CI)
 ctest --test-dir build -R docs_build                  # the same build as a test (skipped without Sphinx)
 ```
@@ -794,8 +795,8 @@ every docs link resolves (pre-commit and CI).
 
 The skill set: `azure2-evaluation` (the procedure of a whole evaluation, which names the owner of each step),
 `azure2-setup`, `azure2-calculate`, `azure2-fit`, `azure2-check`, `azure2-uncertainty`, `azure2-plot`,
-`azure2-targets`, `azure2-thm`, `azure2-resonance-search`, `azure2-exchange`, plus `rmfit-campaign` (the table in
-`docs/upgrade/RULES.md` §3 says which task each owns). A recipe of more than five lines of Python is a script in the
+`azure2-targets`, `azure2-thm`, `azure2-resonance-search`, `azure2-exchange`, plus `rmfit-campaign`, which lives with rmfit
+(`rmfit/.claude/skills/rmfit-campaign/`; the table in `docs/upgrade/RULES.md` §3 says which task each owns). A recipe of more than five lines of Python is a script in the
 skill's `scripts/`, run by its `scripts/selftest.py` on a project of `tests/`; ctest runs every self-test
 (`tests/skills/CMakeLists.txt`, `skill_<name>`). Run `python3 tools/check_skills.py` before committing a skill
 change, and the skill's self-test when a script or pyazr changed.

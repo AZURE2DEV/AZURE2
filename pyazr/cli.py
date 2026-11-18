@@ -318,7 +318,7 @@ def _coulomb_status(result, v):
     if result.get("loaded"):
         return None
     return CallError(1, f"the Coulomb table {result.get('path')} cannot be read (the engine uses its exact routines)",
-                     "a table fetched or built by pyazr (or AZURE2 --build-coulomb-table[=FILE]); FILE, else "
+                     "a table built by pyazr (or AZURE2 --build-coulomb-table[=FILE]); FILE, else "
                      "$AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin",
                      f"{PROG} coulomb-table build {result.get('path')}", "CoulombTableMissing")
 
@@ -516,11 +516,12 @@ COMMANDS = (
             "Where the Coulomb table is looked for and whether a file is there (without loading it).",
             run=_run_coulomb_where),
     Command("coulomb-table fetch", (_COULOMB_FILE,
-                                    Arg("--url", "text", "a copy to download instead of the published one"),
-                                    Arg("--sha256", "text", "the SHA-256 the copy must have (with --url)"),
+                                    Arg("--url", "text", "the copy to download (required; no table is published)"),
+                                    Arg("--sha256", "text", "the SHA-256 the copy must have (required, with --url)"),
                                     Arg("--overwrite", "flag", "replace an existing file")),
             "pyazr.coulomb_table.fetch",
-            "Download the published Coulomb table and check its SHA-256 (exit 2 while none is published: build it).",
+            "Copy a Coulomb table from a URL you name and check its SHA-256 (exit 2 without --url and --sha256: "
+            "build the table here).",
             run=_run_coulomb_fetch, fix="python -m pyazr coulomb-table build"),
     Command("coulomb-table build", (_COULOMB_FILE,
                                     Arg("--threads", "int", "OpenMP threads of the build (default: the engine's)"),

@@ -4,7 +4,7 @@
   1. build() writes a small table (l = 0, 5 nodes per decade) that the engine loads (coulomb_table_info);
   2. fetch() from a file:// URL and from a local HTTP server (http.server on 127.0.0.1) with the right SHA-256: the
      same bytes, the same content identity in the engine, no .part left;
-  3. a corrupted copy (one byte changed) with the published SHA-256, by file:// and by HTTP: ChecksumMismatch, and
+  3. a corrupted copy (one byte changed) with the given SHA-256, by file:// and by HTTP: ChecksumMismatch, and
      neither the file nor its .part exists afterwards;
   4. an existing file is kept without overwrite and replaced with it; no URL or no hash known: ValueError naming
      build(); where() says where and whether.
@@ -105,8 +105,9 @@ def main(scratch):
     text = refused(lambda: coulomb_table.fetch(os.path.join(scratch, "x.bin"), url="file://" + built, sha256=""),
                    ValueError)
     check("fetch without a hash: ValueError", text is not None and not text.startswith("WRONG"), text)
-    check("TABLE_URL and TABLE_SHA256 are set together", bool(coulomb_table.TABLE_URL) ==
-          bool(coulomb_table.TABLE_SHA256), (coulomb_table.TABLE_URL, coulomb_table.TABLE_SHA256))
+    check("no table is published: no TABLE_URL, TABLE_SHA256, and where() keeps its url and sha256 keys, empty",
+          not hasattr(coulomb_table, "TABLE_URL") and not hasattr(coulomb_table, "TABLE_SHA256")
+          and coulomb_table.where()["url"] == "" and coulomb_table.where()["sha256"] == "", coulomb_table.where())
 
     w = coulomb_table.where(os.path.join(scratch, "absent.bin"))
     check("where(FILE): the path, absent, source 'argument'", w["path"].endswith("absent.bin") and not w["exists"]

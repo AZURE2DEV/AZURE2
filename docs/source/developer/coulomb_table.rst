@@ -344,11 +344,11 @@ adaptive-grid settings of the dialog, under **Experimental Effects**
 :doc:`../reference/command_line`.
 
 The table is not in the repository nor in pyazr's wheel (88 MB). A user gets it
-once into ``~/.azure2/`` (or ``$AZURE2_COULOMB_TABLE``): ``pyazr coulomb-table
-fetch`` downloads the published copy (``TABLE_URL`` of ``pyazr/coulomb_table.py``)
-and accepts it only with the published SHA-256 (``TABLE_SHA256``); ``pyazr
-coulomb-table build`` or ``AZURE2 --build-coulomb-table`` builds it here, about
-5 minutes on four threads.
+once into ``~/.azure2/`` (or ``$AZURE2_COULOMB_TABLE``), by building it: ``pyazr
+coulomb-table build`` or ``AZURE2 --build-coulomb-table``, about 5 minutes on
+four threads. The table is not published (the owner's decision of 2026-11-18);
+``pyazr coulomb-table fetch --url URL --sha256 HASH`` copies a table the user
+put somewhere, and accepts it only with the given SHA-256.
 
 Still open: whether ``save_fit`` should write fitted norms and shifts into the
 segment lines.

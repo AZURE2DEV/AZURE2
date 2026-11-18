@@ -18,8 +18,9 @@ hand, on a schedule a script can follow and an LLM agent can resume:
 - a **ledger** (SQLite + npz) of every candidate with provenance, and a `STATUS.md`
   a fresh session can read to continue a campaign.
 
-Process guide (the Claude skill `rmfit-campaign`): `.claude/skills/rmfit-campaign/SKILL.md` in this repository,
-linked as `~/.claude/skills/rmfit-campaign`.  It lived in the AZURE2 repository until 2026-11-07.
+Process guide (the Claude skill `rmfit-campaign`): `.claude/skills/rmfit-campaign/SKILL.md` in this directory,
+linked as `~/.claude/skills/rmfit-campaign`.  It lived in the AZURE2 repository until 2026-11-07, and the copy a
+port had made at `.claude/skills/rmfit-campaign/` of the repository's root was dropped on 2026-11-18.
 
 **Two backends.**  rmfit runs on pyazr 2 (AZURE2 `dev`: `.azr` text projects, `pyazr.azure2`, `AzrModel`) and on
 pyazr 3 (AZURE2 `feature/upgrade`: project format 3 only, `Session`, `Objective`, `Evaluation`, `Parameters`,

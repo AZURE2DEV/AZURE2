@@ -15,8 +15,8 @@ Installation
 
 ``pip install .`` from the repository's root builds the engine and installs
 ``pyazr`` with it, the commands ``pyazr`` and ``AZURE2`` and the data files;
-the Coulomb table is fetched or built once with ``pyazr coulomb-table fetch``
-or ``build``. Python 3.10 or later, NumPy 1.24 or later. What the wheel holds,
+the Coulomb table is built once, locally, with ``pyazr coulomb-table build``
+(about 5 minutes; it is not published). Python 3.10 or later, NumPy 1.24 or later. What the wheel holds,
 the SRIM citation and the developers' in-tree build:
 :doc:`../getting_started/installation` ("The Python package").
 

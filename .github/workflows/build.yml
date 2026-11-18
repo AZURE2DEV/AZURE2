@@ -42,7 +42,6 @@ jobs:
             # like a broken download rather than a distro floor.  22.04 carries
             # glibc 2.35 and covers those; the build is otherwise identical.
             os: ubuntu-22.04
-            use_readline: 'ON'
             pyazr_engine: 'ON'
           - name: macos
             # Intel runner, kept from the Qt builds (Homebrew's qt@5 bottles
@@ -52,11 +51,9 @@ jobs:
             # retired, and a label with no runners behind it queues forever
             # rather than failing.)
             os: macos-15-intel
-            use_readline: 'ON'
             pyazr_engine: 'ON'
           - name: windows
             os: windows-latest
-            use_readline: 'ON'
             pyazr_engine: 'ON'
 
     defaults:
@@ -88,7 +85,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build pkg-config \
-            libgsl-dev libreadline-dev \
+            libgsl-dev \
             python3-dev python3-venv
           # pybind11, numpy and scipy from pip in a venv rather than apt: the
           # image's packages (pybind11 2.9, numpy 1.21) are older than what
@@ -114,7 +111,7 @@ jobs:
       - name: Install dependencies (macos)
         if: matrix.name == 'macos'
         run: |
-          brew install ninja gsl readline libomp
+          brew install ninja gsl libomp
           # GNU tools for the two test steps only.  The test scripts added by the upgrade were written and run
           # against GNU tools and fail with the BSD ones of macOS (sed -i FILE, "\n" in a sed replacement, the
           # padded output of wc, a newline in an awk -v value) or without timeout (tools/run_one.sh; the shell
@@ -164,7 +161,6 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-pkg-config
             mingw-w64-ucrt-x86_64-gsl
-            mingw-w64-ucrt-x86_64-readline
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-python-numpy
             mingw-w64-ucrt-x86_64-python-scipy
@@ -216,7 +212,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DUSE_API=ON \
             -DUSE_MCMC=ON \
-            -DUSE_READLINE=${{ matrix.use_readline }} \
             "${EXTRA[@]}" 2>&1 | tee configure.log; then
             bash scripts/ci_first_errors.sh configure.log "${{ matrix.name }} configure"
             exit 1
@@ -313,6 +308,9 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # The pyazr tests labelled slow (tests/pyazr/CMakeLists.txt) take 5-40 min
         # each; run them locally (ctest -L slow) when changing pyazr.
+        # The tests labelled long (seven, tests/pyazr/CMakeLists.txt: together 87 min on the macOS runner, 39 on
+        # Windows, as measured) run on Linux only: Windows and macOS run the shorter set (the owner, 2026-11-18).  All the
+        # physics regression scripts run on every platform, and so does at least one test of each area.
         # The test labelled browser (the page in a headless Chrome, minutes) is
         # run locally too (ctest -L browser): it has never run on a CI machine.
         run: |
@@ -344,7 +342,11 @@ jobs:
           # 4 cores; the tests set OMP_NUM_THREADS=2 and declare PROCESSORS where they need more.
           JOBS=1
           [ "${{ matrix.name }}" != "macos" ] || JOBS=2
-          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -j "$JOBS" -LE "slow|browser" 2>&1 \
+          # The labels left out: slow and browser everywhere; long too on Windows and macOS (Linux runs it).
+          EXCLUDE="slow|browser"
+          [ "${{ matrix.name }}" = "linux" ] || EXCLUDE="slow|browser|long"
+          echo "unit tests: ctest -LE \"$EXCLUDE\", $JOBS at a time"
+          "${LIMIT[@]}" ctest --test-dir build --output-on-failure --timeout 2400 -j "$JOBS" -LE "$EXCLUDE" 2>&1 \
             | tee unit-tests.log || rc=$?
           # The slowest tests, always (a notice): which tests take the time on each platform.
           awk '/^ *[0-9]+\/[0-9]+ Test +#[0-9]+: / { for (i = 1; i <= NF; i++) if ($i == "sec") print $(i - 1), $4 }' \
@@ -451,7 +453,7 @@ jobs:
           echo "--- packaged ---"
           ls -R dist | head -60
 
-      # The bare executable.  It loads GSL, readline and libomp from
+      # The bare executable.  It loads GSL and libomp from
       # Homebrew; a self-contained macOS package of the command-line program
       # is not designed yet (the Qt .app/.dmg was removed with the GUI).
       - name: Package (macos)
@@ -472,14 +474,14 @@ jobs:
         if: matrix.name == 'linux'
         run: |
           mkdir -p dist AppDir/usr/bin AppDir/usr/share/applications \
-                   AppDir/usr/share/icons/hicolor/128x128/apps
+                   AppDir/usr/share/icons/hicolor/256x256/apps
 
           cmake --install build --prefix AppDir/usr 2>/dev/null || \
             cp build/src/AZURE2 AppDir/usr/bin/
           [ -f AppDir/usr/bin/AZURE2 ] || cp build/src/AZURE2 AppDir/usr/bin/
 
           cp packaging/icons/azure2_icon.png \
-            AppDir/usr/share/icons/hicolor/128x128/apps/azure2.png
+            AppDir/usr/share/icons/hicolor/256x256/apps/azure2.png
 
           cat > AppDir/usr/share/applications/azure2.desktop <<'DESKTOP'
           [Desktop Entry]
@@ -518,7 +520,7 @@ jobs:
             --appdir AppDir \
             --output appimage \
             --desktop-file AppDir/usr/share/applications/azure2.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/128x128/apps/azure2.png
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/azure2.png
 
           mv AZURE2*.AppImage dist/ 2>/dev/null || mv ./*.AppImage dist/
           chmod +x dist/*.AppImage
