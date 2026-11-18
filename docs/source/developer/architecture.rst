@@ -307,8 +307,9 @@ is said at each step. The objects named are drawn in :doc:`classes`.
    ``AZURECalc::Gradient`` (``src/AZURECalcGradient.cpp``), the reverse-mode adjoint of ``src/AZUREGrad.cpp``
    and ``src/GradEnergyTasks.cpp``, and the rerun with a re-frozen relvector
    data covariance), ``FitLevenbergMarquardt`` (``src/FitLeastSquares.cpp``)
-   and ``FitGslTrustRegion`` (``src/FitGslTrustRegion.cpp``) on the residual
-   rows, ``FitNLopt`` (``src/FitNLopt.cpp``). ``FitControl``
+   on the residual rows (GSL's trust region, ``FitGslTrustRegion``, was
+   removed on 2026-11-18: ``RemovedFitters()`` refuses its switch),
+   ``FitNLopt`` (``src/FitNLopt.cpp``). ``FitControl``
    (``include/FitControl.h``) carries the call limit, the progress sink, the
    checkpoint, the caller's stop request and the log stream; ``FitResult`` the
    end point, the objective, the status, EDM, calls, the covariance and the

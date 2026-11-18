@@ -406,7 +406,7 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - `--max-calls` acts on Minuit2's own counter, exact under threads since its increment is atomic (2026-11-18; R:
   `fit_threads` check 3, T1 at 1 and 4 threads); the `param.fit` snapshot depends on the thread schedule, every
   other output does not (`fit_threads.md` sections 3 and 4).
-- Levenberg-Marquardt and GSL's trust region ignore `--refreeze-covariance` without a word (C).
+- Levenberg-Marquardt ignores `--refreeze-covariance` without a word (C).
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
@@ -768,7 +768,10 @@ re-read against its design at the hand-over.
    No Windows wheel; the Coulomb table's address is empty (`pyazr/coulomb_table.py`); no wheel was installed on
    a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
-   environment switches (section 8).
+   environment switches (section 8). *Answered 2026-11-18 ("Remove both"): the GSL fitter is removed (its switch and
+   method name refused with the alternatives, `fit.md`); the two print-only switches of section 8 are dropped.
+   `numcmc/` is the engine's ensemble sampler behind `AZURE2 mcmc`, `Session.sample_with_engine` and the `<mcmc>`
+   section, not dead code: its removal waits for the PI's word.*
 9. **pyazr.** Bound since 2026-11-16 (pyazr 3.0.0.dev4): the level matrix with Brune's or Park's parameters and
    photon channels (`pyazr.physics.collision_matrix`, item 5), and elastic scattering on an optical potential
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against

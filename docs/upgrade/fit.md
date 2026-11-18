@@ -121,14 +121,19 @@ evaluation at the end point. The binding releases the GIL; `pyazr/session_fit.py
 (`src/RunOutputs.cpp`, 182), the reaction rate and the transformation out; `ProgramRun` (`include/ProgramRun.h`)
 carries what a stage hands to the next. The fitters: `src/Fitters.cpp` (the table, 39), `src/FitMigrad.cpp` (188),
 `src/FitLeastSquares.cpp` (439: LM, the free parameters with their priors, the covariance, the row driver with the
-MIGRAD fallback), `src/FitGslTrustRegion.cpp` (242), `src/FitNLopt.cpp` (130, compiled with `USE_NLOPT` only),
+MIGRAD fallback), `src/FitGslTrustRegion.cpp` (242; removed on 2026-11-18), `src/FitNLopt.cpp` (130, compiled with `USE_NLOPT` only),
 `src/FitErrors.cpp` (49), `src/FitEvaluations.cpp` (71); headers `FitControl.h`, `Fitters.h`, `FitEvaluations.h`,
 `FitErrors.h`, `LeastSquares.h`. `src/AZURECalc.cpp` 1948 → 1418 lines (the least-squares drivers moved out).
 The session: `api/src/AZUREAPIFit.cpp` (103), `api/src/pybind_fit.cpp` (140), `pyazr/session_fit.py` (167).
 
-**The table** (precedence order): `nlopt` (`--use-nlopt`), `gsl-lm` (`--use-gsl-lm`), `lm` (`--use-lm`),
-`migrad-gradient` (`--use-gradient`), `migrad` (default). Columns as in section 3; `progressLabel` names the
-iteration lines of LM and GSL-LM, which the program's printer writes from the record.
+**The table** (precedence order): `nlopt` (`--use-nlopt`), `lm` (`--use-lm`), `migrad-gradient` (`--use-gradient`),
+`migrad` (default). Columns as in section 3; `progressLabel` names the iteration lines of LM, which the program's
+printer writes from the record. `gsl-lm` (`--use-gsl-lm`, GSL's trust-region least squares, between `nlopt` and `lm`
+until 2026-11-18) was removed on the owner's answer (OWNER_ANSWERS.md, section 10 item 8): it is a row of
+`RemovedFitters()` (`src/Fitters.cpp`: name, switch, date, what instead), whose switch `ApplyFitterSwitch` refuses
+(exit 2) and whose name `AZUREAPI::FitWithEngine` refuses (ValueError in pyazr), each with the date and the fitters to
+use instead (`lm`, `migrad-gradient`); a project or command line that asks for it never runs another fitter in its
+place (tests: `upgrade_fit_choice`, `tests/cli_option_values`, `pyazr_fit_engine_control`).
 
 **Progress.** `AZURECalc::Observe(const EvaluationObserver *)`: `operator()` hands every evaluation (number, objective,
 vector, MINOS or not) to the observer. `ProgramProgress` is the observer for the whole data run and prints the

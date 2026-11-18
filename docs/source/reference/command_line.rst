@@ -536,8 +536,9 @@ Available Options
        log says so.
    * - ``--max-calls=N``
      - Stop a MIGRAD or NLopt fit after about N function calls (MIGRAD checks
-       the limit between its steps, so it overshoots a little); the fit ends at
-       the lowest objective it evaluated.  LM and GSL-LM ignore the limit and
+       the limit between its steps, so it overshoots a little, by the same
+       number of calls at any thread count); the fit ends at
+       the lowest objective it evaluated.  LM ignores the limit and
        say so (a ``Note:`` line, ``call_limit N (--max-calls) ignored``).  Default: no
        limit, MIGRAD's EDM criterion ends the fit.  ``0`` also means no limit.
        How the fit ended is printed and written to ``fitStatus.out``.  Before
@@ -557,9 +558,10 @@ Available Options
      - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian;
        falls back to MIGRAD.  Ignores ``--max-calls`` and says so.
    * - ``--use-gsl-lm``
-     - Fit with the GSL trust-region least-squares minimizer with geodesic
-       acceleration (analytic Jacobian); falls back to MIGRAD.  Ignores
-       ``--max-calls`` and says so.
+     - Removed on 2026-11-18 with its fitter (GSL's trust-region least
+       squares).  The switch is refused (exit 2) with that and the fitters to
+       use instead: ``--use-lm`` (the same residual rows, the same covariance)
+       or ``--use-gradient``.
    * - ``--use-nlopt``
      - Fit with NLopt's Subplex (SBPLX) instead of Minuit2.  Only in builds
        configured with ``-DUSE_NLOPT=ON``; a build without NLopt refuses the

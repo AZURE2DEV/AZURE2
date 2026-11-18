@@ -239,18 +239,12 @@ without one; a session names the row, ``Session.fit_with_engine(method=...)`` (:
      - NLopt's derivative-free Subplex (SBPLX) within the parameters' limits (unbounded: :math:`\pm10^{10}`); relative
        tolerances :math:`10^{-8}` in the objective and the parameters. No covariance, no MINOS. Only in builds
        configured with ``-DUSE_NLOPT=ON``; elsewhere the switch is refused (exit 2) with the switches of the build.
-   * - ``gsl-lm``
-     - ``--use-gsl-lm``
-     - no
-     - ``migrad``
-     - GSL's geodesic-accelerated trust-region least squares on the residual rows and their analytic Jacobian (priors
-       as rows, limits by projection); at most 200 iterations, tolerances :math:`10^{-9}`. Covariance
-       :math:`(J^TJ + \text{priors})^{-1}`.
    * - ``lm``
      - ``--use-lm``
      - no
      - ``migrad``
-     - Levenberg-Marquardt on the same rows: at most 200 iterations, ending when the largest gradient component is
+     - Levenberg-Marquardt on the residual rows and their analytic Jacobian (priors as rows, limits by projection): at
+       most 200 iterations, ending when the largest gradient component is
        below :math:`10^{-8}` or a step lowers the objective by less than :math:`10^{-9}` of it. Covariance
        :math:`(J^TJ + \text{priors})^{-1}`.
    * - ``migrad-gradient``
@@ -272,12 +266,14 @@ in the session result's ``notices``, and ``call_limit N (--max-calls) ignored`` 
 fitter that runs in its place for a model without an analytic Jacobian (no HESSE, no MINOS after it; its covariance is
 MIGRAD's error matrix); the session result says so in ``fell_back_to_migrad`` and ``notices``, ``fitStatus.out`` in
 ``minimizer``. The program's usage text (``AZURE2 --help``) lists the switches of the fitters of the build from the
-same table.
+same table. ``gsl-lm`` (``--use-gsl-lm``, GSL's trust-region least squares on the same rows as ``lm``) was removed on
+2026-11-18; its switch, and ``method="gsl-lm"`` of a session, are refused with the fitters to use instead (``lm``,
+``migrad-gradient``), never run by another fitter in its place.
 
 After a MIGRAD fit of a project whose data covariance has ``relvector`` terms, the model of those terms is re-frozen at
 the fitted point and MIGRAD rerun up to ``--refreeze-covariance`` times. The program prints a progress line every
-10 evaluations (``Iteration: N Chi-Squared: X``; LM and GSL-LM one per iteration) and writes the intermediate files
-every 100 evaluations (every 10 iterations for LM and GSL-LM); a session receives the same steps as records
+10 evaluations (``Iteration: N Chi-Squared: X``; LM one per iteration) and writes the intermediate files
+every 100 evaluations (every 10 iterations for LM); a session receives the same steps as records
 (``progress=``) and writes nothing.
 
 How a Fit Ends

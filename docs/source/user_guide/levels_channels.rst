@@ -379,7 +379,7 @@ The analytic derivatives do not run over the line shape, so a project with a
 ``line_window`` refuses everything that reads them. The program refuses, at
 set-up and with no output, a fit with a fitter that reads the analytic
 gradient or the Jacobian of the residual rows (``--use-gradient``,
-``--use-lm``, ``--use-gsl-lm``: the columns ``gradient`` and
+``--use-lm``: the columns ``gradient`` and
 ``residual_rows`` of ``pyazr.kinds()["fitters"]``); fit with plain MIGRAD
 (no fitter switch), whose gradient is numerical. A pyazr session raises
 ``pyazr.EngineError`` for ``Objective.value_and_grad``, ``Objective.grad``,

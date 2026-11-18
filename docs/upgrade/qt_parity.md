@@ -383,7 +383,8 @@ because the engine also searches the whole file for them.
 
 - [ ] Calculation Type: Calculate Segments From Data, Fit Segments From Data, Calculate Segments Without Data,
       Perform MINOS Error Analysis, Calculate Reaction Rate (`RunTab.cpp`)
-- [ ] Minimizer (fit only): Minuit2, Minuit2 (analytic grad.), Levenberg-Marquardt, GSL Trust-Region, NLopt SBPLX,
+- [ ] Minimizer (fit only): Minuit2, Minuit2 (analytic grad.), Levenberg-Marquardt, GSL Trust-Region (removed from the
+      engine on 2026-11-18), NLopt SBPLX,
       COBYLA, BOBYQA, NEWUOA, PRAXIS, Nelder-Mead (NLopt builds); MINOS forces Minuit2 (`RunTab.cpp`)
 - [ ] Chi-Sq Variance (MINOS only, default 1.0) (`RunTab.cpp`)
 - [ ] Uncertainty (band) for fit, extrapolation and MINOS; Scale covariance (fit/MINOS with band); Set Wigner

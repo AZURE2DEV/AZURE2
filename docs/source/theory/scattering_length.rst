@@ -132,7 +132,7 @@ In the calculation
   :math:`\tilde\gamma^T\tilde A\tilde\gamma` through the same level-matrix
   adjoint the cross sections use (``AMatrixFunc::BilinearAdjoint``, on the
   channel-space or the level route, :doc:`../developer/level_matrix`), so
-  ``--use-gradient``, ``--use-lm`` and ``--use-gsl-lm`` treat a constraint like
+  ``--use-gradient`` and ``--use-lm`` treat a constraint like
   a data point (one residual row per constrained part).
 * **pyazr.**  ``Session.scattering_lengths()`` returns the values at any
   parameter vector, so a posterior of :math:`a_0` follows from an MCMC chain;

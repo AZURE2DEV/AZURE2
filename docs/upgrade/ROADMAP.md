@@ -70,7 +70,7 @@ Every box still open below, with what an audit by reading on 2026-11-15 found (n
 | 9 | Physics tab plots every function | every row of the physics table | `collision_matrix` and `optical_scattering` are bound but are not rows (matrices, a potential): the tab needs a form for them |
 | 9 | Tests of the page | `/api` tests, one headless-Chrome smoke test | **181 of 201 items of `qt_parity.md` not compared**; Firefox, Safari not run |
 | 9 | ENDF | reading, checking, starting a project, writing | the method of the MF=32 covariance: the owner's decision |
-| 9 | Remove `numcmc/` and the GSL fitter | kept | the owner's decision |
+| 9 | Remove `numcmc/` and the GSL fitter | the GSL fitter removed (2026-11-18) | `numcmc/` (the engine's sampler): waits for the PI |
 
 ## Phase 0 — Stabilise, measure, test projects, rules, skills
 
@@ -566,6 +566,7 @@ Design: `web_ui.md` (process model, `/api`, state rule, tabs, order of work, dec
       (`to_project` as a job, the report before anything is written) and "Export this project" (`write` as a job,
       the losses before and after; `web_ui.md` 11.16); next: stage 5 (MF=32, LTP=1) and stage 6
       (`check_resonances`).
-- [ ] Remove `numcmc/` and the GSL fitter (the owner keeps both for now; `external/erya`: removed in Phase 5, branch
+- [ ] Remove `numcmc/` and the GSL fitter (the owner: remove both, 2026-11-18; the GSL fitter removed; `numcmc/`, the
+      sampler of `AZURE2 mcmc` and `Session.sample_with_engine`, waits for the PI; `external/erya`: removed in Phase 5, branch
       `stopping-wire`).
 Gate: parity checklist signed off by Jakub; release notes.

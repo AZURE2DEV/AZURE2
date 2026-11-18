@@ -38,7 +38,7 @@ norm, A_y, a shift group with a free shift, and a free sqrt(E) shift. Its header
   agree with central differences for all 21 free parameters, dense and rel, to 3e-7 of the
   largest. The parameters are level energies and widths, norms, a shift-group shift, a
   sqrt(E) shift, a shift function and abundances.
-- (e) MIGRAD (`--use-gradient`), `--use-lm` and `--use-gsl-lm` fit `fit.azr` (dense with every
+- (e) MIGRAD (`--use-gradient`) and `--use-lm` (and `--use-gsl-lm` until its removal on 2026-11-18) fit `fit.azr` (dense with every
   level fixed: norms, shifts and abundances free) to the same chi2, within 1e-4 relative
   (3e-8 in practice). With the levels free this synthetic model has several minima, and the
   fitters reach different ones depending on the platform: the first CI run on Linux found

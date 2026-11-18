@@ -456,7 +456,7 @@ MINOS error analysis.
 covariance.dat
 ^^^^^^^^^^^^^^
 
-Written by a fit (MIGRAD, ``--use-lm``, ``--use-gsl-lm``, MINOS) when the
+Written by a fit (MIGRAD, ``--use-lm``, MINOS) when the
 cross-section uncertainty band is on (``--covariance-band``), and read back by a later run's band. It is the covariance of the fit's
 **free level energies and reduced-width amplitudes** only -- the parameters a
 calculated cross section depends on; normalizations, energy shifts and the other

@@ -28,7 +28,7 @@ across the 0.457 MeV resonance, every level fixed, a constant stopping cross sec
 
 `check.sh path/to/AZURE2`:
 
-1. MIGRAD (`--use-gradient`), `--use-lm` and `--use-gsl-lm` recover N = 1.1e18 from 1e18 to 1e-4 (chi2 122
+1. MIGRAD (`--use-gradient`) and `--use-lm` (and `--use-gsl-lm` until its removal on 2026-11-18) recover N = 1.1e18 from 1e18 to 1e-4 (chi2 122
    → 1.5e-4: the truth's grid spans 1.1e18 exactly and the fit's 1.5e18, cut, and the two integrations differ
    by ~1e-5);
 2. `AZURE_GRAD_CHECK`: d chi2/dN by finite differences agrees with the Jacobian path;

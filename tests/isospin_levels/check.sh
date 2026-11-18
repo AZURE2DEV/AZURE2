@@ -11,8 +11,8 @@
 # (b) The 4H member equals a standalone 4H project built from its formal parameters (--no-transform) to 1e-10.
 # (c) Refused: a cross-nucleus level without a record, unequal radii in one arrangement, a mix on an allowed channel,
 #     T too small for a nucleus, Park's basis.
-# (d) Pseudo-data from iso_mix.azr (shifts -0.86 / -0.64, mix 0.05): MIGRAD (numerical and analytic gradient), LM and
-#     GSL least squares from -0.5 / -0.4 / 0 recover all three; param.sav holds the derived slots synced.
+# (d) Pseudo-data from iso_mix.azr (shifts -0.86 / -0.64, mix 0.05): MIGRAD (numerical and analytic gradient) and LM
+#     from -0.5 / -0.4 / 0 recover all three; param.sav holds the derived slots synced.
 # (e) AZURE_GRAD_CHECK on iso_free.azr (every reference parameter free, priors): the analytic gradient and the
 #     Jacobian path agree with finite differences through the ties.
 # (g) Soft tie (iso_soft.azr): at the start every extrapolation equals the hard-tie model's; the gradient check (from
@@ -184,7 +184,7 @@ run truth "$M/iso_mix.azr" extrapolate "--no-brune"
 T="$WORK/truth/output"
 if [ -s "$T/AZUREOut_aa=2_R=2.extrap" ] && [ -s "$T/AZUREOut_aa=5_R=3.extrap" ]; then
   pseudo_data "$T"
-  for fl in "" "--use-gradient" "--use-lm" "--use-gsl-lm"; do
+  for fl in "" "--use-gradient" "--use-lm"; do
     tag="fit${fl//-/_}"
     run "$tag" "$M/iso_fit.azr" fit "--no-brune $fl"
     v="$(fitted "$WORK/$tag/output/param.sav")"

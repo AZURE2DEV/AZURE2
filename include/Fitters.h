@@ -41,10 +41,24 @@ struct AbsentFitterRow {
   const char *build;   ///< what a build needs to have it
 };
 
+/// A fitter the engine had and has no more: its switch and its name are refused with when, why and what instead.
+struct RemovedFitterRow {
+  const char *name;     ///< the method's name, as its row had it
+  const char *option;   ///< the program's switch it had
+  const char *removed;  ///< the date of the removal
+  const char *instead;  ///< why, and the fitters to use in its place (switch and method name)
+};
+
 /// The fitters of this build, in the program's precedence: the program runs the first whose switch is given.
 const std::vector<FitterRow> &Fitters();
 /// The fitters of the engine that this build leaves out.
 const std::vector<AbsentFitterRow> &AbsentFitters();
+/// The fitters the engine no longer has (docs/upgrade/fit.md section 3).
+const std::vector<RemovedFitterRow> &RemovedFitters();
+/// The removed fitter named `name` or with the switch `name`, nullptr for none.
+const RemovedFitterRow *RemovedFitterNamed(const std::string &name);
+/// The refusal of a removed fitter, asked for as `asked` (its switch or its method name): what, when, what instead.
+std::string RemovedFitterMessage(const RemovedFitterRow &row, const std::string &asked);
 /// The row named `name`, nullptr for none.
 const FitterRow *FitterNamed(const std::string &name);
 /// The fitter the program's switches chose: the row named Config::fitter, else the row without a switch.
@@ -70,7 +84,8 @@ std::string FitterSwitchesHelp();
 /*!
  * The program's switch `option` of a fitter: chooses its row (ChooseFitter) and returns true; false for no fitter
  * switch.  The switch of a fitter this build leaves out throws std::invalid_argument with what, the switches
- * allowed and how to get the fitter.
+ * allowed and how to get the fitter; the switch of a removed fitter (RemovedFitters()) throws with when it was removed
+ * and what to use instead.
  */
 bool ApplyFitterSwitch(Config &configure, const std::string &option);
 
@@ -87,11 +102,10 @@ FitResult MigradPass(AZURECalc &objective, const ROOT::Minuit2::MnUserParameters
 /// of result.x, which at a call limit can be a point Minuit2 evaluated but did not accept.
 void AdoptMigradEndPoint(AZUREParams &params, const FitResult &result);
 
-// The functions of the rows (FitMigrad.cpp, FitLeastSquares.cpp, FitGslTrustRegion.cpp, FitNLopt.cpp).
+// The functions of the rows (FitMigrad.cpp, FitLeastSquares.cpp, FitNLopt.cpp).
 FitResult FitMigrad(AZURECalc &objective, AZUREParams &params, const FitControl &control);
 FitResult FitMigradGradient(AZURECalc &objective, AZUREParams &params, const FitControl &control);
 FitResult FitLevenbergMarquardt(AZURECalc &objective, AZUREParams &params, const FitControl &control);
-FitResult FitGslTrustRegion(AZURECalc &objective, AZUREParams &params, const FitControl &control);
 #ifdef USE_NLOPT
 FitResult FitNLopt(AZURECalc &objective, AZUREParams &params, const FitControl &control);
 #endif

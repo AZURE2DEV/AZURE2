@@ -196,7 +196,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * before it finishes, and so a fit that is stopped or crashes is not a total
    * loss. It is the program's FitControl::checkpoint (src/ProgramFit.cpp):
    * its observer calls it every kOutputInterval evaluations (MIGRAD, NLopt), and
-   * LM and GSL-LM call the checkpoint every kIterationOutputInterval iterations,
+   * LM calls the checkpoint every kIterationOutputInterval iterations,
    * since they evaluate through the side-effect-free Chi2Value.  A session's fit
    * has no checkpoint and writes nothing.
    */
@@ -206,7 +206,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   static const int kOutputInterval = 100;
 
   /*! Solver iterations between intermediate writes for the analytic-Jacobian
-   *  minimizers (LM, GSL trust-region).
+   *  minimizer (LM).
    *
    *  Their iterations are whole Gauss-Newton steps, not single function
    *  evaluations, and they converge in tens of them -- a converged LM fit runs

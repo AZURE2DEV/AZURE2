@@ -390,6 +390,6 @@ tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv
 
 ## 12. Out of the tree at the end
 
-Qt/Qwt GUI (removed already, decision 3), ERYA (and `SRIM2013.xml`), numcmc, readline menus, the GSL fitter, per-thread `WorkingCopy`/`CNuc` clones,
+Qt/Qwt GUI (removed already, decision 3), ERYA (and `SRIM2013.xml`), numcmc (waits for the PI), readline menus, the GSL fitter (removed 2026-11-18), per-thread `WorkingCopy`/`CNuc` clones,
 point mapping (deleted 2026-11-11), copy-on-write tables, `NodeTableCache`, process-wide memos, `external/coul` (→ pycoulomb). Kept
 externals: Minuit2, GSL (quadrature and special functions only), pybind11, pycoulomb.

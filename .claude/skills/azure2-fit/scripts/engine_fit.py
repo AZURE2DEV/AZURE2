@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The program's own fitters on a project, through `Session.fit_with_engine` (MIGRAD, MIGRAD with the analytic
-gradient, Levenberg-Marquardt, the GSL trust region, NLopt where built), with MINOS, and their comparison.
+gradient, Levenberg-Marquardt, NLopt where built), with MINOS, and their comparison.
 
 Reads:  the project (format 3); with --sav a parameter file loaded by name first; with --x-json the start vector
         ("x", in the free parameters' order) of a JSON file such as lsq_fit.py writes.
 Writes: --out JSON: per method its status, convergence, objective, EDM, calls, errors, MINOS intervals, and the end
         point; with --save-fit PATH the end point of the first method (Session.save_fit: PATH and its .sav).
         Nothing else: fit_with_engine writes no file.
-Each method starts from the same point.  After a MIGRAD row the engine runs HESSE; the covariance after LM and
-GSL-LM is (J^T J + priors)^-1.  The objective is the number the program prints as Total Chi-Squared.
+Each method starts from the same point.  After a MIGRAD row the engine runs HESSE; the covariance after LM is
+(J^T J + priors)^-1.  The objective is the number the program prints as Total Chi-Squared.
 
     python3 engine_fit.py model.azr --method lm --method migrad-gradient --out fits.json
     python3 engine_fit.py model.azr --method migrad --minos --max-calls 5000

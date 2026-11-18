@@ -1,9 +1,9 @@
 #ifndef LEASTSQUARES_H
 #define LEASTSQUARES_H
 
-// What the two least-squares fitters (LM: src/FitLeastSquares.cpp, GSL-LM: src/FitGslTrustRegion.cpp) share: the free
-// parameters with their limits and priors, the covariance (J^T J + priors)^-1 at the end, and the row driver with its
-// MIGRAD fallback.
+// What a least-squares fitter (LM: src/FitLeastSquares.cpp; GSL's trust region, the second, was removed on 2026-11-18)
+// needs: the free parameters with their limits and priors, the covariance (J^T J + priors)^-1 at the end, and the row
+// driver with its MIGRAD fallback.
 
 #include <ostream>
 #include <string>
@@ -53,8 +53,6 @@ using LeastSquaresSolver = LeastSquaresOutcome (*)(AZURECalc &self, AZUREParams 
                                                    const char *fitter, const FitControl &control);
 LeastSquaresOutcome RunLevenbergMarquardt(AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
                                           const FitControl &control);
-LeastSquaresOutcome RunGSLNonlinear(AZURECalc &self, AZUREParams &params, int maxIter, const char *fitter,
-                                    const FitControl &control);
 
 /// The row function of a least-squares fitter: the solver, or MIGRAD (numerical) where it has no analytic Jacobian.
 FitResult FitByLeastSquares(AZURECalc &objective, AZUREParams &params, const FitControl &control, const char *fitter,

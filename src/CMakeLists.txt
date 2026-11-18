@@ -5,7 +5,7 @@ AMatrixFunc.cpp AMatrixFuncTBar.cpp AMatrixFuncAdjoint.cpp  DoubleFactorial.cpp 
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp AZURECalcGradient.cpp AZURECalcJacobian.cpp AZURECalcNuisance.cpp AZURECalcPool.cpp AZURECalcOutput.cpp AZURECalcDiagnostics.cpp Objective.cpp
 ReactionRate.cpp AZUREMain.cpp RunSetUp.cpp ProgramFit.cpp RunOutputs.cpp
-Fitters.cpp FitEvaluations.cpp FitMigrad.cpp MigradSeed.cpp FitLeastSquares.cpp FitGslTrustRegion.cpp FitNLopt.cpp FitErrors.cpp
+Fitters.cpp FitEvaluations.cpp FitMigrad.cpp MigradSeed.cpp FitLeastSquares.cpp FitNLopt.cpp FitErrors.cpp
 WorkingCopy.cpp WorkingCopyFill.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp LevelTransforms.cpp LevelParameterVector.cpp GammaDecayMap.cpp IsospinTies.cpp GradFreeMask.cpp
 RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CompoundSystemBuild.cpp AbundanceSamples.cpp Equation.cpp

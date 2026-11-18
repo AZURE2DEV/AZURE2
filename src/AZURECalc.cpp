@@ -176,7 +176,7 @@ double AZURECalc::Chi2OnWith(const Config &config, LevelState &ls, WorkingCopy *
       azure2::EvaluateModelSegment(*ld, *ld->Data().GetSegment(i), lc, ls, config, results,
                                    pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
-  // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
+  // Gradient(), the AZURE_GRAD_CHECK reference and the LM cost differentiate or minimize the same function.
   // thmOnly: the THM segments' data part alone, which adds to an analytic gradient that has every other term.
   ObjectiveContext context{lc, ls, inputs_, ld, results, p, config};
   context.segmentChi2 = segChis;

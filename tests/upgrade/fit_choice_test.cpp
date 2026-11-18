@@ -125,6 +125,22 @@ int main() {
     check(std::string(absent.option) + " (not in this build): refused", refused && configure.fitter.empty());
   }
 
+  // A removed fitter (gsl-lm, 2026-11-18): no row, and its switch is refused with when and what instead, never run
+  // by another fitter in its place.
+  check("gsl-lm is a removed fitter, not a row", RemovedFitterNamed("gsl-lm") && RemovedFitterNamed("--use-gsl-lm") &&
+                                                     !FitterNamed("gsl-lm"));
+  for (const RemovedFitterRow &removed : RemovedFitters()) {
+    std::string message;
+    try {
+      ApplyFitterSwitch(configure, removed.option);
+    } catch (const std::invalid_argument &e) {
+      message = e.what();
+    }
+    check(std::string(removed.option) + " (removed): refused with 'removed', the date and --use-lm",
+          message.find("removed") != std::string::npos && message.find(removed.removed) != std::string::npos &&
+              message.find("--use-lm") != std::string::npos && configure.fitter.empty());
+  }
+
   std::printf("%s: %ld checks, %d failed\n", failures ? "FAIL" : "PASS", checks, failures);
   return failures ? 1 : 0;
 }

@@ -195,7 +195,7 @@ records; each is one entry of the history.
 method's settings with their defaults, the start point (the working parameters, the values of the project text, or
 the best point of a job) and **Run**.  The methods are first the engine's own fitters, one per row of the engine's
 fitter table (``pyazr.kinds()["fitters"]``, the fits of the command-line program): ``engine_migrad`` (the program's
-default fit and the form's), ``engine_gsl-lm``, ``engine_lm``, ``engine_migrad-gradient``, and ``engine_nlopt`` in a build with NLopt; under the
+default fit and the form's), ``engine_lm``, ``engine_migrad-gradient``, and ``engine_nlopt`` in a build with NLopt; under the
 method the engine's description of the fitter and what it gives (the program's switch, a covariance, whether MINOS can follow,
 whether it honours a call limit, the fitter it falls back to);
 settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
@@ -213,9 +213,9 @@ the fit's, and a difference is said, not hidden), and after a fit that MINOS can
 without the gradient, or iminuit's) **minos (…)…**, which fills the form for a MINOS job from that fit's best point.
 An engine fit ends where the same fit of ``Session.fit_with_engine`` and of the program ends; its result says the
 engine's status in its own words (``converged``, ``call_limit``, ``stopped``, ...), its errors are those the program
-writes into ``param.sav``, its covariance HESSE's after MIGRAD and (JᵀJ + priors)⁻¹ after LM and GSL-LM.  While it
+writes into ``param.sav``, its covariance HESSE's after MIGRAD and (JᵀJ + priors)⁻¹ after LM.  While it
 runs, the panel shows the stage (fit, then HESSE and MINOS, whose calls are counted on) and, for LM, its damping;
-**Stop** ends it at the best point it has seen.  Where LM or GSL-LM cannot run (a data set without an analytic
+**Stop** ends it at the best point it has seen.  Where LM cannot run (a data set without an analytic
 Jacobian) the engine runs MIGRAD in its place: the result shows the engine's notice and the fitter that ran.  The
 result shows the fit's outcome in the words every fitter shares: ``converged`` in a green box, anything else
 (``call_limit``, ...) in a warning box saying the best point is not a minimum; and the engine's notices (a call

@@ -139,9 +139,9 @@ Minimizer Selection
    Least squares on the analytic Jacobian (CLI ``--use-lm``); falls back to
    MIGRAD where the Jacobian is not available.
 
-**GSL Trust-Region**
-   GSL's trust-region least squares with geodesic acceleration (CLI
-   ``--use-gsl-lm``); falls back to MIGRAD likewise.
+**GSL Trust-Region** (removed on 2026-11-18)
+   The switch ``--use-gsl-lm`` is refused with the fitters to use instead
+   (``--use-lm``, ``--use-gradient``).
 
 **NLopt** (if built with ``USE_NLOPT``; CLI ``--use-nlopt``)
    Alternative minimizer with several algorithms:

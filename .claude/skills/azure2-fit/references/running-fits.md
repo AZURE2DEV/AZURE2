@@ -14,9 +14,9 @@ priors behave, and how to run fits of days on a batch cluster. Behaviour referen
   `MIGRAD converged: valid minimum, EDM ...`, or `WARNING: MIGRAD did NOT converge: stopped at the call limit ...` /
   `... invalid minimum ...`, and writes `output/fitStatus.out` (`minimizer`, `fitter`, `status
   converged|call_limit|iteration_limit|stopped|invalid|failed`, `fitter_status`, `valid`, `edm`, `edm_goal` (`none`
-  except MIGRAD), `calls`, `call_limit`); every fitter writes it, LM and GSL-LM too. Read it before calling a fit
+  except MIGRAD), `calls`, `call_limit`); every fitter writes it, LM too. Read it before calling a fit
   converged; `chiSquared.out` and `param.sav` are written either way, at the lowest objective the fit reached (at the
-  call limit: the lowest MIGRAD evaluated). LM and GSL-LM ignore `--max-calls` (`call_limit N (--max-calls) ignored`
+  call limit: the lowest MIGRAD evaluated). LM ignores `--max-calls` (`call_limit N (--max-calls) ignored`
   and a `Note:` line).
 - builds before 2026-10-31 (expires: 2027-02-01) stopped MIGRAD and NLopt at a fixed 50,000 function calls without a
   message; one 145-parameter refit stopped there in most of its J^π fits and looked converged. On such a build a log

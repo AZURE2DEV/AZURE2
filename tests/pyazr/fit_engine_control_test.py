@@ -2,7 +2,8 @@
 """The controls of Session.fit_with_engine: the fitter table, progress records and the stop request (fit.md).
 
 (a) pyazr.kinds()["fitters"] is the engine's table (_azure2.fitters()): the program's switches by name; an unknown
-    method is refused with the list of fitters; MINOS after a least-squares row is refused.
+    method is refused with the list of fitters; the removed gsl-lm (2026-11-18) is no row and is refused with when it
+    was removed and the alternatives (lm, migrad-gradient); MINOS after a least-squares row is refused.
 (b) Progress on T2 (MIGRAD, call limit 40): records arrive (count > 0), their best objective never increases, the calls
     count up, every record's best is the lowest objective seen so far; the fit ends with status call_limit.
 (c) A stop from the progress callable at the 15th record (2nd for a least-squares row), every fitter of the table:
@@ -68,18 +69,27 @@ def main():
     check("kinds()['fitters'] lists the engine's rows in order", list(kinds) == [r["name"] for r in rows],
           f"{list(kinds)}")
     columns = {n: (k["call_limit"], k["fallback"]) for n, k in kinds.items()}
-    check("the columns call_limit and fallback: MIGRAD honours a limit, LM and GSL-LM ignore it, fall back to migrad",
+    check("the columns call_limit and fallback: MIGRAD honours a limit, LM ignores it, falls back to migrad",
           columns.get("migrad") == (True, "") and columns.get("migrad-gradient") == (True, "") and
-          columns.get("lm") == (False, "migrad") and columns.get("gsl-lm") == (False, "migrad"), f"{columns}")
+          columns.get("lm") == (False, "migrad"), f"{columns}")
     options = {n: k["option"] for n, k in kinds.items()}
     check("the program's switches by fitter", options.get("migrad") == "" and options.get("lm") == "--use-lm" and
-          options.get("gsl-lm") == "--use-gsl-lm" and options.get("migrad-gradient") == "--use-gradient", f"{options}")
+          options.get("migrad-gradient") == "--use-gradient", f"{options}")
+    check("gsl-lm (removed 2026-11-18) is no row", "gsl-lm" not in kinds and "--use-gsl-lm" not in options.values(),
+          f"{options}")
     with tempfile.TemporaryDirectory() as tmp, pyazr.Session(t2_copy(tmp, "a")) as s:
         try:
             s.fit_with_engine("simplex")
             check("an unknown method is refused", False, "no error")
         except ValueError as e:
             check("an unknown method is refused with the list", "migrad" in str(e) and "lm" in str(e), str(e))
+        try:
+            s.fit_with_engine("gsl-lm")
+            check("the removed gsl-lm is refused", False, "no error")
+        except ValueError as e:
+            check("the removed gsl-lm is refused: removed, when, and the alternatives lm and migrad-gradient",
+                  "removed" in str(e) and "2026-11-18" in str(e) and '"lm"' in str(e) and
+                  '"migrad-gradient"' in str(e), str(e))
         try:
             s.fit_with_engine("lm", minos=True)
             check("MINOS after lm is refused", False, "no error")

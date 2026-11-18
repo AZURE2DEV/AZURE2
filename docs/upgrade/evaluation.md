@@ -607,8 +607,8 @@ it and is lent by reference; a method that writes a member of its own object is 
   working copies with their buffers (`idleData`, a `StatePool<WorkingData>`; the fitter's own stack and its lock are
   gone), the copies an intermediate output is written from (`output`, `outputData`, `outputResults`, `outputMutex`)
   and the last gradient (`gradient`: where it was taken, its value, the Gauss-Newton curvature, their lock).
-  `SetFixedMask` is not `const`; the least-squares solvers (`LeastSquares.h`, `FitLeastSquares.cpp`,
-  `FitGslTrustRegion.cpp`) take `AZURECalc &`.
+  `SetFixedMask` is not `const`; the least-squares solver (`LeastSquares.h`, `FitLeastSquares.cpp`; GSL's, removed
+  on 2026-11-18) takes `AZURECalc &`.
 - **The sampler** (`AZURECalcMCMC`).  `SamplerStates` (the caller's: the walkers' levels and the idle working copies,
   two `StatePool`s) replaces the sampler's own pool and lock.  The parameter layout and the priors (14 members) are
   plain members written by `BuildAutoPriors` and `SetUpPriorCovariance`, which are not `const`.
