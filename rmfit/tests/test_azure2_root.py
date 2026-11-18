@@ -49,16 +49,16 @@ def main():
         rc, out, err = probe(A)
         check("(a) rmfit inside an AZURE2 tree: AZURE2_ROOT is that tree, pyazr from it",
               rc == 0 and out[0].startswith(A) and out[1] == A and out[2] == "A", err or out)
-        rc, out, err = probe(f"{A}:{B}", azure2_root=B)
+        rc, out, err = probe(os.pathsep.join((A, B)), azure2_root=B)
         check("(b) $AZURE2_ROOT names another tree later on the path: pyazr from $AZURE2_ROOT",
               rc == 0 and out[0].startswith(A) and out[1] == B and out[2] == "B", err or out)
-        rc, out, err = probe(f"{arch}:{B}", azure2_root=B)
+        rc, out, err = probe(os.pathsep.join((arch, B)), azure2_root=B)
         check("(c) rmfit beside AZURE2, $AZURE2_ROOT set: pyazr from it", rc == 0 and out[1] == B and out[2] == "B", err or out)
         rc, out, err = probe(arch, code="import os, rmfit; print(rmfit.AZURE2_ROOT == os.path.expanduser('~/AZURE2'))")
         check("(c) rmfit beside AZURE2, no $AZURE2_ROOT: ~/AZURE2", rc == 0 and out[0] == "True", err or out)
         guard = ("import sqlite3, rmfit, pyazr; assert pyazr.__file__.startswith(rmfit.AZURE2_ROOT), pyazr.__file__; "
                  "print('import guard ok', pyazr.__file__)")
-        rc, out, err = probe(f"{A}:{B}", azure2_root=B, code=guard)
+        rc, out, err = probe(os.pathsep.join((A, B)), azure2_root=B, code=guard)
         check("(d) the job scripts' import guard passes in case (b)", rc == 0 and "import guard ok" in out[0], err or out)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

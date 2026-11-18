@@ -5,7 +5,11 @@ Before: list(itertools.product((1, -1), repeat=n)) then a sample of --max-signs:
 so every levelscan with a >=30-channel J^pi was OOM-killed.
 Checks: (1) the templates are IDENTICAL to the old enumerate-then-sample code for small n (same rng indices, same order);
 (2) n = 31 and n = 40 finish at once in bounded memory, with --max-signs distinct sign vectors."""
-import itertools, os, resource, sys, time
+import itertools, os, sys, time
+try:
+    import resource   # POSIX only: without it (Windows) the time bound is checked and the memory bound is not
+except ImportError:
+    resource = None
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 import numpy as np
 from rmfit.levelscan import _patterns
@@ -29,9 +33,10 @@ def main():
             new = [p for p in _patterns(n, ms) if p[2] == "equal split"]
             same &= new == old_equal_split(n, ms)
     check("equal-split templates identical to the old code for n = 2..16, max_signs 8/32/4096", same)
-    t0, m0 = time.time(), resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    rss = (lambda: resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) if resource else (lambda: 0)
+    t0, m0 = time.time(), rss()
     p31 = _patterns(31, 32); p40 = _patterns(40, 32)
-    dt, dm = time.time() - t0, (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - m0) / 1024
+    dt, dm = time.time() - t0, (rss() - m0) / 1024
     eq31 = {s for _, s, d in p31 if d == "equal split"}
     check("n = 31 and 40 build in < 5 s and < 200 MB extra", dt < 5 and dm < 200, f"{dt:.1f} s, {dm:.0f} MB")
     check("n = 31: 32 distinct equal-split sign vectors of length 31", len(eq31) == 32 and all(len(s) == 31 for s in eq31), len(eq31))

@@ -126,7 +126,14 @@ same "negative ANC, B_mid --no-brune vs A_orig Brune, capture" "$WORK/B_mid_neg_
 
 # A static moment on the ground state: its M1 line to its own pair with a non-zero value.  parameters.out
 # must print it as a moment ("mu =") with the same numbers in both level orders.
-gsblock() { awk '{ sub(/\r$/, "") } /^J = / { on = ($1 == "J" && $3 == "0.5-" && $6 + 0 < 1 && $6 + 0 > -1) } on && NF { if ($1 == "J") print $1, $2, $3, $4, $5, $6; else print }' "$1"; }
+# A printed zero carries no sign here: with the ground state second its energy comes back from the formal
+# transform as round-off (7.4e-18 MeV on Linux gcc, where the first order gives exactly 0), and a build that rounds
+# the other way prints -0.0000 (the Windows runner failed this comparison, 2026-11-17).  The fields are rejoined by
+# single blanks in both files.
+gsblock() { awk '{ sub(/\r$/, "") } /^J = / { on = ($1 == "J" && $3 == "0.5-" && $6 + 0 < 1 && $6 + 0 > -1) }
+  on && NF { gsub(/\(-0\.0+,/, "(0.000000,"); gsub(/,-0\.0+\)/, ",0.000000)")
+             for (i = 1; i <= NF; i++) if ($i ~ /^-0\.0+$/) $i = substr($i, 2)
+             if ($1 == "J") print $1, $2, $3, $4, $5, $6; else print }' "$1"; }
 for m in A_orig A_swap; do
   awk '$1 == "0.5" && $2 == "-1" && $3 == "0" && $6 == "2" { $12 = "-0.3222"; print " " $0; next } { print }' "$M/$m.azr" > "$WORK/models/${m}_mom.azr"
   run "${m}_mom" "$WORK/models/${m}_mom.azr" "--no-brune" || true
@@ -136,7 +143,11 @@ if grep -q "mu = *-0.3222" "$WORK/A_orig_mom.gs"; then ok "static moment, ground
 # Byte-identical files without cmp (the Windows MSYS2 runner has none); gsblock has already dropped any \r.
 same_file() { [ -f "$2" ] && [ "$(cat "$1")" = "$(cat "$2")" ]; }
 if [ -s "$WORK/A_swap_mom.gs" ] && same_file "$WORK/A_orig_mom.gs" "$WORK/A_swap_mom.gs"; then ok "static moment, ground state second: same ground-state lines in parameters.out"
-else bad "static moment, ground state second: parameters.out differs ($(grep "L = " "$WORK/A_swap_mom.gs" 2>/dev/null | tail -1 | cut -c1-60))"; fi
+else
+  bad "static moment, ground state second: parameters.out differs ($(grep "L = " "$WORK/A_swap_mom.gs" 2>/dev/null | tail -1 | cut -c1-60))"
+  # both blocks, so that the log of a runner nobody can log into shows the difference
+  for m in A_orig A_swap; do sed "s/^/    $m: /" "$WORK/${m}_mom.gs" 2>/dev/null; done
+fi
 
 # The gamma widths REPORTED in parameters.out.  A reported width holds the internal and the external part of
 # the capture amplitude; with the final state's transformed row returned in the wrong sign the external part
