@@ -41,30 +41,54 @@ log in to the remote machine with the gateway as jump host (``ssh -J user@gatewa
 of the page, a browser restarted since) or with the token of another server: paste the token into the field of that
 page, or open the printed URL again.  Several projects served on one machine keep separate cookies (one per port).
 
-The first view and the expert's
--------------------------------
+Finding your way
+----------------
 
-The page opens in its **first view**: the tabs follow the old setup program's path and words, **Project**,
-**Particle Pairs**, **Levels and Channels**, **Segments** (Segments From Data, Segments Without Data, Model
-data), **Experimental Effects** (targets, beams, detectors), **Fit**, **Plot**, **ENDF** and **Reaction Rate**; a
-project with THM content also shows **Physics** and **THM** (after Plot).  The lists of data sets and of particle
-pairs hold the old program's columns (the reaction, the observable, the data file, the energy and angle ranges,
-active, the normalization; the partners with their spins, parities and masses, the excitation and separation
-energies, the pair type, the channel radius); the other columns are in the expert's view and in each record's
-form.  Each screen holds what its task
-needs: a field the engine's table marks as rarely set (the source, EXFOR and DOI of a data set, its pair keys,
-THM experiment, reference cross section, UPOS, a target's phase, Doppler broadening or screening, ...) waits under
-**More fields** unless the record sets it, and every field's meaning is written under its title.  The Project tab
-says what to do next (add the pairs, then the levels, then the data, then Calculate).  The γ decays and potentials,
-the session's options, the history and the project's text are one click away under **More**.
+The page is laid out as the Qt setup program was (``docs/upgrade/web_navigation.md`` compares the two).
 
-Tick **expert** (top right; the key ``e``) for the expert's view: the tabs Project, Nucleus, Data, Fit, Results,
-Physics, THM and Rate with every field, as before.  The page opens in the first view unless you switched to the
-expert's yourself: that choice is kept in this browser; ``?depth=expert`` or
-``?depth=first`` in an address opens one view in that depth.  The two depths show the same project: every
-address means the same thing in both.
+**The tabs.**  One row of tabs, in the order of the work and with the old program's names: **Particle Pairs**,
+**Levels and Channels**, **Segments**, **Experimental Effects**, **Calculate and Fit**, **Plot**; then what the old
+program did not have, in three groups whose tabs open in a second row: **Rate and ENDF** (Reaction Rate, ENDF),
+**Physics and THM** (Physics functions; THM, listed when the project has THM content), **Covariances** (Data
+covariance, Parameter prior); and **Project** (the file, the next step, the problems, the run's settings, the
+history and the text).  Each tab is one click away; the keys ``1`` … ``9`` and ``0`` open the ten tabs of the row,
+``[`` and ``]`` the previous and the next, and in a focused tab row the arrow keys, Home and End move along it.
 
-**Calculate** (in the header on every tab; the key ``c``) asks the engine for the current text and opens the
+**A table and its detail.**  Particle Pairs and Levels and Channels each show their table on the left with **Add**
+and **Remove** at the table and the selected row beside it: a pair's numbers, or a level's energy and its channels
+with their widths (the old program's channel list beside its levels).  Segments and Experimental Effects show the
+list of a group (Segments From Data, Segments Without Data, Model data; targets, beams, detectors) with **Add** at
+the list and the chosen record's form below it, headed by **Duplicate**, **Rename** and **Delete**.
+
+**The menus.**  **File**: Open… (another ``.azr`` of the folder), New project from this one… (its pairs and levels,
+no data), Save (Ctrl+S), Save as…, Write the output files, New project from an ENDF-6 file…, Export as ENDF-6…,
+About.  **Edit**: Undo, Redo, History…, The project's text….  **Configure** (the old program's Configure menu): Run
+settings… (formalism, checks, directories, runtime options: the ``<config>`` entries), Session options…, Prior on
+the parameters…, Engine and threads….  **View**: every field and column (the expert's depth, key ``e``), the theme
+(``t``), the validator's messages (``p``), the job shown in the status line.  **Help**: the overview of the tabs,
+the documentation of the open tab (F1), the keys (``?``), About.  A menu opens by a click (or ↓ on its name) and
+closes with Esc; nothing is reached by hovering only.
+
+**The top bar and the status line.**  The top bar always shows the project's name, whether it has unsaved edits,
+**Undo**, **Redo**, **Save**, **Validate**, **Calculate** and the χ² of the current text.  The line at the bottom
+shows the engine's last message; the job that runs, with its progress and **Stop** (or the job that ran last, with
+its outcome), whatever the tab, a click away from its panel; and the validator's verdict (✓ valid, or the number of
+errors and warnings), which opens the list of its messages, each a link to the record or level it is about.
+
+**The address.**  The address follows the tab and the selected row (``#/nucleus/level/1%2F2%2B%202.365``,
+``#/data/el_lab090``): Back, Forward and Reload keep your place, and a link opens that view.  The printed URL opens
+Particle Pairs; on the first visit an overview of the tabs, in the order of the work, opens over it (Help ›
+Overview of the tabs opens it again).
+
+**Two depths.**  The page shows the fields and columns most projects set; View › Every field and column (the key
+``e``) shows all of them, and every job kind in the Calculate and Fit tab at once (MINOS, the sampler and the bands
+are otherwise one click away under **More: …**).  The tabs are the same in both depths.  The choice is kept in
+this browser; ``?depth=expert`` or ``?depth=first`` in an address opens one view in that depth.  A field the
+engine's table marks as rarely set (the source, EXFOR and DOI of a data set, its pair keys, THM experiment, a
+target's phase, ...) waits under **More fields** unless the record sets it, and every field's meaning is written
+under its title.
+
+**Calculate** (in the top bar on every tab; the key ``c``) asks the engine for the current text and opens the
 Plot tab with every data set, its model and its residuals, the χ² per data set and in total, and what changed
 since the last Calculate: Δχ² in total and per data set, the data set that moved most first (choose a row to go
 to its plot), and the plots in that order.  The status line also gives the change of χ² since the last Calculate
@@ -79,21 +103,21 @@ A project made from nothing, as T1 (p + 12C: elastic scattering, analyzing power
 1. **Start on a new file.**  In the folder that holds your data files, ``pyazr ui first.azr`` (a file that does not
    exist yet): the page opens on an empty project, unsaved, with the folders ``output/`` and ``checks/`` made beside
    it.  **Save** writes the file.
-2. **Particle Pairs → + pair.**  Type the partners by name under **by name** (light ``p``, heavy ``12C``) and press
+2. **Particle Pairs → Add pair.**  Type the partners by name under **by name** (light ``p``, heavy ``12C``) and press
    **Fill from the mass table**: Z, the atomic masses and the separation energy come from AME2020.  Choose J and the
    parity of each partner, type the channel radius and, for the proton, its g-factor (no table of the page holds
    them), then **Add pair**.  A photon pair (γ + 13N in its ground state and in its first excited state) takes the
    heavy nucleus alone, its excitation and the external capture's multipolarities.
-3. **Levels and Channels → + level.**  J, parity and E; the channels the J^π allows with your pairs are offered,
-   each to tick.  Open the level and type each channel's width (Enter sends it; the header shows the new χ² once the
+3. **Levels and Channels → Add level.**  J, parity and E; the channels the J^π allows with your pairs are offered,
+   each to tick; after **Add level** the level opens beside the list.  Type each channel's width (Enter sends it; the header shows the new χ² once the
    project has data) and untick **fixed** where it is fitted.  **Prior / limits…** beside the energy and in each
    channel's row puts a prior or limits on that parameter.
-4. **Segments → + new.**  Pick the data file from the folder's files (its first rows and what the engine reads
+4. **Segments → Add to Segments From Data.**  Pick the data file from the folder's files (its first rows and what the engine reads
    from it are shown), then the reaction, the quantity and its unit, the columns, the windows and the
    normalization.
 5. **Calculate.**  The header shows χ²; the **Plot** tab draws every data set with the model on a fine grid
    (refined where it bends, so a narrow level is drawn through) and the residuals.
-6. **Fit → Run**, then **Accept into project** and **Save**.
+6. **Calculate and Fit → Run** (the status line follows the job on every tab), then **Accept into project** and **Save**.
 
 Made this way with T1's own numbers, the project's χ² is T1's to the last digit (482.27523961726735).  With the mass
 table's numbers it is 482.26440, since T1 holds older masses (the proton 1.00782503223 u against AME2020's
@@ -102,29 +126,30 @@ table's numbers it is 482.26440, since T1 holds older masses (the proton 1.00782
 Six tasks, step by step
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-*Add a particle pair.*  **Particle Pairs** › **+ pair**: the kind (particle, photon, beta), each partner's J,
+*Add a particle pair.*  **Particle Pairs** › **Add pair**: the kind (particle, photon, beta), each partner's J,
 parity, Z, mass (u) and g, the separation energy, the radius and the rest › **Add pair**.  The engine checks every
 number and says what it refuses.
 
-*Add a level and set a width free.*  **Levels and Channels** › **+ level**: J, parity, E (MeV), l max ›
-**Channels** (the channels that J^π has with the project's pairs) › tick those you want › **Add level**.  Choose
-the level, untick a channel's **fixed** and type its width (Enter sends it).
+*Add a level and set a width free.*  **Levels and Channels** › **Add level**: J, parity, E (MeV), l max (the
+channels that J^π has with the project's pairs are listed as you type) › tick those you want › **Add level**: the
+new level opens beside the list; untick a channel's **fixed** and type its width (Enter sends it).
 
-*Add a data set with its file and a normalisation.*  **Segments** › **+ new**: the reaction, the quantity, the
+*Add a data set with its file and a normalisation.*  **Segments** › **Add to Segments From Data**: the reaction, the quantity, the
 unit, the data file (chosen among the project folder's files, or typed; its first rows are shown under the field,
 and for a data set that exists what the engine reads of it: the rows read and kept and their energy range, or the
 engine's refusal), the columns, the normalisation (a value of its own with a mode and a prior, or a shared one) ›
 **Apply**.
 
-*Add a target effect.*  **Experimental Effects** › **+ new**: a target (its kind, the active nucleus, the
+*Add a target effect.*  **Experimental Effects** › **Add to Experimental Effects**: a target (its kind, the active nucleus, the
 composition, the areal density, stopping and straggling), a beam or a detector › **Apply**; then **Segments** ›
 the data set › **Target** (or Beam, Detector) › **Apply**.  The choice of a target, beam, detector or shared
 normalization also offers **new …**, which opens the form of a new record of that kind.
 
-*Run a fit and look at it.*  **Fit** › the method › **Run**; follow its progress; **Accept into project** ›
-**Calculate**: every data set against the new model, with what the fit changed.  The first view offers fits; MINOS,
-the sampler and the bands are under **More: …** in the job form, and beside a finished fit's result (the expert's
-view offers every kind).  MINOS's
+*Run a fit and look at it.*  **Calculate and Fit** › the method › **Run**; follow its progress (here, or in the
+status line from any tab, with **Stop**); **Accept into project** ›
+**Calculate**: every data set against the new model, with what the fit changed.  The usual depth offers fits;
+MINOS, the sampler and the bands are under **More: …** in the job form, and beside a finished fit's result (every
+field and column, View menu, offers every kind).  MINOS's
 parameters are ticked among the free parameters (none ticked: every one).
 
 *Calculate a reaction rate.*  **Reaction Rate** › the entrance and exit pairs, the temperatures › **Calculate**: the
@@ -137,21 +162,29 @@ and the libraries' labels are under **More**.
 What the page shows
 -------------------
 
-The header carries the original program's icon (the red and green spheres with the blue "(A)"; it is also the
-browser tab's icon) and shows the project's name, whether it has unsaved edits, the revision, **Undo**, **Redo**,
-**Save**, and the total χ² of the current evaluation with its number of points.  **About** gives the version of the
+The top bar carries the original program's icon (the red and green spheres with the blue "(A)"; it is also the
+browser tab's icon; a click opens About), the menus, and shows the project's name, whether it has unsaved edits, the
+revision, **Undo**, **Redo**, **Save**, **Validate**, **Calculate** and the total χ² of the current evaluation with
+its number of points.  **About** (File and Help menus) gives the version of the
 program and of pyazr, the reference every publication that uses AZURE2's results cites (R.E. Azuma et al.,
 *Physical Review C* **81**, 045805 (2010)) and the link to this documentation.  The page's colours are the icon's:
 its blue is the accent, its red marks an error and its green a success, and each of these states also carries a
 symbol (✕, ⚠, ✓), so that nobody has to tell red from green.  The line at the bottom shows the engine's last
-message.  The keys are listed by ``?``: ``1`` … ``9`` and ``0`` switch to the first ten tabs as the bar shows
-them, ``[`` and ``]`` to the previous and the next tab, Ctrl+Z and
+message, the job and the validator's verdict.  The keys are listed by ``?``: ``1`` … ``9`` and ``0`` switch to the
+ten tabs of the row, ``[`` and ``]`` to the previous and the next tab, ``c`` calculates, ``p`` lists the validator's
+messages, F1 opens the documentation of the tab, Ctrl+Z and
 Ctrl+Shift+Z undo and redo,
 ``/`` filters the current table, the arrow keys and Enter move through a table, Ctrl+Enter applies a form, Esc
 reverts it, ``t`` switches between the system's theme, light and dark.  Each view has its own address
 (``#/data/s02_diff090``), so a link or a reload brings you back to it.
 
-**Project.**  The file and its working copy; the problems the engine's validator reports, each with a link to the
+The tabs
+--------
+
+Project
+~~~~~~~
+
+The file and its working copy; the problems the engine's validator reports, each with a link to the
 record it names; the **Run settings**: every ``<config>`` entry the engine knows, in groups (the old program's
 Runtime Options first: the formalism, Brune, Park, the parameter transformation, external widths, RMC, GSL Coulomb
 functions; then physics, fit, directories, checks, numerics), each with its control (a switch, a choice, a number
@@ -162,25 +195,38 @@ session's options (Brune, Park, the Coulomb table and the others) with the value
 the history of edits; the project's text, read-only, with **Replace text** for an edit of the whole; the engine's
 version, build and data files.
 
-**Nucleus.**  The particle pairs, in the old program's columns (light and heavy particle by name, their J^π and
+Particle Pairs
+~~~~~~~~~~~~~~
+
+The particle pairs, in the old program's columns (light and heavy particle by name, their J^π and
 masses, the excitation and separation energies, the channel radius, the pair type): choose a row to edit its
 radius, masses, separation energy, excitations and THM
 binding energy B (the fields are those the server's pair edit takes), or to remove it with **Remove pair** (refused
 while a level has a channel of the pair, in the engine's words; then **Remove pair … and its channels** removes
-those channel rows too, and with them their fit parameters).  **+ pair** adds one: its kind (particle, photon,
+those channel rows too, and with them their fit parameters).  **Add pair** adds one: its kind (particle, photon,
 beta), its partners (J, parity, Z, mass in u, g), separation energy, radius and the rest; a pair no level names yet
-is kept in the file by a row of its own.  The levels; **+ level** adds one: J (0.5, 1, ...), parity, E and whether
-its energy is fixed, then **Channels** lists the channels that J^π has with the project's pairs (the engine's rule,
-up to ``l max``), each added with width 0, fixed (with every one checked, a J^π the project has takes its group's
-channels).  For the chosen level its energy, its fixed and active flags and its channels, whose widths are edited in
+is kept in the file by a row of its own.  **Remove pair** at the table removes the selected pair.
+
+Levels and Channels
+~~~~~~~~~~~~~~~~~~~
+
+The levels, with **Add level** and **Remove level** (the selected level and its channels; Undo takes it back) at the
+table.  **Add level**: J (0.5, 1, ...), parity, E and whether its energy is fixed; the channels that J^π has with the
+project's pairs (the engine's rule, up to ``l max``) are listed as you type, each added with width 0, fixed (with
+every one checked, a J^π the project has takes its group's channels); after **Add level** the new level opens with
+its channels.  For the chosen level, beside the list, its energy, its fixed and active flags and its channels, whose widths are edited in
 place (Enter sends a width; the status line then shows the χ² before and after, and Undo takes the edit back), with
 whether each width is an amplitude.  A width is written as the file has it (Γ in eV, an ANC in fm^-1/2 for a bound
 channel, or an amplitude in MeV^1/2 where the row says so; ticking the amplitude box does not convert the number).  The
-γ-decay and potential
-records are edited with the same forms as the records of the Data tab.
+γ-decay, potential, channel-radius and isospin records are under **More** below the levels, edited with the same
+forms as the records of Segments.
 
-**Data.**  The records of every section of the project file, one group per section (data sets, targets,
-extrapolations, model data), one list per kind of record under its name: a data set by its reaction, observable,
+Segments
+~~~~~~~~
+
+Segments holds the groups Segments From Data (data sets, shared normalizations and energy scales), Segments Without
+Data (extrapolations) and Model data; **Experimental Effects** (its own tab) the targets, beams and detectors.  One
+list per kind of record under its name: a data set by its reaction, observable,
 data file, energy range, angle window, points, whether it is active, its normalization (the value in use, fitted or
 fixed, the shared record it comes from) and the program's χ²; a target, beam, detector, shared normalization or
 energy scale by the fields it sets, headed by their names, and the data sets that use it.  Choosing
@@ -188,10 +234,19 @@ a record opens its form, generated from the engine's schema, with the engine's d
 and the engine's messages under the fields they concern; **Apply** (Ctrl+Enter) sends only the fields you changed.
 A data set also shows the first rows of its data file and a preview plot of the data (points with errors) and the
 model at the working parameters, against energy or angle; **Export data (CSV)** saves the numbers drawn with their
-units.  **+ new**, **Duplicate**, **Rename** and **Delete** add, copy, rename (with every reference) and remove
-records; each is one entry of the history.
+units.  **Add** (at the list), **Duplicate**, **Rename** and **Delete** (at the head of the chosen record) add,
+copy, rename (with every reference) and remove records; each is one entry of the history.
 
-**Fit.**  On the left the job form, drawn from the server's job table: the kind (fit, MINOS), the method, the
+Experimental Effects
+~~~~~~~~~~~~~~~~~~~~
+
+The targets, beams and detectors, listed and edited as the records of Segments; a data set names them in its
+**Target**, **Beam** and **Detector** fields, whose **new …** opens the form of a new one here.
+
+Calculate and Fit
+~~~~~~~~~~~~~~~~~
+
+On the left the job form, drawn from the server's job table: the kind (fit, MINOS), the method, the
 method's settings with their defaults, the start point (the working parameters, the values of the project text, or
 the best point of a job) and **Run**.  The methods are first the engine's own fitters, one per row of the engine's
 fitter table (``pyazr.kinds()["fitters"]``, the fits of the command-line program): ``engine_migrad`` (the program's
@@ -200,7 +255,7 @@ method the engine's description of the fitter and what it gives (the program's s
 whether it honours a call limit, the fitter it falls back to);
 settings ``max_calls`` (the program's ``--max-calls``) and, where the fitter allows it, ``minos``.  Then the recipes
 on the objective: iminuit's MIGRAD with HESSE and scipy's L-BFGS-B; the sampler (emcee); the bands; the reaction rate (drawn by the
-Rate tab).  Under the form, the Fit tab's jobs (newest first; the ENDF tab's checks and conversions and the Rate tab's rates are
+Reaction Rate tab).  Under the form, this tab's jobs (newest first; the ENDF tab's checks and conversions and the Reaction Rate tab's rates are
 listed in their own tabs, and **Every job** lists the jobs of every tab here).  A job runs in its own process on the
 text of the current revision with one thread of the server's budget; while it runs, evaluations wait (the header shows
 χ² —).  On the right the job: its calls, the objective (χ² + priors) at the last call and the best so far, the
@@ -246,8 +301,11 @@ set and extrapolation at the fit's best point (linear propagation over the level
 percentiles at each point.  The result says which parameters the band varied (the level parameters for the linear
 band, every free parameter for the band from draws) and which were held at the start point.
 
-**Results.**  Everything at the working parameters (the vector of the last edit or Undo), from one answer of the
-server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show (grouped as on the Data tab, with
+Plot
+~~~~
+
+Everything at the working parameters (the vector of the last edit or Undo), from one answer of the
+server (``GET /api/evaluation``).  Tick the data sets and extrapolations to show (grouped as in Segments, with
 **all** and **none**); choose x (c.m. energy, excitation energy, c.m. angle; **log x**) and y (as measured, or the
 S factor where the data set is a cross section with a charged entrance; **log y**).  Each series gets a plot of its
 own (**together** draws them in one plot per unit), with the data times the normalization in use and their errors,
@@ -261,7 +319,7 @@ or a data set changes; at any other edit the same grid is evaluated at once.  Un
 that cannot be drawn as a curve (its columns give each point its own window, or its points are not one function of
 one variable), the line joins the model at the points, and the reason is written under the plots; a curve whose
 request got no answer is said so in a yellow box with **Ask again**.  An extrapolation is drawn on its grid.  **levels** marks the levels of the project on the excitation-energy axis.  **band**
-shades the band of the newest band job of the Fit tab around each series; the head says which job and project text
+shades the band of the newest band job of Calculate and Fit around each series; the head says which job and project text
 it belongs to and which parameters it varied, and its legend names the job and the point it is drawn around (the
 model at that job's start point: accept the point to see the model line inside it).  When the project's text is a
 job's accepted best point and the band drawn is around another point, the head offers the band at the accepted
@@ -272,20 +330,26 @@ program's output files**, which writes ``AZUREOut_*``, ``chiSquared.out`` and th
 directory and lists them with their first rows.  Each plot exports its numbers as CSV (17 significant digits) and
 the figure as SVG or PNG.  The view is also a link: ``#/results?x=e_x&y=s_factor&logy=1&levels=1&show=a,b``.
 
-Rate and covariance
--------------------
+Rate and ENDF
+-------------
 
-The **Rate** tab computes the reaction rate of a pair of pairs as the program's ``rate`` command does, at the working
+The **Reaction Rate** tab computes the reaction rate of a pair of pairs as the program's ``rate`` command does, at the working
 x or at a fit's or a sampler's best point, with the band of that fit's covariance or that sampler's draws, the Gamow
-window per temperature, a comparison table and the table as CSV (:doc:`reaction_rate`).  **Covariance…** on a data set
-of the Data tab opens the covariance builder (``#/covariance/<name>``): the data set's covariance from named parts,
+window per temperature, a comparison table and the table as CSV (:doc:`reaction_rate`).  The **ENDF** tab is
+described below.
+
+Covariances
+-----------
+
+**Data covariance** lists the data sets that can have one; **Covariance…** on a data set of Segments opens the covariance builder (``#/covariance/<name>``): the data set's covariance from named parts,
 checked as the engine will read it, written and named on the data set as one edit (:doc:`covariance_builder`).
-**Prior on the parameters…** above the Fit tab's parameter table opens the prior builder (``#/prior``): a prior on
+**Parameter prior** (also **Prior on the parameters…** above the parameter table of Calculate and Fit, and Configure ›
+Prior on the parameters…) opens the prior builder (``#/prior``): a prior on
 several fit parameters with their correlations (``priorCovariance``) from named parts, checked as the engine will
 read it, written and named in ``<config>`` as one edit, or removed (:doc:`prior_builder`).
 
 ENDF evaluations
-----------------
+~~~~~~~~~~~~~~~~
 
 The **ENDF** tab (``#/endf``) puts an evaluated file beside the project, with ``pyazr.endf`` (:doc:`endf`). It is
 named after the format because that is the word an evaluator searches for, and each of its screens starts or ends
@@ -326,10 +390,13 @@ with an ENDF-6 file.
   number form; **Write** starts a job that writes a new file of the folder; its result lists the sections, the grid
   of each MF=3 section, how closely MF=2 reproduces MF=3, the losses, and **Check…** on the file.
 
-Physics
--------
+Physics and THM
+---------------
 
-The **Physics** tab evaluates the engine's own functions (kinematics, Coulomb functions, channel functions, widths,
+Physics functions
+~~~~~~~~~~~~~~~~~
+
+The **Physics functions** tab evaluates the engine's own functions (kinematics, Coulomb functions, channel functions, widths,
 resonance quantities, Coulomb scattering, the THM vertex; the stopping powers, ranges, energy losses and straggling
 of the stopping library; and under "this project" the session's channel functions of a pair) on a range, from the
 same tables as ``pyazr.physics`` and ``pyazr.stopping``.  A stopping plot shows SRIM's citation under it, and its
@@ -341,7 +408,7 @@ as Python** gives the ``pyazr.physics`` call that makes the same arrays.  A view
 ``#/physics/coulomb_waves?from=-2&to=20&spacing=linear&v.l=0 1 2 3``.
 
 THM
----
+~~~
 
 The **THM** tab is listed when the project has THM content (a ``<thm>`` section, or a data set that names a THM
 experiment).  **Model options**: a form of the global keys of ``<thm>`` (vertex, kinematics, entranceL,
@@ -355,7 +422,7 @@ offer the nuclei the engine knows by name and the optical-potential boxes its gl
 change is one edit of the project:
 **Undo** takes it back, and what the engine refuses is shown in its words.  **Channels**: the THM pairs with their
 binding energy B and their channels, with whether a width is an amplitude, as the session reads them; a row opens
-the pair or the level in the Nucleus tab, where both are edited.  **Diagnostics**: the session's THM calls at the
+the pair or the level in Particle Pairs or Levels and Channels, where both are edited.  **Diagnostics**: the session's THM calls at the
 working parameters: the experiments'
 profiled norms and backgrounds (with their σ and covariance, and the coherent background's parameters), the entrance
 vertex per channel and level, the Coulomb line shape per level, and the distortion factor R(E), each with its form,
@@ -365,8 +432,8 @@ the Physics tab.  A view is a link: ``#/thm/LC09?fn=thm_vertex``.
 Not there yet
 -------------
 
-In the Fit tab a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag are
-edited in the Nucleus tab, not in the THM tab.  The session's options as editable keys, the file browser, EXFOR and
+In Calculate and Fit a fixed parameter is not edited from the table.  The THM binding energy and amplitude flag
+are edited in Particle Pairs and Levels and Channels, not in the THM tab.  The session's options as editable keys, the file browser, EXFOR and
 ENSDF imports, the Wigner limits and physical
 widths of the channels, the lab energy as an x axis, and live updates pushed by the server (the page asks every three seconds whether another
 client changed the project) come later. The page was checked in a headless Chrome; plotly.js 4.1.2 (MIT licence) is
