@@ -30,9 +30,16 @@ import numpy as np
 from sympy import Rational
 from sympy.physics.wigner import clebsch_gordan
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-import make_models as M  # noqa: E402
+
+
+class M:
+    """The numbers of models/twolevel.azr that the reference needs (the generator make_models.py, deleted with the old
+    project format, held them: README.md, "How the models were made").  Change them with the model's records."""
+    MN, MT = 1.00866, 15.0001              # masses of the neutron and the target (u)
+    S_N = 2.491                            # neutron separation energy (MeV)
+    RADIUS = 4.5                           # channel radius (fm)
+    EA, EB = S_N + 1.0, S_N + 1.3          # E_x of the two 1+ levels (MeV)
+
 
 HBARC, UCONV = 197.3269804, 931.49410242   # include/Constants.h
 
