@@ -1,6 +1,6 @@
 # Skills migration: old section → new location
 
-Phase 0 rewrote `.claude/skills/` into the ten-skill set of `RULES.md` §3 plus a trimmed `rmfit-campaign`. This
+Phase 0 rewrote `.claude/skills/` into the ten-skill set of `RULES.md` §3 plus a trimmed `rmfit-campaign` (that copy was dropped on 2026-11-18: the skill lives with rmfit, `rmfit/.claude/skills/rmfit-campaign/`; its rows below say where its text went). This
 table lets a reviewer check that nothing was dropped: every section of every old skill (line ranges refer to the old
 files on `feature/upgrade` before the rewrite, e.g. `git show ff75fc28:.claude/skills/azure2-eval/SKILL.md`) has a row
 naming where its content now lives, or why it was dropped. "Dropped" is used only for history with no effect on

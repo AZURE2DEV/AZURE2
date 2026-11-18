@@ -132,6 +132,5 @@ Further reading
 - ``rmfit/README.md``: the module table and the command line;
 - ``rmfit/DESIGN.md``: principles, the closed loop (``rmfit drive``), UQ,
   benchmarks and open items;
-- the Claude Code skill ``rmfit-campaign`` (``.claude/skills/rmfit-campaign/``;
-  rmfit's own copy is ``rmfit/.claude/skills/rmfit-campaign/``): the process
-  guide (how to start, drive, judge and resume a campaign).
+- the Claude Code skill ``rmfit-campaign`` (``rmfit/.claude/skills/rmfit-campaign/``,
+  which lives with rmfit): the process guide (how to start, drive, judge and resume a campaign).

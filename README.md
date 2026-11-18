@@ -455,7 +455,7 @@ The skills:
 | `azure2-thm` | A complete THM evaluation, from vetting published THM data to model-averaged results. |
 | `azure2-resonance-search` | Gated search for missing or misassigned levels. |
 | `azure2-exchange` | Conventions and bases, GNDS/ENDF translation, comparison with evaluations. |
-| `rmfit-campaign` | Global R-matrix fitting campaigns with rmfit. |
+| `rmfit-campaign` | Global R-matrix fitting campaigns with rmfit (lives with rmfit: `rmfit/.claude/skills/rmfit-campaign/`). |
 
 ---
 

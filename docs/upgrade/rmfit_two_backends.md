@@ -55,7 +55,7 @@ port's; the difference is the pyazr 2 branches beside them.
 - A pyazr 2 branch inside `feature/upgrade` is code this branch's engine never runs. It is there because the same
   tree serves `dev` and the archive. If `rmfit/` is to follow this branch's rule that a phase deletes what it
   replaces, the pyazr 2 halves can be dropped when `dev` stops being used; `backend.py` makes them one `if` each.
-- The port's open questions stand: which `rmfit-campaign` skill stays (`FOR_THE_OWNER.md` section 8), the size
+- The port's open questions stand: which `rmfit-campaign` skill stays (answered 2026-11-18: rmfit's own, `rmfit/.claude/skills/`; the root copy is dropped), the size
   ratchet, no CI job for the rmfit tests, `W_PARAMETER_SETTING_UNKNOWN` at each shard start.
 - A worker started with `AZURE2_ROOT` at an upgrade checkout imports that checkout's `rmfit/`, ahead of an rmfit
   elsewhere on the path. In-tree that is the rmfit under test; testing another rmfit against an upgrade build needs

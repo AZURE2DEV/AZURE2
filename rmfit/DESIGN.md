@@ -3,7 +3,7 @@
 rmfit runs an evaluator's global R-matrix fit with AZURE2 as resumable, checked steps that a script executes on a cluster
 node and an LLM agent (or a person) can supervise and resume from plain-text state files.  This document describes what it
 is for, how it is built and what is still open.  How to use it in a session is in the `rmfit-campaign` skill
-(`.claude/skills/rmfit-campaign/SKILL.md`); the module table is in README.md.
+(`rmfit/.claude/skills/rmfit-campaign/SKILL.md`); the module table is in README.md.
 
 ## Principles
 

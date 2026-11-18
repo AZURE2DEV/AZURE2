@@ -66,7 +66,7 @@ The skill set:
 | azure2-exchange | conventions, GNDS/ENDF export, rmfit and SAMMY parameters | ferdinand-gnds |
 | azure2-evaluation | the procedure of a whole evaluation: stages, gates, owner skills, records, stop conditions, the final report | (new) |
 
-`rmfit-campaign` stays separate, trimmed to its procedure (its 1,700-line refinement log goes; ~15 rules lifted).
+`rmfit-campaign` lives with rmfit (`rmfit/.claude/skills/rmfit-campaign/`), not in `.claude/skills/` (the owner, 2026-11-18); `tools/check_skills.py` does not check it.
 General user-level skills (uncertainty-audit, prc-figures, data-auditor, physics-referee) are linked, not copied.
 The user-level `~/.claude/skills/azure2` (LUNA-Skills) must narrow its description so it does not load next to the
 repo skills.
