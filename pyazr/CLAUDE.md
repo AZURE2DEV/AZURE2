@@ -174,9 +174,9 @@ path of the row, or a path of the row never appears.
 - **A run-time data file**: put it under `pyazr/`, read it from next to its module (`__file__`), and add its row to
   `DATA_FILES` in `datafiles.py` (or to `NOT_SHIPPED` and `wheel.exclude` if the wheel must not carry it); check 48
   and `pyazr_wheel` fail otherwise.  Never an environment variable for a file of the package.
-- The Coulomb table: `coulomb_table.py` (`where`, `fetch`, `build`; `pyazr coulomb-table ...`).  `TABLE_URL` and
-  `TABLE_SHA256` are set together by the owner when he publishes the file; never download anything in a test (the
-  test serves a small table from `http.server` on 127.0.0.1).
+- The Coulomb table: `coulomb_table.py` (`where`, `build`, `fetch`; `pyazr coulomb-table ...`).  The table is
+  built locally, not published (owner, 2026-11-18): no URL or hash is in the code, `fetch` takes the ones the user
+  gives; never download anything in a test (the test serves a small table from `http.server` on 127.0.0.1).
 
 ## Rules
 

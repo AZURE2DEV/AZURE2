@@ -284,7 +284,7 @@ def case_coulomb_fetch():
         check("coulomb-table fetch: fetched, the same bytes", result and result["fetched"]
               and coulomb_table.file_sha256(fetched) == digest, result)
     code, doc, _ = run("coulomb-table", "fetch", os.path.join(TMP, "none.bin"), "--json")
-    check("coulomb-table fetch with no published table: exit 2, three parts, build named",
+    check("coulomb-table fetch without --url and --sha256: exit 2, three parts, build named",
           code == 2 and three_parts(doc) and "build" in doc["error"]["fix"] + doc["error"]["what"], doc)
 
 

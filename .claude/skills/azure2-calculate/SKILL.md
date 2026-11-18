@@ -47,8 +47,8 @@ python3 $S/decompose.py model.azr --params output/param.sav --level "1/2+ 2.365"
   extrapolations), `minos`, `rate`, `mcmc`. Use it when its output files are the product. `AZURE2 --help` lists the
   commands and their options; a command reads nothing from standard input.
 - **pyazr** (`pyazr.Session`): the engine in the interpreter, for everything else (scans, decompositions, samplers,
-  figures). Installed by `pip install .` from the repository; the Coulomb table once with
-  `pyazr coulomb-table fetch` (or `build`).
+  figures). Installed by `pip install .` from the repository; the Coulomb table built locally once with
+  `pyazr coulomb-table build` (about 5 minutes; it is not published).
 
 ## Procedure A: the program
 
@@ -190,7 +190,7 @@ only. Example: `pyazr/examples/tabulate_cross_sections.py`.
 - `output/intEC.dat` and `intEC.extrap` hold external-capture integrals; each carries a signature of its grid and
   options (`.sig`) and is recomputed at session start when it no longer matches. A running session does not re-check:
   after editing data or grids, open a new session (or `s.recalculate_external_capture()`). Safe to delete.
-- The universal Coulomb table (`pyazr coulomb-table fetch`, or `AZURE2 --build-coulomb-table`;
+- The universal Coulomb table (built locally, once: `pyazr coulomb-table build`, or `AZURE2 --build-coulomb-table`;
   `$AZURE2_COULOMB_TABLE` names the file) speeds charged-particle runs about 4× without changing printed digits.
 
 ## Pitfalls by topic

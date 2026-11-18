@@ -304,8 +304,8 @@ to (`J`, `parity`, `level_energy`) and for widths the channel (`L`, `S`, `pair`,
 `.norms`, `.shifts`) and lookups (`.by_level(...)`, `.by_name(...)`).
 
 `pip install .` builds the `_azure2` module and installs it with the package
-(`docs/source/getting_started/installation.rst`; the Coulomb table once with
-`pyazr coulomb-table fetch` or `build`). For development, the CMake build
+(`docs/source/getting_started/installation.rst`; the Coulomb table built once with
+`pyazr coulomb-table build`, about 5 minutes: it is not published). For development, the CMake build
 (`USE_API=ON`, the default) writes it into `pyazr/`, so `import pyazr` picks it
 up from the repository root.
 

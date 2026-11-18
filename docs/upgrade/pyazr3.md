@@ -621,9 +621,10 @@ shipped. `cli.py`'s `REFERENCE_PAGE` (the docs page) is written by the consisten
 - The Coulomb table (`pyazr/coulomb_table.py`; the commands `python -m pyazr coulomb-table where|fetch|build|check`,
   `pyazr coulomb-table ...` once installed): the file is where the engine looks (`$AZURE2_COULOMB_TABLE`, else
   `~/.azure2/coulomb_table.bin`), so a fetched or built table is used by every later session and by the program
-  with nothing set. `fetch` downloads `TABLE_URL` (one named constant, empty until the owner publishes the file)
-  to `FILE.part`, compares its SHA-256 with `TABLE_SHA256`, renames it over `FILE`, or removes it and refuses;
-  `--url` and `--sha256` name another copy (a mirror, a local file). `build` calls the engine's
+  with nothing set. The owner decided on 2026-11-18 not to publish the table: users build it (`build`), so
+  `TABLE_URL` and `TABLE_SHA256` are gone. `fetch` downloads the copy `--url` names to `FILE.part`, compares its
+  SHA-256 with `--sha256`, renames it over `FILE`, or removes it and refuses (a mirror, a local file); without both
+  it refuses and names `build`; `where` keeps its keys `url` and `sha256`, always empty. `build` calls the engine's
   `CoulombTable::BuildFile` (bound in `pybind_describe.cpp` with the default path), the offline path; the table is
   not built on first use without being asked (five minutes the user did not ask for). Without a table the engine
   uses its exact routines, as today. Tested against a small table served as `file://` and from `http.server` on
@@ -822,7 +823,7 @@ engine's physics does not. Sizes are estimates from the files of this commit.
    `USE_MCMC` stays ON in the wheel (the module's `SamplerLogProbability` needs the vendored, static sampler);
    `wheel.exclude` applies to what CMake installs as well, so it cannot drop a stale in-tree module: the wheel's
    configuration stops while `pyazr/_azure2*` exists; Windows is left out of the workflow. Decision 7 as built:
-   `pyazr coulomb-table fetch` (URL and SHA-256 as two named constants, empty until the owner publishes the file),
+   `pyazr coulomb-table fetch` (URL and SHA-256 as two named constants, empty; removed 2026-11-18, the table is not published),
    `build` (the engine's `CoulombTable::BuildFile`, bound as `build_coulomb_table`, with `l_max` and `per_decade` for
    a small table), `where`; the table is not built on first use without being asked. The wheel on this machine
    (CPython 3.12, Linux x86-64, not repaired): 8.2 MB, 83 files; the module and the program need libgsl,

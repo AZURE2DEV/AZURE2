@@ -151,7 +151,7 @@ Calls ``pyazr.coulomb_table.where``.
 ``coulomb-table fetch``
 -----------------------
 
-Download the published Coulomb table and check its SHA-256 (exit 2 while none is published: build it).
+Copy a Coulomb table from a URL you name and check its SHA-256 (exit 2 without --url and --sha256: build the table here).
 
 .. code-block:: text
 
@@ -160,8 +160,8 @@ Download the published Coulomb table and check its SHA-256 (exit 2 while none is
 Calls ``pyazr.coulomb_table.fetch``.
 
 - ``FILE``: the table file (default: $AZURE2_COULOMB_TABLE, else ~/.azure2/coulomb_table.bin) (a text).
-- ``--url``: a copy to download instead of the published one (a text).
-- ``--sha256``: the SHA-256 the copy must have (with --url) (a text).
+- ``--url``: the copy to download (required; no table is published) (a text).
+- ``--sha256``: the SHA-256 the copy must have (required, with --url) (a text).
 - ``--overwrite``: replace an existing file (an option without a value).
 - ``--json``: one JSON document on standard output.
 

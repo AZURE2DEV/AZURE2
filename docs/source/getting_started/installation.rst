@@ -149,21 +149,23 @@ files are compiled into the module under their authors' terms, not AZURE2's
 licence. A result that uses them cites SRIM; ``pyazr.describe()["stopping"]``
 and ``pyazr stopping`` print the citation.
 
-**The Coulomb table** is not in the wheel (88 MB). Get it once:
+**The Coulomb table** is not in the wheel (88 MB) and is not published: every user
+builds it once, locally (about 5 minutes on 4 threads, offline):
 
 .. code-block:: bash
 
+   pyazr coulomb-table build     # build the table here
    pyazr coulomb-table where     # where the engine looks, and whether a file is there
-   pyazr coulomb-table fetch     # download the published table, checked by its SHA-256
-   pyazr coulomb-table build     # or build it here, offline (about 5 minutes on 4 threads)
 
-Both write the file the engine reads by default (``$AZURE2_COULOMB_TABLE``,
+``build`` writes the file the engine reads by default (``$AZURE2_COULOMB_TABLE``,
 else ``~/.azure2/coulomb_table.bin``), so every later session and run of the
-program uses it with nothing set. ``fetch`` refuses and removes a file whose
-SHA-256 is not the published one; until a table is published it says so and
-names ``build``. Without a table the engine computes the Coulomb functions
-with its exact routines (the same results, about four times slower).
-In Python: ``pyazr.coulomb_table`` (``where``, ``fetch``, ``build``).
+program uses it with nothing set; ``AZURE2 --build-coulomb-table`` does the same.
+``pyazr coulomb-table fetch --url URL --sha256 HASH`` copies a table you have
+put somewhere yourself (a shared disk, your own server) and refuses and removes
+a file whose SHA-256 is not the one given. Without a table the engine computes
+the Coulomb functions with its exact routines (the same results, about four
+times slower).
+In Python: ``pyazr.coulomb_table`` (``where``, ``build``, ``fetch``).
 
 **Developers** keep the in-tree build of the previous section: ``cmake --build
 build`` writes ``_azure2`` into ``pyazr/`` (or into ``PYAZR_OUTPUT_DIR``, found
