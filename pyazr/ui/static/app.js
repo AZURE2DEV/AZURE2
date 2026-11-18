@@ -448,6 +448,12 @@ async function start() {
     onStale: () => ctx.status("another client changed the project first: the page shows the current text", "warn"),
     onActivity: (n) => { ctx.busy.textContent = n ? "working…" : ""; },
   });
+  // a job started, stopped or accepted on any tab: the status line's job mark looks at once
+  const post = ctx.api.post;
+  ctx.api.post = (path, body) => post(path, body).then((answer) => {
+    if (/^\/api\/jobs(\/|$)/.test(path)) ctx.jobMark.poke();
+    return answer;
+  });
   // the self-test needs the API object before the first request
   if (location.hash.startsWith("#selftest")) {
     const { selftest } = await import("./selftest.js");
