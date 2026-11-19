@@ -81,8 +81,10 @@ std::string ThreadsJson(const ThreadsInForce &threads) {
   return "{\"value\": " + std::to_string(threads.count) + ", \"source\": \"" + threads.source + "\"}";
 }
 
-int OptionError(const std::string &message) {
-  std::cout << "ERROR: " << message << std::endl
+int OptionError(const std::string &message) { return OptionError(std::cout, message); }
+
+int OptionError(std::ostream &out, const std::string &message) {
+  out << "ERROR: " << message << std::endl
             << "\tSyntax: AZURE2 <command> [options] FILE  (AZURE2 --help lists the commands and options)" << std::endl;
   return 2;
 }

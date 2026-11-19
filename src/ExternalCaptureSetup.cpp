@@ -506,7 +506,7 @@ int WorkingCopy::CalculateECAmplitudes(const CompoundSystem *compound, const Con
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
                   const azure2::support::ExtendedPrecisionScope fpPrecision;
-                  if (configure.stopFlag || localStop) continue;
+                  if (configure.StopRequested() || localStop) continue;
                   Unit *point = segment->GetPoint(*this, i);
                   // Mapped points compute their own amplitudes too: the
                   // amplitudes are a one-off setup cost, and the intEC file
@@ -525,7 +525,7 @@ int WorkingCopy::CalculateECAmplitudes(const CompoundSystem *compound, const Con
                   ++pointIndex;
                   ECProgressRedraw(configure, segmentKeyOut, pointIndex, numPoints, startTime);
                 }
-                if (configure.stopFlag || localStop) {
+                if (configure.StopRequested() || localStop) {
                   if (out.is_open()) out.close();
                   if (in.is_open()) in.close();
                   return -1;
@@ -613,7 +613,7 @@ int WorkingCopy::LeafECAmplitudes(const CompoundSystem *compound, const Config &
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
                   const azure2::support::ExtendedPrecisionScope fpPrecision;
-                  if (configure.stopFlag || localStop) continue;
+                  if (configure.StopRequested() || localStop) continue;
                   Unit *point = Draft().segments_[leaf.first].GetTermPoint(*this, leaf.second, i);
                   try {
                     point->CalculateECAmplitudes(this, compound, configure, channelTable_.get());
@@ -632,7 +632,7 @@ int WorkingCopy::LeafECAmplitudes(const CompoundSystem *compound, const Config &
                   ++pointIndex;
                   ECProgressRedraw(configure, segmentKeyOut, pointIndex, numPoints, startTime);
                 }
-                if (configure.stopFlag || localStop) {
+                if (configure.StopRequested() || localStop) {
                   if (out.is_open()) out.close();
                   if (in.is_open()) in.close();
                   return -1;

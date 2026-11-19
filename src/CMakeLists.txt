@@ -67,7 +67,14 @@ endif()
 # two use convert/, linked below); RunPreparation.cpp: a run request into the Config.  RunRequest.cpp (the commands
 # and the options of a run, the command line's reader) is the engine library's: a session reads the answers of its
 # sampler run through it (api/src/AZUREAPISampler.cpp), so that no range of an option is typed twice.
-set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp RunPreparation.cpp)
+# ProgramMain.cpp: the run of one command (RunProgram), main's after the process's start-up.  The three files are the
+# library AZURE2Program, which the program and the front ends' facade (api/front/, azure2::front::Run) both link, so
+# that a run from a front end is the program's run (docs/upgrade/qt_gui.md).
+set(AZURE2_PROGRAM_SOURCES ProjectCommands.cpp RunPreparation.cpp ProgramMain.cpp)
+add_library(AZURE2Program STATIC ${AZURE2_PROGRAM_SOURCES})
+target_link_libraries(AZURE2Program PUBLIC AZURE2Core azure2_convert)
+set_target_properties(AZURE2Program PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set(AZURE2_EXEC_SOURCES AZURE2.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)
@@ -122,7 +129,7 @@ endif()
 
 # AZUREAPI pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything
 # else follows from the graph above.
-target_link_libraries(AZURE2 ${AZUREAPI_LIBRARIES} AZURE2Core)
+target_link_libraries(AZURE2 AZURE2Program ${AZUREAPI_LIBRARIES} AZURE2Core)
 # convert/: the converter of old projects, AZURE2 --convert and --convert-params (src/ProjectCommands.cpp); the engine
 # library (AZURE2Core) reads format 3 only and links none of convert/
 target_link_libraries(AZURE2 azure2_convert)

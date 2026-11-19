@@ -18,6 +18,7 @@
 
 class CompoundSystem;
 class Config;
+struct ProgramObserver;
 #include "InferenceTypes.h"
 class WorkingCopy;
 
@@ -26,7 +27,9 @@ class WorkingCopy;
 /// evaluations outside the fit (HESSE, the final evaluation, the band) print as the fit's do.
 class ProgramProgress {
  public:
-  ProgramProgress(AZURECalc &objective, std::ostream &out);
+  /// `observer` (Config::observer, may be null): its stop request is the fit's and the objective's, its progress sink
+  /// gets every record after the line is printed.
+  ProgramProgress(AZURECalc &objective, std::ostream &out, const ProgramObserver *observer = nullptr);
   ~ProgramProgress();
   ProgramProgress(const ProgramProgress &) = delete;
   ProgramProgress &operator=(const ProgramProgress &) = delete;
@@ -37,9 +40,10 @@ class ProgramProgress {
   void Print(const FitProgress &record);
   AZURECalc &objective_;
   std::ostream &out_;
+  const ProgramObserver *observer_ = nullptr;
   std::mutex mutex_;  ///< the stream (its width state and buffer) is shared by every evaluating thread
   FitControl runControl_;
-  EvaluationObserver observer_;
+  EvaluationObserver evaluationObserver_;
 };
 
 struct ProgramRun {

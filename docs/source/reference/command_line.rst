@@ -2,8 +2,8 @@ Command-Line Usage
 ==================
 
 AZURE2 runs a project from the command line, or from Python through ``pyazr``
-(:doc:`../user_guide/pyazr`). This version has no graphical setup utility
-(:doc:`../user_guide/graphical_interface`).
+(:doc:`../user_guide/pyazr`). The Qt setup program ``AZURESetup`` and the browser page
+edit and run the same files (:doc:`../user_guide/graphical_interface`).
 
 Command-Line Mode
 -----------------
@@ -299,8 +299,9 @@ Available Options
      - List all available command-line options. This is the only flag that
        can be used without specifying an Input file.
    * - ``--no-gui``
-     - Accepted and ignored: this build has no graphical setup utility. Builds
-       with the Qt setup utility need it to run in text mode.
+     - Accepted and ignored: the program never starts a graphical interface; the
+       Qt setup program is ``AZURESetup``, a program of its own
+       (:doc:`../user_guide/graphical_interface`).
    * - ``--use-brune``
      - Use the Brune parameterization (equivalent to the GUI's
        "Use Brune formalism" option).  This is the default.

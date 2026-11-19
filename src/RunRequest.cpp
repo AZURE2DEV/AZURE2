@@ -429,8 +429,10 @@ std::string CommandOptionWithoutCommand(const RunQuestion &question) {
          Written(question) + " FILE (AZURE2 --help lists the commands).";
 }
 
-int CommandError(const std::string &message) {
-  std::cout << "ERROR: " << message << std::endl
+int CommandError(const std::string &message) { return CommandError(std::cout, message); }
+
+int CommandError(std::ostream &out, const std::string &message) {
+  out << "ERROR: " << message << std::endl
             << "\tSyntax: AZURE2 <command> [options] FILE  (AZURE2 --help lists the commands and their options)"
             << std::endl;
   return 2;

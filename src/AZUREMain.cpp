@@ -40,7 +40,7 @@ int AZUREMain::operator()() {
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     if (SetUpObjective(run) != 0) return -1;
     {
-      const ProgramProgress progress(*run.objective, configure().outStream);
+      const ProgramProgress progress(*run.objective, configure().outStream, configure().observer);
       RunFitStage(run, progress);
       FinalEvaluation(run);
       WriteRunOutputs(run);

@@ -4,8 +4,8 @@ AZURE2 Documentation
 **AZURE2** is an R-matrix code for nuclear astrophysics, used to calculate differential
 and angle-integrated cross sections for resonant nuclear reactions. A project is an
 ``.azr`` file; AZURE2 runs it from the command line or from Python through ``pyazr``,
-to calculate, fit experimental data and extrapolate. This version has no graphical
-setup utility (:doc:`user_guide/graphical_interface`).
+to calculate, fit experimental data and extrapolate. Its Qt setup program, ``AZURESetup``, and a browser page
+edit and run projects too (:doc:`user_guide/graphical_interface`).
 
 The R-matrix portions of the code are based on the formulation of
 A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).

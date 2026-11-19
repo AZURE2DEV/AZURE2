@@ -1,0 +1,592 @@
+#include "PairsModel.h"
+#include "ElementMap.h"
+#include "MassTable.h"
+#include <math.h>
+#include <cmath>
+#include <QBrush>
+#include <QColor>
+#include <QRegularExpression>
+
+PairsModel::PairsModel(QObject *parent) :
+  QAbstractTableModel(parent) {
+}
+
+int PairsModel::rowCount(const QModelIndex &parent) const {
+  Q_UNUSED(parent);
+  return pairsList.size();
+}
+
+int PairsModel::columnCount(const QModelIndex &parent) const {
+  Q_UNUSED(parent);
+  return PairsData::SIZE + 1;   // the PairsData columns and the derived compound-nucleus column
+}
+
+Nucleus PairsModel::nucleusOf(const PairsData &pair) {
+  Nucleus nucleus;
+  if (pair.pairType == 20) {
+    nucleus.Z = pair.heavyZ - pair.lightZ;
+    nucleus.A = (int)floor(pair.heavyM + 0.5);
+  } else if (pair.pairType == 10) {
+    nucleus.Z = pair.heavyZ;
+    nucleus.A = (int)floor(pair.heavyM + 0.5);
+  } else {
+    nucleus.Z = pair.lightZ + pair.heavyZ;
+    nucleus.A = (int)floor(pair.lightM + pair.heavyM + 0.5);
+  }
+  return nucleus;
+}
+
+QList<Nucleus> PairsModel::nuclei() const {
+  QList<Nucleus> out;
+  for (int i = 0; i < pairsList.size(); i++) {
+    Nucleus nucleus = nucleusOf(pairsList.at(i));
+    if (!out.contains(nucleus)) out.append(nucleus);
+  }
+  return out;
+}
+
+int PairsModel::nucleusIndex(const Nucleus &nucleus) const {
+  return nuclei().indexOf(nucleus);
+}
+
+QString PairsModel::nucleusLabel(const Nucleus &nucleus, bool html) {
+  QString symbol = (nucleus.Z >= 0 && nucleus.Z < (int)(sizeof(elements) / sizeof(elements[0])))
+                       ? elements[nucleus.Z].second : QString("Z%1").arg(nucleus.Z);
+  QString label = QString("<sup>%1</sup>%2").arg(nucleus.A).arg(symbol);
+  return html ? label : plainText(label);
+}
+
+QString PairsModel::nucleusLongLabel(const Nucleus &nucleus) const {
+  for (int i = 0; i < pairsList.size(); i++) {
+    const PairsData &pair = pairsList.at(i);
+    if (pair.pairType != 0 || nucleusOf(pair) != nucleus) continue;
+    QString pairLabel = getPairLabel(pair);
+    int bracket = pairLabel.indexOf(" [");
+    if (bracket > 0) pairLabel = pairLabel.left(bracket);
+    return QString("%1 (%2)").arg(nucleusLabel(nucleus, false)).arg(pairLabel);
+  }
+  return nucleusLabel(nucleus, false);
+}
+
+QString PairsModel::lightExcitationMark(const PairsData &pair) {
+  if (pair.lightExcitation == 0.) return QString();
+  return QString("*(%1)").arg(pair.lightExcitation, 0, 'f', 3);
+}
+
+bool PairsModel::isIdentical(const PairsData &p) {
+  return p.pairType == 0 && p.lightZ == p.heavyZ && std::fabs(p.lightM - p.heavyM) < 1.0e-6 &&
+         std::fabs(p.lightJ - p.heavyJ) < 1.0e-6 && p.lightPi == p.heavyPi && std::fabs(p.lightG - p.heavyG) < 1.0e-9 &&
+         std::fabs(p.lightExcitation - p.excitationEnergy) < 1.0e-9;
+}
+
+QVariant PairsModel::data(const QModelIndex &index, int role) const {
+  if (!index.isValid()) return QVariant();
+
+  if (index.row() >= pairsList.size() || index.row() < 0) return QVariant();
+
+  if (role == Qt::DisplayRole) {
+    PairsData pair = pairsList.at(index.row());
+    if (index.column() == 2)
+      return getSpinLabel(pair, 0);
+    else if (index.column() == 3)
+      return pair.lightPi;
+    else if (index.column() == 0)
+      return getParticleLabel(pair, 0);
+    else if (index.column() == 1)
+      return pair.lightM;
+    else if (index.column() == 4)
+      return pair.lightG;
+    else if (index.column() == 7)
+      return getSpinLabel(pair, 1);
+    else if (index.column() == 8)
+      return pair.heavyPi;
+    else if (index.column() == 5)
+      return getParticleLabel(pair, 1);
+    else if (index.column() == 6)
+      return pair.heavyM;
+    else if (index.column() == 9)
+      return pair.heavyG;
+    else if (index.column() == 10)
+      return pair.excitationEnergy;
+    else if (index.column() == 11)
+      return pair.seperationEnergy;
+    else if (index.column() == 12)
+      return pair.channelRadius;
+    else if (index.column() == 13) {
+      if (pair.pairType == 10)
+        return "Particle, Gamma";
+      else if (pair.pairType == 20)
+        return "Beta Decay";
+      else
+        return "Particle, Particle";
+    } else if (index.column() == 14)
+      return pair.ecMultMask;
+    else if (index.column() == LightExcitationColumn)
+      return pair.lightExcitation;
+    else if (index.column() == NucleusColumn)
+      return nucleusLabel(nucleusOf(pair));
+  } else if (role == Qt::EditRole) {
+    PairsData pair = pairsList.at(index.row());
+    if (index.column() == 0)
+      return pair.lightJ;
+    else if (index.column() == 1)
+      return pair.lightPi;
+    else if (index.column() == 2)
+      return pair.lightZ;
+    else if (index.column() == 3)
+      return pair.lightM;
+    else if (index.column() == 4)
+      return pair.lightG;
+    else if (index.column() == 5)
+      return pair.heavyJ;
+    else if (index.column() == 6)
+      return pair.heavyPi;
+    else if (index.column() == 7)
+      return pair.heavyZ;
+    else if (index.column() == 8)
+      return pair.heavyM;
+    else if (index.column() == 9)
+      return pair.heavyG;
+    else if (index.column() == 10)
+      return pair.excitationEnergy;
+    else if (index.column() == 11)
+      return pair.seperationEnergy;
+    else if (index.column() == 12)
+      return pair.channelRadius;
+    else if (index.column() == 13)
+      return pair.pairType;
+    else if (index.column() == 14)
+      return pair.ecMultMask;
+    else if (index.column() == LightExcitationColumn)
+      return pair.lightExcitation;
+  } else if (role == Qt::TextAlignmentRole)
+    return Qt::AlignCenter;
+  else if ((role == Qt::ToolTipRole || role == Qt::ForegroundRole) && index.column() == 11) {
+    // the separation energy against the mass table: a tooltip always, a warning colour beyond the engine's 1 keV
+    const PairMassCheck c = MassTable::instance().check(pairsList.at(index.row()));
+    if (!c.hasS) return QVariant();
+    const bool off = fabs(c.dSkeV) > MassTable::kToleranceKeV;
+    if (role == Qt::ForegroundRole) return off ? QVariant(QBrush(QColor(214, 80, 0))) : QVariant();
+    if (off)
+      return tr("%1 gives S = %2 MeV for %3 + %4: this pair's S differs by %5 keV.  \"Masses from %1...\" below the "
+                "table fills masses and separation energies from it.")
+          .arg(MassTable::version()).arg(c.sTable, 0, 'f', 6).arg(c.light->label()).arg(c.heavy->label())
+          .arg(c.dSkeV, 0, 'f', 2);
+    return tr("Consistent with %1 (S = %2 MeV, %3 keV).").arg(MassTable::version()).arg(c.sTable, 0, 'f', 6).arg(c.dSkeV, 0, 'f', 2);
+  }
+
+  return QVariant();
+}
+
+QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int role) const {
+  if (role != Qt::DisplayRole) return QVariant();
+  if (orientation == Qt::Horizontal) {
+    switch (section) {
+      case 2:
+        return tr("Light\nSpin");
+      case 3:
+        return tr("Light\nParity");
+      case 0:
+        return tr("Light\n Particle");
+      case 1:
+        return tr("Light\nM");
+      case 4:
+        return tr("Light\ng-Factor");
+      case 7:
+        return tr("Heavy\nSpin");
+      case 8:
+        return tr("Heavy\nParity");
+      case 5:
+        return tr("Heavy\nParticle");
+      case 6:
+        return tr("Heavy\nM");
+      case 9:
+        return tr("Heavy\ng-Factor");
+      case 10:
+        return tr("Heavy\nExcitation");
+      case 11:
+        return tr("Separation\nEnergy");
+      case 12:
+        return tr("Channel\nRadius");
+      case 13:
+        return tr("Pair\nType");
+      case 14:
+        return tr("EC\nMultipolarities");
+      case LightExcitationColumn:
+        return tr("Light\nExcitation");
+      case NucleusColumn:
+        return tr("Compound\nNucleus");
+      default:
+        return QVariant();
+    }
+  } else if (orientation == Qt::Vertical) {
+    return section + 1;
+  }
+  return QVariant();
+}
+
+bool PairsModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+  if (index.isValid() && role == Qt::EditRole) {
+    int row = index.row();
+    PairsData tempData = pairsList.value(row);
+    if (index.column() == 0)
+      tempData.lightJ = value.toDouble();
+    else if (index.column() == 1)
+      tempData.lightPi = value.toInt();
+    else if (index.column() == 2)
+      tempData.lightZ = value.toInt();
+    else if (index.column() == 3)
+      tempData.lightM = value.toDouble();
+    else if (index.column() == 4)
+      tempData.lightG = value.toDouble();
+    else if (index.column() == 5)
+      tempData.heavyJ = value.toDouble();
+    else if (index.column() == 6)
+      tempData.heavyPi = value.toInt();
+    else if (index.column() == 7)
+      tempData.heavyZ = value.toInt();
+    else if (index.column() == 8)
+      tempData.heavyM = value.toDouble();
+    else if (index.column() == 9)
+      tempData.heavyG = value.toDouble();
+    else if (index.column() == 10)
+      tempData.excitationEnergy = value.toDouble();
+    else if (index.column() == 11)
+      tempData.seperationEnergy = value.toDouble();
+    else if (index.column() == 12)
+      tempData.channelRadius = value.toDouble();
+    else if (index.column() == 13)
+      tempData.pairType = value.toInt();
+    else if (index.column() == 14)
+      tempData.ecMultMask = value.toInt();
+    else if (index.column() == LightExcitationColumn)
+      tempData.lightExcitation = value.toDouble();
+    else
+      return false;
+
+    pairsList.replace(row, tempData);
+    emit(dataChanged(index, index));
+    return true;
+  }
+  return false;
+}
+
+bool PairsModel::insertRows(int position, int rows, const QModelIndex &index) {
+  Q_UNUSED(index);
+  if (rows > 0) {
+    beginInsertRows(QModelIndex(), position, position + rows - 1);
+    for (int row = 0; row < rows; row++) {
+      PairsData tempData;
+      pairsList.insert(position, tempData);
+    }
+    endInsertRows();
+  }
+  return true;
+}
+
+bool PairsModel::removeRows(int position, int rows, const QModelIndex &index) {
+  Q_UNUSED(index);
+  if (rows > 0) {
+    beginRemoveRows(QModelIndex(), position, position + rows - 1);
+    for (int row = 0; row < rows; ++row) {
+      pairsList.removeAt(position);
+    }
+    endRemoveRows();
+  }
+  return true;
+}
+
+int PairsModel::isPair(const PairsData &pair) const {
+  int foundPair = -1;
+  for (int i = 0; i < pairsList.size(); i++) {
+    PairsData tempPair = pairsList.value(i);
+    if (tempPair.lightJ == pair.lightJ &&
+        tempPair.lightPi == pair.lightPi &&
+        tempPair.lightZ == pair.lightZ &&
+        tempPair.lightM == pair.lightM &&
+        tempPair.lightG == pair.lightG &&
+        tempPair.heavyJ == pair.heavyJ &&
+        tempPair.heavyPi == pair.heavyPi &&
+        tempPair.heavyZ == pair.heavyZ &&
+        tempPair.heavyM == pair.heavyM &&
+        tempPair.heavyG == pair.heavyG &&
+        tempPair.seperationEnergy == pair.seperationEnergy &&
+        tempPair.excitationEnergy == pair.excitationEnergy &&
+        tempPair.channelRadius == pair.channelRadius &&
+        tempPair.pairType == pair.pairType &&
+        tempPair.ecMultMask == pair.ecMultMask &&
+        tempPair.lightExcitation == pair.lightExcitation) {
+      foundPair = i;
+      break;
+    }
+  }
+  return foundPair;
+}
+
+QString PairsModel::getParticleLabel(const PairsData &pair, int which) const {
+  if (which != -1) {
+    if (pair.pairType == 10 && which == 0)
+      return "<center>&gamma;</center>";
+    else if (pair.pairType == 20 && which == 0) {
+      if (pair.lightZ < 0)
+        return "<center>&beta;<sup>-</sup></center>";
+      else
+        return "<center>&beta;<sup>+</sup></center>";
+    } else {
+      int tempZ;
+      int tempM;
+      if (which == 0) {
+        tempZ = pair.lightZ;
+        tempM = round(pair.lightM);
+      } else {
+        tempZ = pair.heavyZ;
+        tempM = round(pair.heavyM);
+      }
+      const QString mark = which == 0 ? lightExcitationMark(pair) : QString();
+      std::map<int, QString>::const_iterator it = elementMap.find(tempZ);
+      if (it != elementMap.end()) {
+        if (tempM == 1) {
+          if (tempZ == 1)
+            return QString("<center><i>p</i>%1</center>").arg(mark);
+          else
+            return QString("<center><i>%1</i>%2</center>").arg(it->second).arg(mark);
+        } else if (tempZ == 2 && tempM == 4)
+          return QString("<center>&alpha;%1</center>").arg(mark);
+        else
+          return QString("<center><sup>%1</sup>%2%3</center>").arg(tempM).arg(it->second).arg(mark);
+      } else
+        return "?";
+    }
+  } else {
+    QString lightLabel;
+    std::map<int, QString>::const_iterator it = elementMap.find(pair.lightZ);
+    if (pair.pairType == 10)
+      lightLabel = "&gamma;";
+    else if (pair.pairType == 20) {
+      if (pair.lightZ < 0.)
+        lightLabel = "&beta;<sup>-</sup>";
+      else
+        lightLabel = "&beta;<sup>+</sup>";
+    } else if (it != elementMap.end()) {
+      if (round(pair.lightM) == 1) {
+        if (pair.lightZ == 1)
+          lightLabel = "<i>p</i>";
+        else
+          lightLabel = QString("<i>%1</i>").arg(it->second);
+      } else if (pair.lightZ == 2 && round(pair.lightM) == 4)
+        lightLabel = "&alpha;";
+      else
+        lightLabel = QString("<sup>%1</sup>%2").arg(round(pair.lightM)).arg(it->second);
+    } else
+      lightLabel = "?";
+    lightLabel += lightExcitationMark(pair);
+    QString heavyLabel;
+    it = elementMap.find(pair.heavyZ);
+    if (it != elementMap.end()) {
+      if (round(pair.heavyM) == 1) {
+        if (pair.heavyZ == 1)
+          heavyLabel = "<i>p</i>";
+        else
+          heavyLabel = QString("<i>%1</i>").arg(it->second);
+      } else if (pair.heavyZ == 2 && round(pair.heavyM) == 4)
+        heavyLabel = "&alpha;";
+      else
+        heavyLabel = QString("<sup>%1</sup>%2").arg(round(pair.heavyM)).arg(it->second);
+    } else
+      heavyLabel = "?";
+    if (pair.pairType == 20)
+      return QString("<center>%1(%2) [%3 MeV]</center>").arg(heavyLabel).arg(lightLabel).arg(pair.excitationEnergy, 0, 'f', 3);
+    else
+      return QString("<center>%1+%2 [%3 MeV]</center>").arg(heavyLabel).arg(lightLabel).arg(pair.excitationEnergy, 0, 'f', 3);
+  }
+}
+
+QString PairsModel::getReactionLabel(const PairsData &firstPair, const PairsData &secondPair) {
+  QString lightLabel[2];
+  std::map<int, QString>::const_iterator it = elementMap.find(firstPair.lightZ);
+  if (firstPair.pairType == 10)
+    lightLabel[0] = "&gamma;";
+  else if (firstPair.pairType == 20) {
+    if (firstPair.lightZ < 0)
+      lightLabel[0] = "&beta;<sup>-</sup>";
+    else
+      lightLabel[0] = "&beta;<sup>+</sup>";
+  } else if (it != elementMap.end()) {
+    if (round(firstPair.lightM) == 1) {
+      if (firstPair.lightZ == 1)
+        lightLabel[0] = "<i>p</i>";
+      else
+        lightLabel[0] = QString("<i>%1</i>").arg(it->second);
+    } else if (firstPair.lightZ == 2 && round(firstPair.lightM) == 4)
+      lightLabel[0] = "&alpha;";
+    else
+      lightLabel[0] = QString("<sup>%1</sup>%2").arg(round(firstPair.lightM)).arg(it->second);
+  } else
+    lightLabel[0] = "?";
+  it = elementMap.find(secondPair.lightZ);
+  if (secondPair.pairType == 10)
+    lightLabel[1] = "&gamma;";
+  else if (secondPair.pairType == 20) {
+    if (secondPair.lightZ < 0)
+      lightLabel[1] = "&beta;<sup>-</sup>";
+    else
+      lightLabel[1] = "&beta;<sup>+</sup>";
+  } else if (it != elementMap.end()) {
+    if (round(secondPair.lightM) == 1) {
+      if (secondPair.lightZ == 1)
+        lightLabel[1] = "<i>p</i>";
+      else
+        lightLabel[1] = QString("<i>%1</i>").arg(it->second);
+    } else if (secondPair.lightZ == 2 && round(secondPair.lightM) == 4)
+      lightLabel[1] = "&alpha;";
+    else
+      lightLabel[1] = QString("<sup>%1</sup>%2").arg(round(secondPair.lightM)).arg(it->second);
+  } else
+    lightLabel[1] = "?";
+  lightLabel[0] += lightExcitationMark(firstPair);
+  lightLabel[1] += lightExcitationMark(secondPair);
+  QString heavyLabel[2];
+  it = elementMap.find(firstPair.heavyZ);
+  if (it != elementMap.end()) {
+    if (round(firstPair.heavyM) == 1) {
+      if (firstPair.heavyZ == 1)
+        heavyLabel[0] = "<i>p</i>";
+      else
+        heavyLabel[0] = QString("<i>%1</i>").arg(it->second);
+    } else if (firstPair.heavyZ == 2 && round(firstPair.heavyM) == 4)
+      heavyLabel[0] = "&alpha;";
+    else
+      heavyLabel[0] = QString("<sup>%1</sup>%2").arg(round(firstPair.heavyM)).arg(it->second);
+  } else
+    heavyLabel[0] = "?";
+  it = elementMap.find(secondPair.heavyZ);
+  if (it != elementMap.end()) {
+    if (round(secondPair.heavyM) == 1) {
+      if (secondPair.heavyZ == 1)
+        heavyLabel[1] = "<i>p</i>";
+      else
+        heavyLabel[1] = QString("<i>%1</i>").arg(it->second);
+    } else if (secondPair.heavyZ == 2 && round(secondPair.heavyM) == 4)
+      heavyLabel[1] = "&alpha;";
+    else
+      heavyLabel[1] = QString("<sup>%1</sup>%2").arg(round(secondPair.heavyM)).arg(it->second);
+  } else
+    heavyLabel[1] = "?";
+  if (firstPair.pairType == 20)
+    return QString("%1(%2%3)%4 [%5 MeV]").arg(heavyLabel[0]).arg(lightLabel[0]).arg(lightLabel[1]).arg(heavyLabel[1]).arg(secondPair.excitationEnergy, 0, 'f', 3);
+  else
+    return QString("%1(%2,%3)%4 [%5 MeV]").arg(heavyLabel[0]).arg(lightLabel[0]).arg(lightLabel[1]).arg(heavyLabel[1]).arg(secondPair.excitationEnergy, 0, 'f', 3);
+}
+
+QString PairsModel::getReactionLabelTotalCapture(const PairsData &firstPair) {
+  QString lightLabel[2];
+  std::map<int, QString>::const_iterator it = elementMap.find(firstPair.lightZ);
+  if (firstPair.pairType == 10)
+    lightLabel[0] = "&gamma;";
+  else if (firstPair.pairType == 20) {
+    if (firstPair.lightZ < 0)
+      lightLabel[0] = "&beta;<sup>-</sup>";
+    else
+      lightLabel[0] = "&beta;<sup>+</sup>";
+  } else if (it != elementMap.end()) {
+    if (round(firstPair.lightM) == 1) {
+      if (firstPair.lightZ == 1)
+        lightLabel[0] = "<i>p</i>";
+      else
+        lightLabel[0] = QString("<i>%1</i>").arg(it->second);
+    } else if (firstPair.lightZ == 2 && round(firstPair.lightM) == 4)
+      lightLabel[0] = "&alpha;";
+    else
+      lightLabel[0] = QString("<sup>%1</sup>%2").arg(round(firstPair.lightM)).arg(it->second);
+  } else
+    lightLabel[0] = "?";
+  lightLabel[0] += lightExcitationMark(firstPair);
+  lightLabel[1] = "&gamma;";
+  QString heavyLabel[2];
+  it = elementMap.find(firstPair.heavyZ);
+  if (it != elementMap.end()) {
+    if (round(firstPair.heavyM) == 1) {
+      if (firstPair.heavyZ == 1)
+        heavyLabel[0] = "<i>p</i>";
+      else
+        heavyLabel[0] = QString("<i>%1</i>").arg(it->second);
+    } else if (firstPair.heavyZ == 2 && round(firstPair.heavyM) == 4)
+      heavyLabel[0] = "&alpha;";
+    else
+      heavyLabel[0] = QString("<sup>%1</sup>%2").arg(round(firstPair.heavyM)).arg(it->second);
+  } else
+    heavyLabel[0] = "?";
+  int i;
+  for (i = 0; i < pairsList.size(); i++)
+    if (pairsList[i].pairType == 10) break;
+  if (i == pairsList.size())
+    heavyLabel[1] = "?";
+  else {
+    PairsData secondPair = pairsList[i];
+    it = elementMap.find(secondPair.heavyZ);
+    if (it != elementMap.end()) {
+      if (round(secondPair.heavyM) == 1) {
+        if (secondPair.heavyZ == 1)
+          heavyLabel[1] = "<i>p</i>";
+        else
+          heavyLabel[1] = QString("<i>%1</i>").arg(it->second);
+      } else if (secondPair.heavyZ == 2 && round(secondPair.heavyM) == 4)
+        heavyLabel[1] = "&alpha;";
+      else
+        heavyLabel[1] = QString("<sup>%1</sup>%2").arg(round(secondPair.heavyM)).arg(it->second);
+    } else
+      heavyLabel[1] = "?";
+  }
+  if (firstPair.pairType == 20)
+    return QString("%1(%2%3)%4 [TOTAL]").arg(heavyLabel[0]).arg(lightLabel[0]).arg(lightLabel[1]).arg(heavyLabel[1]);
+  else
+    return QString("%1(%2,%3)%4 [TOTAL]").arg(heavyLabel[0]).arg(lightLabel[0]).arg(lightLabel[1]).arg(heavyLabel[1]);
+}
+
+QString PairsModel::getSpinLabel(const PairsData &pair, int which) const {
+  double tempJ;
+  int tempPi;
+  if (which == 0) {
+    tempJ = pair.lightJ;
+    tempPi = pair.lightPi;
+  } else {
+    tempJ = pair.heavyJ;
+    tempPi = pair.heavyPi;
+  }
+  QString tempSpin;
+  if (((int)(tempJ * 2)) % 2 != 0 && tempJ != 0.)
+    tempSpin = QString("%1/2").arg((int)(tempJ * 2));
+  else
+    tempSpin = QString("%1").arg(tempJ);
+  // Superscript plus/minus (U+207A/B), as in the Levels table and the Add/Edit Level dialog.
+  return tempSpin + (tempPi == -1 ? QString(QChar(0x207B)) : QString(QChar(0x207A)));
+}
+
+QString PairsModel::getPairLabel(const PairsData &pair) const { return plainText(getParticleLabel(pair, -1)); }
+
+QString PairsModel::plainText(const QString &html) {
+  static const QString superscripts = QString::fromUtf8("\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079");
+  QString out = html;
+  QRegularExpression sup("<sup>([^<]*)</sup>");
+  QRegularExpressionMatch m;
+  int from = 0;
+  while ((m = sup.match(out, from)).hasMatch()) {
+    QString inner = m.captured(1), repl;
+    for (QChar c : inner) {
+      if (c.isDigit())
+        repl += superscripts.at(c.digitValue());
+      else if (c == '+')
+        repl += QChar(0x207A);
+      else if (c == '-')
+        repl += QChar(0x207B);
+      else
+        repl += c;
+    }
+    out.replace(m.capturedStart(0), m.capturedLength(0), repl);
+    from = m.capturedStart(0) + repl.length();
+  }
+  out.remove(QRegularExpression("<[^>]*>"));
+  out.replace("&alpha;", QString(QChar(0x03B1))).replace("&beta;", QString(QChar(0x03B2))).replace("&gamma;", QString(QChar(0x03B3)));
+  out.replace("&nbsp;", " ").replace("&amp;", "&");
+  return out.simplified();
+}

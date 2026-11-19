@@ -12,6 +12,7 @@
 #include "ThmOptions.h"
 #include "ProjectOptions.h"
 
+struct ProgramObserver;
 namespace AZUREProfile {
 class Account;
 }
@@ -121,6 +122,11 @@ class Config {
   std::string OpenPath(const std::string &path) const;
   /// A control variable to stop AZURE calculation
   bool stopFlag;
+  /// The front end that runs the program in its own process (include/ProgramObserver.h): its stop request and its
+  /// sinks of progress and chi^2.  Null for the command line.  Owned by the caller; not reset by Reset.
+  const ProgramObserver *observer = nullptr;
+  /// stopFlag, or the observer's stop request.
+  bool StopRequested() const;
   /// A bitmask for the encoding of configuration flags
   unsigned int paramMask;
   /// The fitter the program's switches chose: the name of a row of Fitters() (include/Fitters.h), empty for none (the

@@ -4,9 +4,9 @@ Experimental Effects Tab
 .. note::
 
    This page describes the ``.azr`` content through the fields of the Qt setup
-   utility of the released versions. This version has no setup utility;
-   :doc:`graphical_interface` says how to do the same from the command line and
-   with ``pyazr``.
+   program; where a tab of this version differs (records of project format 3),
+   :doc:`graphical_interface` says how, and how to do the same from the command
+   line and with ``pyazr``.
 
 The **Experimental Effects** tab is used to apply corrections for experimental
 effects such as beam energy loss in targets, beam energy resolution, detector

@@ -10,6 +10,7 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "ModelData.h"
+#include "ProgramObserver.h"
 #include "InferenceTypes.h"
 #include "LineWindow.h"
 #include "Profile.h"
@@ -47,12 +48,19 @@ void FinalEvaluation(ProgramRun &run) {
                             << " Chi-Squared/N: "
                             << run.results.objective.segmentChi2[segment - run.data->Data().GetSegments().begin() + 1] / segment->NumPoints()
                             << std::endl;
+      if (run.configure.observer && run.configure.observer->dataSetChiSquared)
+        run.configure.observer->dataSetChiSquared(
+            segment->GetSegmentKey(),
+            run.results.objective.segmentChi2[segment - run.data->Data().GetSegments().begin() + 1],
+            (int)segment->NumPoints());
       // With component segments, no need to skip - total capture is handled within the segment
     }
     // Twelve significant digits: a unit change of a prior must be readable
     // from this line against a data chi-squared of thousands.
     std::ostringstream total;
     total << std::setprecision(12) << chiSquared;
+    if (run.configure.observer && run.configure.observer->totalChiSquared)
+      run.configure.observer->totalChiSquared(chiSquared);
     run.configure.outStream << "Total Chi-Squared: "
                           << total.str() << std::endl
                           << std::endl;

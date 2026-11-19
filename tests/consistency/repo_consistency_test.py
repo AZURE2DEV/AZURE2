@@ -149,7 +149,8 @@ check_sizes()
 #    command-line reference.  A flag that is only in the source is a flag only
 #    the person who wrote it knows about.
 main_cpp = read("src/AZURE2.cpp")
-parser = function_body(main_cpp, "void parseOptions(")
+# parseOptions is the program's run's (src/ProgramMain.cpp, shared with the front ends' facade); printHelp is main's
+parser = function_body(read("src/ProgramMain.cpp"), "static void parseOptions(")
 help_text = function_body(main_cpp, "void printHelp(")
 cli_doc = read("docs/source/reference/command_line.rst")
 
@@ -1291,7 +1292,7 @@ try:
     _fitters_src = read("src/Fitters.cpp")
     _fitter_rows += [(_n, _o, "absent") for _n, _o in
                      re.findall(r'\{"([\w-]+)", "(--[\w-]+)", "[^"]*"\}', _fitters_src)]
-    _parser = read("src/AZURE2.cpp")
+    _parser = read("src/AZURE2.cpp") + read("src/ProgramMain.cpp")
     for _call in ("ApplyFitterSwitch(configure, *it)", "FitterSwitchesHelp()"):
         if _call not in _parser:
             problems.append(f"src/AZURE2.cpp: {_call} is not called: the fitters' switches and their usage lines come "
