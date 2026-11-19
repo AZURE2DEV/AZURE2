@@ -221,7 +221,7 @@ from the facade's rows (a value set in an editor reaches the command line); the 
 export (rows = points of the files).
 
 
-## 14. Forms of values: what is chosen is chosen, not typed (upgrade 7, 2026-11-19)
+## 12. Forms of values: what is chosen is chosen, not typed (upgrade 7, 2026-11-19)
 
 The record tabs of stage 2 showed a record as one line of text and its fields as text lines in which the grammar was
 typed by hand (`2e+17 atoms/cm2 fit prior 2e+17 10% grid_max 3e+17`).  The PI's measure is dev's Segments tab:
@@ -309,7 +309,7 @@ data sets".
 
 Code: `api/front/` (facade and test), `src/ProgramMain.cpp`, `include/ProgramObserver.h`, `gui/`.
 
-## 12. The Levels and Channels tab and the Particle Pairs tab as easy as dev's, and quicker (U7, agent levels)
+## 13. The Levels and Channels tab and the Particle Pairs tab as easy as dev's, and quicker (U7, agent levels)
 
 The PI (2026-11-19): "the level and channels tab should be easy as in the old version, with some QoL improvements
 for easier navigations, removal, or addition on the go", and "too many things must be inserted by hand and are not
@@ -461,7 +461,7 @@ are marked **open**.
 | Undo | none | Ctrl+Z / Ctrl+Shift+Z over both tabs |
 | Pairs: the pair type as a column | hidden | shown in words |
 | Levels: the Insert/Del/Ctrl+D keys, the context menus | none | as 11.2, 11.3 |
-## 13. The Physics tab's facade (2026-11-19)
+## 14. The Physics tab's facade (2026-11-19)
 
 The calls a Physics tab needs are in `Engine.h`, section "Physics": the rows of the physics table and one evaluated
 (`PhysicsFunctions`, `EvaluatePhysics`: the rows `pyazr.physics` reads, now plain C++ in `api/physics_table/`), and a
