@@ -105,8 +105,14 @@ def main(repo, scratch):
         for sub in ("output", "checks"):
             shutil.rmtree(os.path.join(folder, sub), ignore_errors=True)
             os.makedirs(os.path.join(folder, sub))
+        # The package's file run directly loads its DLLs (a Windows wheel: pyazr.libs) from the PATH, which the
+        # console script (pyazr.program.main) sets the same way.
+        environment = dict(os.environ)
+        libs = packaged._libs_directory()
+        if os.name == "nt" and libs:
+            environment["PATH"] = libs + os.pathsep + environment.get("PATH", "")
         p = subprocess.run([program, "calculate", "--no-gui", "--no-coulomb-table", "T1.azr"], stdin=subprocess.DEVNULL,
-                           capture_output=True, text=True, cwd=folder, timeout=600)
+                           capture_output=True, text=True, cwd=folder, timeout=600, env=environment)
         total = None
         try:
             with open(os.path.join(folder, "output", "chiSquared.out")) as f:
@@ -117,7 +123,8 @@ def main(repo, scratch):
             pass
         check(f"AZURE2 on T1: exit 0, Total-Chi-Squared {total} is the stored {PROGRAM_T1_TOTAL}",
               p.returncode == 0 and total is not None and PROGRAM_T1_TOTAL is not None
-              and math.isclose(total, PROGRAM_T1_TOTAL, rel_tol=1e-5), p.stdout[-400:] + p.stderr[-400:])
+              and math.isclose(total, PROGRAM_T1_TOTAL, rel_tol=1e-5),
+              f"exit {p.returncode} of {program}; " + p.stdout[-400:] + p.stderr[-400:])
 
 
 if __name__ == "__main__":
