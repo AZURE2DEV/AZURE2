@@ -36,3 +36,10 @@ add_executable(gui_forms_test gui_forms_test.cpp)
 target_link_libraries(gui_forms_test PRIVATE AZURESetupLib)
 add_test(NAME gui_forms COMMAND gui_forms_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/forms)
 set_tests_properties(gui_forms PROPERTIES LABELS gui TIMEOUT 600 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+
+# The Overview page (docs/upgrade/qt_gui.md section 15): its cards against the facade, a calculation through the
+# window, the stale mark, the row that opens the plot; screenshots in AZURE2_QT_SHOTS/u8-overview.
+add_executable(gui_overview_test gui_overview_test.cpp)
+target_link_libraries(gui_overview_test PRIVATE AZURESetupLib)
+add_test(NAME gui_overview COMMAND gui_overview_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:AZURE2> ${AZURE2_QT_SHOTS}/u8-overview)
+set_tests_properties(gui_overview PROPERTIES LABELS gui TIMEOUT 1200 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")

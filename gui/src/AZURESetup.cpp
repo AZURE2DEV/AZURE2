@@ -4,6 +4,11 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QComboBox>
+#include <QDialog>
+#include <QFontDatabase>
+#include <QPlainTextEdit>
+#include <QVBoxLayout>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QDir>
@@ -41,6 +46,9 @@
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
 #include "MCMCTab.h"
+#include "OverviewPage.h"
+#include "PlotWidget.h"
+#include "ProjectWatcher.h"
 #include "PlotTab.h"
 #include "PythonTools.h"
 #include "RunTab.h"
@@ -219,6 +227,165 @@ AZURESetup::AZURESetup() {
   createMenus();
   createStatusBar();
   connect(runTab, &RunTab::plotRequested, this, [this]() { tabWidget->setCurrentWidget(plotTab); });
+  // The Overview page (docs/upgrade/qt_gui.md section 15): the first tab, selected when a project opens; it reads the
+  // project and the output directory again after a run, a save, an edit, a validation, and when it is shown.
+  {
+    OverviewPage *overview = new OverviewPage(holder_);
+    tabWidget->insertTab(0, overview, tr("O&verview"));
+    connect(holder_, &ProjectHolder::opened, overview, [this, overview]() {
+      overview->clearProgress();
+      overview->refresh();
+      tabWidget->setCurrentWidget(overview);
+    });
+    connect(holder_, &ProjectHolder::sectionEdited, overview, &OverviewPage::refreshLater);
+    connect(diagnostics, &DiagnosticsPanel::validated, overview, &OverviewPage::setValidity);
+    connect(this, &AZURESetup::startWorker, overview, [overview]() { overview->setRunning(true); });
+    connect(this, &AZURESetup::runFinished, overview, [overview]() { overview->setRunning(false); });
+    connect(worker_, &RunWorker::progress, overview,
+            [overview](const QString &stage, qlonglong evaluation, qlonglong, double, double best) {
+              overview->addProgress(stage, evaluation, best);
+            });
+    for (const char *name : {"save", "saveAs"}) connect(actions_[name], &QAction::triggered, overview, &OverviewPage::refresh);
+    connect(tabWidget, &QTabWidget::currentChanged, overview, [this, overview]() {
+      if (tabWidget->currentWidget() != overview || !hasProject_ || running_) return;
+      QString why;
+      commitTabs(why);  // an edit of the Levels tab counted
+      overview->refresh();
+    });
+    connect(overview, &OverviewPage::commandRequested, this, [this](const QString &command) {
+      QString why;
+      if (!runCommand(command, why)) QMessageBox::warning(this, tr("Not run"), why);
+    });
+    connect(overview, &OverviewPage::validateRequested, this, &AZURESetup::validate);
+    connect(overview, &OverviewPage::diagnosticsRequested, this, [this]() {
+      diagnosticsDock->show();
+      diagnosticsDock->raise();
+    });
+    connect(overview, &OverviewPage::plotRequested, this, [this](const QString &record) {
+      if (!record.isEmpty() && plotTab->availableRecords().contains(record)) plotTab->selectRecords({record});
+      tabWidget->setCurrentWidget(plotTab);
+    });
+    connect(overview, &OverviewPage::recordRequested, this, &AZURESetup::showRecord);
+    connect(overview, &OverviewPage::tabRequested, this, [this](const QString &name) {
+      tabWidget->setCurrentWidget(name == "fitting" ? static_cast<QWidget *>(fittingTab) : static_cast<QWidget *>(runTab));
+    });
+    if (QComboBox *fitter = fittingTab->findChild<QComboBox *>("fitterCombo")) {
+      connect(fitter, &QComboBox::currentTextChanged, overview, &OverviewPage::setFitterChoice);
+      overview->setFitterChoice(fitter->currentText());
+    }
+
+    // Changes on disk (docs/upgrade/qt_gui.md section 16; ProjectWatcher.h): the project file changed outside is
+    // re-read when the window holds no unsaved edit, else a bar asks; outputs of an outside run and changed data
+    // files refresh the Overview and the Plot tab (its zoom kept).  View > Follow changes on disk.
+    ProjectWatcher *watcher = new ProjectWatcher(holder_, this);
+    watcher->setObjectName("projectWatcher");
+    QToolBar *bar = new QToolBar(tr("Changed on disk"), this);
+    bar->setObjectName("diskChangeBar");
+    bar->setMovable(false);
+    QLabel *barText = new QLabel;
+    barText->setObjectName("diskChangeText");
+    barText->setContentsMargins(8, 0, 12, 0);
+    barText->setStyleSheet("font-weight: bold;");
+    bar->addWidget(barText);
+    QAction *reload = bar->addAction(tr("Reload (discard mine)"));
+    reload->setObjectName("diskReload");
+    QAction *keep = bar->addAction(tr("Keep mine"));
+    keep->setObjectName("diskKeep");
+    QAction *differences = bar->addAction(tr("Show differences"));
+    differences->setObjectName("diskDifferences");
+    addToolBarBreak();
+    addToolBar(bar);
+    bar->hide();
+    auto reloadProject = [this, bar]() {
+      const int tab = tabWidget->currentIndex();
+      QMap<RecordsPanel *, QString> shown;
+      for (RecordsPanel *p : findChildren<RecordsPanel *>()) shown[p] = p->shownName();
+      QString why;
+      if (!readProjectFile(holder_->path(), why)) {
+        statusBar()->showMessage(tr("The project changed on disk and could not be read: %1").arg(why), 30000);
+        return;
+      }
+      tabWidget->setCurrentIndex(tab);
+      for (auto it = shown.begin(); it != shown.end(); ++it)
+        if (!it.value().isEmpty()) it.key()->selectRecord(it.value());
+      bar->hide();
+      statusBar()->showMessage(tr("Project reloaded: changed on disk."), 15000);
+    };
+    connect(watcher, &ProjectWatcher::projectChanged, this, [this, bar, barText, reloadProject]() {
+      if (!holder_->project().Modified() && !levelsDirty_) {
+        reloadProject();
+        return;
+      }
+      barText->setText(tr("The project changed on disk, and this window has unsaved changes."));
+      bar->show();
+    });
+    connect(reload, &QAction::triggered, this, reloadProject);
+    connect(keep, &QAction::triggered, this, [watcher, bar]() {
+      watcher->acceptDisk();
+      bar->hide();
+    });
+    connect(differences, &QAction::triggered, this, [this, watcher]() {
+      QString why;
+      commitTabs(why);
+      QDialog *d = new QDialog(this);
+      d->setObjectName("diskDifferencesDialog");
+      d->setAttribute(Qt::WA_DeleteOnClose);
+      d->setWindowTitle(tr("The project on disk and in this window"));
+      QPlainTextEdit *text = new QPlainTextEdit(ProjectWatcher::lineDiff(
+          QString::fromUtf8(watcher->diskText()), QString::fromStdString(holder_->project().Text()), tr("on disk"),
+          tr("in this window")));
+      text->setReadOnly(true);
+      text->setLineWrapMode(QPlainTextEdit::NoWrap);
+      text->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+      (new QVBoxLayout(d))->addWidget(text);
+      d->resize(900, 600);
+      d->show();
+    });
+    auto refreshFromDisk = [this, overview]() {
+      if (running_) return;
+      // the plot keeps a zoom the user made (a view other than the whole range)
+      PlotWidget *plot = plotTab->plot();
+      const QRectF before = plot->view();
+      plot->resetZoom();
+      const bool zoomed = before != plot->view();
+      plotTab->refresh();
+      if (zoomed) plot->zoomTo(before);
+      runTab->setDataSetNames(plotTab->dataRecords());
+      overview->refresh();
+    };
+    connect(watcher, &ProjectWatcher::outputsChanged, this, [this, refreshFromDisk]() {
+      refreshFromDisk();
+      statusBar()->showMessage(tr("The outputs changed on disk: the Overview and the plot read again."), 15000);
+    });
+    connect(watcher, &ProjectWatcher::inputsChanged, this, [this, refreshFromDisk](const QStringList &files) {
+      refreshFromDisk();
+      statusBar()->showMessage(tr("Data changed on disk: %1").arg(files.join(", ")), 15000);
+    });
+    connect(watcher, &ProjectWatcher::parameterFileChanged, overview, &OverviewPage::refresh);
+    connect(holder_, &ProjectHolder::opened, watcher, &ProjectWatcher::follow);
+    connect(holder_, &ProjectHolder::sectionEdited, watcher, &ProjectWatcher::follow);
+    for (const char *name : {"save", "saveAs"}) connect(actions_[name], &QAction::triggered, watcher, &ProjectWatcher::follow);
+    connect(this, &AZURESetup::startWorker, watcher, [watcher](const QString &, const QStringList &options) {
+      QString file;
+      for (const QString &o : options)
+        if (o.startsWith("--parameter-file=")) file = o.mid(17);
+      watcher->setParameterFile(file);
+      watcher->setRunning(true);
+    });
+    connect(this, &AZURESetup::runFinished, watcher, [watcher]() { watcher->setRunning(false); });
+    QAction *followDisk = new QAction(tr("&Follow Changes on Disk"), this);
+    followDisk->setObjectName("followDisk");
+    followDisk->setCheckable(true);
+    followDisk->setToolTip(tr("Re-read the project, its data and the run's outputs when another program changes them"));
+    followDisk->setChecked(QSettings().value("view/followDisk", true).toBool());
+    watcher->setEnabled(followDisk->isChecked());
+    connect(followDisk, &QAction::toggled, watcher, [watcher](bool on) {
+      QSettings().setValue("view/followDisk", on);
+      watcher->setEnabled(on);
+    });
+    for (QAction *menu : menuBar()->actions())
+      if (menu->menu() && menu->text() == tr("&View")) menu->menu()->addAction(followDisk);
+  }
   projectOpened();
   showProject(false);
   restoreWindowState();
