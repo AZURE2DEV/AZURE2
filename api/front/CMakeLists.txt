@@ -2,7 +2,8 @@
 # setup program, gui/) includes.  It links the program's run (AZURE2Program: RunProgram, --validate's and --convert's
 # functions), so that a run from a front end is the program's run.
 add_library(azure2_front STATIC src/FrontProject.cpp src/FrontRun.cpp src/FrontSchema.cpp src/FrontOutputs.cpp
-            src/FrontParameters.cpp src/FrontThm.cpp src/FrontLevels.cpp src/FrontPhysics.cpp src/FrontForms.cpp)
+            src/FrontParameters.cpp src/FrontThm.cpp src/FrontLevels.cpp src/FrontPhysics.cpp src/FrontForms.cpp
+            src/FrontPolish.cpp)
 target_include_directories(azure2_front PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # PRIVATE: the engine's include directories do not reach a front end; only Engine.h does.
 # AZUREAPI: the parameter vector of a session (ReadParameters, as pyazr's Session sets it up).

@@ -317,6 +317,157 @@ void FormsChecks(const fs::path &source) {
 
 }  // namespace
 
+/// Round 8 (polish, docs/upgrade/qt_gui.md section 15): the fields a quantity uses, the kernels drawn from the
+/// engine's own (against the closed forms of experiment/tests/kernels_test.cpp), a reaction expression's terms, and
+/// the channel rule on unsaved pairs.
+void PolishChecks(const fs::path &source) {
+  std::string why;
+  // (a) the fields a quantity uses
+  std::vector<front::QuantityFieldRule> rules;
+  bool phase = front::QuantityFieldRules("phase_shift", rules);
+  int required = 0;
+  for (const front::QuantityFieldRule &r : rules) required += r.required && (r.field == "J" || r.field == "l" || r.field == "s");
+  Check(phase && required == 3, "polish: phase_shift requires J, l and s");
+  bool sigmaJ = false, multipole = false;
+  front::QuantityFieldRules("sigma", rules);
+  for (const front::QuantityFieldRule &r : rules) {
+    sigmaJ = sigmaJ || r.field == "J";
+    if (r.field == "multipole") multipole = r.conditional && !r.when.empty();
+  }
+  Check(!sigmaJ && multipole, "polish: sigma does not use J; its multipole only under a condition in words");
+  Check(!front::QuantityFieldRules("no_such_quantity", rules), "polish: an unknown quantity is refused");
+
+  // (b) kernels: T1 (p + 12C) with a Doppler target, a Gaussian spread and two table resolutions, each named by an
+  // extrapolation at E_lab 1.2 MeV
+  front::Project p;
+  Check(front::Project::Open((source / "tests/upgrade/T1/T1.azr").string(), p, why), "polish: T1 opens");
+  auto record = [](const std::string &kind, const std::string &name, std::vector<front::Field> fields) {
+    front::Record r;
+    r.kind = kind;
+    r.name = name;
+    r.fields = std::move(fields);
+    return r;
+  };
+  const front::Record td = record("target", "TD", {{"kind", "none", ""}, {"doppler", "free_gas 300 K fixed", ""}});
+  const front::Record bg = record("beam", "BG", {{"spread", "1 keV lab", ""}});
+  const front::Record dr = record("detector", "DR", {{"energy_resolution", "rectangular width 20 keV fixed", ""}});
+  const front::Record dt = record("detector", "DT", {{"energy_resolution", "triangular width 20 keV fixed", ""}});
+  bool set = p.SetRecord("targets", td, why) && p.SetRecord("targets", bg, why) && p.SetRecord("targets", dr, why) &&
+             p.SetRecord("targets", dt, why);
+  const std::vector<std::pair<std::string, std::string>> users = {{"xd", "target TD"}, {"xg", "beam BG"},
+                                                                 {"xr", "detector DR"}, {"xt", "detector DT"}};
+  for (const auto &u : users) {
+    const std::string kind = u.second.substr(0, u.second.find(' ')), name = u.second.substr(u.second.find(' ') + 1);
+    set = set && p.SetRecord("extrapolations",
+                             record("extrapolation", u.first,
+                                    {{"reaction", "12C(p,g)13N", ""}, {"quantity", "sigma", ""}, {"unit", "b", ""},
+                                     {"energies", "list 1.1 1.2 1.3 MeV lab", ""}, {kind, name, ""},
+                                     {"quadrature", "points 20", ""}}),
+                             why);
+  }
+  Check(set, "polish: kernel records and their extrapolations set (" + why + ")");
+  auto area = [](const front::KernelCurve &c) {
+    double a = 0;
+    for (std::size_t i = 1; i < c.x.size(); i++) a += 0.5 * (c.y[i] + c.y[i - 1]) * (c.x[i] - c.x[i - 1]);
+    return a;
+  };
+  const double gaussianFwhm = 2.0 * std::sqrt(2.0 * std::log(2.0));
+  front::KernelPreview k;
+  why.clear();
+  bool ok = front::KernelPreviewOf(p, "targets", dr, "", std::nan(""), 801, k, why);
+  Check(ok && k.user == "extrapolations: xr" && std::fabs(k.labEnergy - 1.2) < 1e-12 && k.curves.size() == 1 &&
+            k.curves[0].kernel == "rectangular" && std::fabs(k.curves[0].fwhm_keV - 20.0) < 0.05 &&
+            std::fabs(area(k.curves[0]) - 1.0) < 1e-6,
+        "polish: rectangular width 20 keV: FWHM " + (ok && !k.curves.empty() ? std::to_string(k.curves[0].fwhm_keV) : why) +
+            " keV, area 1, at the middle of the grid (1.2 MeV)");
+  why.clear();
+  ok = front::KernelPreviewOf(p, "targets", dt, "", 1.2, 801, k, why);
+  Check(ok && k.curves.size() == 1 && std::fabs(k.curves[0].fwhm_keV - 10.0) < 0.05 && std::fabs(area(k.curves[0]) - 1.0) < 1e-6,
+        "polish: triangular base 20 keV: FWHM " + (ok && !k.curves.empty() ? std::to_string(k.curves[0].fwhm_keV) : why) + " keV");
+  why.clear();
+  ok = front::KernelPreviewOf(p, "targets", bg, "", 1.2, 801, k, why);
+  Check(ok && k.curves.size() == 1 && k.curves[0].kernel == "gaussian" &&
+            std::fabs(k.curves[0].fwhm_keV - gaussianFwhm) < 2e-3 * gaussianFwhm && std::fabs(area(k.curves[0]) - 1.0) < 1e-6,
+        "polish: Gaussian sigma 1 keV lab: FWHM " + (ok && !k.curves.empty() ? std::to_string(k.curves[0].fwhm_keV) : why) +
+            " keV (2 sqrt(2 ln 2) = " + std::to_string(gaussianFwhm) + ")");
+  why.clear();
+  ok = front::KernelPreviewOf(p, "targets", td, "", 1.2, 801, k, why);
+  // the free gas: a Gaussian in velocity of standard deviation u / sqrt 2, u^2 = kT m/M; in the lab-equivalent energy
+  // E = w^2 its standard deviation is sqrt(2 E kT m/M) (E >> kT), m/M = (1 - f)/f
+  const double kT = 8.617333262e-11 * 300.0, f = k.cmFactor;
+  const double doppler = 1e3 * gaussianFwhm * std::sqrt(2.0 * 1.2 * kT * (1.0 - f) / f);
+  Check(ok && k.curves.size() == 1 && k.curves[0].kernel == "doppler" && std::fabs(k.curves[0].fwhm_keV - doppler) < 5e-3 * doppler &&
+            std::fabs(area(k.curves[0]) - 1.0) < 1e-3,
+        "polish: free-gas Doppler at 300 K, E_lab 1.2 MeV, p + 12C: FWHM " +
+            (ok && !k.curves.empty() ? std::to_string(k.curves[0].fwhm_keV) : why) + " keV (closed form " +
+            std::to_string(doppler) + " keV)");
+  // the record as the form holds it, not as the project: 600 K widens it by sqrt 2
+  front::Record hot = td;
+  hot.fields[1].value = "free_gas 600 K fixed";
+  why.clear();
+  front::KernelPreview k2;
+  ok = front::KernelPreviewOf(p, "targets", hot, "", 1.2, 801, k2, why) && !k.curves.empty() && !k2.curves.empty();
+  Check(ok && std::fabs(k2.curves[0].fwhm_keV / k.curves[0].fwhm_keV - std::sqrt(2.0)) < 5e-3,
+        "polish: the form's unapplied 600 K drawn: the width times sqrt 2");
+  why.clear();
+  const front::Record lonely = record("beam", "BL", {{"spread", "1 keV lab", ""}});
+  ok = front::KernelPreviewOf(p, "targets", lonely, "", 1.2, 801, k, why);
+  Check(ok && k.users.empty() && k.user.empty() && !k.notes.empty() && k.curves.size() == 1 &&
+            std::fabs(k.curves[0].fwhm_keV - gaussianFwhm) < 2e-3 * gaussianFwhm,
+        "polish: a record no data set names is drawn for the first pair, and says so: " +
+            (k.notes.empty() ? why : k.notes[0]));
+  why.clear();
+  const front::Record plain = record("target", "TP", {{"kind", "none", ""}});
+  Check(!front::KernelPreviewOf(p, "targets", plain, "", 1.2, 101, k, why) && !why.empty(),
+        "polish: a target without a kernel: nothing drawn (" + why + ")");
+
+  // (c) a reaction expression's terms
+  front::Project t2;
+  Check(front::Project::Open((source / "tests/upgrade/T2/T2.azr").string(), t2, why), "polish: T2 opens");
+  front::ReactionExpression e;
+  const std::string sum = "0.5*15N(p,a)12C + 15N(p,p)15N";
+  ok = front::ParseReactionExpression(t2, sum, e, why);
+  Check(ok && e.op == "sum" && e.terms.size() == 2 && e.terms[0].scale == "0.5" && e.terms[0].entrance > 0 &&
+            e.terms[0].exit > 0 && e.terms[1].scale.empty() && front::ReactionExpressionText(e) == sum,
+        "polish: a sum's terms with their weight and pairs, written back the same: " + front::ReactionExpressionText(e));
+  const std::string ratio = "15N(p,a)12C @ 90 deg cm / 15N(p,p)15N @ 90 deg cm";
+  ok = front::ParseReactionExpression(t2, ratio, e, why);
+  Check(ok && e.op == "ratio" && e.terms.size() == 2 && e.terms[1].angle == "90" && e.terms[1].angleFrame == "cm" &&
+            front::ReactionExpressionText(e) == ratio,
+        "polish: a ratio at a fixed angle written back the same");
+  why.clear();
+  Check(!front::ParseReactionExpression(t2, "15N(p,a)12C +", e, why) && !why.empty(), "polish: a sum without its term refused: " + why);
+
+  // (d) the channel rule on the rows of T1, and an identical pair made of its first row
+  const std::vector<front::LevelRow> rows = p.Levels();
+  std::vector<front::AllowedChannelInfo> channels;
+  ok = front::AllowedChannels(rows, 1, +1, 2, 2, 2, {}, channels, why);
+  std::string list;
+  for (const front::AllowedChannelInfo &c : channels)
+    list += " (" + std::to_string(c.pairKey) + "," + std::to_string(c.l) + "," + std::to_string(c.twoS) + ")";
+  Check(ok && channels.size() == 4 && channels[0].pairKey == 1 && channels[0].l == 0 && channels[0].twoS == 1,
+        "polish: T1, 1/2+: p + 12C s-wave and the photon channels:" + list);
+  Check(front::AllowedChannels(rows, 2, +1, 2, 2, 2, {}, channels, why) && channels.empty(),
+        "polish: T1, 1+: no channel (p + 12C has half-whole J only; no photon from J = 1 to a J_f = 1/2 or 3/2)");
+  front::LevelRow alpha;
+  for (const front::LevelRow &r : rows)
+    if (alpha.tokens.empty() && !r.tokens.empty()) alpha = r;
+  for (const char *c : {"z1", "z2"}) alpha.tokens[front::LevelColumnIndex(c)] = "2";
+  for (const char *c : {"m1", "m2"}) alpha.tokens[front::LevelColumnIndex(c)] = "4.00260325";
+  for (const char *c : {"j1", "j2"}) alpha.tokens[front::LevelColumnIndex(c)] = "0";
+  for (const char *c : {"pi1", "pi2"}) alpha.tokens[front::LevelColumnIndex(c)] = "1";
+  for (const char *c : {"g1", "g2", "e2", "e1"})
+    if (front::LevelColumnIndex(c) < (int)alpha.tokens.size()) alpha.tokens[front::LevelColumnIndex(c)] = "0";
+  alpha.tokens[front::LevelColumnIndex("s2")] = "0";
+  why.clear();
+  ok = front::AllowedChannels({alpha}, 2, -1, 2, 2, 2, {}, channels, why);
+  Check(ok && channels.empty(), "polish: alpha + alpha, 1-: l = 1 is left out (identical bosons: l + s even) " + why);
+  ok = front::AllowedChannels({alpha}, 4, +1, 2, 2, 2, {}, channels, why);
+  Check(ok && channels.size() == 1 && channels[0].l == 2, "polish: alpha + alpha, 2+: l = 2");
+  why.clear();
+  Check(!front::AllowedChannels(rows, 1, 0, 2, 2, 2, {}, channels, why) && !why.empty(), "polish: parity 0 refused: " + why);
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) {
     std::cerr << "usage: front_test <source dir> <AZURE2 binary>" << std::endl;
@@ -843,6 +994,7 @@ int main(int argc, char **argv) {
   }
 
   FormsChecks(source);
+  PolishChecks(source);
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;
   return failures ? 1 : 0;

@@ -861,6 +861,82 @@ class PhysicsSession {
   std::unique_ptr<Impl> impl_;
 };
 
+// ---- Round 8: what the quantity decides, kernels drawn, sums of reactions, the channel rule (qt_gui.md section 15) ----
+
+/// One field a quantity uses (experiment::Quantity::fields): the fields of a record kind marked FieldInfo::byQuantity
+/// that the quantity does not list are refused for it.
+struct QuantityFieldRule {
+  std::string field;
+  bool required = false;
+  bool conditional = false;  ///< the rule holds only when `when` holds
+  std::string when;          ///< the condition in words ("every reaction term has a photon exit"), "" for always
+};
+/// The fields quantity `quantity` uses; false for a quantity (or alias) the table has not.
+bool QuantityFieldRules(const std::string &quantity, std::vector<QuantityFieldRule> &out);
+
+/// The shape of one kernel at an energy: x lab MeV of the beam, y the kernel's weight per lab MeV (area 1).
+struct KernelCurve {
+  std::string kernel;  ///< the kernel table's row: "doppler", "gaussian", "rectangular", "triangular", "beam_profile"
+  std::string title;   ///< in words, with its parameter ("free-gas Doppler broadening, T = 300 K")
+  std::string xLabel;
+  std::vector<double> x, y;
+  double fwhm_keV = 0;    ///< full width at half maximum, keV lab (NaN when the curve has no half maximum on both sides)
+  double fwhmCm_keV = 0;  ///< the same in the c.m. frame of the pair
+};
+/// What a record of <targets> does to the points of a data set that names it, drawn from the engine's kernels.
+struct KernelPreview {
+  std::vector<std::string> users;  ///< the data sets and extrapolations that name the record ("data: s1", ...)
+  std::string user;                ///< the one drawn for ("" when none names it: the first particle pair is used)
+  std::string pair;                ///< its entrance pair ("p+15N")
+  double cmFactor = 0;             ///< E_c.m. / E_lab of the pair (experiment::BeamCMFactor)
+  double labEnergy = 0, cmEnergy = 0;  ///< E_0 (MeV)
+  double lowEnergy = 0, highEnergy = 0;  ///< the user's data or grid, lab MeV (0, 0 unknown)
+  std::vector<KernelCurve> curves;     ///< one per kernel the record selects
+  std::vector<std::string> notes;      ///< what was assumed or left out, in words
+};
+/// The kernels a record of section `section` (a target, beam or detector, as a form holds it: applied or not) selects,
+/// for the points of `user` ("data: <name>" or "extrapolations: <name>"; "" the first that names it) at lab energy
+/// `labEnergy` (MeV; NaN: the middle of the user's energies), each on `points` nodes.  The record is set into a copy
+/// of `project`, built by the engine's reader, and each kernel made by the engine's TargetEffect from the built spec
+/// (docs/upgrade/physics_tab.md section 6.2).  False with `why` when the copy does not build or the record selects
+/// no kernel.
+bool KernelPreviewOf(const Project &project, const std::string &section, const Record &record, const std::string &user,
+                     double labEnergy, int points, KernelPreview &out, std::string &why);
+
+/// One term of a reaction expression (section 3.5 of the format): [scale*]reaction [@ angle unit frame].
+struct ReactionTermInfo {
+  std::string scale;     ///< the weight as written ("" for none: 1)
+  std::string reaction;  ///< the reaction as written ("20Ne(n,a)17O")
+  int entrance = 0;      ///< its pair keys (0: it names no single pair of the project); exit -1 a total capture
+  int exit = 0;
+  std::string angle, angleUnit, angleFrame;  ///< a fixed angle ("" for none)
+};
+struct ReactionExpression {
+  std::string op = "single";  ///< "single", "sum", "ratio"
+  std::vector<ReactionTermInfo> terms;
+};
+/// The reaction expression `text` split by the engine's parser (experiment::ParseReaction); false with the parser's
+/// words otherwise.
+bool ParseReactionExpression(const Project &project, const std::string &text, ReactionExpression &out, std::string &why);
+/// The text of an expression: its terms as the grammar writes them, joined by " + " or " / ".
+std::string ReactionExpressionText(const ReactionExpression &expression);
+
+/// One channel a level may have: its pair key, l (a photon channel: the multipolarity; a beta channel: 1
+/// Gamow-Teller, 0 Fermi) and 2s.
+struct AllowedChannelInfo {
+  int pairKey = 0;
+  int l = 0;
+  int twoS = 0;
+};
+/// The channels a level of 2J `twoJ` and parity `parity` has with the pairs of `pairRows` (one <levels> row per
+/// pair, the GUI's unsaved pairs; keys as the rows give them), limited to `pairKeys` (empty: all): the engine's rule
+/// (experiment::AllowedChannels, pyazr's) with the limits lMax, multipolarityMax and multipolaritiesMax, less the
+/// channels the engine's set-up refuses: l + s odd for identical particles, a photon channel between an integer and a
+/// half-integer spin.  False with the engine's words for a refused J^pi, limit, key or row.
+bool AllowedChannels(const std::vector<LevelRow> &pairRows, int twoJ, int parity, int lMax, int multipolarityMax,
+                     int multipolaritiesMax, const std::vector<int> &pairKeys, std::vector<AllowedChannelInfo> &out,
+                     std::string &why);
+
 }  // namespace front
 }  // namespace azure2
 
