@@ -9,7 +9,8 @@
 //  (e) a fit stopped through the facade ends at its best point with exit 0 and fitStatus.out saying "stopped";
 //  (f) physics: the rows of the physics table and one evaluated; a session of T1: poles, channel functions against
 //      the row, the 1/2+ block's phase shift against the program's extrapolation, |U| = 1, |det A^-1| least at the
-//      level; T2's THM vertex.
+//      level; T2's THM vertex;
+//  (g) what the Qt Physics tab draws (PhysicsCalls, PhysicsPlots, Block's T_abs, LastParameterFile).
 // Each check prints PASS or FAIL; exit 1 on a failure.
 #include "azure2/front/Engine.h"
 
@@ -316,6 +317,109 @@ void FormsChecks(const fs::path &source) {
 }
 
 }  // namespace
+
+/// (g) what the Qt Physics tab draws (docs/upgrade/qt_gui.md section 15.2): every plot of PhysicsPlots names series
+/// the call's answer has (T1's channel functions and every J group's block, T2's THM vertex and line shape), the
+/// calls in words, Block's T_abs = |T_re + i T_im|, and the last fit's parameter file found only when it is there.
+void PhysicsQtChecks(const fs::path &source) {
+  std::string why;
+  const std::vector<front::PhysicsCall> calls = front::PhysicsCalls();
+  bool callsNamed = calls.size() == 5;
+  for (const front::PhysicsCall &c : calls) callsNamed = callsNamed && !c.title.empty() && !c.axisTitle.empty();
+  Check(callsNamed, "physqt: five per-session calls with titles and axis titles");
+  bool plotsOfCalls = !front::PhysicsPlots("").empty();
+  for (const front::PhysicsPlot &p : front::PhysicsPlots("")) {
+    bool known = false;
+    for (const front::PhysicsCall &c : calls) known = known || c.name == p.call;
+    plotsOfCalls = plotsOfCalls && known && !p.title.empty() && !p.y.empty();
+  }
+  Check(plotsOfCalls, "physqt: every plot belongs to a call and names its series");
+  // the stopping rows' formula carries its example; a stopping status in words names the numeric argument
+  const std::vector<front::PhysicsFunction> stopping = front::StoppingFunctions();
+  bool formulaExample = !stopping.empty();
+  for (const front::PhysicsFunction &f : stopping)
+    formulaExample = formulaExample && f.arguments[0].kind == "text" && !f.arguments[0].exampleText.empty();
+  Check(formulaExample, "physqt: every stopping row's formula has an example (" +
+                            (stopping.empty() ? std::string() : stopping[0].arguments[0].exampleText) + ")");
+  if (!stopping.empty()) {
+    const front::PhysicsFunction &f = stopping[0];
+    front::PhysicsValues sv;
+    std::vector<std::vector<double>> cols;
+    for (std::size_t k = 1; k < f.arguments.size(); k++)
+      cols.push_back({f.arguments[k].hasDefault ? f.arguments[k].defaultValue : f.arguments[k].example});
+    cols[2] = {0.0};  // z1 = 0: outside its domain (>= 1)
+    why.clear();
+    const bool evaluated = front::EvaluateStopping(f.name, f.arguments[0].exampleText, cols, sv, why);
+    const std::string words = evaluated && !sv.status.empty() ? front::StoppingStatusText(f.name, sv.status[0]) : why;
+    Check(evaluated && sv.status[0] == 3 && words.find("z1") == 0,
+          "physqt: z1 = 0 is status 3 and its words name z1: " + words);
+  }
+
+  const fs::path t1 = CopyProject(source / "tests/upgrade/T1/T1.azr", fs::path("front_test_work") / "physqt_t1");
+  front::PhysicsSession s;
+  Check(front::PhysicsSession::Open(t1.string(), "", false, s, why), "physqt: T1 session (" + why + ")");
+  if (!s.IsOpen()) return;
+  auto hasSeries = [](const front::PhysicsCurves &c, const std::string &name) { return c.Find(name) != nullptr; };
+  front::PhysicsCurves cf;
+  why.clear();
+  bool cfOk = s.ChannelFunctions(1, 0, 0, -1, {0.5, 1.0}, cf, why);
+  for (const front::PhysicsPlot &p : front::PhysicsPlots("ChannelFunctions")) cfOk = cfOk && hasSeries(cf, p.y);
+  Check(cfOk, "physqt: T1's channel functions have every plot's series (" + why + ")");
+  // every J group: each plot's series (and x series) are in the answer; the maps' rows are there
+  bool blockOk = !s.Groups().empty(), tAbs = true;
+  for (const front::PhysicsGroup &g : s.Groups()) {
+    front::PhysicsCurves b;
+    why.clear();
+    blockOk = blockOk && s.Block(g.jgroup, {2.0, 2.365, 3.0}, b, why);
+    for (const front::PhysicsPlot &p : front::PhysicsPlots("Block"))
+      blockOk = blockOk && hasSeries(b, p.y) && (p.x.empty() || hasSeries(b, p.x));
+    for (const front::PhysicsSeries &t : b.series) {
+      if (t.name != "T_abs") continue;
+      const front::PhysicsSeries *re = b.Find("T_re", t.keys), *im = b.Find("T_im", t.keys);
+      if (!re || !im) {
+        tAbs = false;
+        continue;
+      }
+      for (std::size_t e = 0; e < t.values.size(); e++)
+        if (std::isfinite(t.values[e]))
+          tAbs = tAbs && std::fabs(t.values[e] - std::hypot(re->values[e], im->values[e])) <= 1e-15 * (1 + t.values[e]);
+    }
+  }
+  Check(blockOk, "physqt: every J group of T1 answers with every Block plot's series");
+  Check(tAbs, "physqt: T_abs = |T_re + i T_im| on every channel pair of T1");
+
+  // the last fit's parameter file: none in a fresh copy; the program's param.sav once a fit wrote one
+  front::Project p;
+  Check(front::Project::Open(t1.string(), p, why) && front::LastParameterFile(p).empty(),
+        "physqt: no param.sav in a fresh copy: none found");
+  { std::ofstream(t1.parent_path() / "output" / "param.sav") << "#brune\n"; }
+  const std::string last = front::LastParameterFile(p);
+  Check(!last.empty() && fs::equivalent(last, t1.parent_path() / "output" / "param.sav"),
+        "physqt: the output directory's param.sav found (" + last + ")");
+
+  // T2: the THM plots' series (M2_pw only for vertexModel=dw: absent is allowed there)
+  const fs::path t2 = CopyProject(source / "tests/upgrade/T2/T2.azr", fs::path("front_test_work") / "physqt_t2");
+  front::PhysicsSession s2;
+  why.clear();
+  if (!front::PhysicsSession::Open(t2.string(), "", false, s2, why)) {
+    Check(false, "physqt: T2 session (" + why + ")");
+    return;
+  }
+  front::PhysicsCurves v, ls;
+  why.clear();
+  bool vOk = s2.ThmVertex("LC09", {0.3, 0.5}, v, why);
+  for (const front::PhysicsPlot &pl : front::PhysicsPlots("ThmVertex"))
+    vOk = vOk && (hasSeries(v, pl.y) || pl.y == "M2_pw");
+  Check(vOk, "physqt: T2's vertex has the vertex plots' series (" + why + ")");
+  why.clear();
+  if (s2.ThmLineshape("LC09", {0.3, 0.5}, ls, why)) {
+    bool lOk = true;
+    for (const front::PhysicsPlot &pl : front::PhysicsPlots("ThmLineshape")) lOk = lOk && hasSeries(ls, pl.y);
+    Check(lOk, "physqt: T2's line shape has the line-shape plots' series");
+  } else {
+    std::cout << "NOTE physqt: T2 has no line shape (" << why << ")" << std::endl;
+  }
+}
 
 int main(int argc, char **argv) {
   if (argc < 3) {
@@ -843,6 +947,7 @@ int main(int argc, char **argv) {
   }
 
   FormsChecks(source);
+  PhysicsQtChecks(source);
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;
   return failures ? 1 : 0;

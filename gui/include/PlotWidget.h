@@ -5,6 +5,7 @@
 #include <QList>
 #include <QRectF>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QWidget>
 
@@ -48,6 +49,9 @@ class PlotWidget : public QWidget {
   void setShowBand(bool on);
   void setShowResiduals(bool on);
   void setShowLegend(bool on);
+  /// Vertical dashed lines at `x` (data units) with a label each, drawn over the curves (the Physics tab's poles).
+  void setMarkers(const QVector<double> &x, const QStringList &labels = QStringList());
+  const QVector<double> &markers() const { return markersX_; }
   /// Zoom to a rectangle in data coordinates; resetZoom() to the data's range.
   void zoomTo(const QRectF &data);
   void resetZoom();
@@ -104,6 +108,8 @@ class PlotWidget : public QWidget {
   bool panning_ = false;
   QPoint panLast_;
   QString cursorText_;
+  QVector<double> markersX_;
+  QStringList markerLabels_;
 };
 
 #endif

@@ -36,3 +36,10 @@ add_executable(gui_forms_test gui_forms_test.cpp)
 target_link_libraries(gui_forms_test PRIVATE AZURESetupLib)
 add_test(NAME gui_forms COMMAND gui_forms_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/forms)
 set_tests_properties(gui_forms PROPERTIES LABELS gui TIMEOUT 600 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+
+# The Physics tab (docs/upgrade/qt_gui.md section 15): each page through its widgets, the plotted arrays against the
+# facade's calls, the pole map's cells and read-out, the pole table; screenshots AZURE2_QT_SHOTS/u8-physqt.
+add_executable(gui_physqt_test gui_physqt_test.cpp)
+target_link_libraries(gui_physqt_test PRIVATE AZURESetupLib)
+add_test(NAME gui_physqt COMMAND gui_physqt_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/u8-physqt)
+set_tests_properties(gui_physqt PROPERTIES LABELS gui TIMEOUT 900 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")

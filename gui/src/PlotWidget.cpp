@@ -1,6 +1,8 @@
 // The Plot tab's drawing with QPainter (PlotWidget.h).
 #include "PlotWidget.h"
 
+#include "PlotAxis.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -21,35 +23,9 @@ const int kLeft = 78, kRight = 16, kTop = 14, kBottom = 44, kGap = 30;
 
 double Log(double v) { return std::log10(v); }
 
-/// Linear ticks: about n nice steps (1, 2, 5 x 10^k) over [a, b].
-QVector<double> LinearTicks(double a, double b, int n) {
-  QVector<double> out;
-  if (!(b > a)) return out;
-  const double raw = (b - a) / n, mag = std::pow(10.0, std::floor(std::log10(raw)));
-  const double r = raw / mag, step = (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag;
-  for (double t = std::ceil(a / step) * step; t <= b + 1e-9 * step; t += step) out << (std::fabs(t) < 1e-12 * step ? 0 : t);
-  return out;
-}
-
-/// Decade ticks over [a, b] (a, b > 0); with fewer than two decades, the 2 and 5 of each decade too.
-QVector<double> LogTicks(double a, double b) {
-  QVector<double> out;
-  if (!(b > a) || a <= 0) return out;
-  const int lo = (int)std::floor(Log(a)), hi = (int)std::ceil(Log(b));
-  const int every = std::max(1, (hi - lo) / 8);
-  for (int k = lo; k <= hi; k += every)
-    for (double m : (hi - lo <= 2 ? QVector<double>{1, 2, 5} : QVector<double>{1})) {
-      const double t = m * std::pow(10.0, k);
-      if (t >= a * (1 - 1e-12) && t <= b * (1 + 1e-12)) out << t;
-    }
-  return out;
-}
-
-QString TickText(double v) {
-  const double a = std::fabs(v);
-  if (a != 0 && (a < 1e-3 || a >= 1e5)) return QString::number(v, 'e', 0).replace("e-0", "e-").replace("e+0", "e");
-  return QString::number(v, 'g', 6);
-}
+using plotaxis::LinearTicks;
+using plotaxis::LogTicks;
+using plotaxis::TickText;
 
 void Marker(QPainter &p, int shape, QPointF c, double r) {
   switch (shape % 5) {
@@ -104,6 +80,12 @@ void PlotWidget::setShowResiduals(bool on) {
   update();
 }
 
+void PlotWidget::setMarkers(const QVector<double> &x, const QStringList &labels) {
+  markersX_ = x;
+  markerLabels_ = labels;
+  update();
+}
+
 void PlotWidget::setShowLegend(bool on) {
   legend_ = on;
   update();
@@ -145,7 +127,9 @@ QRectF PlotWidget::dataRange() const {
       a = std::pow(10.0, la - m);
       b = std::pow(10.0, lb + m);
     } else {
-      const double m = b > a ? 0.05 * (b - a) : (a != 0 ? 0.1 * std::fabs(a) : 1.0);
+      // a range at round-off (|U| = 1 to 1e-16) is shown as one value
+      const bool flat = !(b - a > 1e-9 * std::max(std::fabs(a), std::fabs(b)));
+      const double m = !flat ? 0.05 * (b - a) : (a != 0 ? 0.1 * std::fabs(a) : 1.0);
       a -= m;
       b += m;
     }
@@ -322,6 +306,23 @@ void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
       Marker(p, s.marker, c, 3.2);
     }
     p.setBrush(Qt::NoBrush);
+  }
+  // vertical markers (the Physics tab's poles): dashed lines with their labels at the top
+  if (!markersX_.isEmpty()) {
+    QColor mark = ink;
+    mark.setAlpha(150);
+    for (int i = 0; i < markersX_.size(); i++) {
+      const double x = markersX_[i];
+      if (!std::isfinite(x) || (logX_ && x <= 0)) continue;
+      const double px = mapX(x, r);
+      p.setPen(QPen(mark, 1, Qt::DashLine));
+      p.drawLine(QPointF(px, r.top()), QPointF(px, r.bottom()));
+      const QString label = markerLabels_.value(i);
+      if (!label.isEmpty()) {
+        p.setPen(mark);
+        p.drawText(QPointF(px + 3, r.bottom() - 4 - (i % 3) * fm.height()), label);
+      }
+    }
   }
   p.restore();
 

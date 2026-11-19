@@ -671,6 +671,7 @@ struct PhysicsArgument {
   double defaultValue = 0;            ///< a choice: the index; a flag: 0 or 1
   bool hasExample = false;
   double example = 0;                 ///< a typical value: a form's start value where there is no default
+  std::string exampleText;            ///< "text" (a stopping row's formula): a typical value ("Ta2O5")
   bool hasSweep = false;              ///< the argument may be a plot's axis; the range of a first plot over it:
   double sweepLower = 0, sweepUpper = 0;
   bool sweepLog = false;              ///< log spacing (else linear)
@@ -713,6 +714,8 @@ std::string PhysicsStatusText(const std::string &name, int status);
 /// the material; areal densities atoms/cm^2; straggling MeV.  Every use cites SRIM (StoppingCitation()).
 std::vector<PhysicsFunction> StoppingFunctions();
 std::string StoppingCitation();
+/// The words of a status of stopping row `name` (k > 0: the k-th NUMERIC argument outside its domain).
+std::string StoppingStatusText(const std::string &name, int status);
 /// Row `name` for the material `formula`: one column per NUMERIC argument (the arguments after the formula), each of
 /// length n or 1; as EvaluatePhysics (status -2 where a layer is at least the range).  False with `why` for an unknown
 /// row, columns of unequal lengths or a formula stopping/ refuses.  Bit for bit pyazr.stopping.evaluate.
@@ -832,7 +835,7 @@ class PhysicsSession {
   /// One J^pi group on excitation energies `excitation` (E_x, MeV; axis "E_x"), as pyazr's Session.jpi_block.  Series
   /// (keys: jgroup; channel; channel_out; level; level_out):
   ///  per channel   E_c (MeV), P, S, L_re and L_im (S - B_c and P: the level matrix's L_c - B_c);
-  ///  per pair of open particle channels c, c' (c <= c'):  U_re, U_im, U_abs (|U_cc'|), T_re, T_im, and on the diagonal
+  ///  per pair of open particle channels c, c' (c <= c'):  U_re, U_im, U_abs (|U_cc'|), T_re, T_im, T_abs (|T_cc'|), and on the diagonal
   ///                delta (deg, the nuclear phase shift arg(U_cc)/2 as the engine's phase_shift data kind: in
   ///                (-90, 90], [0, 180) for identical particles), eta (the inelasticity |U_cc|);
   ///  per pair of levels l <= m:  A_abs (|A_lm|, MeV^-1);
@@ -860,6 +863,40 @@ class PhysicsSession {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+// ---- What the Physics tab draws from the per-session calls (docs/upgrade/qt_gui.md section 15.2) ----
+
+/// One per-session call of PhysicsSession that answers with a PhysicsCurves.
+struct PhysicsCall {
+  std::string name;   ///< "ChannelFunctions", "Block", "ThmVertex", "ThmLineshape", "ThmDistortion"
+  std::string title;  ///< in words, for a drop-down
+  std::string doc;    ///< what it is, one or two sentences
+  std::string axisTitle;  ///< the horizontal axis in words with its unit ("E_x of the compound nucleus (MeV)")
+  bool slow = false;  ///< milliseconds or more per energy (a DWBA per energy) or a chi^2 evaluation first
+};
+std::vector<PhysicsCall> PhysicsCalls();
+
+/// One thing a page can draw from a call's answer: the series named `y` (every series of that name, one line each,
+/// labelled by its `label`) against the call's axis, or against the series named `x` with the axis as the curve's
+/// parameter (the Argand plot).
+struct PhysicsPlot {
+  std::string call;   ///< the PhysicsCall it reads
+  std::string name;   ///< an identifier ("delta", "argand", "map_det", ...)
+  std::string title, doc;
+  std::string y, yTitle;   ///< the series on the vertical axis; its axis title with unit
+  std::string x, xTitle;   ///< "" the call's axis; else the series on the horizontal axis
+  bool diagonalOnly = false;  ///< only the series whose channel equals channel_out
+  bool logY = false;          ///< a log axis suits it (a value over orders of magnitude, > 0)
+  /// A map (Pole map page): "" not a map; "series" rows = the series named `y` of one answer (one J group);
+  /// "jgroup" rows = one answer per J group, the series named `y` of each.
+  std::string mapRows;
+};
+/// The plots of one call (`call` = "" for every call's), in the order a drop-down lists them.
+std::vector<PhysicsPlot> PhysicsPlots(const std::string &call);
+
+/// The parameter file of the project's last fit, `param.sav` in its output directory (as the program writes it),
+/// when that file exists; "" otherwise.
+std::string LastParameterFile(const Project &project);
 
 }  // namespace front
 }  // namespace azure2

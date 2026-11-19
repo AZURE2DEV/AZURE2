@@ -145,6 +145,10 @@ The tabs
        its histogram, or the walkers' mean log posterior against the step.
    * - Plot
      - The data sets and extrapolations of the last run (below).
+   * - Physics
+     - The quantities between the level parameters and the observables: the
+       physics functions, the project's channel functions, R-matrix and pole
+       map, the THM parts, the stopping powers (below).
 
 Records: tables and forms
 -------------------------
@@ -331,6 +335,86 @@ the data (x, y, error) and one of the calculation (x, y and the band's limits
 where there is one). The tab is read again after
 every run; a file older than the project (records added since the run) is
 named in a note below the plot.
+
+The Physics tab
+---------------
+
+The Physics tab draws the quantities between the level parameters and the
+observables, each from the engine's own functions (the design:
+``docs/upgrade/physics_tab.md``; the same calls the web page's Physics tab and
+``pyazr.physics`` read). A list of pages stands on the left. Every page works
+the same way: choose what to draw from the drop-downs, the swept argument and
+its range (from, to, the number of points, log spacing), then ``Draw`` (this
+curve alone) or ``Add curve`` (over the others: several l, radii, materials);
+``Clear`` empties the plot. The plot has a legend, the cursor's read-out, log
+or linear axes, zoom and pan as the Plot tab, and ``Export`` (PNG, SVG, PDF or
+the points as CSV). A line under the plot says what was left out and why.
+The computations run in worker threads: a busy bar and ``Cancel`` stand at the
+bottom while one runs, and the window stays usable.
+
+Functions
+  Every function of the physics table (kinematics, Coulomb functions, P, S and
+  the hard-sphere phase, the Wigner limit and single-particle width, the THM
+  plane-wave vertex, ...): its arguments as fields with their units, started at
+  the row's default or example values, its documentation above them, the
+  swept argument as a drop-down. A point outside an argument's domain is a gap
+  in the curve, and the line under the plot counts such points with their
+  reason (``e_cm outside its domain (finite > 0)``). No project is needed.
+
+Channels of the project
+  The project's channel functions of a pair (drop-down of the particle pairs),
+  an l and the channel radius (empty: the pair's): P, S, the hard-sphere phase,
+  F, G and their derivatives at the channel radius, against the pair's c.m.
+  energy, as the calculation uses them (the Coulomb table, a pair's nuclear
+  potential).
+
+R-matrix of the project
+  One J^π group on an excitation-energy grid: the phase shifts and the
+  inelasticities of the open particle channels, \|U_cc'\|, the Argand plot
+  (Im U_cc against Re U_cc, the energy along the curve, a marker at each level),
+  \|T_cc'\|, P and S per channel, \|A_λμ\| and log10 \|det A^-1\|; a check list
+  chooses the channels or pairs drawn. The group's levels are dashed lines and,
+  beside the plot, a table: J^π, level, the physical E_x and Γ (MeV), and per
+  channel its observed width W (MeV) or its ANC (fm^-1/2), the numbers of
+  ``parameters.out``. A click on a level centres the plot on it.
+
+Pole map
+  A map with the excitation energy along x and one row per J^π group (log10
+  \|det A^-1\|, one calculation per group), per pair of open channels of one
+  group (\|U_cc'\|) or per pair of its levels (\|A_λμ\|); the colour is the value,
+  read on the colour bar (dark blue low, yellow high). The levels are white
+  points on their group's row (or white lines on a map of one group). The
+  cursor's read-out gives the energy, the row and the value; the wheel zooms in
+  energy (Shift: the rows), a dragged rectangle zooms, the right button pans, a
+  double click shows the whole map; a click on a row draws its cut below. This
+  is a map on the real energy axis: a minimum of \|det A^-1\| is where the
+  inverse level matrix is nearly singular, the energy of a narrow resonance.
+  The complex-energy plane, where the poles of the collision matrix are the
+  zeros of det A^-1 continued in E, is not available: the engine's Coulomb
+  functions and level matrix take real energies only.
+
+THM
+  For a project with ``<thm>`` experiments: the entrance vertex (⟨\|M_l\|^2⟩
+  over the spectator window, \|M_l\|^2 at p_s = 0), the Coulomb line shape and
+  the distortion factor R(E) and its parts, against the c.m. energy of x + A.
+  The distortion runs a DWBA per energy (about 17 ms each): ``Cancel`` stops it
+  between groups of ten energies.
+
+Stopping
+  SRIM's stopping powers, ranges, energy loss and straggling (the stopping
+  table, :doc:`experimental_effects`) of a material given by its
+  formula and of a projectile given by Z and mass. SRIM's citation stands under
+  the plot. No project is needed.
+
+The project pages read the *saved* project through the engine's session (the
+levels and the data set up as a calculation would: up to a few seconds); they
+say so when no project is saved. ``Parameters`` above them chooses the levels'
+values: the project's start values, the last fit (``param.sav`` of the output
+directory, when a fit has written it) or a parameter file. After an edit, save
+the project: the pages set the session up again when they are next shown, or at
+``Re-read``. Pages for the kernel shapes of the apparatus and for a level /
+interference decomposition are not there yet (the engine has no call for
+them; the decomposition is a pyazr script, :doc:`calculate`).
 
 Runs
 ----

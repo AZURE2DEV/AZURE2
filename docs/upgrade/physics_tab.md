@@ -103,7 +103,7 @@ evaluation path was edited.
 | P_c, S_c, E_c per channel | `P`, `S`, `E_c` / `channels[].P`, `.S`, `.E_c` | —, —, MeV |
 | L_c − B_c as A⁻¹ reads it | `L_re`, `L_im` / `channels[].L_re`, `.L_im` | — |
 | U_cc′ (c ≤ c′, open particle channels) | `U_re`, `U_im`, `U_abs` / `elements[]` | — |
-| T_cc′ | `T_re`, `T_im` / `elements[]` | — |
+| T_cc′ | `T_re`, `T_im`, `T_abs` (facade only, \|T_cc′\|) / `elements[]` | — |
 | δ_c, η_c (Argand plot: U_re against U_im of the diagonal) | `delta`, `eta` / `phase_shifts[]` | deg, — |
 | abs(A_λμ), λ ≤ μ | `A_abs` / `level_pairs[]` | MeV⁻¹ |
 | det A⁻¹ | `det_re`, `det_im`, `log10_abs_det` | MeV^n |
@@ -323,7 +323,7 @@ left out and why). `Find(name, {{"channel", 1}, {"channel_out", 1}})` returns th
 | Call | Axis | Series (keys) | Shape for a heatmap |
 |---|---|---|---|
 | `ChannelFunctions` | `e_cm` (MeV, c.m. of the pair) | `F`, `Fp`, `G`, `Gp`, `P`, `S`, `delta_hs` (rad), `open` (pair, l) | — |
-| `Block` | `E_x` (MeV) | per channel `E_c`, `P`, `S`, `L_re`, `L_im`; per channel pair c ≤ c′ `U_re`, `U_im`, `U_abs`, `T_re`, `T_im`, diagonal `delta` (deg), `eta`; per level pair `A_abs`; once `det_re`, `det_im`, `log10_abs_det` | rows = the `U_abs` series (nc(nc+1)/2 of the open particle channels) or the `A_abs` series (n(n+1)/2), columns = E_x |
+| `Block` | `E_x` (MeV) | per channel `E_c`, `P`, `S`, `L_re`, `L_im`; per channel pair c ≤ c′ `U_re`, `U_im`, `U_abs`, `T_re`, `T_im`, `T_abs`, diagonal `delta` (deg), `eta`; per level pair `A_abs`; once `det_re`, `det_im`, `log10_abs_det` | rows = the `U_abs` series (nc(nc+1)/2 of the open particle channels) or the `A_abs` series (n(n+1)/2), columns = E_x |
 | `ThmVertex` | `E` (MeV, c.m. x + A) | `reached`; per (channel, level) `M2`, `M2_qf`, `M2_pw` | — |
 | `ThmLineshape` | `E` | `E_sF`, `eta_0`; per exit pair `zeta`, `eta_sb`; per (exit, level) `NC2` | — |
 | `ThmDistortion` | `E` | `R`, `R_model`, `M2`, `M2_PW` (fm⁶), `E_sF`, `k_sF`, `eta_sF`, `theta_cm` (deg), `x`, `q`, `lmax` | — |
@@ -338,6 +338,10 @@ after an edit the page re-opens it.
 A pole map over a grid of nE energies for every J group is `Groups().size()` calls of `Block`; the heatmap's rows are
 the groups' `log10_abs_det` series (the J^π of each from `Groups()`), with `Poles()` drawn on it as points at
 (`energy`, group).
+
+What the Qt tab draws from each call (titles, the series of each plot, the maps' rows) is the facade's
+`PhysicsCalls()` and `PhysicsPlots(call)`, and the last fit's parameter file `LastParameterFile(project)`
+(`api/front/src/FrontPhysicsPlots.cpp`; `docs/upgrade/qt_gui.md` section 15.2).
 
 ### 7.3 The same through pyazr and the web page
 

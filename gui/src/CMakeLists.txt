@@ -20,6 +20,7 @@ set(AZURESETUP_SOURCES
     LevelsTabEdits.cpp LevelsTabNavigation.cpp LevelsUndo.cpp LevelsViews.cpp
     ChooseFileButton.cpp RichTextDelegate.cpp InfoDialog.cpp InTabDocs.cpp AboutAZURE2Dialog.cpp
     AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp
+    PhysicsTab.cpp PhysicsSessionPages.cpp PhysicsForms.cpp PhysicsWorker.cpp HeatmapWidget.cpp
     AZURESetup.qrc ShellIcons.qrc)
 
 # The Plot tab is drawn with QPainter (PlotWidget.cpp) and exported with QtSvg and QPdfWriter: no plotting library.

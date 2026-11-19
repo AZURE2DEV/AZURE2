@@ -470,3 +470,96 @@ channel functions, one J^pi group's U, T, phase shifts, |A| and det A^-1 on an E
 and distortion), each answer a `PhysicsCurves` of series over one axis.  The design, the engine function behind
 every curve, the shapes and units, and which calls are slow: `docs/upgrade/physics_tab.md` (section 7 is the
 interface).  Test: `api_front`, section (f).
+
+## 15. The Physics tab in the Qt program (U8, agent physqt, 2026-11-20)
+
+The PI (2026-11-19): "It would be nice also to have a tab about physics, where the different R-matrix parts can be
+plotted, or THM parts, or collision matrix poles finding with a heatmap etc."; the six pages below were approved the
+same day.  The engine side and its interface are `docs/upgrade/physics_tab.md` (section 7 exact); this section is
+the window.  Code: `gui/src/PhysicsTab.cpp` (the tab and its pages), `PhysicsWorker.cpp` (the worker threads),
+`PhysicsForms.cpp` (an argument form made from a facade row), `HeatmapWidget.cpp`, `gui/include/PlotAxis.h` (the
+ticks shared by the two plot widgets).
+
+### 15.1 Layout and one pattern
+
+A list of pages on the left, the page on the right.  Every page: what to draw from drop-downs, the swept argument and
+its range (from, to, points, log spacing), Draw (replace) and Add curve (overlay), Clear; the curves with a legend;
+the cursor's read-out; log/linear per axis; Reset zoom; Export (PNG, SVG, PDF, CSV: `PlotWidget::exportTo`, the
+Plot tab's).  A status line under the plot says what was left out (points outside a domain, the engine's notes).
+
+| Page | Facade | Needs a project |
+|---|---|---|
+| Functions | `PhysicsFunctions`, `EvaluatePhysics`, `PhysicsStatusText` | no |
+| Channels of the project | `PhysicsSession::Pairs`, `ChannelFunctions` | yes |
+| R-matrix of the project | `Groups`, `Block`, `Poles` | yes |
+| Pole map | `Groups`, `Block` (one call per J group for det A^-1), `Poles` | yes |
+| THM | `ThmExperiments`, `ThmVertex`, `ThmLineshape`, `ThmDistortion` | yes, with `<thm>` |
+| Stopping | `StoppingFunctions`, `EvaluateStopping`, `StoppingCitation` | no |
+
+Kernel shapes and the level/interference decomposition have no facade call (physics_tab.md 6.1, 6.2): no page.
+
+### 15.2 Nothing typed in `gui/`
+
+The drop-downs come from the facade: a function's arguments (kind, unit, domain, default or example, sweep range and
+spacing), its returns (name, unit, doc); the session's pairs (labelled by `Pairs(project)`), J groups, poles, THM
+experiments; and what can be drawn from each per-session call.  The last needs words the facade did not have, so
+the facade gains (plain C++, `api/front/src/FrontPhysicsPlots.cpp`):
+
+- `PhysicsCalls()`: one row per per-session call (`ChannelFunctions`, `Block`, `ThmVertex`, `ThmLineshape`,
+  `ThmDistortion`): title, doc, whether it is slow (a DWBA per energy, a chi^2 evaluation first).
+- `PhysicsPlots(call)`: what a page can draw from that call's answer: a title, the series on the vertical axis, the
+  series on the horizontal one when it is not the call's axis (the Argand plot: `U_im` against `U_re`, energy the
+  curve's parameter), whether only the diagonal (c = c') is meant, whether a log axis suits it, and for a map how its
+  rows are made (the series of one answer, or one answer per J group).
+- `Block`'s series `T_abs` (|T_cc'|, from the same T as `T_re`, `T_im`), so that the GUI computes no modulus.
+- `LastParameterFile(project)`: the `param.sav` the program writes in the project's output directory, when it is
+  there ("" otherwise), so that the R-matrix pages can start from the last fit without the GUI naming the file.
+
+### 15.3 Threads
+
+A `PhysicsSession` is opened in a worker thread (0.2-6 s) and every call on it runs in that same thread, one at a
+time (the facade's rule).  The session-free pages have a worker of their own, so a slow `coulomb_waves` never waits
+for a session's set-up.  A job is a function run in the worker; its result is handed back to the GUI thread by a
+queued call; the page shows a busy bar and Cancel.  Cancel sets a flag the job reads between chunks of the energy
+grid (a call per chunk of 50 energies for the slow THM distortion, per J group for the map); a set-up that cannot be
+stopped mid-way is abandoned: its result is dropped when it arrives.  A newer request supersedes an older one (ticket
+numbers).  The window never waits on a worker.
+
+The session reads the saved project (`PhysicsSession::Open` on the file): the tab re-opens it when the project is
+opened or saved, or when the parameters choice changes (start values; the last fit's `param.sav` when the facade
+finds one; a file chosen).  Without a project the project pages say what they need ("open or save a project");
+without `<thm>` the THM page says so.
+
+### 15.4 The R-matrix page
+
+J^pi group, E_x range, quantity (from `PhysicsPlots("Block")`), the channels or channel pairs or level pairs as a
+check list (the series' labels).  Vertical dashed markers at the group's poles (`Poles()`: the physical E_x), and a
+table of the group's poles beside the plot: J^pi, level, E_x, Gamma (the sum of the observed widths), then one column
+per channel of the group with its observed width W (MeV) or its ANC (fm^-1/2).  A click on a pole zooms the plot to
+E_x +- max(3 Gamma, 2 % of the range).  The Argand plot draws Im U against Re U per diagonal element with the
+excitation energy as the curve's parameter and a marker at the energy of each pole.
+
+### 15.5 The pole map
+
+`HeatmapWidget`: energy on x, one row per J group (log10 |det A^-1|), per pair of open particle channels (|U_cc'|) or
+per pair of levels (|A_lm|) of one group, colour the value with a colour bar with numbers.  The colour map is a table
+of our own (nine anchors of a viridis-like ramp, dark blue to yellow, lightness increasing monotonically, interpolated
+in RGB), readable on the light and the dark paper (the cells are drawn on their own, the frame and text in the
+palette's ink).  Zoom with the wheel or a dragged rectangle, pan with the right button, double click resets; the cursor
+read-out is (x, row, value).  The poles are drawn on the map: white-ringed points at (E_x, its group's row) on the
+det map, vertical ticks at the group's poles on the per-group maps.  A click on a row draws its 1-D cut below the map
+(`PlotWidget`) with the same pole markers.  The page's text says what the map is: a real-energy map; a minimum of
+|det A^-1| (a dark valley in log10) is where the level matrix is nearly singular on the real axis, the resonance
+energy of a narrow level; the complex-energy plane (the poles of U as zeros of det A^-1 continued in E) is not
+available because the engine's Coulomb functions and level matrix take real energies only (physics_tab.md 5.3).
+
+### 15.6 Tests (`tests/gui/gui_physqt_test.cpp`, label gui)
+
+Each page driven through its widgets, the drawn arrays compared with a direct facade call: Functions (a row, an
+argument changed, a curve added, a point outside the domain left as a gap and counted in the status line);
+Channels (T1's pair 1, l = 1: P against `ChannelFunctions`); R-matrix (T1's 1/2+ group: delta against `Block`, the
+pole table against `Poles()`, the click on a pole zooms to it; the Argand plot's x and y); Pole map (the map's cells
+against `Block`'s `log10_abs_det` per group, the cursor read-out of a cell, a click on a row gives its cut); THM (T2's
+LC09 vertex against `ThmVertex`); Stopping (protons in a material against `EvaluateStopping`, the citation shown); the
+tab without a project (pages 1 and 6 draw, the project pages say what is needed).  Screenshots light and dark:
+`work/qt-shots/u8-physqt/`.
