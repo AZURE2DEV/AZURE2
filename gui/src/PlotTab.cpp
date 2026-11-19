@@ -4,7 +4,9 @@
 #include <cmath>
 
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
+#include <QMenu>
 #include <QFileDialog>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -49,6 +51,30 @@ PlotTab::PlotTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
   extrapList_->setObjectName("plotExtrapList");
   connect(dataList_, &QListWidget::itemChanged, this, &PlotTab::draw);
   connect(extrapList_, &QListWidget::itemChanged, this, &PlotTab::draw);
+  // a curve's colour and marker from the list's context menu
+  for (QListWidget *l : {dataList_, extrapList_}) {
+    l->setContextMenuPolicy(Qt::CustomContextMenu);
+    l->setToolTip(tr("Check the curves to draw; right-click one for its colour and marker."));
+    connect(l, &QListWidget::customContextMenuRequested, this, [this, l](const QPoint &at) {
+      QListWidgetItem *item = l->itemAt(at);
+      if (!item) return;
+      const QString record = item->data(Qt::UserRole).toString().section('/', 1);
+      QMenu menu;
+      menu.addAction(tr("Colour..."), this, [this, record]() {
+        const QColor c = QColorDialog::getColor(styles_.value(record, qMakePair(QColor(), 0)).first, this,
+                                                tr("The colour of %1").arg(record));
+        if (c.isValid()) setCurveStyle(record, c, styles_.value(record, qMakePair(QColor(), -1)).second);
+      });
+      QMenu *markers = menu.addMenu(tr("Marker"));
+      const QStringList names = {tr("Circle"), tr("Square"), tr("Diamond"), tr("Triangle"), tr("Inverted triangle")};
+      for (int m = 0; m < names.size(); m++)
+        markers->addAction(names[m], this, [this, record, m]() {
+          setCurveStyle(record, styles_.value(record, qMakePair(QColor(), 0)).first, m);
+        });
+      menu.addAction(tr("Default style"), this, [this, record]() { setCurveStyle(record, QColor(), -1); });
+      menu.exec(l->viewport()->mapToGlobal(at));
+    });
+  }
 
   xAxis_ = new QComboBox;
   xAxis_->setObjectName("plotXAxis");
@@ -208,6 +234,12 @@ QStringList PlotTab::availableRecords() const {
   return out;
 }
 
+void PlotTab::setCurveStyle(const QString &record, const QColor &color, int marker) {
+  if (!color.isValid() && marker < 0) styles_.remove(record);
+  else styles_[record] = qMakePair(color, marker);
+  draw();
+}
+
 void PlotTab::checkAll(bool extrapolations, bool on) {
   QListWidget *l = extrapolations ? extrapList_ : dataList_;
   l->blockSignals(true);
@@ -249,6 +281,10 @@ void PlotTab::draw() {
       ps.color = kPalette[n % 10];
       ps.marker = n % 5;
       n++;
+      if (styles_.contains(ps.label)) {  // the user's own choice
+        if (styles_[ps.label].first.isValid()) ps.color = styles_[ps.label].first;
+        if (styles_[ps.label].second >= 0) ps.marker = styles_[ps.label].second;
+      }
       const bool useS = s && c.sFactor;
       if (!useS) observables.insert(QString::fromStdString(c.observable));
       anyS = anyS || useS;

@@ -179,7 +179,9 @@ observable such as A_y or a phase shift) or the S factor (MeV b, for a cross
 section). Either axis can be logarithmic (points that are not positive are then
 left out). Where the run wrote the uncertainty band (``--covariance-band``) the
 1σ band is shaded. The lower panel shows the residuals (data − calculation) /
-error. The lists have a check box per curve and ``All`` / ``None``. The mouse
+error. The lists have a check box per curve and ``All`` / ``None``; a right
+click on a curve chooses its colour and marker (``Default style`` returns it to
+the program's). The mouse
 wheel zooms about the cursor (with Ctrl the x axis only, with Shift the y axis
 only); dragging a rectangle with the left button zooms to it; dragging with the
 right or middle button, or with Shift and the left button, pans; a double click

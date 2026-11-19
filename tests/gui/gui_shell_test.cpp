@@ -294,6 +294,13 @@ int main(int argc, char **argv) {
   plot->checkAll(false, false);
   Check(pw->series().isEmpty() && plot->checkedRecords().isEmpty(), "Plot: None clears the plot");
   plot->selectRecords({"cap_g0", "el_lab090"});
+  plot->setCurveStyle("cap_g0", QColor("#123456"), 2);
+  bool styled = false;
+  for (const PlotSeries &ps : pw->series()) styled = styled || (ps.label == "cap_g0" && ps.color == QColor("#123456") && ps.marker == 2);
+  plot->setCurveStyle("cap_g0", QColor(), -1);
+  bool restored = false;
+  for (const PlotSeries &ps : pw->series()) restored = restored || (ps.label == "cap_g0" && ps.color != QColor("#123456"));
+  Check(styled && restored, "Plot: a curve's own colour and marker, and back to the palette's");
   Settle();
   const QRectF whole = pw->view();
   const QPointF centre = pw->rect().center();
