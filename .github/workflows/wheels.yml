@@ -170,7 +170,9 @@ jobs:
           { command -v gcc g++ cmake ninja; gcc --version | head -1; cmake --version | head -1; } 2>&1 | note "wheel build (MinGW): tools of the MSYS2 shell"
           log="$(ls build-wheel/CMakeFiles/CMakeConfigureLog.yaml 2>/dev/null | head -1)"
           if [ -n "$log" ]; then
-            grep -n -i -B4 -A40 'OpenMP' "$log" | grep -v '^--$' | head -150 | note "wheel build (MinGW): OpenMP in CMakeConfigureLog"
+            # The first failed OpenMP try-compile whole (its link line and the linker's words), long lines folded.
+            awk '/OpenMP_COMPILE_RESULT_C_fopenmp/ {on=1} on {print} on && /^  -$/ {exit}' "$log" | fold -w 390 | grep -n -i -E 'ld\.exe|cannot|undefined|error|FAILED|collect2|-lgomp|\.spec|exitCode' | head -60 | note "wheel build (MinGW): the linker's lines of the OpenMP test"
+            awk '/OpenMP_COMPILE_RESULT_C_fopenmp/ {on=1} on {print} on && /^  -$/ {exit}' "$log" | fold -w 390 | tail -45 | note "wheel build (MinGW): the end of the OpenMP test"
           else
             find build-wheel -maxdepth 2 2>/dev/null | head -40 | note "wheel build (MinGW): no CMakeConfigureLog; build-wheel holds"
           fi
