@@ -93,7 +93,8 @@ The pybind11 module (``api/src/CMakeLists.txt``, target ``_azure2``) links
        in ``api/physics_table/``, which the facade ``api/front`` reads too.
    * - ``pybind_stopping.cpp``
      - The submodule ``_azure2.stopping`` (``pyazr.stopping``), with the
-       table of stopping functions (``BuildStoppingTable()``), each row
+       table of stopping functions as Python data; the rows
+       (``BuildStoppingTable()``, plain C++ in ``api/physics_table/``), each row
        with SRIM's citation.
    * - ``pybind_rows.h``
      - The rows' description as Python data; the row types the two tables

@@ -2,6 +2,61 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-19 (agent physics, `feature/upgrade-7-physics`) — the Physics tab below the widgets: table in plain C++, facade calls, design
+
+**Asked** (the PI, 2026-11-19: "a tab about physics, where the different R-matrix parts can be plotted, or THM parts,
+or collision matrix poles finding with a heatmap"; the director's six pages approved): everything below the Qt
+widgets, which another agent writes from `docs/upgrade/physics_tab.md` (section 7 is the interface). `gui/` was not
+touched.
+
+**Done** (commits on `feature/upgrade-7-physics`, base `35cfcffe`):
+- `d1281efc` the physics table moves from pybind (`api/src/pybind_physics.cpp`, `pybind_rows.h`) to plain C++,
+  `api/physics_table/` (target `azure2_physics_table`, links physics/, physics/transfer, experiment/ only). No
+  behaviour change: `tools/gen_physics_docs.py --check` passed against the page as committed (byte for byte),
+  `pyazr_physics_table` passes, check 41 reads the rows from the new file. Recipes in CLAUDE.md, pyazr/CLAUDE.md and
+  the developer pages name it. `599d7cf5`: the generated page's header comment names the new file (its only change).
+- `c7f8bc43` `physics::level_matrix_determinant` (det A⁻¹, a diagnostic; test `physics_level_matrix_determinant`).
+- `0164deed` `AZUREAPI::JpiBlockAllRWA` (one J^π group on an E_x grid: P, S, L−B per channel, U and T of the open
+  particle channels, the phase shift as the engine's `phase_shift` data kind forms it, |A_λμ|, det A⁻¹), bound as
+  pyazr `Session.jpi_block(jgroup, e_x, params=None)` and a row of `SESSION_FUNCTIONS` (the web page's Physics tab
+  draws it, no JavaScript edited). pyazr 3.0.0.dev8. Compared with the independent assembly of
+  `pyazr_collision_matrix_session` on every block of T1–T3 in three parametrizations: ≤ 3.4e-10.
+- `28eff842` `docs/upgrade/physics_tab.md` (and qt_gui.md section 11).
+- `32b27a88` the facade (`Engine.h`, "Physics"; `api/front/src/FrontPhysics.cpp`): `PhysicsFunctions`,
+  `EvaluatePhysics`, `PhysicsStatusText`; `PhysicsSession` (Open with a parameter file through the program's
+  `--parameter-file` route, Pairs, Groups, Poles, ChannelFunctions, Block, ThmExperiments, ThmVertex, ThmLineshape,
+  ThmDistortion), answers as `PhysicsCurves`. `api_front` (f): 23 checks, among them the block's phase shift equal to
+  the program's `extrapolate` output of T1's x3 to 4.7e-11 relative (shown to fail with a wrong Coulomb phase).
+- `420b8139` the stopping table moves to plain C++ as well (`api/physics_table/src/StoppingTable.cpp`); the binding's
+  rows and values hash identically to another build of the base. `7e519a14` the facade's `StoppingFunctions`,
+  `EvaluateStopping`, `StoppingCitation`.
+
+**Complex energy** (physics_tab.md 5.3): the engine's Coulomb functions (`Coulomb.h`: real η, real ρ > 0), the
+channel functions (`ChannelFunctions.h`, `CoulFunc`, `ChannelTable`, the Coulomb table) and the level matrix
+(`fill_level_matrix(..., double E_MeV, ...)`) take real energy only; the third-party COULCC and cwfcomp are complex
+inside but the adaptors pass real arguments and no test calls them off the axis. No complex-plane map was built and
+no Coulomb code written; the note says what it needs (an adaptor over COULCC, L_c on the second sheet, a level
+matrix templated on the energy type) and the mpmath checks. The pole page gives the observed poles (`Poles`) and
+the real-energy maps (|U|, |A|, log10 |det A⁻¹| as rows of a heatmap).
+
+**Run**: build without GUI 0 warnings; `ctest -LE slow -j4` (at `32b27a88`): 393 of 396, failed `rmfit_enginepin`
+(as on the base) and `pyazr_ui_smoke`, `pyazr_ui_navigation` (label browser: time budget and a fetch under the
+parallel load), which both passed when rerun alone; after the stopping move `ctest -R
+'stopping|api_front|physics_tab|pyazr_physics_table'` 15 of 15; `pyazr_collision_matrix_session` and
+`pyazr_session_functions` by hand, ok; `repo_consistency` before every commit. GUI: `work/build_gui.sh` at `7e519a14` 0 warnings (the facade compiles for `gui/`), `ctest -L gui` 1 of 1 (`gui_window`).
+
+**Not run**: `tests/run_tests.sh` (no file of the evaluation path was edited: the new engine code is a reader in
+`api/src/`, and `physics/` gained a file no engine path calls); `ctest -L slow`; the web page in a browser
+(`ctest -L browser`); Windows and macOS.
+
+**Open**: (1) eigenphases of a block with several open channels need a complex symmetric eigensolver in physics/;
+(2) the decomposition into levels, interference and external capture is a pyazr script only
+(`.claude/skills/azure2-calculate/scripts/decompose.py`): a design paragraph in physics_tab.md 6.1, no C++; (3) a
+target record's own stopping (its table or formula, the stopping scale) has no facade call, only SRIM's rows; (4) kernel
+shapes need a set-up call that builds a record's `KernelParameters` outside a run (6.2); (5) the complex pole map
+(5.3); (6) `PhysicsSession::Poles` gives `totalWidth` as the sum of |W| of the width-kind channels (photon included),
+which the Qt page should label as such.
+
 ## 2026-11-19 (director) — `feature/upgrade-6` joined and checked: the owner's answers, the Qt program, the page's navigation
 
 **What it is**: `98a4cf60` (GitHub's `feature/upgrade` `a405a9e9` + the owner's `feature/upgrade-5-fixes` and

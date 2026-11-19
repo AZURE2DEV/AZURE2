@@ -1252,7 +1252,7 @@ provenance per element (`pyazr.stopping.provenance`) is not shown; user stopping
 reachable (the rows evaluate SRIM's stopping only).
 
 *Extensibility of stopping*: a new stopping function is one row of `BuildStoppingTable()` in
-`api/src/pybind_stopping.cpp` (its own arguments with unit, domain, example, and a sweep for its axis; returns with
+`api/physics_table/src/StoppingTable.cpp` (since 2026-11-19; before, `api/src/pybind_stopping.cpp`) (its own arguments with unit, domain, example, and a sweep for its axis; returns with
 units; an adapter calling the library); `physics_tab_test.py` plots every row without typing and runs its Python text,
 the node test draws its form; nothing in pyazr, the server or the page.
 

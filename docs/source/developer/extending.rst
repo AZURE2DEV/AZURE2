@@ -516,7 +516,7 @@ A physics function of the binding
    the Python function from the row; nothing is written in Python.
 
 A stopping function is one row of ``BuildStoppingTable()`` in
-``api/src/pybind_stopping.cpp``, of the same row types, with its citation;
+``api/physics_table/src/StoppingTable.cpp``, of the same row types, with its citation;
 ``tests/pyazr/ui/physics_tab_test.py`` plots every row of both tables and
 runs the Python text the page offers for it. Neither kind of row needs
 anything in ``pyazr/ui`` or in the page. A new kind of argument is a value

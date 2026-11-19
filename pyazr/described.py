@@ -312,7 +312,7 @@ def _build_kinds():
                                    "effect": row["effect"], "reason": row["reason"], "doc": row["doc"]}
     # one entry per row of the binding's physics table (api/physics_table/src/PhysicsTable.cpp); pyazr.physics is built from it
     physics = {row["name"]: row for row in engine.physics_functions()}
-    # one entry per row of the binding's stopping table (api/src/pybind_stopping.cpp), with SRIM's citation
+    # one entry per row of the stopping table (api/physics_table/src/StoppingTable.cpp), with SRIM's citation
     stopping = {row["name"]: row for row in engine.stopping.functions()}
     # one entry per row of the engine's fitter table (src/Fitters.cpp), in the program's precedence
     fitters = {row["name"]: {k: v for k, v in row.items() if k != "name"} for row in engine.fitters()}
