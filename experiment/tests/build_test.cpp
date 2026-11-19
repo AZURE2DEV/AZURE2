@@ -756,6 +756,25 @@ int main() {
     ExpectOne("E_POTENTIAL_TWICE", BuildText(potentials(pot + "potential again\n" + pot.substr(pot.find('\n') + 1))));
     ExpectOne("E_POTENTIAL_PAIR_KIND", BuildText(potentials(Set(pot, "pair", "    pair g+16O"))));
     ExpectOne("E_POTENTIAL_RELATIVISTIC", BuildText(potentials(pot), true));
+    // the `wave` fields (potential_background.md): a depth per partial wave and the interior background
+    {
+      const BuiltProject w = BuildText(potentials(pot + "    wave l 0 depth 67.5 MeV background interior boundary -1 subtract 2\n"
+                                                        "    wave l 1 J 3/2 depth 83.83 MeV\n"));
+      check("two wave fields build", w.Ok() && w.diagnostics.empty() && w.potentials.pairs.count(7) &&
+                                         w.potentials.pairs.at(7).waves.size() == 2);
+      if (w.Ok() && w.potentials.pairs.count(7) && w.potentials.pairs.at(7).waves.size() == 2) {
+        const std::vector<azure2::physics::PartialWave> &v = w.potentials.pairs.at(7).waves;
+        check("wave l 0: every J, depth, background B -1, subtract 2",
+              v[0].l == 0 && v[0].two_j == -1 && v[0].depth_MeV && *v[0].depth_MeV == 67.5 && v[0].background &&
+                  v[0].background->boundary == -1.0 && v[0].background->subtract_nodes == std::vector<int>{2});
+        check("wave l 1 J 3/2: 2J = 3, depth, no background", v[1].l == 1 && v[1].two_j == 3 && v[1].depth_MeV &&
+                                                                 *v[1].depth_MeV == 83.83 && !v[1].background);
+        check("the waves reach the potential value", w.potentials.pairs.at(7).Potential().waves == v);
+      }
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 background interior\n")));
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 boundary 0\n")));
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 depth 1 MeV\n    wave l 0 depth 2 MeV\n")));
+    }
     // ---- the `channel_radius` records of <channelRadii>: entries in record order, s and J where given
     {
       auto radii = [](const std::string &body) { return "<channelRadii>\n" + body + "</channelRadii>\n"; };

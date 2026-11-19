@@ -429,7 +429,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
       status_ |= 1;
       return complex(0.0, 0.0);
     }
-    struct CoulWaves coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
+    struct CoulWaves coul = coulfunction()->ChannelWaves(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     const complex hsp = CoulombHardSpherePhase(coul);
     const double flux = Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
     auto overlap = [&](complex fw, complex gw) {
@@ -447,7 +447,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   } else if (outEnergy > 0.0) {
     Integrate(chanRad);
     struct CoulWaves
-        coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
+        coul = coulfunction()->ChannelWaves(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     if (isChannelCapture) {
       complex chanExpHSP = CoulombHardSpherePhase(coul);
       overlapIntegral = complex(0.0, -0.5) *

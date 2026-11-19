@@ -60,7 +60,24 @@ bool CoulFunc::TableLookup(int l, double radius, double energy) {
 std::complex<double> CoulFunc::HardSpherePhase(int l, int two_j, double radius, double energy) {
   // The table holds pairs without a potential only, whose functions do not depend on two_j.
   if (table_ && TableLookup(l, radius, energy)) return std::complex<double>(std::cos(tPhi_), -std::sin(tPhi_));
-  return CoulombHardSpherePhase(this->operator()(l, two_j, radius, energy));
+  return CoulombHardSpherePhase(ChannelWaves(l, two_j, radius, energy));
+}
+
+CoulWaves CoulFunc::ChannelWaves(int l, int two_j, double radius, double energy) {
+  CoulWaves w = this->operator()(l, two_j, radius, energy);
+  if (!potential_) return w;
+  const azure2::physics::InteriorBackground *bg = azure2::physics::BackgroundOf(*potential_, l, two_j);
+  if (!bg || radius > potential_->matching_radius_fm) return w;
+  // R0 of the partial wave's own potential at the channel radius (an error propagates: no fallback)
+  const double R0 = azure2::physics::BackgroundR(azure2::physics::ForPartialWave(*potential_, l, two_j), z1(), z2(),
+                                                 redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius, energy, *bg);
+  const azure2::physics::WavesAtRadius d =
+      azure2::physics::DressWaves({w.F, w.dF, w.G, w.dG}, kin_.Rho(radius, energy), R0, bg->boundary);
+  w.F = d.F;
+  w.dF = d.Fp;
+  w.G = d.G;
+  w.dG = d.Gp;
+  return w;
 }
 
 /*!
@@ -198,7 +215,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
 
 double CoulFunc::Penetrability(int l, int two_j, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tP_;
-  struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
+  struct CoulWaves coul = ChannelWaves(l, two_j, radius, energy);
   return azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
@@ -215,7 +232,7 @@ double CoulFunc::PEShift(int l, int two_j, double radius, double energy) {
 double CoulFunc::PEShiftExact(int l, int two_j, double radius, double energy) {
   // physics/ChannelFunctions: S with the overflow guard just above a charged threshold (eta >~ 110; 11B+alpha
   // within ~1 keV, where a band of bare cross sections of 1e26-1e37 b once came from the unguarded formula).
-  struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
+  struct CoulWaves coul = ChannelWaves(l, two_j, radius, energy);
   return azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
@@ -266,7 +283,8 @@ CoulWaves CoulFunc::PlainWaves(int l, double radius, double energy) const {
 
 CoulWaves CoulFunc::computeHybrid(int l, int two_j, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
-  const azure2::physics::HybridPotential &potential = *potential_;
+  // the potential of this partial wave (a `wave` depth of the record in place of the central one; potential_background.md)
+  const azure2::physics::HybridPotential potential = azure2::physics::ForPartialWave(*potential_, l, two_j);
 
   // The engine's constants (Constants.h), as the plain Coulomb path uses them.
   const double UCONV = uconv;    // MeV/u

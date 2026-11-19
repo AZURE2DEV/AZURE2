@@ -56,6 +56,40 @@ std::string DefaultNote(const ValidatedRecord &r, const std::string &field) {
   return "potential " + r.name + ": " + field + " not given, " + (f ? f->defaultText : std::string("?")) + " (the default)";
 }
 
+/// The `wave` fields of the record (l, J, depth, background interior boundary subtract) into s.waves; false after an
+/// error (reported).
+bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) {
+  for (const Value *w : r.GetAll("wave")) {
+    physics::PartialWave pw;
+    if (const Value *l = w->Get("l")) pw.l = (int)l->integer;
+    if (const Value *j = w->Get("J")) pw.two_j = j->spin.twice;
+    if (const Value *d = w->Get("depth")) pw.depth_MeV = InBase(*d);
+    const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract");
+    if (bg) {
+      if (!b) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) +
+                                                    ": background interior needs boundary <B_bg> (potential_background.md "
+                                                    "section 2.2: the split depends on it)");
+        return false;
+      }
+      physics::InteriorBackground ib;
+      ib.boundary = b->number.value;
+      if (sub) ib.subtract_nodes.push_back((int)sub->integer);
+      pw.background = ib;
+    } else if (b || sub) {
+      c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": boundary and subtract belong to a background");
+      return false;
+    }
+    for (const physics::PartialWave &o : s.waves)
+      if (o.l == pw.l && o.two_j == pw.two_j) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + " is given twice for the same J");
+        return false;
+      }
+    s.waves.push_back(pw);
+  }
+  return true;
+}
+
 }  // namespace
 
 void BuildPotentials(Context &c) {
@@ -108,6 +142,7 @@ void BuildPotentials(Context &c) {
         continue;
       }
     }
+    if (!ReadWaves(c, r, s)) continue;
     s.coulomb_radius_fm = InBase(*coulomb);
     // r_m and the step: the table's defaults (HybridPotentialSetting's, the solver's) when absent, written to the log
     if (const Value *m = r.Get("matching_radius"))

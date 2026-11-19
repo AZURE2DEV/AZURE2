@@ -267,6 +267,17 @@ HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j) {
   return q;
 }
 
+HybridPotential BelowThresholdPotential(const HybridPotential &p, int l, int two_j) {
+  if (BackgroundOf(p, l, two_j))
+    throw std::runtime_error("the partial wave l = " + std::to_string(l) +
+                             (two_j >= 0 ? ", 2J = " + std::to_string(two_j) : std::string()) +
+                             " of a hybrid pair has an interior background and is evaluated at or below threshold (a level "
+                             "below the pair's threshold, a closed channel or a bound final state of external capture): "
+                             "refused, the background is built above threshold only (docs/upgrade/potential_background.md "
+                             "section 6)");
+  return ForPartialWave(p, l, two_j);
+}
+
 const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_j) {
   const PartialWave *w = FindWave(p, l, two_j);
   return (w && w->background) ? &*w->background : nullptr;

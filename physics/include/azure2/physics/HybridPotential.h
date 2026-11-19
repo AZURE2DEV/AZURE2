@@ -193,6 +193,10 @@ bool DependsOnJ(const HybridPotential &p);
 /// The potential the radial equation of the channel (l, 2J) uses: p with the entry's depth in place of the central one
 /// (p itself, field for field, when the entry has none).
 HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j);
+/// ForPartialWave for a solution below or at threshold (the decaying solution, S(E <= 0)): throws std::runtime_error
+/// when the partial wave has an interior background, which is not built below threshold (potential_background.md
+/// section 6).
+HybridPotential BelowThresholdPotential(const HybridPotential &p, int l, int two_j);
 /// The background of the channel (l, 2J), or nullptr.
 const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_j);
 

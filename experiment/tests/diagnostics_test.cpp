@@ -491,7 +491,7 @@ int main() {
                                             "E_COVARIANCE_FILE", "E_FINAL_STATE_NOT_LEVEL", "E_FINAL_STATE_SHARED", "E_FINAL_STATE_UNBOUND",
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
                                             "E_THM_EXPERIMENT_UNKNOWN", "E_THM_OLD_LIST", "E_LAB_JACOBIAN_AT_LIMIT",
-                                            "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
+                                            "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_WAVE", "E_POTENTIAL_RELATIVISTIC",
                                             "E_CHANNEL_RADIUS_TWICE", "E_CHANNEL_RADIUS_PAIR_KIND", "E_CHANNEL_RADIUS_THM",
                                             "E_ISOSPIN_RECORD", "E_ISOSPIN_PAIR",
                                             "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_CONFIG_KEY_REMOVED", "E_CONFIG_OPTION_VALUE",

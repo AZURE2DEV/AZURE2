@@ -2022,6 +2022,77 @@
      ],
      "doc": "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"
     },
+    "wave": {
+     "title": "Partial wave",
+     "type": "structured",
+     "grammar": "l <integer >= 0> [J <J>] [depth <number> <energy unit>] [background interior] [boundary <number>] [subtract <integer >= 0>]",
+     "required": false,
+     "repeatable": true,
+     "rare": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "l",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 0>",
+         "optional": false,
+         "min": 0,
+         "doc": "the orbital angular momentum of the partial wave"
+        },
+        {
+         "name": "J",
+         "keyword": true,
+         "type": "spin",
+         "grammar": "<J>",
+         "optional": true,
+         "doc": "only the channels of this total J (left out: every J of this l)"
+        },
+        {
+         "name": "depth",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": true,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true,
+         "doc": "V0 of the central term in this partial wave, in both halves (left out: the central depth)"
+        },
+        {
+         "name": "background",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "interior",
+         "optional": true,
+         "values": ["interior"],
+         "doc": "the R-function of the potential inside the channel radius as the background of the channel's diagonal R-matrix element (potential_background.md); left out: none"
+        },
+        {
+         "name": "boundary",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": true,
+         "doc": "B_bg of the background (dimensionless); required with background"
+        },
+        {
+         "name": "subtract",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 0>",
+         "optional": true,
+         "min": 0,
+         "doc": "the node number of a box state of the potential whose pole is subtracted from the background (a state a level of the project represents); left out: none"
+        }
+       ],
+       "doc": "what one partial wave of the pair has of its own (docs/upgrade/potential_background.md)"
+      }
+     ],
+     "doc": "a depth of its own and/or the interior background for the partial wave l (J) of the pair (docs/upgrade/potential_background.md); absent: neither"
+    },
     "matching_radius": {
      "title": "Matching radius",
      "type": "number_with_unit",
@@ -4549,6 +4620,10 @@
   "E_POTENTIAL_PAIR_KIND": {
    "severity": "error",
    "meaning": "a potential record on a photon or beta pair (a potential belongs to a particle pair)"
+  },
+  "E_POTENTIAL_WAVE": {
+   "severity": "error",
+   "meaning": "a wave field of a potential record: background without boundary, boundary or subtract without background, or one (l, J) twice"
   },
   "E_CHANNEL_RADIUS_TWICE": {
    "severity": "error",
