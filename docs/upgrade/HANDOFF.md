@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-19 (agent qt2) — `feature/upgrade-6-qt2`: the Qt program completed (stage 2)
+
+**Design** `docs/upgrade/qt_gui.md` sections 5-9 (new). Cut from `feature/upgrade-6` at `d42935c9`.
+
+**Facade** (`api/front/`, the one header `gui/` includes): `ReadCurves` (the run's `AZUREOut_*` files as data,
+matched to the records by the engine's build of the project and chiSquared.out's keys; `src/FrontOutputs.cpp`),
+`ReadParameters` (a session's parameter vector through `AZUREAPI`, now linked PRIVATE), `ReadParameterFile`,
+`ParameterSettings`/`SetParameterSetting` (`<parameterSettings>` in `ParameterLimitsManager`'s grammar),
+`SamplerPriors`/`SetSamplerPriors` (`<mcmc>` `<parameters>` in `SamplerRun.cpp`'s grammar), `HasCommand`,
+`ThmKinds`/`ThmEntries`/`SetThmOption`/`SetThmExperimentKey` (the engine's `ThmKeys.h` tables and `ThmBlockEdits.h`
+edits; `src/FrontThm.cpp`), `Option::words`, and the sampler's step as a `RunProgress` (stage `mcmc`).
+
+**Engine files touched**: `include/ProgramObserver.h` (a sink `samplerStep`), `src/ProgramMain.cpp` (the step hook
+calls it when an observer is set; null on the command line). Nothing else of the engine.
+
+**GUI**: Plot tab (`PlotTab`, `PlotWidget`: QPainter, no Qwt; `USE_QWT` removed), the parameter table of Fitting
+Settings, the MCMC tab (only where `HasCommand("mcmc")`), the rate's pair drop-downs, the THM form (`ThmTab`) with a
+text view, the Tools menu (`PythonTools`: `python -m pyazr ...` as a child process), record add/duplicate/remove/
+rename without dialogs for the tests (`RecordsPanel`), `PairsTab::removePairAt`, `LevelsTab::removeLevelAt`.
+**Fixed** (stage 1): the fitter drop-down started on the first row of `Fitters()` (gsl-lm), so "fit" from the window
+ran gsl-lm where `AZURE2 fit` runs MIGRAD; it now starts on the row without a switch (MIGRAD).
+`ProjectHolder::setConfig` no longer rewrites a `<config>` line whose value is unchanged.
+
+**Run** (head `4a16f920`, `work/u6-qt2-check.sh`, its output `work/u6-qt2-check.out`): build without the GUI 0
+warnings; `ctest -LE slow` 393 of 394 (`rmfit_enginepin` fails, as on the base); the program against `work/b-join3`
+(`work/u6-qt2-cmp.sh`: calculate and extrapolate of T1, T2, T3, 13N, Brune and `--no-brune`, one thread): every output
+file identical (180), the exit codes the same (T2's and 13N's extrapolate exit 1 on both); GUI build (`work/b-u6-qt2-gui`,
+the facade's and `gui/`'s objects rebuilt) 0 warnings; `ctest -L gui` 1 of 1, `gui_window` 78 checks; `api_front`
+passes (in `ctest -LE slow`).  Screenshots: `work/qt-shots/stage2/` (every tab of T2 after a calculate, sub-pages,
+the Configure dialogs, the Tools menu, two plots).  Not run: `tests/run_tests.sh` (the engine edit is a sink that is
+null on the command line; the 180-file comparison above covers the CLI), `ctest -L slow`, sanitizers, sphinx by hand
+(ctest `docs_build` passed), Windows, macOS.  Seen, not investigated (engine): after a stopped fit of T1_start,
+`calculate --parameter-file=param.sav` writes `param.par` with width_5_1 = 3.0429828 where the file has 3.0614144
+(the window and the program agree byte for byte).
+
+**Open**: no Results page of the sampler; plot: no per-curve style dialog, pan, tracker, print, level markers; the
+parameter table edits limits and priors, not values or fixed flags; dev's EXFOR search dialog, Coulomb-table dialog
+and THM diagnostics plots are not ported (Tools runs pyazr's commands; samplers and band jobs are in the web page and
+Python, not on pyazr's command line). Not run: CI (no Qt job, the PI's decision), Windows, macOS.
+
 ## 2026-11-18 (agent) — feature/upgrade-6-house: the owner's housekeeping answers
 
 Seven commits on `feature/upgrade-6-house`, one per answer of `OWNER_ANSWERS.md` that is housekeeping. No engine file
