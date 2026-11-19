@@ -28,8 +28,16 @@ const QColor kPalette[] = {QColor(0x1f, 0x77, 0xb4), QColor(0xd6, 0x27, 0x28), Q
 
 QListWidget *CurveList() {
   QListWidget *l = new QListWidget;
-  l->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  l->setSelectionMode(QAbstractItemView::SingleSelection);
   return l;
+}
+
+/// The list's curves to draw: the checked ones.
+QList<QListWidgetItem *> Checked(QListWidget *l) {
+  QList<QListWidgetItem *> out;
+  for (int i = 0; i < l->count(); i++)
+    if (l->item(i)->checkState() == Qt::Checked) out << l->item(i);
+  return out;
 }
 
 }  // namespace
@@ -39,8 +47,8 @@ PlotTab::PlotTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
   dataList_->setObjectName("plotDataList");
   extrapList_ = CurveList();
   extrapList_->setObjectName("plotExtrapList");
-  connect(dataList_, &QListWidget::itemSelectionChanged, this, &PlotTab::draw);
-  connect(extrapList_, &QListWidget::itemSelectionChanged, this, &PlotTab::draw);
+  connect(dataList_, &QListWidget::itemChanged, this, &PlotTab::draw);
+  connect(extrapList_, &QListWidget::itemChanged, this, &PlotTab::draw);
 
   xAxis_ = new QComboBox;
   xAxis_->setObjectName("plotXAxis");
@@ -69,6 +77,13 @@ PlotTab::PlotTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
   connect(ySigma_, &QRadioButton::toggled, this, &PlotTab::draw);
 
   plot_ = new PlotWidget;
+  cursor_ = new QLabel;
+  cursor_->setObjectName("plotCursor");
+  cursor_->setProperty("role", "hint");
+  cursor_->setMinimumWidth(fontMetrics().horizontalAdvance("x = -0.000000e-00, y = -0.000000e-00"));
+  connect(plot_, &PlotWidget::cursorMoved, this, [this](double x, double y, bool inside) {
+    cursor_->setText(inside ? QString("x = %1, y = %2").arg(x, 0, 'g', 6).arg(y, 0, 'g', 6) : QString());
+  });
   notes_ = new QLabel;
   notes_->setObjectName("plotNotes");
   notes_->setWordWrap(true);
@@ -81,10 +96,25 @@ PlotTab::PlotTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
   QPushButton *exportButton = new QPushButton(tr("&Export..."));
   connect(exportButton, &QPushButton::clicked, this, &PlotTab::exportDialog);
 
-  QGroupBox *dataBox = new QGroupBox(tr("Segments From Data"));
-  (new QVBoxLayout(dataBox))->addWidget(dataList_);
-  QGroupBox *extrapBox = new QGroupBox(tr("Segments Without Data"));
-  (new QVBoxLayout(extrapBox))->addWidget(extrapList_);
+  auto listBox = [this](const QString &title, QListWidget *list, bool extrapolations) {
+    QGroupBox *box = new QGroupBox(title);
+    QVBoxLayout *v = new QVBoxLayout(box);
+    v->addWidget(list);
+    QPushButton *all = new QPushButton(tr("All"));
+    QPushButton *none = new QPushButton(tr("None"));
+    all->setObjectName(extrapolations ? "plotExtrapAll" : "plotDataAll");
+    none->setObjectName(extrapolations ? "plotExtrapNone" : "plotDataNone");
+    connect(all, &QPushButton::clicked, this, [this, extrapolations]() { checkAll(extrapolations, true); });
+    connect(none, &QPushButton::clicked, this, [this, extrapolations]() { checkAll(extrapolations, false); });
+    QHBoxLayout *h = new QHBoxLayout;
+    h->addWidget(all);
+    h->addWidget(none);
+    h->addStretch(1);
+    v->addLayout(h);
+    return box;
+  };
+  QGroupBox *dataBox = listBox(tr("Segments From Data"), dataList_, false);
+  QGroupBox *extrapBox = listBox(tr("Segments Without Data"), extrapList_, true);
   QWidget *left = new QWidget;
   QVBoxLayout *leftLayout = new QVBoxLayout(left);
   leftLayout->setContentsMargins(0, 0, 0, 0);
@@ -106,6 +136,7 @@ PlotTab::PlotTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
   axes->addSpacing(12);
   for (QCheckBox *b : {logX_, logY_, band_, residuals_, legend_}) axes->addWidget(b);
   axes->addStretch(1);
+  axes->addWidget(cursor_);
   QWidget *right = new QWidget;
   QVBoxLayout *rightLayout = new QVBoxLayout(right);
   rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -124,7 +155,7 @@ PlotTab::PlotTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
 void PlotTab::refresh() {
   QStringList selected;
   for (QListWidget *l : {dataList_, extrapList_})
-    for (QListWidgetItem *i : l->selectedItems()) selected << i->data(Qt::UserRole).toString();
+    for (QListWidgetItem *i : Checked(l)) selected << i->data(Qt::UserRole).toString();
   curves_ = azure2::front::ReadCurves(holder_->project());
   for (QListWidget *l : {dataList_, extrapList_}) {
     l->blockSignals(true);
@@ -145,8 +176,9 @@ void PlotTab::refresh() {
                          .arg(c.block + 1)
                          .arg(c.points.empty() ? c.coefficients.size() : c.points.size())
                          .arg(c.haveBand ? tr(", with its uncertainty band") : QString()));
+    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+    item->setCheckState(selected.contains(id) ? Qt::Checked : Qt::Unchecked);
     (c.section == "data" ? dataList_ : extrapList_)->addItem(item);
-    item->setSelected(selected.contains(id));
   }
   for (QListWidget *l : {dataList_, extrapList_}) l->blockSignals(false);
   QStringList notes;
@@ -162,7 +194,7 @@ void PlotTab::selectRecords(const QStringList &names) {
     l->blockSignals(true);
     for (int i = 0; i < l->count(); i++) {
       const QString id = l->item(i)->data(Qt::UserRole).toString();
-      l->item(i)->setSelected(names.contains(id.section('/', 1)));
+      l->item(i)->setCheckState(names.contains(id.section('/', 1)) ? Qt::Checked : Qt::Unchecked);
     }
     l->blockSignals(false);
   }
@@ -176,6 +208,28 @@ QStringList PlotTab::availableRecords() const {
   return out;
 }
 
+void PlotTab::checkAll(bool extrapolations, bool on) {
+  QListWidget *l = extrapolations ? extrapList_ : dataList_;
+  l->blockSignals(true);
+  for (int i = 0; i < l->count(); i++) l->item(i)->setCheckState(on ? Qt::Checked : Qt::Unchecked);
+  l->blockSignals(false);
+  draw();
+}
+
+QStringList PlotTab::checkedRecords() const {
+  QStringList out;
+  for (QListWidget *l : {dataList_, extrapList_})
+    for (QListWidgetItem *i : Checked(l)) out << i->data(Qt::UserRole).toString().section('/', 1);
+  return out;
+}
+
+QStringList PlotTab::dataRecords() const {
+  QStringList out;
+  for (const azure2::front::Curve &c : curves_.curves)
+    if (c.section == "data") out << QString::fromStdString(c.record);
+  return out;
+}
+
 QString PlotTab::notes() const { return notes_->text(); }
 
 void PlotTab::draw() {
@@ -186,7 +240,7 @@ void PlotTab::draw() {
   QSet<QString> observables;
   int n = 0;
   for (QListWidget *l : {dataList_, extrapList_})
-    for (QListWidgetItem *item : l->selectedItems()) {
+    for (QListWidgetItem *item : Checked(l)) {
       const int index = item->data(Qt::UserRole + 1).toInt();
       if (index < 0 || index >= (int)curves_.curves.size()) continue;
       const azure2::front::Curve &c = curves_.curves[index];
@@ -272,7 +326,7 @@ bool PlotTab::exportPlot(const QString &file, QString &why) const { return plot_
 
 void PlotTab::exportDialog() {
   const QString file = QFileDialog::getSaveFileName(this, tr("Export the plot"), holder_->directory(),
-                                                    tr("PNG image (*.png);;SVG drawing (*.svg);;PDF (*.pdf)"));
+                                                    tr("PNG image (*.png);;SVG drawing (*.svg);;PDF (*.pdf);;Points as CSV (*.csv)"));
   if (file.isEmpty()) return;
   QString why;
   if (!exportPlot(file, why)) QMessageBox::warning(this, tr("Export"), why);

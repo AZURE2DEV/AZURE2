@@ -29,8 +29,11 @@ struct PlotSeries {
  * The Plot tab's drawing (docs/upgrade/qt_gui.md section 5): a plot drawn with QPainter, so that every GUI build has
  * it without a plotting library.  Linear or logarithmic axes with decade ticks, data with error bars, the calculated
  * curve (a single point drawn as a marker), the band as a shaded area, a legend, and a panel of normalised residuals
- * below.  Zoom: drag a rectangle with the left button; double-click or resetZoom() returns to the whole range.
- * render() draws into any QPainter: the widget, a PNG, an SVG (QSvgGenerator) or a PDF (QPdfWriter).
+ * below.  Zoom: drag a rectangle with the left button, or turn the wheel about the cursor (Ctrl: x only, Shift: y
+ * only); pan: drag with the right or middle button, or Shift + left; double-click or resetZoom() returns to the whole
+ * range.  The cursor's coordinates are drawn in the panel's corner and sent as cursorMoved.  render() draws into any
+ * QPainter: the widget (in the window's palette), a PNG, an SVG (QSvgGenerator) or a PDF (QPdfWriter) (on white);
+ * exportTo() also writes the points drawn as CSV.
  */
 class PlotWidget : public QWidget {
   Q_OBJECT
@@ -51,11 +54,25 @@ class PlotWidget : public QWidget {
   QRectF view() const { return view_; }
   /// The number of data points drawn (finite and, on a log axis, positive), for the tests.
   int dataPointsDrawn() const;
-  /// Draw the whole plot into `p` over `area`.
-  void render(QPainter &p, const QRect &area) const;
-  /// Write the plot to a file: .png, .svg or .pdf by its extension.  False with `why`.
+  /// Draw the whole plot into `p` over `area`: on white (a file) or, `onScreen`, in the widget's palette.
+  void render(QPainter &p, const QRect &area, bool onScreen = false) const;
+  /// Write the plot to a file: .png, .svg, .pdf or .csv (the points drawn) by its extension.  False with `why`.
   bool exportTo(const QString &file, QString &why) const;
+  /// The points of the series as CSV: per series a block "# <label>: data" (x, y, error) and "# <label>: calculated"
+  /// (x, y[, band low, band high]).
+  QString csv() const;
+  /// The data coordinates under a pixel of the main panel (false outside it).
+  bool dataAt(const QPointF &pixel, QPointF &data) const;
+  /// Zoom about a pixel by wheel steps (> 0 in): what a wheel turn does.  Ctrl: x only, Shift: y only.
+  void wheelZoom(const QPointF &pixel, double steps, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
+  /// Pan by a drag of `pixels` (the content follows the mouse).
+  void panBy(const QPoint &pixels);
+  /// The cursor's read-out as drawn ("x = 0.52, y = 0.031"), empty outside the panel.
+  QString cursorText() const { return cursorText_; }
   QSize sizeHint() const override { return QSize(700, 480); }
+
+ signals:
+  void cursorMoved(double x, double y, bool inside);
 
  protected:
   void paintEvent(QPaintEvent *) override;
@@ -63,6 +80,8 @@ class PlotWidget : public QWidget {
   void mouseMoveEvent(QMouseEvent *) override;
   void mouseReleaseEvent(QMouseEvent *) override;
   void mouseDoubleClickEvent(QMouseEvent *) override;
+  void wheelEvent(QWheelEvent *) override;
+  void leaveEvent(QEvent *) override;
 
  private:
   struct Frame {
@@ -82,6 +101,9 @@ class PlotWidget : public QWidget {
   QRectF view_;
   QRubberBand *rubber_ = nullptr;
   QPoint origin_;
+  bool panning_ = false;
+  QPoint panLast_;
+  QString cursorText_;
 };
 
 #endif
