@@ -87,6 +87,16 @@ PairsTab::PairsTab(QWidget *parent) :
   deleteButton->setMaximumSize(28, 28);
   deleteButton->setEnabled(false);
   connect(deleteButton, SIGNAL(clicked()), this, SLOT(removePair()));
+  duplicateButton = new QPushButton(tr("Duplicate"));
+  duplicateButton->setObjectName("duplicatePair");
+  duplicateButton->setToolTip(tr("A copy of the selected pair in the pair dialog, to change into another pair (Ctrl+D)"));
+  duplicateButton->setEnabled(false);
+  connect(duplicateButton, &QPushButton::clicked, this, &PairsTab::duplicatePair);
+  {
+    auto *s = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), pairsView);
+    s->setContext(Qt::WidgetShortcut);
+    connect(s, &QShortcut::activated, this, &PairsTab::duplicatePair);
+  }
 
   /*
   mapper = new QSignalMapper(this);
@@ -108,6 +118,7 @@ PairsTab::PairsTab(QWidget *parent) :
   QGridLayout *buttonBox = new QGridLayout;
   buttonBox->addWidget(addButton, 0, 0);
   buttonBox->addWidget(deleteButton, 0, 1);
+  buttonBox->addWidget(duplicateButton, 0, 3);
   buttonBox->addItem(new QSpacerItem(28, 28), 0, 2);
   buttonBox->addWidget(massButton, 0, 4);
   // buttonBox->addWidget(infoButton[0],0,3);
@@ -153,47 +164,34 @@ void PairsTab::updateNucleusColumn() {
 }
 
 void PairsTab::addPair() {
-  AddPairDialog aDialog;
+  AddPairDialog aDialog(this);
   if (aDialog.exec()) {
     if (!((pairsModel->getPairs()).size() == 0 && aDialog.pairTypeCombo->currentIndex() != 0)) {
-      PairsData newPair;
-      newPair.lightJ = (aDialog.lightJText->text()).toDouble();
-      if (aDialog.lightPiCombo->currentIndex() == 0)
-        newPair.lightPi = -1;
-      else
-        newPair.lightPi = 1;
-      newPair.lightZ = (aDialog.lightZText->text()).toInt();
-      newPair.lightM = (aDialog.lightMText->text()).toDouble();
-      newPair.lightG = 0.;  //(aDialog.lightGText->text()).toDouble();
-      newPair.heavyJ = (aDialog.heavyJText->text()).toDouble();
-      if (aDialog.heavyPiCombo->currentIndex() == 0)
-        newPair.heavyPi = -1;
-      else
-        newPair.heavyPi = 1;
-      newPair.heavyZ = (aDialog.heavyZText->text()).toInt();
-      newPair.heavyM = (aDialog.heavyMText->text()).toDouble();
-      newPair.heavyG = 0.;  //(aDialog.heavyGText->text()).toDouble();
-      newPair.seperationEnergy = (aDialog.seperationEnergyText->text()).toDouble();
-      newPair.excitationEnergy = (aDialog.excitationEnergyText->text()).toDouble();
-      newPair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
-      newPair.channelRadius = (aDialog.channelRadiusText->text()).toDouble();
-      if (aDialog.pairTypeCombo->currentIndex() == 1)
-        newPair.pairType = 10;
-      else if (aDialog.pairTypeCombo->currentIndex() == 2)
-        newPair.pairType = 20;
-      else
-        newPair.pairType = 0;
-      unsigned int newMask = 0;
-      if (aDialog.e1Check->isChecked()) newMask |= (1 << 0);
-      // if(aDialog.m1Check->isChecked()) newMask |= (1<<1);
-      if (aDialog.e2Check->isChecked()) newMask |= (1 << 2);
-      newPair.ecMultMask = newMask;
-      addPair(newPair, pairsModel->numPairs(), false);
+      addPair(aDialog.pair(), pairsModel->numPairs(), false);
     } else {
       QMessageBox::information(this, tr("Pair Type Error"),
                                tr("The first pair must be a particle,particle pair."));
     }
   }
+}
+
+void PairsTab::duplicatePair() {
+  const QModelIndex index = pairsView->currentIndex();
+  if (!index.isValid() || index.row() >= pairsModel->numPairs()) return;
+  AddPairDialog aDialog(this);
+  aDialog.setWindowTitle(tr("Duplicate a Particle Pair"));
+  aDialog.setPair(pairsModel->getPairs().at(index.row()));
+  if (!aDialog.exec()) return;
+  const PairsData pair = aDialog.pair();
+  if (pairsModel->isPair(pair) != -1) {
+    QMessageBox::information(this, tr("Pair not added"),
+                             tr("The copy is the same pair as pair %1: change what makes it another pair (a state, a "
+                                "radius, a spin) before accepting it.")
+                                 .arg(pairsModel->isPair(pair) + 1));
+    return;
+  }
+  addPair(pair, pairsModel->numPairs(), false);
+  pairsView->setCurrentIndex(pairsModel->index(pairsModel->numPairs() - 1, index.column()));
 }
 
 void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
@@ -278,134 +276,15 @@ void PairsTab::removePair() {
 }
 
 void PairsTab::editPair() {
-  QItemSelectionModel *selectionModel = pairsView->selectionModel();
-  QModelIndexList indexes = selectionModel->selectedRows();
-
-  QModelIndex index = indexes[0];
-  QModelIndex i = pairsModel->index(index.row(), 0, QModelIndex());
-  QVariant var = pairsModel->data(i, Qt::EditRole);
-  QString lightJ = var.toString();
-  i = pairsModel->index(index.row(), 1, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  int lightPi = var.toInt();
-  i = pairsModel->index(index.row(), 2, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString lightZ = var.toString();
-  i = pairsModel->index(index.row(), 3, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString lightM = var.toString();
-  i = pairsModel->index(index.row(), 4, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString lightG = var.toString();
-  i = pairsModel->index(index.row(), 5, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString heavyJ = var.toString();
-  i = pairsModel->index(index.row(), 6, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  int heavyPi = var.toInt();
-  i = pairsModel->index(index.row(), 7, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString heavyZ = var.toString();
-  i = pairsModel->index(index.row(), 8, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString heavyM = var.toString();
-  i = pairsModel->index(index.row(), 9, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString heavyG = var.toString();
-  i = pairsModel->index(index.row(), 10, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString excitationEnergy = var.toString();
-  i = pairsModel->index(index.row(), 11, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString seperationEnergy = var.toString();
-  i = pairsModel->index(index.row(), 12, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString channelRadius = var.toString();
-  i = pairsModel->index(index.row(), 13, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  int pairType = var.toInt();
-  i = pairsModel->index(index.row(), 14, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  int ecMultMask = var.toInt();
-  i = pairsModel->index(index.row(), PairsModel::LightExcitationColumn, QModelIndex());
-  var = pairsModel->data(i, Qt::EditRole);
-  QString lightExcitation = var.toString();
-
-
-  AddPairDialog aDialog;
+  const QModelIndexList indexes = pairsView->selectionModel()->selectedRows();
+  if (indexes.isEmpty()) return;
+  const QModelIndex index = indexes[0];
+  AddPairDialog aDialog(this);
   aDialog.setWindowTitle(tr("Edit a Particle Pair"));
-  aDialog.lightJText->setText(lightJ);
-  if (lightPi == -1)
-    aDialog.lightPiCombo->setCurrentIndex(0);
-  else
-    aDialog.lightPiCombo->setCurrentIndex(1);
-  aDialog.lightZText->setText(lightZ);
-  aDialog.lightMText->setText(lightM);
-  // aDialog.lightGText->setText(lightG);
-  aDialog.heavyJText->setText(heavyJ);
-  if (heavyPi == -1)
-    aDialog.heavyPiCombo->setCurrentIndex(0);
-  else
-    aDialog.heavyPiCombo->setCurrentIndex(1);
-  aDialog.heavyZText->setText(heavyZ);
-  aDialog.heavyMText->setText(heavyM);
-  // aDialog.heavyGText->setText(heavyG);
-  aDialog.excitationEnergyText->setText(excitationEnergy);
-  aDialog.lightExcitationText->setText(lightExcitation);
-  aDialog.seperationEnergyText->setText(seperationEnergy);
-  aDialog.channelRadiusText->setText(channelRadius);
-  if (pairType == 10)
-    aDialog.pairTypeCombo->setCurrentIndex(1);
-  else if (pairType == 20)
-    aDialog.pairTypeCombo->setCurrentIndex(2);
-  else
-    aDialog.pairTypeCombo->setCurrentIndex(0);
-  if (ecMultMask & (1 << 0))
-    aDialog.e1Check->setChecked(true);
-  else
-    aDialog.e1Check->setChecked(false);
-  // if(ecMultMask&(1<<1)) aDialog.m1Check->setChecked(true);
-  // else aDialog.m1Check->setChecked(false);
-  if (ecMultMask & (1 << 2))
-    aDialog.e2Check->setChecked(true);
-  else
-    aDialog.e2Check->setChecked(false);
-
+  aDialog.setPair(pairsModel->getPairs().at(index.row()));
   if (aDialog.exec()) {
     if (!(index.row() == 0 && aDialog.pairTypeCombo->currentIndex() != 0)) {
-      PairsData pair;
-      pair.lightJ = aDialog.lightJText->text().toDouble();
-      if (aDialog.lightPiCombo->currentIndex() == 0)
-        pair.lightPi = -1;
-      else
-        pair.lightPi = 1;
-      pair.lightZ = aDialog.lightZText->text().toInt();
-      pair.lightM = aDialog.lightMText->text().toDouble();
-      pair.lightG = 0.;  // aDialog.lightGText->text().toDouble();
-      pair.heavyJ = aDialog.heavyJText->text().toDouble();
-      if (aDialog.heavyPiCombo->currentIndex() == 0)
-        pair.heavyPi = -1;
-      else
-        pair.heavyPi = 1;
-      pair.heavyZ = aDialog.heavyZText->text().toInt();
-      pair.heavyM = aDialog.heavyMText->text().toDouble();
-      pair.heavyG = 0.;  // aDialog.heavyGText->text().toDouble();
-      pair.excitationEnergy = aDialog.excitationEnergyText->text().toDouble();
-      pair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
-      pair.seperationEnergy = aDialog.seperationEnergyText->text().toDouble();
-      pair.channelRadius = aDialog.channelRadiusText->text().toDouble();
-      if (aDialog.pairTypeCombo->currentIndex() == 1)
-        pair.pairType = 10;
-      else if (aDialog.pairTypeCombo->currentIndex() == 2)
-        pair.pairType = 20;
-      else
-        pair.pairType = 0;
-      unsigned char newECMultMask = 0;
-      if (aDialog.e1Check->isChecked()) newECMultMask |= (1 << 0);
-      // if(aDialog.m1Check->isChecked()) newECMultMask |= (1<<1);
-      if (aDialog.e2Check->isChecked()) newECMultMask |= (1 << 2);
-      pair.ecMultMask = newECMultMask;
-      editPair(pair, index.row(), false);
+      editPair(aDialog.pair(), index.row(), false);
     } else {
       QMessageBox::information(this, tr("Pair Type Error"),
                                tr("The first pair must be a particle,particle pair."));
@@ -489,8 +368,10 @@ void PairsTab::updateButtons(const QItemSelection &selection) {
 
   if (!indexes.isEmpty()) {
     deleteButton->setEnabled(true);
+    duplicateButton->setEnabled(true);
   } else {
     deleteButton->setEnabled(false);
+    duplicateButton->setEnabled(false);
   }
 }
 

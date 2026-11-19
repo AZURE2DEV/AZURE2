@@ -74,8 +74,19 @@ class RecordsPanel : public QWidget {
   /// The boxes of the form, by their field's key (for the tests and the screenshots).
   QWidget *box(const QString &key) const { return boxes_.value(key, nullptr); }
   QString shownName() const;
-  /// The preview of the record's kernel (nullptr or hidden when it has none).
+  /// The preview of the record's kernels (nullptr or hidden when it has none).
   QWidget *preview() const { return preview_; }
+  /// The kernels the preview draws, as the facade gave them last (empty when none).
+  const azure2::front::KernelPreview &kernelPreview() const { return kernels_; }
+  /// Draw the kernels for user `user` ("data: <name>", "" the first) at lab energy `labEnergy` (MeV; NaN the default).
+  void setPreviewPoint(const QString &user, double labEnergy);
+  /// Why the kernels are not drawn ("" when they are).
+  QString previewWhy() const { return previewWhy_; }
+  /// The fields of the shown record that its quantity (as the form holds it) hides, and of those the ones that hold a
+  /// value Apply will drop (the quantity was changed in the form).
+  QStringList hiddenByQuantity() const { return hiddenByQuantity_; }
+  /// Whether a field's row is shown on the form (the tests).
+  bool fieldRowShown(const QString &key) const;
 
  signals:
   void edited();
@@ -86,6 +97,9 @@ class RecordsPanel : public QWidget {
  private slots:
   void selectionChanged();
   void addRecord();
+  /// The pop-up of the selected record (a double click on its row, or Edit...): its fields by their widgets, OK
+  /// checks it with the engine and writes it.
+  void editRecord();
   void duplicateRecord();
   void removeRecord();
   void apply();
@@ -105,8 +119,12 @@ class RecordsPanel : public QWidget {
   void quantityChanged();
   void updateButtons();
   void showUsedBy();
-  /// Draw the shape of the record's kernel (a beam profile) as the form holds it, where the engine has one.
+  /// Draw the record's kernels (Doppler, beam spread, energy resolution, beam profile) as the form holds it, from the
+  /// engine's own (front::KernelPreviewOf).
   void updatePreview();
+  /// Show the fields the record's quantity uses and hide the others (front::QuantityFieldRules).
+  void applyQuantityRules();
+  bool quantityEdited() const;
   /// The record as the form holds it.
   azure2::front::Record formRecord() const;
   bool formEdited() const;
@@ -122,6 +140,7 @@ class RecordsPanel : public QWidget {
   QLineEdit *filter_;
   QPushButton *addButton_, *removeButton_, *duplicateButton_, *upButton_, *downButton_, *applyButton_, *revertButton_;
   QPushButton *includeButton_, *excludeButton_;
+  QPushButton *editButton_ = nullptr;
   QAction *addAction_, *removeAction_, *duplicateAction_, *upAction_, *downAction_;
   QCheckBox *everyField_;
   QWidget *formHost_;
@@ -132,12 +151,29 @@ class RecordsPanel : public QWidget {
   QPushButton *assignButton_;
   QLabel *status_;
   QWidget *preview_ = nullptr;
+  azure2::front::KernelPreview kernels_;
+  QString previewUser_;
+  QString previewWhy_;
+  double previewEnergy_ = 0;  ///< lab MeV; 0: the default
+  QWidget *formScroll_ = nullptr;
+  QWidget *bottom_ = nullptr;     ///< the form's half of the splitter (hidden while the section has no record)
+  QLabel *emptyHint_ = nullptr;   ///< "No record yet: Add..." under the empty table
+  /// The rows of the fields the quantity decides: key -> (form, label, field widget).
+  struct QuantityRow {
+    QFormLayout *form = nullptr;
+    QLabel *label = nullptr;
+    QWidget *row = nullptr;
+    azure2::front::FieldInfo field;
+  };
+  QMap<QString, QuantityRow> quantityRows_;
+  QStringList hiddenByQuantity_;
   QMap<QString, QList<FieldEditor *>> editors_;  ///< field key -> its editors (several for a repeatable field)
   QMap<QString, QWidget *> boxes_;               ///< field key -> its box (a structured field and its group)
   QList<QWidget *> rareRows_;                    ///< rows of rare fields the record does not set
   azure2::front::Record shown_;                   ///< the record as last read
   bool haveShown_ = false;
   bool reloading_ = false;
+  bool previewPending_ = false;
   QString quantityKey_;
 };
 

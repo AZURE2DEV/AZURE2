@@ -11,7 +11,7 @@ file(GLOB AZURESETUP_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../include/*.h)
 
 set(AZURESETUP_SOURCES
     AZURESetup.cpp AZURESetupFile.cpp main.cpp
-    ProjectHolder.cpp RecordsPanel.cpp ValueEditor.cpp RecordTableModel.cpp SectionTextPanel.cpp RecordTabs.cpp FittingTab.cpp RunTab.cpp RunWorker.cpp
+    ProjectHolder.cpp RecordsPanel.cpp RecordDialog.cpp ValueEditor.cpp RecordTableModel.cpp SectionTextPanel.cpp RecordTabs.cpp FittingTab.cpp RunTab.cpp RunWorker.cpp
     PlotTab.cpp PlotWidget.cpp MCMCTab.cpp ThmTab.cpp PythonTools.cpp
     ConfigDialogs.cpp DiagnosticsPanel.cpp
     PairsModel.cpp PairsTab.cpp AddPairDialog.cpp PairKeyCombo.cpp MassTable.cpp MassCheckDialog.cpp

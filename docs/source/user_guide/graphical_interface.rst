@@ -163,13 +163,23 @@ target its kind, active nucleus, areal density, stopping and straggling; for a
 beam its spread and profile. The whole record is the row's tool tip. The
 columns sort by a click on their header, the filter line keeps the rows that
 contain its text, and several rows can be selected (Shift, Ctrl).
-A double click edits a cell in place: a list for a word, a unit or the name of
-another record; the number of a normalization or of any value with a ``fit``
-box. ``Add...`` (Ins) opens the kind, the name and the required fields,
-filled with the first choices of the project (the first reaction of its pairs,
-the first quantity and its first unit, the data file's columns for that
-quantity, a normalization of 1, fixed); a field left empty is written as ``?``
-and named by the diagnostics until it is given. ``Duplicate`` (Ctrl+D),
+F2, or a click on a selected cell, edits it in place: a list for a word, a unit
+or the name of another record; the number of a normalization or of any value
+with a ``fit`` box. ``Add...`` (Ins) opens the record's pop-up, as the earlier
+program's segment dialogs: the kind, the name and every field a record of the
+kind is usually given (for a data set the reaction, quantity, unit, data file,
+columns, energy and angle windows, normalization, target, beam and detector;
+for an extrapolation the reaction, quantity, unit, energy and angle grids and
+the target, beam and detector), filled with the first choices of the project.
+Under the data file its first lines are shown, with the number of rows and
+columns of numbers, and the columns are made as many as the file has (check
+their roles). ``OK`` checks the record with the engine: a refusal is shown
+under its field and the pop-up stays; ``OK`` again writes it as it is (a field
+left empty is written as ``?``, named by the diagnostics until it is given).
+``Add another`` writes it and keeps the pop-up open with the same choices and
+the next name, for a series of data files. A double click on a row (or
+``Edit...``) opens the record in the same pop-up; the form below the table
+stays. ``Duplicate`` (Ctrl+D),
 ``Remove`` (Del), ``Up`` and ``Down`` (Ctrl+Up, Ctrl+Down; only the record's
 lines move in the file), ``Use`` and ``Leave out`` act on the selected records,
 also from the context menu.
@@ -183,8 +193,12 @@ the project itself:
   (with the target's epochs), and the quantity (by its title) are lists;
 * a reaction is two lists, the entrance pair and the exit pair of the same
   compound nucleus (from the Particle Pairs tab), and the total capture where
-  the project has a photon pair; a sum or a ratio of reactions is written as
-  text;
+  the project has a photon pair; a list beside them makes it a sum of reactions
+  or a ratio of two: one row per term, its weight (empty: 1), its two pairs and,
+  if asked, a fixed angle with its unit and frame (``Add term`` and ``-``); a
+  term whose pairs the project has not is kept as written;
+* a pair (of a channel radius, a potential, a gamma decay's final state) is a
+  list of the project's pairs, still editable;
 * a value that a fit may vary (a normalization, an areal density, a screening
   potential, a kernel's width) is its number, its unit, a ``Fit`` box and
   ``Prior...``: a Gaussian prior's centre and width (``%`` of the centre) and
@@ -200,11 +214,28 @@ the project itself:
   energy or angle column;
 * a file is a line with ``Browse...``, relative to the project.
 
+The quantity of a data set, an extrapolation or a model datum decides which of
+its fields apply (``J``, ``l`` and ``s`` of a phase shift, the spin operator of
+an analyzing power, the expansion and orders of Legendre coefficients, the
+level of a resonance strength, ...): only those are shown, a ``*`` marks the
+ones the quantity requires, and a tool tip says when one applies only under a
+condition (a multipolarity only for a photon exit). Choosing another quantity
+shows and hides them at once; a value in a field that disappears is kept in the
+form until ``Apply``, which then leaves it out of the record and says so under
+the form ("Dropped J: quantity 'sigma' does not use it"). In the ``Add...``
+dialog a change of the quantity makes the rows again: the fields the new
+quantity requires, its unit and columns chosen anew, the other values kept.
+
+An optional field shows the value that applies when it is left out, greyed
+(``yes (default)``), or as the line's placeholder (``default: 0``); nothing is
+written for it.
+
 A field that belongs with another is in its box (a target's composition, phase
 and compound correction with the stopping; its epochs with the areal density;
 the profile's truncation and detailed balance with the profile); a box is
-closed unless the record sets it. The ``T`` button beside each field shows it
-as text, with its grammar; a value the lists cannot show opens as text. Each
+closed unless the record sets it. The text button beside each field (an icon
+with ``Ab``; its tool tip says so) shows the field as the project file writes
+it, with its grammar; a value the lists cannot show opens as text. Each
 field is checked by the engine's reader as it is edited, and its message is
 shown under it. ``Apply`` checks the record against the whole project
 (``--validate``), shows each refusal under its field and asks before writing a
@@ -215,6 +246,24 @@ fields that changed. ``Revert`` shows the record as the project holds it.
 
 The form of a target, beam or detector says which data sets and
 extrapolations use it (``Used by``); ``Assign to...`` checks them in a list.
+An empty section shows a line that says how to add a record, and no empty form.
+
+**What it does to a point.** Over the form of a target with a Doppler
+broadening, a beam with an energy spread or a profile, and a detector with an
+energy resolution, a curve per kernel shows what the record does to one point
+of a data set that uses it, and its full width at half maximum under it, in keV
+in the lab and in the c.m. frame. The curves are the engine's own kernels (the
+free-gas Doppler broadening, the Gaussian spread, the rectangular and
+triangular resolutions, the skewed-Gaussian profile) built as a run builds
+them, from the form as it stands: a temperature, a width or a spread typed is
+drawn at once, before ``Apply``. ``for`` chooses the data set (its entrance
+pair's masses: the Doppler width depends on them) and ``at E_lab`` the beam
+energy, by default the middle of that data set's energies. The Doppler
+broadening of a free gas at temperature T is a Gaussian in velocity: at a lab
+energy E much above kT its width is about 2.355 (2 E kT m/M)^1/2, m and M the
+masses of the projectile and the target (0.17 keV for protons on 12C at
+1.2 MeV and 300 K). A record no data set names yet is drawn for the project's
+first particle pair at the energy typed, which the line under the curves says.
 
 The Levels and Channels tab
 ---------------------------
@@ -286,8 +335,25 @@ cannot be taken is refused with the reason); a double click elsewhere opens the
 pair's dialog. Removing a pair asks first, naming the channels that go with it
 and the data sets and extrapolations whose reaction names it (the engine
 refuses them once the pair is gone; records that name a later pair by its key
-then point one pair off). The isotope fields of the pair's dialog complete
-from the mass table. Ctrl+Z undoes a pair's edit as in the Levels tab.
+then point one pair off). ``Duplicate`` (Ctrl+D) opens the dialog on a copy of
+the selected pair, to change into another pair (an excited state, another
+radius). Ctrl+Z undoes a pair's edit as in the Levels tab.
+
+The pair's dialog: the pair type is a list (two particles, a photon pair of the
+compound nucleus in a final level, a beta decay), and what a type does not use
+is hidden (a photon pair has no light particle, separation energy or channel
+radius); a look at another type and back gives the particle pair's values back.
+Each particle is chosen by its element (a list of the mass table's symbols, or
+the symbol typed) and its mass number A: Z and the atomic mass (AME2020) are
+filled, and J and the parity where they are known without a spin table (n, p,
+d, t, 3He, alpha, and 0+ for an even-even nucleus); otherwise the dialog says
+to give them. J is a spin box of halves and the parity a +/- button. Every
+value stays editable. ``Fill masses and S`` fills both masses and the
+separation energy from the table.
+
+The channels of a level (when it is added, or its J^pi or the limits change)
+are the engine's rule, the one ``pyazr`` uses, applied to the pairs as the tab
+holds them before a save.
 
 The parameter table
 -------------------

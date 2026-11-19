@@ -638,66 +638,36 @@ QList<SpinParityOption> LevelsTab::spinParityOptions(const Nucleus &nucleus) {
 
 QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int levelIndex) {
   QList<ChannelsData> channels;
-  QList<PairsData> pairs = pairsModel->getPairs();
-
-  int maxL = maxLSpin->value();
-  int maxMult = maxMultSpin->value();
-  int maxNumMult = maxNumMultSpin->value();
-
+  const QList<PairsData> pairs = pairsModel->getPairs();
+  // one pair row per pair, as the tab writes a pair (channelRow), the key its place + 1; the level's nucleus's keys
+  std::vector<azure2::front::LevelRow> rows;
+  std::vector<int> keys;
+  const LevelsData pairLevel = {0, 0, 0., 1, 0.};
   for (int i = 0; i < pairs.size(); i++) {
-    PairsData pair = pairs.at(i);
-    // A level with a compound nucleus takes channels from that nucleus's pairs only.
-    if (level.hasNucleus() && PairsModel::nucleusOf(pair) != level.nucleus()) continue;
-    if (pair.pairType == 0) {
-      // Bose/Fermi symmetry of identical particles (the engine's rule, PPair / CNuc::CheckIdenticalChannels):
-      // only l + s even.  Before 2026-11-05 every (l, s) was offered, and the engine refused a pair with spin
-      // (p+p, d+d, 12C(2+)+12C(2+)) on the l + s odd ones and warned about them for a spin-0 pair.
-      const bool identical = PairsModel::isIdentical(pair);
-      for (double s = fabs(pair.heavyJ - pair.lightJ); s <= pair.heavyJ + pair.lightJ; s += 1.0) {
-        for (double l = fabs(s - level.jValue); l <= s + level.jValue; l += 1.0) {
-          if (identical && (int(l + 0.5) + int(s + 0.5)) % 2 != 0) continue;
-          if (int(l * 2.0) % 2 == 0 && pair.lightPi * pair.heavyPi * pow(-1, int(l)) == level.piValue && int(l) <= maxL) {
-            ChannelsData channel = {0, levelIndex, i, s, int(l), 'P', 0.0};
-            channels.push_back(channel);
-          }
-        }
-      }
-    } else if (pair.pairType == 20) {
-      if (fabs(pair.heavyJ - level.jValue) == 0. && pair.heavyPi == level.piValue) {
-        ChannelsData gtChannel = {0, levelIndex, i, 0., 1, 'G', 0.0};
-        ChannelsData fChannel = {0, levelIndex, i, 0., 0, 'F', 0.0};
-        channels.push_back(gtChannel);
-        channels.push_back(fChannel);
-      } else if (fabs(pair.heavyJ - level.jValue) == 1. && pair.heavyPi == level.piValue) {
-        ChannelsData gtChannel = {0, levelIndex, i, 1., 1, 'G', 0.0};
-        channels.push_back(gtChannel);
-      }
-    } else {
-      int numMult = 1;
-      // J couples to the final state's spin and an integer multipole only when both are integer or both half-integer;
-      // the triangle condition alone would let an integer J radiate to a half-integer final state.
-      bool sameCharacter = int(2.0 * (level.jValue + pair.heavyJ) + 0.5) % 2 == 0;
-      for (int l = 1; l <= maxMult && sameCharacter; l++) {
-        if (fabs(l - pair.heavyJ) <= level.jValue && level.jValue <= l + pair.heavyJ && numMult <= maxNumMult) {
-          QChar radType;
-          int parityChange = pair.heavyPi * level.piValue;
-          if (l % 2 != 0) {
-            if (parityChange == -1)
-              radType = 'E';
-            else
-              radType = 'M';
-          } else {
-            if (parityChange == -1)
-              radType = 'M';
-            else
-              radType = 'E';
-          }
-          ChannelsData channel = {0, levelIndex, i, pair.heavyJ, l, radType, 0.0};
-          channels.push_back(channel);
-          numMult++;
-        }
-      }
+    const ChannelsData ch = {0, -1, i, 0., 0, 'P', 0.};
+    rows.push_back(channelRow(ch, pairLevel, pairs.at(i), pairs.at(0), 0));
+    if (!level.hasNucleus() || PairsModel::nucleusOf(pairs.at(i)) == level.nucleus()) keys.push_back(i + 1);
+  }
+  if (rows.empty() || keys.empty()) return channels;
+  std::vector<azure2::front::AllowedChannelInfo> allowed;
+  std::string why;
+  const int twoJ = int(std::lround(2.0 * level.jValue));
+  if (!azure2::front::AllowedChannels(rows, twoJ, level.piValue, maxLSpin->value(), maxMultSpin->value(),
+                                      maxNumMultSpin->value(), keys, allowed, why))
+    return channels;
+  for (const azure2::front::AllowedChannelInfo &c : allowed) {
+    const int i = c.pairKey - 1;
+    if (i < 0 || i >= pairs.size()) continue;
+    const PairsData &pair = pairs.at(i);
+    QChar radType = 'P';
+    if (pair.pairType == 20) {
+      radType = c.l == 1 ? 'G' : 'F';  // Gamow-Teller, Fermi
+    } else if (pair.pairType == 10) {
+      // E or M from the parities: an odd L with a change of parity is electric, an even L without one too
+      const int parityChange = pair.heavyPi * level.piValue;
+      radType = (c.l % 2 != 0) == (parityChange == -1) ? 'E' : 'M';
     }
+    channels.push_back({0, levelIndex, i, c.twoS / 2.0, c.l, radType, 0.0});
   }
   return channels;
 }

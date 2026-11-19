@@ -47,6 +47,8 @@ class LevelsTab : public QWidget {
   void updateChannelsLevelDeleted(int levelIndex);
   void updateChannelsLevelEdited(int levelIndex);
   QList<ChannelsData> calculateChannels(int levelIndex);
+  /*! The channels of a level under the pairs and limits: the facade's rule (azure2::front::AllowedChannels, the
+   *  engine's experiment::AllowedChannels on the tab's unsaved pairs), the level's compound nucleus's pairs only. */
   QList<ChannelsData> calculateChannels(const LevelsData &level, int levelIndex);
   /*! The J^pi that give at least one channel under the current pairs and limits (every pair). */
   QList<SpinParityOption> spinParityOptions();

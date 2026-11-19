@@ -54,6 +54,46 @@ interference decomposition (no facade call: `physics_tab.md` 6.1, 6.2).  The def
 every level of the project, background poles included (T1: 2-16 MeV).  The Argand plot's markers sit at the grid
 point nearest each level (no interpolation).  The THM line shape was not exercised (T2 has `lineshape` off).
 
+## 2026-11-20 (agent polish) — `feature/upgrade-8-polish`: what the quantity decides, kernels drawn, sums of reactions, the pair dialog, the channel rule
+
+**Design** `docs/upgrade/qt_gui.md` section 15.  Cut from `feature/upgrade-6` at `8e74e8db`.
+
+**Facade** (`api/front/src/FrontPolish.cpp`, cases `PolishChecks` in `front_test.cpp`): `QuantityFieldRules`
+(experiment's `Quantity::fields`, conditions in words); `KernelPreviewOf` (physics_tab.md 6.2's set-up call: the
+record, as the form holds it, set into a copy of the project built by the engine's reader, the other data sets left
+out so their errors do not block it; each kernel made by the engine's `TargetEffect` from a reduced spec; shapes from
+the kernel's own `LinearForm` weights or Doppler `broadeningWeights`, FWHM keV lab and c.m.; Doppler, Gaussian
+spread, table resolutions, beam profile; UDR and the target integration not drawn); `ParseReactionExpression` /
+`ReactionExpressionText`; `AllowedChannels` on unsaved pair rows (experiment::AllowedChannels less two rules it
+lacks: identical particles l+s even, a photon channel between whole and half-whole spins).  No engine file edited.
+
+**GUI**: byQ fields shown only for a quantity that uses them (hide/show at once, a dropped value said on Apply);
+the Add dialog remade on a change of quantity (rows, unit, columns); "What it does to a point" over a target's,
+beam's, detector's form (curves with FWHM, data set and E_lab chosen, redrawn as typed); optional words show their
+default greyed; the "T" toggle an icon with a tool tip; a spin by a spin box of halves (+ parity toggle); a pair by
+a drop-down of the project's pairs; a sum or ratio of reactions by terms (weight, pairs, fixed angle); an empty
+section shows its hint and no empty form; "J^pi" titles shown as Jπ; the Segments help one line; the pair dialog by
+element + A (Z, mass from AME2020, J^pi for n, p, d, t, 3He, alpha and even-even 0+), J spin box, parity toggle,
+type hiding what it does not use; Duplicate pair (Ctrl+D); the Levels tab's channels from the facade.  Added by the
+director's message (the PI, 2026-11-20: "a pop-up for adding the segments and extrapolations could be nice"):
+`RecordDialog`, the record pop-up of dev's segment dialogs (every usual field, the data file's first lines and its
+columns counted, `front::ColumnsForFile`, OK checked by the engine with the refusal under its field, Add another,
+Edit by a double click on a row; in-place cell editing moved to F2 / a click on the selected cell).
+
+**Run**: see the agent's report (build 0 warnings; `ctest -L gui`, `api_front`, `repo_consistency`, `-LE slow`).
+Screenshots before/after: `work/qt-shots/u8-polish/` (before_* are the merged program's).
+
+**Not run**: `tests/run_tests.sh` (no engine file changed); a real display; Windows/macOS.
+
+**Open**: the tab's edits per action through `experiment::LevelEdits` (not a contained change: the tab's three
+models and its undo stack); experiment::AllowedChannels itself lacks the identical-particle and whole/half-whole
+rules (pyazr's `allowed_channels` offers those channels; the facade filters them; fixing it is an engine edit);
+a model datum's level and J are not picked from the levels (spin box and number); the spin of a heavy nucleus that
+is not even-even is not filled (no spin table in the repository); the UDR kernel and the target integration have
+no preview; T3's 2+ level at 3.03 MeV carries a Gamow-Teller channel of s = 1 to the 2+ 8Li parent, which neither
+experiment::AllowedChannels nor the GUI's former copy offers (both give s = 0 for J = J_parent): the rule or the file
+needs the owner's look.
+
 ## 2026-11-19 (agent shell) — `feature/upgrade-7-gui-shell`: CI for the Qt program, a modern shell
 
 **Design** `docs/upgrade/qt_gui.md` section 11.  Cut from `feature/upgrade-6` at `35cfcffe`.
