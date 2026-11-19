@@ -235,5 +235,7 @@ if(NOT AZURE2_PHYSICS_STANDALONE)
                    -DGENERATOR=${CMAKE_GENERATOR}
                    -DCXX=${CMAKE_CXX_COMPILER}
                    -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/physics_standalone.cmake)
-  set_tests_properties(physics_standalone PROPERTIES TIMEOUT 300)
+  # RUN_SERIAL: the test is a build of its own; beside another test (ctest -j 2 on the macOS runner) it took 236 s
+  # and 266 s and then ran into the 300 s limit (run 44419023869), against 168 s alone.
+  set_tests_properties(physics_standalone PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
 endif()
