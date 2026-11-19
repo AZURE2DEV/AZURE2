@@ -9,6 +9,9 @@
 //  (d) every tab grabbed into the screenshot directory.
 // PASS/FAIL per check; exit 1 on a failure.
 #include <atomic>
+#include <deque>
+#include <functional>
+#include <map>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -16,7 +19,14 @@
 #include <iostream>
 #include <sstream>
 
+#include <QAbstractButton>
 #include <QApplication>
+#include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMessageBox>
 #include <QCheckBox>
 #include <QFile>
 #include <QFileInfo>
@@ -29,10 +39,14 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTimer>
 
 #include "AZURESetup.h"
+#include "ChannelsModel.h"
+#include "ConfigDialogs.h"
+#include "LevelsModel.h"
 #include "DiagnosticsPanel.h"
 #include "FittingTab.h"
 #include "LevelsTab.h"
@@ -128,6 +142,51 @@ bool SameOutputs(const fs::path &a, const fs::path &b, std::string &report) {
   return total > 0 && same == total;
 }
 
+/// Answers the modal dialogs a menu item opens, one handler per dialog in order (a file chooser given its file, a
+/// message box its button), polled from the event loop.
+struct DialogDriver {
+  std::deque<std::function<bool(QWidget *)>> answers;
+  QTimer timer;
+  DialogDriver() {
+    timer.setInterval(100);
+    QObject::connect(&timer, &QTimer::timeout, [this]() {
+      QWidget *modal = QApplication::activeModalWidget();
+      if (modal && !answers.empty() && answers.front()(modal)) answers.pop_front();
+      else if (modal && std::getenv("AZURE2_TEST_DIALOGS"))
+        std::cout << "  (a dialog without an answer: " << modal->metaObject()->className() << " "
+                  << modal->windowTitle().toStdString() << ")" << std::endl;
+    });
+    timer.start();
+  }
+  void file(const QString &path) {
+    answers.push_back([path](QWidget *w) {
+      QFileDialog *d = qobject_cast<QFileDialog *>(w);
+      if (!d) return false;
+      // the file name typed into the dialog's name field and its Open/Save button pressed, as a user does
+      QLineEdit *name = d->findChild<QLineEdit *>("fileNameEdit");
+      QDialogButtonBox *buttons = d->findChild<QDialogButtonBox *>("buttonBox");
+      if (!name || !buttons) return false;
+      name->setText(path);
+      for (QAbstractButton *b : buttons->buttons())
+        if (buttons->buttonRole(b) == QDialogButtonBox::AcceptRole) {
+          b->click();
+          return true;
+        }
+      return false;
+      return true;
+    });
+  }
+  void button(QMessageBox::StandardButton b) {
+    answers.push_back([b](QWidget *w) {
+      QMessageBox *m = qobject_cast<QMessageBox *>(w);
+      if (!m) return false;
+      if (QAbstractButton *x = m->button(b)) x->click();
+      else m->accept();
+      return true;
+    });
+  }
+};
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -136,6 +195,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   QApplication app(argc, argv);
+  QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, true);  // the dialogs the tests answer are Qt's
   QCoreApplication::setOrganizationName("jina-test");
   QCoreApplication::setApplicationName("azure2-gui-test");
   const fs::path source = argv[1];
@@ -246,6 +306,200 @@ int main(int argc, char **argv) {
     const std::string back = w.holder()->project().Text();
     Check(back == original, "T2: every key removed again: the file as it was");
     if (back != original) std::cout << back.substr(back.find("<thm>"), 300) << std::endl;
+  }
+
+  // (b3) editing paths: records added, duplicated, renamed and removed in each list; a pair added and removed; levels
+  // added, edited and removed with their channels; saved, reopened and validated
+  {
+    const fs::path copy = CopyProject(projects[1], work / "edit_T2");
+    QString why;
+    w.readProjectFile(QString::fromStdString(copy.string()), why);
+    struct List {
+      RecordsPanel *panel;
+      std::string section, kind;
+    };
+    const std::vector<List> lists = {{w.getSegmentsTab()->records("data"), "data", "dataset"},
+                                     {w.getSegmentsTab()->records("extrapolations"), "extrapolations", "extrapolation"},
+                                     {w.getEffectsTab()->records("targets"), "targets", "target"}};
+    std::map<std::string, int> expected;
+    for (const List &l : lists) {
+      RecordsPanel *panel = l.panel;
+      const int before = panel ? panel->recordCount() : -1;
+      std::string first;
+      for (const azure2::front::Record &r : w.holder()->records(QString::fromStdString(l.section)))
+        if (first.empty() && r.kind == l.kind) first = r.name;
+      QString copyName;
+      // a list without a record of the kind (T2 has no extrapolation): only the add and the remove
+      const bool duplicated = first.empty() || (panel && panel->selectRecord(QString::fromStdString(first)) &&
+                                                panel->duplicateShown(copyName, why));
+      const QString renamed = QString::fromStdString(first) + "_dup";
+      const bool renamedOk = first.empty() || (duplicated && panel->renameShown(renamed, why) &&
+                                               panel->recordNames().contains(renamed) && !panel->recordNames().contains(copyName));
+      const int kept = panel ? panel->recordCount() : -1;
+      const bool added = panel && panel->addNamedRecord(QString::fromStdString(l.kind), "added_one", why) &&
+                         panel->recordCount() == kept + 1;
+      const bool removed = panel && panel->selectRecord("added_one") && panel->removeShown(why) &&
+                           panel->recordCount() == kept;
+      Check(duplicated && renamedOk && added && removed,
+            "T2 " + l.section + ": " + (first.empty() ? std::string("(none of kind ") + l.kind + ")" :
+                                        first + " duplicated and renamed " + renamed.toStdString()) +
+                ", a new " + l.kind + " added and removed (" + why.toStdString() + ")");
+      expected[l.section] = before + (first.empty() ? 0 : 1);
+    }
+    Check(w.writeProjectFile(QString::fromStdString(copy.string()), why), "T2: saved after the record edits");
+    azure2::front::Project back;
+    std::string reason;
+    const bool opened = azure2::front::Project::Open(copy.string(), back, reason);
+    bool counts = opened;
+    for (const auto &e : expected) counts = counts && (int)back.Records(e.first).size() == e.second;
+    const azure2::front::Validation v = back.Validate();
+    std::string errors;
+    for (const azure2::front::Diagnostic &d : v.diagnostics)
+      if (d.severity == "error") errors += " " + d.text;
+    Check(opened && counts && v.ok, "T2: reopened with the new records, valid" + errors);
+  }
+  {
+    const fs::path copy = CopyProject(projects[0], work / "levels_T1");
+    QString why;
+    w.readProjectFile(QString::fromStdString(copy.string()), why);
+    PairsModel *pairs = w.getPairsTab()->getPairsModel();
+    const int numPairs = pairs->numPairs();
+    PairsData pair = pairs->getPairs().first();
+    pair.channelRadius += 0.25;
+    w.getPairsTab()->addPair(pair, numPairs, false);
+    const bool pairAdded = pairs->numPairs() == numPairs + 1;
+    w.getPairsTab()->removePairAt(numPairs);
+    Check(pairAdded && pairs->numPairs() == numPairs, "T1: a pair added and removed (" + std::to_string(numPairs) + " pairs)");
+    LevelsTab *levels = w.getLevelsTab();
+    LevelsModel *lm = levels->getLevelsModel();
+    const int numLevels = lm->getLevels().size();
+    const int numChannels = levels->getChannelsModel()->getChannels().size();
+    levels->addLevel(LevelsData{1, 0, 0.5, 1, 6.0}, false);
+    levels->addLevel(LevelsData{1, 0, 2.5, -1, 7.0}, false);
+    int newChannels = 0;
+    for (const ChannelsData &c : levels->getChannelsModel()->getChannels()) newChannels += c.levelIndex >= numLevels;
+    Check(lm->getLevels().size() == numLevels + 2 && newChannels > 0 &&
+              levels->getChannelsModel()->getChannels().size() == numChannels + newChannels,
+          "T1: two levels added (1/2+ at 6 MeV, 5/2- at 7 MeV) with " + std::to_string(newChannels) + " channels");
+    lm->setData(lm->index(numLevels, 4), 6.5, Qt::EditRole);
+    levels->removeLevelAt(numLevels + 1);
+    int kept = 0;
+    for (const ChannelsData &c : levels->getChannelsModel()->getChannels()) kept += c.levelIndex >= numLevels;
+    Check(lm->getLevels().size() == numLevels + 1 && kept > 0 && kept < newChannels,
+          "T1: the 1/2+ level moved to 6.5 MeV, the 5/2- level removed with its channels (" + std::to_string(kept) +
+              " channels left of the new level)");
+    Check(w.writeProjectFile(QString::fromStdString(copy.string()), why), "T1: saved after the level edits (" + why.toStdString() + ")");
+    azure2::front::Project back;
+    std::string reason;
+    azure2::front::Project::Open(copy.string(), back, reason);
+    bool found = false;
+    for (const azure2::front::LevelRow &r : back.Levels())
+      found = found || (r.tokens.size() > 2 && r.tokens[0] == "0.5" && r.tokens[1] == "1" && r.tokens[2] == "6.5");
+    const azure2::front::Validation v = back.Validate();
+    std::string errors;
+    for (const azure2::front::Diagnostic &d : v.diagnostics)
+      if (d.severity == "error") errors += " " + d.text;
+    Check(found && v.ok, "T1: reopened with the level at 6.5 MeV, valid" + errors);
+  }
+  // the Configure dialogs, the formalism, File > New, Open Recent and Convert (through its dialogs)
+  {
+    const fs::path copy = CopyProject(projects[0], work / "config_T1");
+    QString why;
+    w.readProjectFile(QString::fromStdString(copy.string()), why);
+    const std::string original = w.holder()->project().Text();
+    const QJsonArray table = QJsonDocument::fromJson(QByteArray::fromStdString(azure2::front::ConfigTableJson())).array();
+    struct Dialog {
+      QString title;
+      QStringList groups, exclude;
+      std::string shot;
+    };
+    for (const Dialog &d : {Dialog{"Checks", {"Checks"}, {}, "dialog_checks"},
+                            Dialog{"Directories", {"Directories"}, {}, "dialog_directories"},
+                            Dialog{"Runtime Options", {}, {"Checks", "Directories", "File"}, "dialog_runtime_options"}}) {
+      ConfigDialog dialog(w.holder(), d.title, d.groups, d.exclude, &w);
+      // the first entry of the dialog the test can change: a check's word, a directory's text, an option's box
+      QString name, from, to;
+      for (const QJsonValue &v : table) {
+        const QJsonObject row = v.toObject();
+        if (!dialog.editor(row["name"].toString()) || row["kind"].toString() == "version") continue;
+        name = row["name"].toString();
+        break;
+      }
+      QWidget *e = dialog.editor(name);
+      const QString asRead = w.holder()->configValue(name, QString(QChar(1)));  // the line as it stands, or none
+      if (QComboBox *c = qobject_cast<QComboBox *>(e)) {
+        from = c->currentText();
+        c->setCurrentIndex((c->currentIndex() + 1) % c->count());
+        to = c->currentText();
+      } else if (QCheckBox *b = qobject_cast<QCheckBox *>(e)) {
+        from = b->isChecked() ? "1" : "0";
+        b->setChecked(!b->isChecked());
+        to = b->isChecked() ? "1" : "0";
+      } else if (QLineEdit *l = qobject_cast<QLineEdit *>(e)) {
+        from = l->text();
+        l->setText("output2/");
+        to = "output2/";
+      }
+      dialog.show();
+      QApplication::processEvents();
+      dialog.grab().save(shots + "/" + QString::fromStdString(d.shot) + ".png");
+      const bool written = dialog.write(why) && w.holder()->configValue(name) == to;
+      Check(!name.isEmpty() && written && w.holder()->project().Validate().format3,
+            "Configure > " + d.title.toStdString() + ": " + name.toStdString() + " " + from.toStdString() + " -> " +
+                to.toStdString() + " written by the engine's edit (" + why.toStdString() + ")");
+      if (asRead == QString(QChar(1))) w.holder()->setConfig(name, QString(), why, true);
+      else w.holder()->setConfig(name, asRead, why);
+    }
+    QAction *rMatrix = nullptr, *aMatrix = nullptr;
+    for (QAction *a : w.findChildren<QAction *>()) {
+      if (a->text() == "&R-Matrix") rMatrix = a;
+      if (a->text() == "&A-Matrix") aMatrix = a;
+    }
+    const std::string amatrix = w.holder()->project().Config().front().value;
+    if (rMatrix) rMatrix->trigger();
+    const std::string r = w.holder()->project().Config().front().value;
+    if (aMatrix) aMatrix->trigger();
+    Check(rMatrix && aMatrix && amatrix == "true" && r == "false" && w.holder()->project().Config().front().value == "true",
+          "Configure > Formalism: R-Matrix writes the first <config> line false, A-Matrix true again");
+    // every entry back to its value (an edited line keeps the engine's layout of an edit: "true  #..." for "true #...")
+    azure2::front::Project before = azure2::front::Project::FromText(original, copy.string());
+    bool same = before.Config().size() == w.holder()->project().Config().size();
+    for (std::size_t i = 0; same && i < before.Config().size(); i++)
+      same = before.Config()[i].name == w.holder()->project().Config()[i].name &&
+             before.Config()[i].value == w.holder()->project().Config()[i].value;
+    Check(same, "T1: every Configure edit undone: the <config> entries as read");
+    w.writeProjectFile(QString::fromStdString(copy.string()), why);
+
+    // File > New
+    QMetaObject::invokeMethod(&w, "newProject");
+    Check(w.holder()->path().endsWith("untitled.azr") && w.holder()->records("data").empty() &&
+              w.holder()->project().Levels().empty(),
+          "File > New: an empty project (untitled.azr)");
+    // Open Recent: the item of the T1 copy saved above
+    QAction *recent = nullptr;
+    for (QAction *a : w.findChildren<QAction *>())
+      if (a->data().toString() == QFileInfo(QString::fromStdString(copy.string())).absoluteFilePath()) recent = a;
+    if (recent) recent->trigger();
+    Check(recent && w.holder()->path() == QFileInfo(QString::fromStdString(copy.string())).absoluteFilePath(),
+          "File > Open Recent: the T1 copy opened from its item");
+    // Convert through its dialogs: the old file, the new name, the converter's report, then the new file opens
+    const fs::path conv = work / "convert_13N";
+    fs::remove_all(conv);
+    fs::create_directories(conv / "output");
+    fs::create_directories(conv / "checks");
+    fs::copy(source / "tests/convert/fixtures/tests/13N/13N.azr", conv / "13N.azr");
+    fs::copy(source / "tests/13N/data", conv / "data", fs::copy_options::recursive);
+    DialogDriver driver;
+    driver.file(QString::fromStdString((conv / "13N.azr").string()));
+    driver.file(QString::fromStdString((conv / "13N.f3.azr").string()));
+    driver.button(QMessageBox::Ok);
+    QMetaObject::invokeMethod(&w, "convertProject");
+    const azure2::front::Validation v = w.holder()->project().Validate();
+    std::string errors;
+    for (const azure2::front::Diagnostic &d : v.diagnostics)
+      if (d.severity == "error") errors += " " + d.text;
+    Check(fs::exists(conv / "13N.f3.azr") && w.holder()->path().endsWith("13N.f3.azr") && v.ok,
+          "File > Convert: the old 13N through the dialogs, the converted file opened and valid" + errors);
   }
 
   // (c) runs
@@ -523,10 +777,48 @@ int main(int argc, char **argv) {
     w.readProjectFile(QString::fromStdString(copy.string()), why);
     w.getSegmentsTab()->records("data")->selectRecord("s02_diff090");
     w.getEffectsTab()->records("targets")->selectRecord("tgt_s05_implanted");
+    // after a calculation (the Calculate tab's results, the Plot tab), the parameter tables filled
+    w.getRunTab()->setCommand("calculate");
+    const RunOutcome o = RunAndWait(w, turns);
+    Check(o.exitCode == 0, "T2: calculate from the window for the screenshots");
+    w.getPlotTab()->selectRecords({"s02_diff090", "s03_diff150"});
+    w.getFittingTab()->readParameters(QString::fromStdString(copy.string()), why);
+    if (w.getMCMCTab()) w.getMCMCTab()->readParameters(QString::fromStdString(copy.string()), why);
+    w.getThmTab()->selectExperiment("LC09");
     for (const QString &old : QDir(shots).entryList({"tab*.png"})) QFile::remove(shots + "/" + old);
     w.saveTabScreenshots(shots);
     const int n = (int)QDir(shots).entryList({"tab*.png"}).size();
     Check(n == w.tabs()->count(), "screenshots of " + std::to_string(n) + " tabs in " + shots.toStdString());
+    // the sub-pages that a tab grab does not show, the Tools menu, About
+    auto shot = [&](QWidget *page, QWidget *tab, const QString &name) {
+      if (QTabWidget *pages = qobject_cast<QTabWidget *>(page->parentWidget() ? page->parentWidget()->parentWidget() : nullptr))
+        pages->setCurrentWidget(page);
+      w.tabs()->setCurrentWidget(tab);
+      QApplication::processEvents();
+      w.grab().save(shots + "/" + name + ".png");
+    };
+    if (QTabWidget *pages = w.getThmTab()->findChild<QTabWidget *>("thmPages")) {
+      pages->setCurrentIndex(1);
+      shot(pages->currentWidget(), w.getThmTab(), "sub_thm_text");
+      pages->setCurrentIndex(0);
+    }
+    if (QTabWidget *pages = w.getFittingTab()->findChild<QTabWidget *>("fittingPages"))
+      for (int i = 1; i < pages->count(); i++) {
+        pages->setCurrentIndex(i);
+        shot(pages->currentWidget(), w.getFittingTab(), QString("sub_fitting_%1").arg(i));
+      }
+    if (w.getMCMCTab())
+      if (QTabWidget *pages = w.getMCMCTab()->findChild<QTabWidget *>("mcmcPages")) {
+        pages->setCurrentIndex(1);
+        shot(pages->currentWidget(), w.getMCMCTab(), "sub_mcmc_settings");
+      }
+    QMenu tools;
+    w.tools()->fillMenu(&tools, w.holder()->path());
+    tools.popup(w.mapToGlobal(QPoint(200, 30)));
+    QApplication::processEvents();
+    tools.grab().save(shots + "/menu_tools.png");
+    tools.close();
+    Check(QFileInfo(shots + "/menu_tools.png").size() > 0, "a screenshot of the Tools menu");
   }
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;

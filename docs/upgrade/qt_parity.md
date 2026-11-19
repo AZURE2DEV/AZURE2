@@ -170,12 +170,15 @@ because the engine also searches the whole file for them.
 - [ ] File > New Project (Ctrl+N): resets every tab, A-matrix, THM off (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): File › New project from this one… (a new file with the pairs and
       levels, no data; POST /api/project/new); an empty project is `pyazr ui new.azr`.*
+      *Qt (2026-11-19): verified (`gui_window`): an empty project untitled.azr, no records, no levels*
 - [ ] File > Open... (Ctrl+O); a read error resets and shows "Can't Access File" (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): File › Open… (a .azr of the folder, POST /api/project/open); a
       refusal is shown in the dialog. No Ctrl+O (the browser's).*
 
       *Qt (2026-11-18): verified: an old file is refused with the converter's command (and offered to the converter in the dialog path, not tested)*
+      *Qt (2026-11-19): File > Convert an Old Project verified through its dialogs (the old 13N chosen, the new name typed, the report): the converted file opens and validates clean*
 - [ ] File > Open Recent: five most recent files, stored in QSettings, plus Clear (`AZURESetup.cpp`)
+      *Qt (2026-11-19): verified: the item of a saved T1 copy opens it*
 - [ ] File > Save (Ctrl+S; Save As when untitled), Save As... (Shift+Ctrl+S), Quit (Ctrl+Q) (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): File › Save (Ctrl+S) and Save as… (a file of the folder); Quit is
       closing the browser tab and Ctrl-C on the server.*
@@ -201,15 +204,19 @@ because the engine also searches the whole file for them.
       (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): the Configure menu's Run settings… opens the run settings
       (formalism, checks, directories, runtime options) of the Project tab.*
+      *Qt (2026-11-19): verified: R-Matrix writes the first <config> line false, A-Matrix true again; choosing the route that stands writes nothing (ProjectHolder::setConfig skips an unchanged value)*
 - [ ] Checks...: eight drop-downs None / Screen / File: Compound Nucleus, Boundary Conditions, Data, L-Matrix/Phases/
       Penetrabilities, Legendre Polynomials, Coulomb Amplitudes, Reaction Pathways, Angular Distributions
       (`EditChecksDialog.cpp`)
+      *Qt (2026-11-19): verified: the first check changed and written by the engine's edit; dialogs drawn from the engine's <config> table, so no control for what the engine no longer has*
 - [ ] Directories...: Output Directory and Checks Directory with Choose... (`EditDirsDialog.cpp`)
+      *Qt (2026-11-19): verified: output_dir written; the Python interpreter of the Tools menu is a row of this dialog (a computer setting, QSettings)*
 - [ ] Runtime Options...: Use GSL Coulomb functions; Use Brune formalism; Use Park parametrization (implies Brune);
       Ignore external width if internal width is zeroed (switches to A-matrix with a message); Use RMC capture
       formalism (neutron capture only); Do not perform parameter transformations; Use Hybrid Coulomb method (shows
       the Nuclear Potential tab); Use adaptive integration grid for target effects; Use Trojan Horse Method
       (`EditOptionsDialog.cpp`, `AZURESetup.cpp`)
+      *Qt (2026-11-19): verified: the first option (amatrix) written; no GSL Coulomb control (the engine has no such option)*
 - [ ] Runtime Options > Kinematics box: Relativistic kinematics, noted as saved in the project (`EditOptionsDialog.cpp`)
 - [ ] Runtime Options > Prior Parameter Covariance: file field + Choose..., relative to the project directory
       (`EditOptionsDialog.cpp`)
@@ -231,6 +238,7 @@ because the engine also searches the whole file for them.
 - [ ] `+` opens Add a Particle Pair; `-` deletes the selected pair; double-click edits (`PairsTab.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): Add pair and Remove pair at the table, the selected pair's numbers
       beside it.*
+      *Qt (2026-11-19): verified (`gui_window`, T1): a pair added and removed (the tab's slots; the dialog not driven)*
 - [ ] Pair dialog fields: Particle Pair Type (Particle, Particle / Particle, Gamma / Beta Decay); light and heavy J
       (validated), parity (- / +), Z, M (atomic mass, u); Heavy Excitation [MeV]; Light Excitation [MeV] (particle
       pairs only); Separation Energy [MeV]; Channel Radius [fm] (`AddPairDialog.cpp`)
@@ -268,6 +276,7 @@ because the engine also searches the whole file for them.
 - [ ] `+` Add a Level, `-` delete, double-click Edit a Level (`LevelsTab.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): Add level and Remove level at the table (Remove level new: the page
       had no control), the selected level and its channels beside it.*
+      *Qt (2026-11-19): verified (T1): two levels added with their channels, one moved from 6 to 6.5 MeV, the other removed with its channels; saved, reopened, valid*
 - [ ] Level dialog: Compound Nucleus (several nuclei; fixed on edit), Excitation Energy [MeV], Spin-Parity
       (J^π) list of only the J^π that give channels; Accept disabled until the energy is a number
       (`AddLevelDialog.cpp`)
@@ -312,6 +321,7 @@ because the engine also searches the whole file for them.
       *Qt (2026-11-18): model data are the Model Data sub-tab of Segments (records of <modelData>)*
 - [ ] Buttons: `+`, `-`, up, down, Check All, Uncheck All, EXFOR; Filter by entrance and exit pair
       (`SegmentsTab.cpp`)
+      *Qt (2026-11-19): records of <data>, <extrapolations>, <targets>: verified (T2) Duplicate, rename (the form's name), Add (a new record with '?' placeholders) and Remove in each list; saved, reopened, valid.  A data set from a new data file is a new record whose `file` field names it (the form's file chooser): not tested beyond the duplicate*
 - [x] Moving or deleting a line renumbers what names segments: effect segment lists (line dropped when empty), THM
       `segments=` and `weight[k]`, `segment_N_*` settings and prior centres (`SegmentsTab.cpp`, `AZURESetup.cpp`)
       *Dropped (the PI, 2026-11-13): no renumbering: records are named.*

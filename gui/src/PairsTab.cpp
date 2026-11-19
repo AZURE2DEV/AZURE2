@@ -213,6 +213,12 @@ void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
   }
 }
 
+void PairsTab::removePairAt(int row) {
+  pairsView->selectionModel()->select(pairsModel->index(row, 0),
+                                      QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+  removePair();
+}
+
 void PairsTab::removePair() {
   QItemSelectionModel *selectionModel = pairsView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();

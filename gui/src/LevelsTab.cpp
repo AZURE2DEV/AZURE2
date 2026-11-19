@@ -369,6 +369,12 @@ void LevelsTab::addLevel(LevelsData level, bool fromFile) {
   }
 }
 
+void LevelsTab::removeLevelAt(int row) {
+  levelsView->selectionModel()->select(levelsModelProxy->mapFromSource(levelsModel->index(row, 0)),
+                                       QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+  removeLevel();
+}
+
 void LevelsTab::removeLevel() {
   QItemSelectionModel *selectionModel = levelsView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();

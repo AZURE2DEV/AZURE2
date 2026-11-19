@@ -62,6 +62,10 @@ QString ProjectHolder::configValue(const QString &name, const QString &absent) c
 }
 
 bool ProjectHolder::setConfig(const QString &name, const QString &value, QString &why, bool remove) {
+  // a value as it stands is no edit: its line keeps its bytes (the formalism chosen again, a dialog's unchanged entry)
+  const QString absent(QChar(1));
+  const QString now = configValue(name, absent);
+  if (remove ? now == absent : now == value) return true;
   std::string w;
   if (!project_.SetConfig(name.toStdString(), value.toStdString(), w, remove)) {
     why = QString::fromStdString(w);
