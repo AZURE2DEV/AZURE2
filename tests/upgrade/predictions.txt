@@ -926,6 +926,12 @@ extrapolation x1: dsdo_cm(1->1)
 exit 1
 == tests/shift_true_energy/models/fit.azr
 data scan: sigma(1->2)
+== tests/shift_true_energy/models/fit_gauss.azr
+data fit_gauss_scan: sigma(1->2)
+== tests/shift_true_energy/models/fit_profile.azr
+data fit_profile_scan: sigma(1->2)
+== tests/shift_true_energy/models/fit_udr.azr
+data fit_udr_scan: sigma(1->2)
 == tests/shift_true_energy/models/identity.azr
 data thin_formula_none_none_offset: sigma(1->2)
 data thin_formula_none_none_offset_twin: sigma(1->2)
@@ -999,6 +1005,39 @@ data thick_table_bohr_none_sqrt: sigma(1->2)
 data thick_table_bohr_none_sqrt_twin: sigma(1->2)
 data thick_table_bohr_spread_function: sigma(1->2)
 data thick_table_bohr_spread_function_twin: sigma(1->2)
+== tests/shift_true_energy/models/kernel_gauss.azr
+data gauss_offset: sigma(1->2)
+data gauss_offset_twin: sigma(1->2)
+data gauss_sqrt: sigma(1->2)
+data gauss_sqrt_twin: sigma(1->2)
+data gauss_function: sigma(1->2)
+data gauss_function_twin: sigma(1->2)
+data gausslayer_offset: sigma(1->2)
+data gausslayer_offset_twin: sigma(1->2)
+data gausslayer_sqrt: sigma(1->2)
+data gausslayer_sqrt_twin: sigma(1->2)
+data gausslayer_function: sigma(1->2)
+data gausslayer_function_twin: sigma(1->2)
+data doppler_offset: sigma(1->2)
+data doppler_offset_twin: sigma(1->2)
+data doppler_sqrt: sigma(1->2)
+data doppler_sqrt_twin: sigma(1->2)
+data doppler_function: sigma(1->2)
+data doppler_function_twin: sigma(1->2)
+== tests/shift_true_energy/models/kernel_profile.azr
+data profile_offset: sigma(1->2)
+data profile_offset_twin: sigma(1->2)
+data profile_sqrt: sigma(1->2)
+data profile_sqrt_twin: sigma(1->2)
+data profile_function: sigma(1->2)
+data profile_function_twin: sigma(1->2)
+== tests/shift_true_energy/models/kernel_udr.azr
+data udr_offset: sigma(1->2)
+data udr_offset_twin: sigma(1->2)
+data udr_sqrt: sigma(1->2)
+data udr_sqrt_twin: sigma(1->2)
+data udr_function: sigma(1->2)
+data udr_function_twin: sigma(1->2)
 == tests/shift_true_energy/models/shifted.azr
 data thin_formula_none_none_offset: sigma(1->2)
 data thin_formula_none_spread_sqrt: sigma(1->2)

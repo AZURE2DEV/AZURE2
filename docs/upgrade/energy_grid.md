@@ -284,7 +284,13 @@ multiplier 5 and 20; the yields differ by 2.0 × 10⁻³ (relative) at 253.8 keV
   the straggling grows along that window, and the stopping at a node is the node's own ε(E_n).  Until then the engine
   translated the kernel rigidly (stopping, thickness and window as at the nominal energy): a yield on a resonance was
   off by (d ln ε/d ln E) s/E, 0.9 % on `shift_sqrt_subpoints/narrow_sqrt`.  The statement is `include/ShiftedFold.h`'s;
-  the identity is `tests/shift_true_energy`.
+  the identity is `tests/shift_true_energy`.  Since 2026-11-18 (the owner's answer, `OWNER_ANSWERS.md` section 8) the
+  kernels whose shape depends on the energy beyond a translation follow it too: the support of a Gaussian with
+  σ(E) (5 σ of the true energy), the beam profile's reconstructed-energy window (it moves with the shift, as before)
+  and its detailed-balance norm (taken at the true energy), a UDR kernel (the delay table read and the log channel
+  formed at the true energy), and the window of a free-gas Doppler broadening.  Before, the norm and the UDR table
+  were those of the nominal energy and the supports were translated: the identity failed by up to 4.4 × 10⁻³ (beam
+  profile), 8.7 × 10⁻³ (UDR), 1.7 × 10⁻⁴ (σ ∝ E⁸) and 1.7 × 10⁻⁸ (Doppler).
 - The **interpolated mode** of `ARCHITECTURE.md` §1 (observables on a fixed mesh, an unfolded shifted point as
   interpolation weights) stays opt-in, with its check against the exact mode.
 
@@ -295,11 +301,15 @@ whose shape does not depend on E_0 that is the rigid translation K_i(E − Δ_i;
 
 1. *The planner's support.*  The unshifted support [a_i, b_i] moved by a centre c_i and widened by a reach R_i on each
    side, its low edge further by G_i, the growth of the target's window over the reach (never below the integration
-   floor, a hard edge there).  At the shift Δ the low edge is a_i + Δ − dT(Δ), dT the change of the support's target
+   floor, a hard edge there), its high edge by H_i for a kernel whose support follows the energy (below).  At the shift Δ the low edge is a_i + Δ − dT(Δ), dT the change of the support's target
    thickness (`TargetEffect::SupportThickness`) from the set-up's; G_i is the largest dT at c_i − R_i, c_i, c_i + R_i plus
    their spread, which bounds dT over the reach (it is monotone there, and near the stopping's maximum the spread covers
    its curvature).  dT = 0 bit for bit without a target or with a constant stopping; with R_i = 0 the planned support is
-   the set-up's at E + c_i.  R_i = 3 Σ_k |Δ_i(ν_0 + σ_k e_k) − Δ_i(ν_0)| over the
+   the set-up's at E + c_i.  For a kernel whose support is not a translation apart from the target
+   (`TargetEffect::SupportFollowsEnergy`: σ(E), a beam profile, a UDR kernel, a Doppler window) the support at Δ is the
+   set-up's at E + Δ (`SupportAtEnergy`, the same `EffectSupport` with the window, the target thickness and the UDR
+   kernel at that energy); the drop of its low edge below a_i + Δ takes the place of dT, and the rise of its high edge
+   above b_i + Δ gives H_i the same way (`SupportChangeAt`).  Without such a kernel H_i = 0 bit for bit.  R_i = 3 Σ_k |Δ_i(ν_0 + σ_k e_k) − Δ_i(ν_0)| over the
    varied shift parameters k (a follower: its leader's; a shift-function group: the owner's), σ_k the prior width; a
    varied parameter without a prior adds b_i − a_i; R_i = 0 when nothing of the point's shift varies (a fixed shift
    moves the support once, no node added).  From what the project already says (the priors), no new field.
@@ -309,8 +319,10 @@ whose shape does not depend on E_0 that is the rigid translation K_i(E − Δ_i;
    (§2.3); deterministic at any thread count, counted in `run.log`; χ² steps by the quadrature difference there.
 3. *The sites a point reads.*  Its slots are its planned range (fixed for the stage); the fold reads the tightest
    sub-range enclosing the moved support [a_i + Δ_i, b_i + Δ_i] (at least two nodes), the kernel clips there; the block
-   is not rewritten (the moved support is [a_i + Δ_i − dT_i, b_i + Δ_i]).  What depends on ν besides the kernel's centre:
-   the target at the true energy (`MoveTargetToShift`, in the shift step): the point's thickness at E_0 and dT_i; the
+   is not rewritten (the moved support is [a_i + Δ_i − dT_i, b_i + Δ_i], or for a kernel whose support follows the
+   energy the set-up's support at E_0).  What depends on ν besides the kernel's centre: the kernels at the true energy
+   (`MoveKernelsToShift`, in the shift step): the point's thickness at E_0 and the edges of its moved support; a UDR
+   kernel is read from the table at E_0 by the fold (`PointFold.cpp`), a beam profile's norm taken at E_0; the
    stopping at a node is the node's own ε(E_n) for every reader; and the c.m. angle of a
    lab-frame differential point (converted at its shifted energy), which its group's sites carry: their Legendre rows
    and Coulomb amplitude are recomputed by the slot's writer when it changes (the channel rows stay), and the group key

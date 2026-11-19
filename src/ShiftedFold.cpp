@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -90,22 +91,67 @@ double SupportThicknessChange(const Unit &point, const Unit::SubGridSpec &spec, 
          spec.supportThickness;
 }
 
+SupportChange SupportChangeAt(const Unit &point, const Unit::SubGridSpec &spec, double udrMass, const TargetEffect &effect,
+                              const Config &configure, double delta) {
+  if (delta == 0.0) return SupportChange();
+  if (!effect.SupportFollowsEnergy()) return {SupportThicknessChange(point, spec, effect, configure, delta), 0.0};
+  double low = 0.0, high = 0.0;
+  SupportAtEnergy(point, spec, udrMass, effect, configure, point.GetOriginalEnergy() + delta / spec.stoppingConversion,
+                  spec.centreEnergy + delta, delta, low, high);
+  return {spec.endEnergy + delta - low, high - (spec.startEnergy + delta)};
+}
+
+void SupportAtEnergy(const Unit &point, const Unit::SubGridSpec &spec, double udrMass, const TargetEffect &effect,
+                     const Config &configure, double labEnergy, double cmEnergy, double delta, double &low, double &high) {
+  // The SupportPoint of the set-up (WorkingCopy::SetUpTargetEffects) at this energy.
+  const double f = spec.stoppingConversion;
+  azure2::experiment::SupportPoint support;
+  support.energy = cmEnergy;
+  support.labEnergy = labEnergy;
+  support.cmFactor = f;
+  support.z1 = point.GetBeamCharge();
+  support.z2 = point.GetTargetCharge();
+  support.targetThickness = effect.IsTargetIntegration() ? effect.SupportThickness(labEnergy, cmEnergy, f, configure) : 0.0;
+  support.minimumEnergy = spec.floorEnergy;
+  support.thm = spec.thm;
+  // the reconstructed-energy window moves with the shift, as the beam profile's fold moves it (KernelBeamProfile.cpp)
+  support.binLow = point.GetBinLowCM() + delta;
+  support.binHigh = point.GetBinHighCM() + delta;
+  std::shared_ptr<const azure2::experiment::UdrKernel> udr;
+  if (effect.IsUdr()) {
+    std::string refusal;
+    udr = effect.BuildUdrKernel(labEnergy, udrMass, refusal);
+    if (!udr)
+      throw std::runtime_error("the UDR kernel of segment " + std::to_string(point.GetSegmentKey()) + " at the shifted E_lab " +
+                               std::to_string(labEnergy) + " MeV: " + refusal);
+    support.udr = udr.get();
+    support.udrMass = udrMass;
+  }
+  azure2::experiment::EffectSupport(effect.Kernels(), effect.KernelParametersFor(configure), support, high, low);
+}
+
 MeshSupport PlannedShiftSupport(const MeshSupport &nominal, const Unit::SubGridSpec &spec, double centre,
-                                const std::function<double(double)> &thicknessChange) {
-  // The low edge a_i + Delta - dT(Delta) over the reach |Delta - c_i| <= R_i lies above a_i + c_i - R_i - G (question 1):
-  // G the largest dT of the three samples c_i - R_i, c_i, c_i + R_i plus their spread.
+                                const std::function<SupportChange(double)> &change) {
+  // The low edge a_i + Delta - dL(Delta) over the reach |Delta - c_i| <= R_i lies above a_i + c_i - R_i - G (question 1):
+  // G the largest dL of the three samples c_i - R_i, c_i, c_i + R_i plus their spread; dL is the target's thickness
+  // change, or for a kernel whose support follows the energy the drop of its low edge.  The high edge b_i + Delta +
+  // dH(Delta) lies below b_i + c_i + R_i + H, H bound in the same way (0 for a kernel that is a translation above).
   const double R = spec.shiftReach;
-  double largest = thicknessChange(centre), smallest = largest;
+  const SupportChange at = change(centre);
+  double largestLow = at.low, smallestLow = at.low, largestHigh = at.high, smallestHigh = at.high;
   if (R > 0.0)
     for (double d : {centre - R, centre + R}) {
-      const double t = thicknessChange(d);
-      largest = std::max(largest, t);
-      smallest = std::min(smallest, t);
+      const SupportChange t = change(d);
+      largestLow = std::max(largestLow, t.low);
+      smallestLow = std::min(smallestLow, t.low);
+      largestHigh = std::max(largestHigh, t.high);
+      smallestHigh = std::min(smallestHigh, t.high);
     }
-  const double growth = largest + (largest - smallest);
+  const double growth = largestLow + (largestLow - smallestLow);
+  const double growthHigh = largestHigh + (largestHigh - smallestHigh);
   MeshSupport s = nominal;
   s.low = nominal.low + centre - spec.shiftReach - growth;
-  s.high = nominal.high + centre + spec.shiftReach;
+  s.high = nominal.high + centre + spec.shiftReach + growthHigh;
   const double floor = spec.floorEnergy + spec.frameShift;
   if (s.low <= floor) {
     s.low = floor;
@@ -125,8 +171,8 @@ namespace {
 const char *MovedSupport(const Unit &point, const WorkingCopy &data, ShiftedNodes &r) {
   const Unit::SubGridSpec &spec = data.Data().GridSpecOf(point);
   r.delta = point.GetCMEnergy() - spec.centreEnergy;
-  r.high = spec.startEnergy + r.delta;
-  r.low = std::max(spec.endEnergy + r.delta - point.SupportThicknessChange(), spec.floorEnergy);
+  r.high = spec.startEnergy + r.delta + point.SupportHighChange();
+  r.low = std::max(spec.endEnergy + r.delta - point.SupportLowChange(), spec.floorEnergy);
   const int n = point.NumSubPoints();
   if (n == 0) return nullptr;
   const double top = point.GetSubPoint(data, 1)->GetCMEnergy(), bottom = point.GetSubPoint(data, n)->GetCMEnergy();
@@ -192,18 +238,31 @@ double InsideShiftStep(const WorkingCopy &data, const std::vector<int> &segmentN
   return step;
 }
 
-void MoveTargetToShift(Unit &point, const WorkingCopy &data, const Config &configure) {
+void MoveKernelsToShift(Unit &point, const WorkingCopy &data, const Config &configure) {
   const Unit::SubGridSpec &spec = data.Data().GridSpecOf(point);
-  if (!spec.valid || !spec.targetIntegration) return;
+  if (!spec.valid) return;
   const TargetEffect &effect = *data.Data().GetTargetEffect(point.GetTargetEffectNum());
-  const TargetEffectValues &values = data.EffectValues(point.GetTargetEffectNum());
   const double f = spec.stoppingConversion, lab = point.GetLabEnergy(), cm = point.GetCMEnergy();
-  // the lab energy a fitted density or stopping scale recomputes the thickness at (WorkingCopy::FillDensitiesFromParams,
-  // FollowStoppingScales)
-  point.SetTargetLabEnergy(lab);
-  point.SetTargetThickness(effect.KernelThickness(lab, cm, f, configure, values.density, values.stoppingScale));
-  point.SetSupportThicknessChange(
-      cm == spec.centreEnergy ? 0.0 : effect.SupportThickness(lab, cm, f, configure) - spec.supportThickness);
+  double low = 0.0, high = 0.0;
+  if (spec.targetIntegration) {
+    const TargetEffectValues &values = data.EffectValues(point.GetTargetEffectNum());
+    // the lab energy a fitted density or stopping scale recomputes the thickness at (WorkingCopy::FillDensitiesFromParams,
+    // FollowStoppingScales)
+    point.SetTargetLabEnergy(lab);
+    point.SetTargetThickness(effect.KernelThickness(lab, cm, f, configure, values.density, values.stoppingScale));
+    low = cm == spec.centreEnergy ? 0.0 : effect.SupportThickness(lab, cm, f, configure) - spec.supportThickness;
+  }
+  // A kernel whose support is not a translation (a sigma(E), a beam profile, a UDR table, a Doppler window): the
+  // support the set-up lays out at the true energy (SupportChangeAt).
+  if (effect.SupportFollowsEnergy() && cm != spec.centreEnergy) {
+    const DataSet::PointSetUp *setUp = data.Data().SetUpOf(point);
+    const double delta = cm - spec.centreEnergy;
+    double supportLow = 0.0, supportHigh = 0.0;
+    SupportAtEnergy(point, spec, setUp ? setUp->udrMass : 0.0, effect, configure, lab, cm, delta, supportLow, supportHigh);
+    low = spec.endEnergy + delta - supportLow;
+    high = supportHigh - (spec.startEnergy + delta);
+  }
+  point.SetSupportChange(low, high);
 }
 
 bool FoldOnlyShift(const WorkingCopy &data, const Segment &segment) {

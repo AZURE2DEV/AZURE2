@@ -63,8 +63,8 @@ namespace {
  * G  the absolute beam energy profile (a sum of skewed Gaussians, not centred on the data point),
  * W  the fraction of the Gaussian detector resolution (sigma s) that lands inside the point's energy window [a, b],
  *    shifted with the segment's energy shift; 1 when the point has no window,
- * D  the detailed-balance factor sigma(gamma,a)/sigma(a,gamma) relative to its value at the point's own (unshifted)
- *    energy; 1 unless requested.  The measurement spreads its luminosity over G*W and averages sigma(gamma,a) =
+ * D  the detailed-balance factor sigma(gamma,a)/sigma(a,gamma) relative to its value at the point's own energy (with
+ *    an energy shift the shifted, true one: until 2026-11-18 the unshifted one); 1 unless requested.  The measurement spreads its luminosity over G*W and averages sigma(gamma,a) =
  *    f_db * sigma(a,gamma); the datum is that average divided by f_db at the point's energy.  So D weights the
  *    numerator only: in the denominator too it would replace f_db(E0) by its beam average and cancel its own
  *    normalisation (a 1-5 % error when the kernel's centroid is tens of keV off the point energy).
@@ -94,7 +94,10 @@ V FoldBeamProfile(const KernelParameters &p, const KernelPoint &point, const Ker
     double egamma = (arg > 0.0) ? point.photoMass * (1.0 - std::sqrt(arg)) : sum;
     return (egamma > 0.0) ? e / (egamma * egamma) : 0.0;
   };
-  double dbNorm = photo ? dbWeight(originalCM) : 1.0;
+  // The norm at the point's own energy: the true one, E_n + s, for a shifted point (the rule of ShiftedFold.h: the twin
+  // without a shift at E_n + s has its norm there); an unshifted point's is written as before, bit for bit.
+  const double normEnergy = (point.labEnergy == point.nominalLabEnergy) ? originalCM : point.energy;
+  double dbNorm = photo ? dbWeight(normEnergy) : 1.0;
   auto kernel = [&](double e) {
     double k = BeamProfileWeight(p, e / cmFactor);  // the profile is lab; e is c.m.
     if (window) {

@@ -11,7 +11,16 @@
 #      spread on a layer, 6.5e-8 on the thick target);
 #   3. models/fit.azr: the gradient of a fitted offset on a 72 keV layer with eps ~ E^-1.5 (the back edge's position
 #      depends on the true energy) against a central difference of chi^2 (AZURE_GRAD_CHECK on the Jacobian path):
-#      relative difference below 1e-5 (measured 3.9e-7; the existing gradient tests flag above 1e-2).
+#      relative difference below 1e-5 (measured 3.9e-7; the existing gradient tests flag above 1e-2); the same for
+#      models/fit_gauss.azr, fit_profile.azr, fit_udr.azr (measured 2.5e-7, 5.5e-10, 6.7e-9);
+#   4. the kernels whose shape depends on the energy beyond a translation (the owner's answer of 2026-11-18;
+#      make_kernel_models.py): models/kernel_gauss.azr (a Gaussian beam spread sigma(E) = a0 x^8 alone and in a layer's
+#      kernel, a free-gas Doppler window), kernel_profile.azr (a beam profile: the window and the detailed-balance
+#      norm), kernel_udr.azr (a UDR kernel with a channel of 7.55 bins per decade), each shifted data set against its
+#      twin at the shifted energies in the same project: equal to 1e-9 (measured: 0 in all printed digits).  The
+#      engine before (supports translated from the nominal energy, the norm and the UDR table at it) fails 13 of the
+#      15 pairs: the Gaussian by up to 1.7e-4, the Doppler window 1.7e-8 (one pair), the beam profile 4.4e-3, the UDR
+#      8.7e-3; the layer's pairs pass both ways (its support reaches 25 sigma of the spread).
 #
 #   ./tests/shift_true_energy/check.sh path/to/AZURE2
 
@@ -56,23 +65,44 @@ else
 fi
 
 # ---- 3. the gradient of a fitted shift against a central difference of chi^2
-mkdir -p "$WORK/grad/output" "$WORK/grad/checks"
-ln -s "$HERE/models/data" "$WORK/grad/data"
-cp "$HERE/models/fit.azr" "$WORK/grad/"
-(cd "$WORK/grad" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 900) "$AZURE2_BIN" fit \
-   --use-gradient --no-gui fit.azr > grad.log 2>&1) && gradrc=0 || gradrc=$?
-line="$(grep -a '\[grad-check\] idx .* shift ' "$WORK/grad/grad.log" | sed -n 1p)"
-relJ="$(echo "$line" | grep -o 'relJ [-0-9.e+]*' | cut -d' ' -f2)"
-if [ -n "$relJ" ] && awk -v r="$relJ" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 < 1e-5) }'; then
-  ok "the shift's gradient (Jacobian path) = the central difference of chi^2 (relative $relJ, tolerance 1e-5)"
-else
-  bad "the shift's gradient against the central difference of chi^2: '${line:-no grad-check line}'"
-  # why, where the line is missing: the run's exit status (124 or 143: stopped at the 900 s limit) and its last lines
-  if [ -z "$line" ]; then
-    echo "    exit status of the gradient run: $gradrc; the last lines of its log:"
-    tail -n 15 "$WORK/grad/grad.log" | sed 's/^/      /'
+grad_check() {  # NAME MODEL: AZURE_GRAD_CHECK on the Jacobian path of models/MODEL; its shift's line
+  local name="$1" model="$2" line relJ gradrc
+  mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
+  ln -s "$HERE/models/data" "$WORK/$name/data"
+  cp "$HERE/models/$model" "$WORK/$name/"
+  (cd "$WORK/$name" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 900) "$AZURE2_BIN" fit \
+     --use-gradient --no-gui "$model" > grad.log 2>&1) && gradrc=0 || gradrc=$?
+  line="$(grep -a '\[grad-check\] idx .* shift ' "$WORK/$name/grad.log" | sed -n 1p)"
+  relJ="$(echo "$line" | grep -o 'relJ [-0-9.e+]*' | cut -d' ' -f2)"
+  if [ -n "$relJ" ] && awk -v r="$relJ" 'BEGIN { exit !(r ~ /^ *[-+]?\.?[0-9]/ && r + 0 < 1e-5) }'; then
+    ok "$model: the shift's gradient (Jacobian path) = the central difference of chi^2 (relative $relJ, tolerance 1e-5)"
+  else
+    bad "$model: the shift's gradient against the central difference of chi^2: '${line:-no grad-check line}'"
+    # why, where the line is missing: the run's exit status (124 or 143: stopped at the 900 s limit) and its last lines
+    if [ -z "$line" ]; then
+      echo "    exit status of the gradient run: $gradrc; the last lines of its log:"
+      tail -n 15 "$WORK/$name/grad.log" | sed 's/^/      /'
+    fi
   fi
-fi
+}
+grad_check grad fit.azr
+# the kernels of section 4: a Gaussian with sigma(E), the beam profile with its window and detailed-balance norm, a
+# UDR kernel read at the true energy (the owner's answer of 2026-11-18)
+grad_check grad_gauss fit_gauss.azr
+grad_check grad_profile fit_profile.azr
+grad_check grad_udr fit_udr.azr
+
+# ---- 4. the kernels whose shape depends on the energy beyond a translation (the owner's answer of 2026-11-18): the
+#         Gaussian with sigma(E) (alone and in a layer's kernel), a free-gas Doppler window, the beam profile's window
+#         and detailed-balance norm, a UDR kernel read at the energy; one project each, the pairs on one mesh
+for model in kernel_gauss kernel_profile kernel_udr; do
+  run "$model" "$model.azr"
+  if python3 -I "$HERE/compare.py" 1e-9 "$HERE/models/$model.azr" "$WORK/$model/output" > "$WORK/$model.txt" 2>&1; then
+    ok "$model: every shifted data set = its twin at the shifted energies ($(tail -1 "$WORK/$model.txt"))"
+  else
+    bad "$model: shifted data sets against their twins"; grep -v '^ok' "$WORK/$model.txt" | sed -n '1,16p'
+  fi
+done
 
 echo
 if [ "$failures" -eq 0 ]; then echo "shift_true_energy: PASS"; else echo "shift_true_energy: FAIL ($failures)"; exit 1; fi

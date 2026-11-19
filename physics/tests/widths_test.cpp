@@ -6,10 +6,10 @@
 //  - (|E| / hbar c)^(2L+1) for E1 and E2 photons, with the sign of E dropped;
 //  - the Weisskopf estimate Gamma_W(XL) in eV against the closed forms of Blatt and Weisskopf (as Bohr and Mottelson
 //    vol. 1 write them, eqs. 3C-38 and 3C-39) with R = 1.2 A^(1/3) fm, written out here from alpha, hbar c and the
-//    proton mass: the function's two-digit table coefficients are within the stated distance of the closed form for
-//    each multipole (E1 +0.8 %, E2 +2.3 %, E3 +3.1 %, E4 -3.1 %, M1 +1.3 %, M2 +1.9 %, M3 -0.8 %, M4 -7.2 %, each held
-//    to 0.1 %), the scaling in E and A is the closed form's to 1e-13, and one textbook number: an E1 of 1 MeV in
-//    A = 125 is 6.8e-2 x 25 = 1.7 eV.  NaN outside E1-E4, M1-M4, for E <= 0 and A <= 0.
+//    proton mass: equal to 1e-13 for E1-E4 and M1-M4 (until 2026-11-18 the function held the two-digit textbook
+//    coefficients, E1 +0.79 %, E2 +2.28 %, E3 +3.05 %, E4 -3.11 %, M1 +1.34 %, M2 +1.94 %, M3 -0.80 %, M4 -7.23 % from
+//    the closed form; the table stays here, its offsets held to 0.01 %); two numbers by hand (an E1 of 1 MeV in A = 125,
+//    an M1 of 2 MeV).  NaN outside E1-E4, M1-M4, for E <= 0 and A <= 0.
 //   physics_widths_test
 #include <cmath>
 #include <cstdio>
@@ -93,33 +93,38 @@ int main() {
                                 : common * std::pow(R, 2 * L);
     return mev * 1e6;
   };
-  // table / closed form - 1 per multipole, in percent (what the two-digit coefficients are from r0 = 1.2 fm)
-  const double offE[4] = {0.79, 2.28, 3.05, -3.11}, offM[4] = {1.34, 1.94, -0.80, -7.23};
+  // The function is the closed form: to 1e-13 over A = 4-208, E = 0.05-20 MeV, every multipole.  The two-digit table
+  // it replaced on 2026-11-18 (the owner's answer) stands beside it, so that the move of every W.u. stays on record:
+  // table / closed form - 1 per multipole, in percent, held to 0.01 %.
+  const double tableE[4] = {6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21}, tableM[4] = {2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21};
+  const double offE[4] = {0.789, 2.285, 3.054, -3.114}, offM[4] = {1.338, 1.942, -0.805, -7.225};
   for (int magnetic = 0; magnetic < 2; magnetic++) {
     for (int L = 1; L <= 4; L++) {
       const double want = (magnetic ? offM : offE)[L - 1];
-      double worst = 0.0, scale = 0.0;
-      const double ref = weisskopf_width_eV(magnetic, L, 1.0, 27.0) / closed(magnetic, L, 1.0, 27.0);
+      const double coefficient = (magnetic ? tableM : tableE)[L - 1];
+      const int thirds = magnetic ? 2 * L - 2 : 2 * L;
+      double worst = 0.0, tableWorst = 0.0;
       for (double A : {4.0, 13.0, 27.0, 100.0, 208.0})
         for (double E : {0.05, 0.5, 2.0, 8.0, 20.0}) {
-          const double ratio = weisskopf_width_eV(magnetic, L, E, A) / closed(magnetic, L, E, A);
-          worst = std::fmax(worst, std::fabs((ratio - 1.0) * 100.0 - want));
-          scale = std::fmax(scale, std::fabs(ratio / ref - 1.0));
+          const double c = closed(magnetic, L, E, A);
+          worst = std::fmax(worst, std::fabs(weisskopf_width_eV(magnetic, L, E, A) / c - 1.0));
+          const double table = coefficient * std::pow(A, thirds / 3.0) * std::pow(E, 2 * L + 1);
+          tableWorst = std::fmax(tableWorst, std::fabs((table / c - 1.0) * 100.0 - want));
         }
       const std::string name = std::string(magnetic ? "M" : "E") + std::to_string(L);
-      check("Weisskopf " + name + ": table / closed form (r0 = 1.2 fm) - 1 = " + std::to_string(want) +
-                " % to 0.1 %, A = 4-208, E = 0.05-20 MeV",
-            worst <= 0.1, worst, 0.1);
-      check("Weisskopf " + name + ": the dependence on E and A is the closed form's to 1e-13", scale <= 1e-13, scale,
-            1e-13);
+      check("Weisskopf " + name + ": the closed form (r0 = 1.2 fm) to 1e-13, A = 4-208, E = 0.05-20 MeV", worst <= 1e-13,
+            worst, 1e-13);
+      check("Weisskopf " + name + ": the former table / closed form - 1 = " + std::to_string(want) + " % to 0.01 %",
+            tableWorst <= 0.01, tableWorst, 0.01);
     }
   }
-  check("Weisskopf E1, 1 MeV, A = 125: 6.8e-2 x 125^(2/3) = 1.7 eV",
-        close(weisskopf_width_eV(false, 1, 1.0, 125.0), 1.7, 1e-14), weisskopf_width_eV(false, 1, 1.0, 125.0), 1.7);
-  check("Weisskopf M1 does not depend on A: 2.1e-2 E^3 eV",
+  check("Weisskopf E1, 1 MeV, A = 125: 1.68669 eV (the former table: 6.8e-2 x 125^(2/3) = 1.7 eV)",
+        close(weisskopf_width_eV(false, 1, 1.0, 125.0), 1.6866885576579, 1e-12), weisskopf_width_eV(false, 1, 1.0, 125.0),
+        1.6866885576579);
+  check("Weisskopf M1 does not depend on A: 0.165782 eV at 2 MeV (the former table: 2.1e-2 E^3 = 0.168 eV)",
         weisskopf_width_eV(true, 1, 2.0, 13.0) == weisskopf_width_eV(true, 1, 2.0, 208.0) &&
-            close(weisskopf_width_eV(true, 1, 2.0, 13.0), 0.168, 1e-14),
-        weisskopf_width_eV(true, 1, 2.0, 13.0), 0.168);
+            close(weisskopf_width_eV(true, 1, 2.0, 13.0), 0.16578213605135, 1e-12),
+        weisskopf_width_eV(true, 1, 2.0, 13.0), 0.16578213605135);
   check("Weisskopf is NaN for L = 0, L = 5, E = 0, E < 0, A = 0",
         std::isnan(weisskopf_width_eV(false, 0, 1.0, 13.0)) && std::isnan(weisskopf_width_eV(true, 5, 1.0, 13.0)) &&
             std::isnan(weisskopf_width_eV(false, 1, 0.0, 13.0)) && std::isnan(weisskopf_width_eV(false, 1, -1.0, 13.0)) &&

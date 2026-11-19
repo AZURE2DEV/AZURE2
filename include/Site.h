@@ -319,7 +319,7 @@ class Site {
   /// Beam energy loss across the target at this point.
   double GetTargetThickness() const;
   /// The lab energy the target thickness was computed at: the nominal one at the set-up (WorkingCopy::
-  /// SetUpTargetEffects), the shifted, true one after an energy shift (azure2::MoveTargetToShift), so a fitted density
+  /// SetUpTargetEffects), the shifted, true one after an energy shift (azure2::MoveKernelsToShift), so a fitted density
   /// or stopping scale recomputes it at the same energy (WorkingCopy::FillDensitiesFromParams, FollowStoppingScales).
   double GetTargetLabEnergy() const { return values_.targetLabEnergy; }
   void SetTargetLabEnergy(double e) { values_.targetLabEnergy = e; }

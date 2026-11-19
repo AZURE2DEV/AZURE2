@@ -151,7 +151,7 @@ void Segment::UpdatePointEnergyWithShift(WorkingCopy &data, int t, int i, const 
         // (the c.m. angle of a point given at a lab angle is the row set's at each node, a function of the node's
         // energy and the lab angle: RowSet.h).  Its target is taken at the shifted, true energy (the rule of
         // ShiftedFold.h): the window of a layer, the thick target's reach, the thickness its kernel reads.
-        if (point->IsTargetEffect()) azure2::MoveTargetToShift(*point, data, *configure);
+        if (point->IsTargetEffect()) azure2::MoveKernelsToShift(*point, data, *configure);
       }
     }
   }

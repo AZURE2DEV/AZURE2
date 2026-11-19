@@ -16,7 +16,7 @@ namespace physics {
  *   P_gamma = (|E_gamma| / hbar c)^(2L+1)      the photon "penetrability" of a multipole L (fm^-(2L+1)), the factor
  *                                              that turns a reduced photon amplitude into a width (Lane and Thomas,
  *                                              Rev. Mod. Phys. 30 (1958) 257, section XIII);
- *   Gamma_W(XL) = c_XL A^(p_XL) E_gamma^(2L+1) the Weisskopf single-particle estimate of a gamma width (eV), below.
+ *   Gamma_W(XL)                                the Weisskopf single-particle estimate of a gamma width (eV), below.
  *
  * The expressions are the engine's, operation for operation (AChannel::SetWignerLimit and the photon branch of the
  * level parameters call these), so the engine's numbers do not move.  Pure functions: no state.
@@ -37,22 +37,20 @@ double photon_penetrability(double E_gamma_MeV, int L);
 
 /// The Weisskopf single-particle estimate of the radiative width of an electric (magnetic = false) or magnetic
 /// 2^L-pole transition of energy E_gamma (MeV) in a nucleus of mass number A, in **eV** (the total width hbar * lambda
-/// of the transition, not a reduced strength; no frame: E_gamma is the transition energy, recoil neglected).
-///
-///   Gamma_W(EL) = c_EL A^(2L/3) E_gamma^(2L+1),      c_E1..E4 = 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21 eV MeV^-(2L+1)
-///   Gamma_W(ML) = c_ML A^((2L-2)/3) E_gamma^(2L+1),  c_M1..M4 = 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21 eV MeV^-(2L+1)
-///
-/// The coefficients are the two-digit ones of the textbook tables (Blatt and Weisskopf, Theoretical Nuclear Physics
-/// (1952), ch. XII; as tabulated by Krane, Introductory Nuclear Physics, eqs. 10.13 and 10.15, times hbar), for the
-/// nuclear radius R = r0 A^(1/3) with r0 = 1.2 fm.  The closed forms they round,
+/// of the transition, not a reduced strength; no frame: E_gamma is the transition energy, recoil neglected), for the
+/// nuclear radius R = r0 A^(1/3), r0 = 1.2 fm:
 ///
 ///   Gamma_W(EL) = 2 (L+1) / (L [(2L+1)!!]^2) (3/(L+3))^2 alpha hbar c (E_gamma/hbar c)^(2L+1) R^(2L),
 ///   Gamma_W(ML) = 80 (L+1) / (L [(2L+1)!!]^2) (3/(L+3))^2 alpha hbar c (hbar c / (2 m_p c^2))^2
 ///                 (E_gamma/hbar c)^(2L+1) R^(2L-2)                 (Bohr and Mottelson vol. 1, eqs. 3C-38, 3C-39),
 ///
-/// differ from the table by +0.8 % (E1), +2.3 % (E2), +3.1 % (E3), -3.1 % (E4), +1.3 % (M1), +1.9 % (M2), -0.8 % (M3)
-/// and -7.2 % (M4) (table / closed form - 1; physics_widths_test holds these).  The table is kept, number for number:
-/// it is the unit pyazr's W.u. were quoted in before this function existed.
+/// i.e. hbar lambda(XL) = 8 pi (L+1) / (L [(2L+1)!!]^2) (E/hbar c)^(2L+1) B_W(XL) with the Weisskopf reduced strengths
+/// B_W(EL) = (1/4 pi) (3/(L+3))^2 R^(2L) e^2 and B_W(ML) = (10/pi) (3/(L+3))^2 R^(2L-2) mu_N^2; alpha, hbar c and m_p
+/// are Constants.h's.  Until 2026-11-18 (the owner's answer) the function used the two-digit coefficients of the
+/// textbook tables (Blatt and Weisskopf 1952; Krane eqs. 10.13, 10.15): c_E1..E4 = 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21,
+/// c_M1..M4 = 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21 eV MeV^-(2L+1), which are above the closed form by +0.79 % (E1),
+/// +2.28 % (E2), +3.05 % (E3), -3.11 % (E4), +1.34 % (M1), +1.94 % (M2), -0.80 % (M3), -7.23 % (M4) (table / closed
+/// form - 1, independent of E_gamma and A); a strength in W.u. moved by that factor (new / old = table / closed form).
 /// NaN for L outside 1..4, E_gamma <= 0 or A <= 0.
 double weisskopf_width_eV(bool magnetic, int L, double E_gamma_MeV, double mass_number);
 

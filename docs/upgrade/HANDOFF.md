@@ -161,6 +161,42 @@ tests `pyazr_fit_with_engine` (764 s) and `pyazr_endf_write_slow`; sphinx `-W` w
 sanitizers, macOS, Windows. **Open:** numcmc (the PI); pyazr's version not bumped (FormalCovariance's fields, the
 `band` column of the kinds, `removed_fitters`): the merge's.
 
+## 2026-11-19 (phys agent, U6) — `feature/upgrade-6-phys`: three of the owner's answers that move numbers
+
+Branch `feature/upgrade-6-phys` from `98a4cf60`, build `work/b-u6-phys` (0 warnings); one commit per answer (plus one
+re-baselining commit), nothing pushed or merged.
+
+- `987603b7` **Two constants** (section 8): the β-decay Fermi function's argument W₀ = 1 + T₀/m_e c² takes physics/'s
+  `kElectronMass_MeV` (0.51099895 MeV, was CODATA 2002's 0.510998903), the M1 external-capture amplitude the new
+  `kProtonMass_MeV` = 938.27208816 MeV (was 1.00727638 u); `include/Constants.h` keeps no mass of its own; EC signature
+  v9; check 10 covers m_p and has no exception left. Moved (every project × 3 bases, tags `phys-base` → `phys-c1`, the
+  same in the three bases): 16N 3.99e-7, T3 4.46e-7, T1 2.0e-8, ec_m1_exact 1.72e-7, ec_e1m1_phase up to 2.64e-7, plus
+  intEC.dat of the M1 projects and every intEC.dat.sig.
+- `5a0ea4be` **Re-baselined** what that moved: the T1/T3 golden files whose numbers moved (T1 calc/extrap R=2, R=3,
+  param.par; T3 calc/extrap aa=4 R=1), `examples_test` (T3 objective "509.31249" → "509.31248"), `wheel_smoke` (T1
+  482.27523957308824 → 482.27523879169445, T3 518.713434718418 → 518.7134446833464).
+- `c6cde289` **An energy shift and the kernels** (section 8): the rule of `ShiftedFold.h` now holds for every kernel
+  whose support is not a translation (`TargetEffect::SupportFollowsEnergy`: σ(E) given as a formula, a beam profile, a
+  UDR kernel, and the free-gas Doppler window — not named in the question, the same defect): `SupportAtEnergy`,
+  `SupportChangeAt`, the planner's high edge widened by H as the low edge by G; the beam profile's detailed-balance norm
+  at the true energy; a shifted UDR point reads its kernel from the table at its true energy (`PointFold.cpp`);
+  `MoveTargetToShift` is `MoveKernelsToShift`. `tests/shift_true_energy` check 4 (15 pairs against their twins: 0; the
+  base build fails 13: Gaussian 1.7e-4, Doppler 1.7e-8, beam profile 4.4e-3, UDR 8.7e-3), check 3 extended (three
+  gradient checks, ≤ 2.5e-7), a beam-profile case in `experiment/tests/kernels_test.cpp` (7.7e-4 before). No unshifted
+  number moved (`phys-c1` → `phys-c2`: 1029/993/1029 identical; only the new projects' files are new).
+- `c4df3bb1` **Weisskopf units** (section 10 item 9): `weisskopf_width_eV` is the closed form for R = 1.2 A^{1/3} fm;
+  every W.u. moved by table/closed − 1: E1 +0.79 %, E2 +2.28 %, E3 +3.05 %, E4 −3.11 %, M1 +1.34 %, M2 +1.94 %, M3
+  −0.80 %, M4 −7.23 % (pyazr only; no engine output reads it, no expected file moved).
+
+**Run:** runall × 3 bases for the base, item 1 and items 2+3; `ctest -LE slow` after item 1 (390/392: `pyazr_examples`,
+then re-baselined, and `rmfit_enginepin`, no installed module, failing at the base too) and at the end 391/392 (`rmfit_enginepin`; `docs_build` passes);
+`tests/run_tests.sh` at 2 threads, 185 passed, 0 failed, on item 1 (`5a0ea4be`) and at the end (`c4df3bb1`); `shift_true_energy/check.sh` with the new and the base build; golden.py.
+**Not run:** `ctest -L slow`, the sanitizers, macOS, Windows. **Open:** `nuclearMagneton` in
+`include/Constants.h` is still the rounded 0.1051544551 e fm (1.3e-10 from ħc/2m_p c², read by a photon channel's M1
+penetrability; not in the answer); the truth scripts of `ec_m1_exact` and `ec_e1m1_phase` cannot be rerun (their
+`make_models.py` is gone), so their truth files keep the old m_p (1.7e-7, a hundredth of the 2e-5 tolerance); pyazr's
+version not bumped (the merge's).
+
 ## 2026-11-18 (agent) — fix/param-duplicate-name: two stopping scales of one name
 
 **Symptom.** `Session(...).objective()` and `AZURE2 calculate` failed with "AZUREParams: N parameters but N+1 records"

@@ -13,6 +13,7 @@
 #include "DataSet.h"
 #include "MeshPlanner.h"
 #include "Segment.h"
+#include "ShiftedFold.h"
 #include "SlotGroup.h"
 #include "Unit.h"
 
@@ -59,10 +60,10 @@ bool EdgeAtFloor(const TargetEffect &effect, double low, double floor);
 
 /// Records a folded point's support (E_x) in the mesh of its nucleus and the mesh's place in its grid record; the
 /// support of a point with an energy shift (spec.shifted) is the planned one at its start centre (ShiftedFold.h), its
-/// window's growth at a shift given by `thicknessChange` (azure2::SupportThicknessChange).
+/// support's change at a shift given by `change` (azure2::SupportChangeAt).
 MeshPoint QueueMeshPoint(std::vector<DataSet::NucleusMesh> &meshes, Unit &point, const TermRef &term,
                          Unit::SubGridSpec &spec, const PPair *entrance, const PPair *exit, bool lowHard,
-                         const std::function<double(double)> &thicknessChange);
+                         const std::function<azure2::SupportChange(double)> &change);
 
 /// The support of a folded point (E_x) as its kernels give it at the nominal point, from its grid record.
 MeshSupport NominalMeshSupport(const Unit::SubGridSpec &spec, int dataSet);

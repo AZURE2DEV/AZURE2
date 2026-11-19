@@ -8,9 +8,9 @@
            width_2_4      -0.0000000e+00      -0.0000000e+00
             energy_3       3.5020000e+00       3.5020000e-01
            width_3_1       5.0395408e-01       5.0395408e-02
-           width_3_2       2.6222126e-01       2.6222126e-02
+           width_3_2       2.6222125e-01       2.6222125e-02
            width_3_3       0.0000000e+00       0.0000000e+00
-           width_3_4       3.0042937e-01       3.0042937e-02
+           width_3_4       3.0042936e-01       3.0042936e-02
             energy_4       1.5000000e+01       1.5000000e+00
            width_4_1       6.8268156e-01       6.8268156e-02
            width_4_2       0.0000000e+00       0.0000000e+00
@@ -27,23 +27,23 @@
             energy_7       3.5470000e+00       3.5470000e-01
            width_7_1       1.8623630e+00       1.8623630e-01
            width_7_2      -4.4308029e-01      -4.4308029e-02
-segment_1_energy_shift       0.0000000e+00       5.0000000e-04
-segment_2_energy_shift       0.0000000e+00       5.0000000e-04
-segment_3_energy_shift       0.0000000e+00       5.0000000e-04
-segment_4_energy_shift       0.0000000e+00       5.0000000e-04
-segment_5_energy_shift       0.0000000e+00       5.0000000e-04
-segment_6_energy_shift       0.0000000e+00       5.0000000e-04
-segment_7_energy_shift       0.0000000e+00       5.0000000e-04
-segment_8_energy_shift       0.0000000e+00       5.0000000e-04
-segment_9_energy_shift       0.0000000e+00       5.0000000e-04
-segment_10_energy_shift       0.0000000e+00       5.0000000e-04
-segment_1_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_2_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_3_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_4_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_5_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_6_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_7_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_8_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_9_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
-segment_10_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+el_lab090.shift.offset       0.0000000e+00       5.0000000e-04
+el_lab125.shift.offset       0.0000000e+00       5.0000000e-04
+el_lab160.shift.offset       0.0000000e+00       5.0000000e-04
+ay_cm090.shift.offset       0.0000000e+00       5.0000000e-04
+ay_cm150.shift.offset       0.0000000e+00       5.0000000e-04
+phase_s12.shift.offset       0.0000000e+00       5.0000000e-04
+ cap_g0.shift.offset       0.0000000e+00       5.0000000e-04
+ cap_g1.shift.offset       0.0000000e+00       5.0000000e-04
+cap_g0_lab000.shift.offset       0.0000000e+00       5.0000000e-04
+cap_g0_lab090.shift.offset       0.0000000e+00       5.0000000e-04
+el_lab090.shift.sqrt       0.0000000e+00       5.0000000e-04
+el_lab125.shift.sqrt       0.0000000e+00       5.0000000e-04
+el_lab160.shift.sqrt       0.0000000e+00       5.0000000e-04
+ ay_cm090.shift.sqrt       0.0000000e+00       5.0000000e-04
+ ay_cm150.shift.sqrt       0.0000000e+00       5.0000000e-04
+phase_s12.shift.sqrt       0.0000000e+00       5.0000000e-04
+   cap_g0.shift.sqrt       0.0000000e+00       5.0000000e-04
+   cap_g1.shift.sqrt       0.0000000e+00       5.0000000e-04
+cap_g0_lab000.shift.sqrt       0.0000000e+00       5.0000000e-04
+cap_g0_lab090.shift.sqrt       0.0000000e+00       5.0000000e-04

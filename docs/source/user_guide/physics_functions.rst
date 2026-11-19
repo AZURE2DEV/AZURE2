@@ -948,11 +948,11 @@ Library: ``physics/Widths.h: photon_penetrability``.  Plot axis: ``e_gamma``.
 -----------------------------------------------------------------------
 
 Weisskopf single-particle estimate of a gamma width, Gamma_W(XL) (eV).  The total radiative width hbar lambda of an
-electric or magnetic 2^L-pole transition of energy E_gamma in a nucleus of mass number A: Gamma_W(EL) = c_EL A^(2L/3)
-E_gamma^(2L+1), Gamma_W(ML) = c_ML A^((2L-2)/3) E_gamma^(2L+1), with the two-digit textbook coefficients for R = 1.2
-A^(1/3) fm (c_E1..E4 = 6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21; c_M1..M4 = 2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21 eV MeV^-(2L+1);
-Blatt and Weisskopf 1952), 0.8 to 3.1 % from the closed form they round (M4: 7.2 %).  Gamma_gamma / Gamma_W is the
-strength in Weisskopf units.
+electric or magnetic 2^L-pole transition of energy E_gamma in a nucleus of mass number A, the closed form for R = 1.2
+A^(1/3) fm: Gamma_W(EL) = 2 (L+1) / (L [(2L+1)!!]^2) (3/(L+3))^2 alpha hbar c (E_gamma/hbar c)^(2L+1) R^(2L),
+Gamma_W(ML) the same times 40 (hbar c / 2 m_p c^2)^2 R^(2L-2) / R^(2L) (Blatt and Weisskopf 1952; Bohr and Mottelson
+vol. 1, eqs. 3C-38, 3C-39).  The two-digit textbook coefficients used until 2026-11-18 (6.8e-2 A^(2/3) E^3 eV for E1,
+...) are 0.8 to 3.1 % from it (M4: 7.2 %).  Gamma_gamma / Gamma_W is the strength in Weisskopf units.
 
 Library: ``physics/Widths.h: weisskopf_width_eV``.  Plot axis: ``e_gamma``.
 

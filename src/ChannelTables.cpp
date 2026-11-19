@@ -343,7 +343,7 @@ void Site::CalcEDependentValues(WorkingCopy *data, const CompoundSystem *compoun
           this->AddLoElement(j, ch, loElement);
           IntegratedFermiFunc fermiFunc(thePair->GetZ(1));
           double endPointE = thePair->GetSepE() - inEnergy;
-          double sqrtPene = (1. + endPointE / electronMassOfFermiFunction <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / electronMassOfFermiFunction, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetPairRadius()));
+          double sqrtPene = (1. + endPointE / azure2::physics::kElectronMass_MeV <= 1.) ? 0. : sqrt(fermiFunc(1. + endPointE / azure2::physics::kElectronMass_MeV, exitPair->GetZ(1) + exitPair->GetZ(2), thePair->GetPairRadius()));
           this->AddSqrtPenetrability(j, ch, sqrtPene);
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);

@@ -49,6 +49,14 @@ class TargetEffect {
   /// keyword), as the constant sigma always is? Without the keyword an expression is the pre-2026-10
   /// convention: evaluated at the c.m. energy, its value the c.m. width.
   bool IsSigmaLab() const { return sigmaLab_; }
+  /// Whether the support of the effect's kernels at a point is more than a translation of it with the point's energy
+  /// and a target thickness (TargetEffect::SupportThickness): an expression sigma(E) of the beam spread (its 5 sigma
+  /// reach), a beam profile (an absolute profile clipped to the point's window), a UDR kernel (a delay table read at
+  /// the energy, a window in time of flight) or a free-gas Doppler broadening (a window in velocity).  An energy shift
+  /// then lays such a point's support out again at its true energy (ShiftedFold.h, SupportChangeAt).
+  bool SupportFollowsEnergy() const {
+    return isBeamProfile_ || isUdr_ || isDoppler_ || (isConvCoefficients_ && convolutionEq_.GetEquation() != "");
+  }
   /*!
    * Electron screening (`screening Ue vary sigma`, Ue and sigma in eV): every point and sub-point of the
    * effect's segments gets its bare cross section times exp(pi eta U_e / E).  U_e is a fit parameter

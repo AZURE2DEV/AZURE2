@@ -5,6 +5,9 @@
 
 #include <cmath>
 #include <cstddef>
+#include <memory>
+#include <stdexcept>
+#include <string>
 
 #include "Config.h"
 #include "DataSet.h"
@@ -30,6 +33,8 @@ struct PointKernelInput {
   std::vector<double> energy, stopping;
   azure2::experiment::KernelNodes nodes;
   int first = 0;
+  /// A shifted point's UDR kernel, read from the effect's table at its true energy (the set-up's is the nominal one's).
+  std::shared_ptr<const azure2::experiment::UdrKernel> shiftedUdr;
 
   PointKernelInput(const Unit &unit, const WorkingCopy &data, const Config &configure)
       : effect(data.Data().GetTargetEffect(unit.GetTargetEffectNum())), parameters(effect->KernelParametersFor(configure)) {
@@ -56,6 +61,15 @@ struct PointKernelInput {
     point.temperature = values.dopplerTemperature;
     const Unit::SubGridSpec &grid = data.Data().GridSpecOf(unit);
     const bool shifted = azure2::IsShiftedOnMesh(unit, data);
+    // The rule of ShiftedFold.h: a UDR kernel is the effect's table read at the point's true energy.
+    if (shifted && point.udr && unit.GetLabEnergy() != unit.GetOriginalEnergy()) {
+      std::string refusal;
+      shiftedUdr = effect->BuildUdrKernel(unit.GetLabEnergy(), point.udrMass, refusal);
+      if (!shiftedUdr)
+        throw std::runtime_error("the UDR kernel of segment " + std::to_string(unit.GetSegmentKey()) +
+                                 " at the shifted E_lab " + std::to_string(unit.GetLabEnergy()) + " MeV: " + refusal);
+      point.udr = shiftedUdr.get();
+    }
     const azure2::ShiftedNodes moved = shifted ? azure2::ShiftedFoldNodes(unit, data) : azure2::ShiftedNodes();
     first = shifted ? moved.first : 0;
     const int n = shifted ? moved.count : unit.NumSubPoints();

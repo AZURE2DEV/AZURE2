@@ -222,7 +222,10 @@ int WorkingCopy::ReplaceSubPointGrids(const CompoundSystem *compound, const Leve
       const TargetEffect &effect = *Data().GetTargetEffect(moved.point->GetTargetEffectNum());
       meshSupports_[m][k] = azure2::PlannedShiftSupport(
           azure2::NominalMeshSupport(*moved.spec, meshes[m].supports[k].dataSet), *moved.spec, moved.centre,
-          [&](double delta) { return azure2::SupportThicknessChange(*moved.point, *moved.spec, effect, configure, delta); });
+          [&](double delta) {
+            const DataSet::PointSetUp *setUp = Data().SetUpOf(*moved.point);
+            return azure2::SupportChangeAt(*moved.point, *moved.spec, setUp ? setUp->udrMass : 0.0, effect, configure, delta);
+          });
       meshSupports_[m][k].label = meshes[m].supports[k].label;
       meshCentres_[m][k] = moved.centre;
       supportsMoved++;
@@ -580,6 +583,7 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, const CompoundSyste
       Unit::SubGridSpec &spec = Draft().SetUpFor(*point).grid;
       spec = MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, conversion);
       spec.supportThickness = targetThickness;
+      spec.thm = support.thm;
       spec.timeOfFlight = support.udr != nullptr;
       SetShiftLayout(spec, Draft().GetSegments(), segment, State(segment), *point, minSubEnergy);
       // Every folded point is a support of the shared mesh; a pair without an E_x frame has no place on it.
@@ -592,7 +596,9 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, const CompoundSyste
       const Unit &queued = *point;
       meshPending.push_back(QueueMeshPoint(
           Draft().meshes_, *point, term, spec, entrance, exit, EdgeAtFloor(*targetEffect, endEnergy, minSubEnergy),
-          [&](double delta) { return azure2::SupportThicknessChange(queued, spec, *targetEffect, configure, delta); }));
+          [&](double delta) {
+            return azure2::SupportChangeAt(queued, spec, support.udrMass, *targetEffect, configure, delta);
+          }));
     }
     return 0;
   };

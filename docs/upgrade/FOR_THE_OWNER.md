@@ -405,16 +405,18 @@ estimate from the 65 commits read, not a measurement).
   distance of the old engine to a refined reference.
   Answered 2026-11-18: as proposed; see OWNER_ANSWERS.md.
 - **What an energy shift means for three kernels**: the beam-profile window and its detailed-balance norm, a user's
-  resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.
-  Answered 2026-11-18: all three should follow the shifted energy; see OWNER_ANSWERS.md.
+  resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.  *Answered
+  2026-11-18 (all three follow the shifted energy) and done: the support of every kernel whose shape depends on the
+  energy is the set-up's at E + s (a free-gas Doppler window too), the beam profile's norm and a UDR table are taken
+  at E + s; `tests/shift_true_energy` check 4; no unshifted number moved.*
 - **Fitted target parameters in the band**: today an areal density or a stopping scale does not widen it.
   *Answered 2026-11-18: included (`output_files.rst`, covariance.dat); a band without such a parameter is unchanged
   bit for bit.*
 - **Minuit2's call counter**: two atomic increments in `external/` (not applied; AZURE2 counts its own calls).
   *Answered 2026-11-18: applied, the listed local change of `external/minuit2` (`developer/architecture.rst`).*
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the
-  proton mass of the M1 capture integral (`include/Constants.h`).
-  Answered 2026-11-18: update both to the current values and accept that results move; see OWNER_ANSWERS.md.
+  proton mass of the M1 capture integral (`include/Constants.h`).  *Answered 2026-11-18 and done: both CODATA 2018
+  (physics/ `kElectronMass_MeV`, `kProtonMass_MeV`); β-delayed spectra moved by up to 4.5e-7, M1 capture by 1.7e-7.*
 - **Publishing and CI**: the Coulomb table's address and hash (`pyazr/coulomb_table.py`, `TABLE_URL`, empty); one
   run of `.github/workflows/wheels.yml` (section 10 item 7); a Windows wheel (MinGW or MSVC); SRIM's two data files
   under their authors' terms (`stopping/data/srim/README.md`); `USE_READLINE` in `.github/workflows/build.yml`.
@@ -828,10 +830,11 @@ re-read against its design at the hand-over.
    well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
    of its own design). The Weisskopf width is a function of `physics/` since the PI's approval of 2026-11-16
    (pyazr 3.0.0.dev5; `physics/Widths.h`, `weisskopf_width_eV`; the row `weisskopf_width` of `pyazr.physics`):
-   the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
-   A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
-   for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
-   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.). **Answered 2026-11-18: switch to the closed form; see OWNER_ANSWERS.md.**
+   the total width of an E1-E4 or M1-M4 transition in eV; `pyazr.weisskopf_width` calls it. Since 2026-11-18 (the
+   owner's answer) it is the closed form for R = 1.2 A^(1/3) fm (Bohr and Mottelson eqs. 3C-38, 3C-39), no longer
+   the two-digit textbook coefficients pyazr's Python formula had: every W.u. moved by table / closed form = +0.79 %
+   (E1), +2.28 % (E2), +3.05 % (E3), -3.11 % (E4), +1.34 % (M1), +1.94 % (M2), -0.80 % (M3), -7.23 % (M4); no
+   output file of the engine reads it.
    `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2 since the same approval (it was a probe of the
    transformation): P of the session's channel functions at the level's physical energy, gamma_W^2 the engine's
    3 hbar^2 / (2 mu a^2); the name and the return shape are kept. theta^2 of `dimensionless_widths` changes

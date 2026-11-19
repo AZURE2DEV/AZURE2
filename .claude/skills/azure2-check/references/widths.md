@@ -48,13 +48,16 @@ Strengths in Weisskopf units (W.u.) against the Weisskopf estimates, with E_γ i
 
 | Multipole | Γ_W.u. (eV) |
 |---|---|
-| E1 | 6.8 × 10⁻² A^{2/3} E_γ³ |
-| E2 | 4.9 × 10⁻⁸ A^{4/3} E_γ⁵ |
-| M1 | 2.1 × 10⁻² E_γ³ |
+| E1 | 6.75 × 10⁻² A^{2/3} E_γ³ |
+| E2 | 4.79 × 10⁻⁸ A^{4/3} E_γ⁵ |
+| M1 | 2.07 × 10⁻² E_γ³ |
+
+(The closed form for R = 1.2 A^{1/3} fm, Bohr and Mottelson vol. 1, eqs. 3C-38 and 3C-39; the textbooks round the
+coefficients to 6.8 × 10⁻², 4.9 × 10⁻⁸, 2.1 × 10⁻².)
 
 `Session.dimensionless_widths(x)` gives E1 to E4 and M1 to M4 (`ChannelWidth.weisskopf`, `.wu`; A is the compound
 nucleus's mass number); one estimate is `pyazr.physics.weisskopf_width(e_gamma, multipolarity, mass_number,
-radiation)`, in eV (two-digit coefficients for R = 1.2 A^{1/3} fm, within 3 % of the closed form, M4 7 %). A γ width is not proportional to γ² for a capture channel: the external-capture term is
+radiation)`, in eV (the closed form for R = 1.2 A^{1/3} fm). A γ width is not proportional to γ² for a capture channel: the external-capture term is
 linear in the amplitude. Convert with `Session.transform(x)`, never by squaring.
 
 ## The level norm J: saturated levels
