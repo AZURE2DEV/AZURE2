@@ -74,6 +74,26 @@ constexpr int kNoSpinOrbit = -1;
 /// -(l + 1) for j = l - 1/2 when i = 1/2.  Throws std::invalid_argument unless |l - i| <= j <= l + i.
 double TwoLDotI(int l, int two_j, int two_i);
 
+/*!
+ * The interior background of a partial wave (docs/upgrade/potential_background.md sections 1-3): the R-function of
+ * the potential inside the channel radius, R0(E) = 1/(l(E) - B_bg) - sum_p gamma_p^2/(E_p - E), added to the
+ * diagonal R-matrix element of the channel, with the box states p named by their node numbers subtracted.
+ */
+struct InteriorBackground {
+  double boundary = 0.0;               ///< B_bg (dimensionless): the boundary condition the background is defined with
+  std::vector<int> subtract_nodes;     ///< node numbers of the box states whose poles are subtracted (rule 1, section 3)
+};
+bool operator==(const InteriorBackground &a, const InteriorBackground &b);
+
+/// What one partial wave of a pair has of its own: a depth in place of the central one and an interior background.
+struct PartialWave {
+  int l = 0;
+  int two_j = -1;                          ///< 2J, or -1 (kNoSpinOrbit): every J of this l
+  std::optional<double> depth_MeV;         ///< V0 of this partial wave (MeV, > 0 attractive); none: the central depth
+  std::optional<InteriorBackground> background;  ///< none: no background (the channel functions of the exterior alone)
+};
+bool operator==(const PartialWave &a, const PartialWave &b);
+
 /// The potential of one hybrid pair, with the numerical settings of its radial integration.
 struct HybridPotential {
   double coulomb_radius_fm = 3.5;     ///< R_C of the uniformly charged sphere (fm)
@@ -82,6 +102,7 @@ struct HybridPotential {
   double matching_radius_fm = 15.0;   ///< r_m (fm): beyond it the solution is the point-Coulomb one
   double step_fm = 0.0275;            ///< Numerov step (fm), adjusted so that a_c is a node
   std::optional<SpinOrbitTerm> spin_orbit;  ///< none: a central potential
+  std::vector<PartialWave> waves;     ///< per-partial-wave depths and backgrounds (empty: none; potential_background.md)
 };
 bool operator==(const HybridPotential &a, const HybridPotential &b);
 inline bool operator!=(const HybridPotential &a, const HybridPotential &b) { return !(a == b); }
@@ -161,6 +182,81 @@ DecayingValue DecayingSolution(const HybridPotential &p, int z1, int z2, double 
  */
 double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                         double B_MeV);
+
+// ---- Partial waves and the interior background (docs/upgrade/potential_background.md) ----
+
+/// The entry of p.waves for the channel (l, 2J): the one with this l and two_j, else the one with this l and every J
+/// (two_j = -1); nullptr when there is none.
+const PartialWave *FindWave(const HybridPotential &p, int l, int two_j);
+/// Does a channel function of the pair depend on J (a spin-orbit term, or an entry of waves with a J)?
+bool DependsOnJ(const HybridPotential &p);
+/// The potential the radial equation of the channel (l, 2J) uses: p with the entry's depth in place of the central one
+/// (p itself, field for field, when the entry has none).
+HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j);
+/// The background of the channel (l, 2J), or nullptr.
+const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_j);
+
+/// The regular solution of the radial equation at the channel radius: u(a) and du/dr(a) (fm^-1), times exp(-log_scale).
+struct InteriorValue {
+  double u = 0.0;
+  double du_dr = 0.0;
+  double log_scale = 0.0;  ///< ln of the factor u and du_dr were divided by
+};
+
+/*!
+ * Integrates the radial equation of p (the depth p.central_depth_MeV as given: call ForPartialWave first) outward from
+ * the origin to a (fm) at energy E (MeV, c.m., any sign) for charges z1, z2, reduced mass mu (MeV), l and <2 l.i>, by
+ * Numerov's method on the grid of IntegrateInward (the step closest to p.step_fm with a on a node), with u(0) = 0 and
+ * u(h) = h^(l+1) (l = 1: the limit (g u)(0) = -2 u(h)/h^2 of the singular centrifugal term).  The derivative at a by
+ * the same five-point difference (the loop runs two nodes past a).  `nodes`, if given, receives the number of sign
+ * changes of u on the open interval (0, a).
+ */
+InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                               double a_fm, double E_MeV, int *nodes = nullptr);
+
+/// l(E) = a u'(a)/u(a) of the regular solution (dimensionless), Eq. (2) of potential_background.md.
+double InteriorLogDerivative(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                             double a_fm, double E_MeV);
+
+/// R_pot(E; a, B) = u(a) / (a u'(a) - B u(a)) = 1/(l(E) - B) (dimensionless), Eq. (3).
+double InteriorRFunction(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                         double E_MeV, double boundary);
+
+/// A pole of R_pot: an eigenvalue of the potential in the box [0, a] with a u'(a) = B u(a), Eq. (4).
+struct BoxState {
+  int nodes = 0;            ///< sign changes of u_p on (0, a)
+  double E_MeV = 0.0;       ///< E_p (MeV, c.m.)
+  double gamma2_MeV = 0.0;  ///< gamma_p^2 = -1/(dl/dE) at E_p (MeV): the residue, R_pot ~ gamma_p^2/(E_p - E)
+};
+
+/*!
+ * The box states of the channel with E_p in [E_lo, E_hi] (MeV), by a scan of f(E) = a u'(a) - B u(a) with the step
+ * dE (MeV) and bisection to 1e-11 MeV; E_lo below the minimum of V on [0, a] is raised to it (no state lies below).
+ * gamma_p^2 from a Richardson central difference of l(E) at E_p.  Ascending in E, so nodes = 0, 1, ... for the
+ * states the window holds.
+ */
+std::vector<BoxState> InteriorBoxStates(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                                        double a_fm, double boundary, double E_lo_MeV, double E_hi_MeV, double dE_MeV = 0.25);
+
+/*!
+ * The background R0(E) of the channel (dimensionless): R_pot(E; a, B_bg) minus the poles gamma_p^2/(E_p - E) of the box
+ * states of bg.subtract_nodes (Eqs. (3), (4)); p as for IntegrateOutward.  Throws std::runtime_error when a named
+ * state is not found below 200 MeV.
+ */
+double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                   double E_MeV, const InteriorBackground &bg);
+
+/// Waves at the channel radius: F, G and their rho-derivatives.
+struct WavesAtRadius {
+  double F = 0.0, Fp = 0.0, G = 0.0, Gp = 0.0;
+};
+/*!
+ * The background as a change of the exterior waves at a (potential_background.md Eq. (9)): for u = F and u = G,
+ *   u~ = u - R0 (rho u' - B u),   rho u~' = rho u' - B R0 (rho u' - B u),
+ * a real map of determinant 1 (the Wronskian is kept), after which P~ = rho/|H~|^2, phi~ = arg H~ and
+ * S~ = Re rho H~'/H~ are the channel functions of the levels on top of the background (Eq. (8)).
+ */
+WavesAtRadius DressWaves(const WavesAtRadius &w, double rho, double R0, double boundary);
 
 }  // namespace physics
 }  // namespace azure2
