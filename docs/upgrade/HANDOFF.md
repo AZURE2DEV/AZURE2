@@ -2,6 +2,23 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+
+## 2026-11-19 22:00 (director) — the four U7 branches joined and checked: the friendlier Qt program, the physics facade
+
+Merged into `feature/upgrade-6`: `feature/upgrade-7-gui-shell` (look, start page, tool and status bars, Calculate
+and Plot tabs, sampler results, the workflow `gui.yml`), `-gui-levels` (Levels and Pairs tabs on the go),
+`-physics` (the physics table in plain C++, `Session.jpi_block`, the Physics tab's facade), `-gui-forms` (record
+tables with columns, forms that choose). Their entries are below. Conflicts were in `front_test.cpp`,
+`api/front/CMakeLists.txt`, `tests/gui/CMakeLists.txt`, `qt_gui.md` (sections renumbered 11-14) and this file.
+Also: the wheel smoke test starts the packaged program with its DLL directory and compares paths case-folded
+(Windows wheels: Python 3.11-3.13 green on `35cfcffe`, 3.10 failed on that comparison only).
+
+**Run** (`work/director/verify_u6c.out`, head `8e74e8db`): build 0 warnings with and without the GUI; `ctest -L gui`
+4 of 4; against the pushed state (`tab-u6b-1`): all 3189 output files identical, the eight fits identical;
+`ctest -LE slow` 395 of 396 (`rmfit_enginepin`, this machine only); `tests/run_tests.sh` 185 of 185.
+**Not run**: the workflow `gui.yml` (its first run is this push), Qt 6.4, a real display, `ctest -L slow`.
+**Open**: rounds 8 agents `physqt` (the Physics tab, done, to merge), `polish`, `overview` still working.
+
 ## 2026-11-19 (agent shell) — `feature/upgrade-7-gui-shell`: CI for the Qt program, a modern shell
 
 **Design** `docs/upgrade/qt_gui.md` section 11.  Cut from `feature/upgrade-6` at `35cfcffe`.
