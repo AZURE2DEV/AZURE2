@@ -193,9 +193,9 @@ bool DependsOnJ(const HybridPotential &p);
 /// The potential the radial equation of the channel (l, 2J) uses: p with the entry's depth in place of the central one
 /// (p itself, field for field, when the entry has none).
 HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j);
-/// ForPartialWave for a solution below or at threshold (the decaying solution, S(E <= 0)): throws std::runtime_error
-/// when the partial wave has an interior background, which is not built below threshold (potential_background.md
-/// section 6).
+/// ForPartialWave for the decaying solution W~ at or below threshold (the ANC <-> gamma factor, the bound final state of
+/// external capture): throws std::runtime_error when the partial wave has an interior background, whose W~ is not
+/// built (potential_background.md section 6; S(E <= 0) is, ChannelBoundShift).
 HybridPotential BelowThresholdPotential(const HybridPotential &p, int l, int two_j);
 /// The background of the channel (l, 2J), or nullptr.
 const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_j);
@@ -249,6 +249,19 @@ std::vector<BoxState> InteriorBoxStates(const HybridPotential &p, int z1, int z2
  */
 double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                    double E_MeV, const InteriorBackground &bg);
+
+/// The shift function with the background at E <= 0 (the same map as DressWaves on the decaying solution W~, real):
+/// S~ = B + (S - B) / (1 - R0 (S - B)), S = rho W~'/W~.
+double DressShift(double S, double R0, double boundary);
+
+/*!
+ * S(E = -B_MeV <= 0) of the channel (l, 2J) of the pair: HybridBoundShift with the partial wave's own potential
+ * (ForPartialWave), changed by the partial wave's interior background when it has one (DressShift with R0 at E =
+ * -B_MeV).  Continuous through threshold with the open-channel S~ of the dressed waves (potential_background.md
+ * section 6).
+ */
+double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
+                         double a_fm, double B_MeV);
 
 /// Waves at the channel radius: F, G and their rho-derivatives.
 struct WavesAtRadius {

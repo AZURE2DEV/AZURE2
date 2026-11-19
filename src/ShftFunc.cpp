@@ -26,7 +26,7 @@
 double ShftFunc::ZeroEnergyLimit(int l, int two_j) const {
   const WhitFunc &w = *params_.whitFunc;
   if (potential_)  // the zero-energy decaying solution of the radial equation with the potential
-    return azure2::physics::HybridBoundShift(azure2::physics::BelowThresholdPotential(*potential_, l, two_j), w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), 0.0);
+    return azure2::physics::ChannelBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, two_j, pair_->SpinOrbitFactor(l, two_j), radius(), 0.0);
   const double c = w.z1() * w.z2() * fstruc * w.redmass() * uconv / hbarc;
   return azure2::physics::zero_energy_shift(c, radius(), l);  // K_n without GSL (coulomb.md section 1.4)
 }
@@ -61,7 +61,7 @@ double ShftFunc::operator()(int l, int two_j, double energy) {
   params_.twoJ = two_j;
   if (potential_) {
     const WhitFunc &w = *params_.whitFunc;
-    return azure2::physics::HybridBoundShift(azure2::physics::BelowThresholdPotential(*potential_, l, two_j), w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), binding);
+    return azure2::physics::ChannelBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, two_j, pair_->SpinOrbitFactor(l, two_j), radius(), binding);
   }
 
   // Neutral channel: the Whittaker function is rho k_l(rho) up to a constant,

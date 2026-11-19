@@ -273,8 +273,8 @@ HybridPotential BelowThresholdPotential(const HybridPotential &p, int l, int two
                              (two_j >= 0 ? ", 2J = " + std::to_string(two_j) : std::string()) +
                              " of a hybrid pair has an interior background and is evaluated at or below threshold (a level "
                              "below the pair's threshold, a closed channel or a bound final state of external capture): "
-                             "refused, the background is built above threshold only (docs/upgrade/potential_background.md "
-                             "section 6)");
+                             "refused, the background's decaying solution (ANC and capture final state) is not built "
+                             "(docs/upgrade/potential_background.md section 6)");
   return ForPartialWave(p, l, two_j);
 }
 
@@ -410,6 +410,17 @@ double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int 
     R -= s->gamma2_MeV / (s->E_MeV - E_MeV);
   }
   return R;
+}
+
+double DressShift(double S, double R0, double B) { return B + (S - B) / (1.0 - R0 * (S - B)); }
+
+double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
+                         double a_fm, double B_MeV) {
+  const HybridPotential q = ForPartialWave(p, l, two_j);
+  const double S = HybridBoundShift(q, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, B_MeV);
+  const InteriorBackground *bg = BackgroundOf(p, l, two_j);
+  if (!bg) return S;
+  return DressShift(S, BackgroundR(q, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, -B_MeV, *bg), bg->boundary);
 }
 
 WavesAtRadius DressWaves(const WavesAtRadius &w, double rho, double R0, double B) {

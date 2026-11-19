@@ -18,6 +18,8 @@
 //     a_c = 3, 4, 5, 6 fm, l = 0-3, E = 0.5-4 MeV, B_bg = 0 and -2; to 2e-6 in |U0 - e^(2i delta)|.  The same through
 //     DressWaves (Eq. (9)): e^(-2 i phi~) of the dressed waves.  With the Coulomb exterior instead of the potential's
 //     the identity fails (a check that the test can fail): |dU| > 1e-3 for every l <= 2, E >= 1 MeV.
+//  6. Below threshold the background acts through S~ = B + (S - B)/(1 - R0 (S - B)) (ChannelBoundShift), continuous
+//     with the dressed open-channel S~ through E = 0 (5e-3 over 1 keV).
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -282,6 +284,32 @@ double Identity(const Ref &ref, double &worstDressed, double &smallestCoulombMis
   return worst;
 }
 
+// 6. Below threshold: the dressed S (ChannelBoundShift, DressShift) continues the open-channel S~ of the dressed waves
+// through E = 0: |S~(+1 keV) - S~(-1 keV)| small (dS/dE ~ 1 MeV^-1), for the s wave of the Gaussian with its background.
+double Threshold() {
+  HybridPotential p = Cluster(0);
+  PartialWave w;
+  w.l = 0;
+  w.background = InteriorBackground{-0.5, {}};
+  p.waves.push_back(w);
+  const double a = 4.2, E = 1e-3;
+  const double R0 = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, E, *w.background);
+  const Exterior x = ExteriorOf(p, true, 0, a, E);
+  WavesAtRadius wv{x.H.imag(), x.dH.imag(), x.H.real(), x.dH.real()};
+  const WavesAtRadius d = DressWaves(wv, x.rho, R0, -0.5);
+  const double Sabove = x.rho * (d.F * d.Fp + d.G * d.Gp) / (d.F * d.F + d.G * d.G);
+  const double Sbelow = ChannelBoundShift(p, 2, 2, kMu_MeV, 0, -1, 0.0, a, E);
+  const double S0 = ChannelBoundShift(p, 2, 2, kMu_MeV, 0, -1, 0.0, a, 0.0);
+  const double dd = std::max(std::fabs(Sabove - Sbelow), std::fabs(Sabove - S0));
+  Check(dd < 5e-3, "dressed S continuous through threshold: " + std::to_string(Sabove) + " / " + std::to_string(S0) +
+                       " / " + std::to_string(Sbelow));
+  // DressShift is DressWaves on a real wave: S~ of the dressed (W, rho W') equals the formula
+  const double S = 1.3, Rr = 0.4, B = -0.5;
+  const WavesAtRadius r = DressWaves({1.0, S / 2.0, 0.0, 0.0}, 2.0, Rr, B);
+  Check(std::fabs(2.0 * r.Fp / r.F - DressShift(S, Rr, B)) < 1e-14, "DressShift = DressWaves on a real wave");
+  return dd;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -297,9 +325,11 @@ int main(int argc, char **argv) {
   const double box = BoxStates();
   double dressed = 0.0, miss = 0.0;
   const double ident = Identity(ref, dressed, miss);
+  const double thr = Threshold();
   std::printf("free particle %.2e, constant well %.2e, point Coulomb %.2e, box states %.2e\n", free, well, coul, box);
   std::printf("identity |U0 - exp(2 i delta)|: %.2e (formula 7), %.2e (dressed waves); Coulomb exterior misses by >= %.2e\n",
               ident, dressed, miss);
+  std::printf("threshold: |S~(+1 keV) - S~(-1 keV, 0)| = %.2e\n", thr);
   if (failures) {
     std::printf("%d failure(s)\n", failures);
     return 1;
