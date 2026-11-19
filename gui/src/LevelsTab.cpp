@@ -638,6 +638,42 @@ QList<SpinParityOption> LevelsTab::spinParityOptions(const Nucleus &nucleus) {
 
 QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int levelIndex) {
   QList<ChannelsData> channels;
+  const QList<PairsData> pairs = pairsModel->getPairs();
+  // one pair row per pair, as the tab writes a pair (channelRow), the key its place + 1; the level's nucleus's keys
+  std::vector<azure2::front::LevelRow> rows;
+  std::vector<int> keys;
+  const LevelsData pairLevel = {0, 0, 0., 1, 0.};
+  for (int i = 0; i < pairs.size(); i++) {
+    const ChannelsData ch = {0, -1, i, 0., 0, 'P', 0.};
+    rows.push_back(channelRow(ch, pairLevel, pairs.at(i), pairs.at(0), 0));
+    if (!level.hasNucleus() || PairsModel::nucleusOf(pairs.at(i)) == level.nucleus()) keys.push_back(i + 1);
+  }
+  if (rows.empty() || keys.empty()) return channels;
+  std::vector<azure2::front::AllowedChannelInfo> allowed;
+  std::string why;
+  const int twoJ = int(std::lround(2.0 * level.jValue));
+  if (!azure2::front::AllowedChannels(rows, twoJ, level.piValue, maxLSpin->value(), maxMultSpin->value(),
+                                      maxNumMultSpin->value(), keys, allowed, why))
+    return channels;
+  for (const azure2::front::AllowedChannelInfo &c : allowed) {
+    const int i = c.pairKey - 1;
+    if (i < 0 || i >= pairs.size()) continue;
+    const PairsData &pair = pairs.at(i);
+    QChar radType = 'P';
+    if (pair.pairType == 20) {
+      radType = c.l == 1 ? 'G' : 'F';  // Gamow-Teller, Fermi
+    } else if (pair.pairType == 10) {
+      // E or M from the parities: an odd L with a change of parity is electric, an even L without one too
+      const int parityChange = pair.heavyPi * level.piValue;
+      radType = (c.l % 2 != 0) == (parityChange == -1) ? 'E' : 'M';
+    }
+    channels.push_back({0, levelIndex, i, c.twoS / 2.0, c.l, radType, 0.0});
+  }
+  return channels;
+}
+
+QList<ChannelsData> LevelsTab::calculateChannelsCopy(const LevelsData &level, int levelIndex) {
+  QList<ChannelsData> channels;
   QList<PairsData> pairs = pairsModel->getPairs();
 
   int maxL = maxLSpin->value();
