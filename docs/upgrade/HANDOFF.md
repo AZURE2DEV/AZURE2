@@ -2,6 +2,33 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-19 (director) — `feature/upgrade-6` joined and checked: the owner's answers, the Qt program, the page's navigation
+
+**What it is**: `98a4cf60` (GitHub's `feature/upgrade` `a405a9e9` + the owner's `feature/upgrade-5-fixes` and
+`feature/upgrade-5-owner-answers`) with six agent branches merged: `-house`, `-web`, `-qt`, `-fit`, `-phys`, `-qt2`
+(their entries are below). `dev` was not merged and not moved (the PI: "Do not merge with dev still!").
+
+**Run on the merged tree** (`work/director/verify_u6a.out`, then `verify_u6b.out` after `-qt2`):
+- build 0 warnings, with and without `-DBUILD_GUI=ON`; `ctest -L gui` 1 of 1 (`gui_window`, 78 checks, offscreen);
+- outputs against the join (`7b804180`'s engine), three modes: 182 old files differ, at most 4.46e-7 relative, all
+  in beta-delayed, M1-capture and T1/T3 projects or the capture-integral cache (the CODATA 2018 constants); 138 new
+  files (the shift-kernel projects); after `-qt2` every one of the 3189 files identical to before it;
+- eight fits: six identical to the join, the two 13N fits differ in one file each (the cache's signature), same
+  chi-squared; all eight identical before and after `-qt2`;
+- `ctest -LE slow` 394 of 395: `rmfit_enginepin` fails here (this machine's layout; it passes on Linux CI);
+- `tests/run_tests.sh` 185 of 185.
+
+**Not run**: `ctest -L slow`, sanitizers (TSan with the Minuit2 atomic in particular), Windows and macOS (CI only;
+the `wheels-windows` MinGW job has never run), the GUI on a real display.
+
+**Checked**: the `param.par` remark of agent qt2 is not a defect: `param.par` is the start values, written before
+`--parameter-file` is read; the file is applied (T1_start: chi-squared 6070.04 with it, 15387.15 without).
+
+**Open, waiting for the PI or the owner**: SRIM's two data files (the answers page says do not ship, the letter says
+ship and cite: untouched); `numcmc/` (the sampler uses about 750 lines of it: kept; the GSL fitter is removed); the
+band leaves out normalisations and energy shifts; the Doppler window moves with the three kernels; no CI job builds
+the GUI; `packaging/docker/Dockerfile.windows` still names readline.
+
 ## 2026-11-19 (agent qt2) — `feature/upgrade-6-qt2`: the Qt program completed (stage 2)
 
 **Design** `docs/upgrade/qt_gui.md` sections 5-9 (new). Cut from `feature/upgrade-6` at `d42935c9`.
