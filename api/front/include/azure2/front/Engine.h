@@ -138,6 +138,10 @@ class Project {
   bool RenameRecord(const std::string &section, const std::string &from, const std::string &to, std::string &why);
   /// Remove the record `name` of `section` with its comment lines.
   bool RemoveRecord(const std::string &section, const std::string &name, std::string &why);
+  /// Move the record `name` of `section` one place up (`delta` -1) or down (+1) among the section's records: its
+  /// lines (comments above it included) change places with its neighbour's, every other line stays.  False with
+  /// `why` at either end or for a name the section has not.
+  bool MoveRecord(const std::string &section, const std::string &name, int delta, std::string &why);
 
   /// AZURE2 --validate of the text as it stands (data files are read relative to Directory()).
   Validation Validate() const;
@@ -150,6 +154,45 @@ class Project {
 /// The table of project format 3 as JSON (AZURE2 --schema): sections, record kinds and their fields with titles,
 /// docs, types, closed choices and units, quantities, units, diagnostic codes.
 std::string SchemaJson();
+
+// ---- The shape of a value: what a form offers to edit it (docs/upgrade/qt_gui.md section 11) ----
+
+struct PartInfo;
+/// One alternative of a structured value (the schema's FormSpec): led by `keyword`, or "" for the one taken when no
+/// keyword matches.
+struct AlternativeInfo {
+  std::string keyword;
+  std::string doc;
+  std::vector<PartInfo> parts;  ///< positional parts first, in order, then the keyword parts
+};
+/// The value type of a field or of a part of a structured field, with what its grammar lets a form choose (the
+/// schema's ValueSpec).  Every word a form offers comes from here: units, enum words, alternatives, grid kinds.
+struct ValueInfo {
+  std::string type;       ///< the value type's name ("number", "nuisance", "form", "grid", ...: ValueTypeName)
+  std::string grammar;    ///< the grammar in words, for a placeholder
+  std::string dimension;  ///< of the unit ("" none; "@quantity": a unit of the record's quantity)
+  std::vector<std::string> units;  ///< the units of `dimension` (empty for "@quantity": QuantityUnits)
+  bool unitOfQuantity = false;
+  std::vector<std::string> values;  ///< enum: the words; reference: the record kinds it may name
+  bool positive = false;            ///< number: > 0
+  bool hasMin = false;              ///< integer: a smallest value
+  long min = 0;
+  bool epoch = false;      ///< reference: <name>@<epoch> allowed
+  bool profiled = false;   ///< nuisance: 'profiled' allowed
+  bool none = false;       ///< grid: 'none' allowed
+  std::vector<std::string> refKinds;          ///< nuisance: the kinds of record whose name may stand instead
+  std::vector<AlternativeInfo> alternatives;  ///< form: its alternatives
+};
+/// One part of an alternative: positional (in order) or written "<name> <value>".
+struct PartInfo {
+  std::string name;
+  bool keyword = false;
+  bool optional = false;
+  std::string defaultText;  ///< the value used when an optional part is absent
+  std::string doc;
+  ValueInfo value;
+};
+
 /// One field of a record kind (the schema's row, in the kind's order): what a form needs to offer it.
 struct FieldInfo {
   std::string key;
@@ -167,6 +210,12 @@ struct FieldInfo {
   std::vector<std::string> values;  ///< enum: the words; reference: the kinds it names
   std::vector<std::string> units;   ///< the units of its dimension; for "@quantity" those of the record's quantity
   bool unitOfQuantity = false;      ///< units come from the record's quantity (QuantityUnits)
+  ValueInfo value;                  ///< the value's whole shape (parts of a structured value, grid kinds, ...)
+  /// A field a table of records shows as a column (KindInfo::summaryFields gives their order).
+  bool summary = false;
+  /// The key of the field this one belongs with on a form (the field its "applies"/"required" condition names, as
+  /// a stopping's phase with the stopping, a profile's truncation with the profile); "" for a field of its own.
+  std::string group;
 };
 /// One record kind: its sections, title, doc and fields in the schema's order.
 struct KindInfo {
@@ -175,6 +224,16 @@ struct KindInfo {
   std::string doc;
   std::vector<std::string> sections;
   std::vector<FieldInfo> fields;
+  /// The columns a table of these records shows, in order: the required fields first (the quantity's and the
+  /// reaction's), then the references to other records, the windows and grids, the main numbers; never free text or
+  /// the column roles.  Every FieldInfo with `summary`.
+  std::vector<std::string> summaryFields;
+  /// The field that switches a record on and off (an optional yes/no field whose default is the first word: a data
+  /// set's or an extrapolation's "active"), or "".
+  std::string includeField;
+  std::string includeOn, includeOff;  ///< its two words (on first)
+  /// The groups at least one field of which a record must give (a beam: spread or profile).
+  std::vector<std::vector<std::string>> oneOf;
 };
 std::vector<KindInfo> RecordKinds();
 /// The sections of records and the kinds each holds, in the schema's order.
@@ -182,8 +241,130 @@ std::vector<std::pair<std::string, std::vector<std::string>>> RecordSections();
 /// The quantities a record kind may use (names, schema order), and the units of one quantity.
 std::vector<std::string> QuantityNames(const std::string &kind);
 std::vector<std::string> QuantityUnits(const std::string &quantity);
+/// One quantity of the schema (section 7.2): its name, the title and doc a form shows, its units.
+struct QuantityInfo {
+  std::string name;
+  std::string title;
+  std::string doc;
+  std::vector<std::string> units;
+};
+/// The quantities a record kind may use, in the schema's order.
+std::vector<QuantityInfo> Quantities(const std::string &kind);
 /// The diagnostic codes and their meaning.
 std::vector<std::pair<std::string, std::string>> DiagnosticCodes();
+
+/// A value split into the pieces a form edits, each as written (numbers keep their text).  Which members hold it
+/// depends on `type`; FieldValueText writes it back.  Made by ParseFieldValue with the engine's own parsers.
+struct NamedValue;
+struct ValueParts {
+  std::string type;    ///< the value type (ValueInfo::type)
+  /// Number, integer, unit, enum, name, text, spin, nucleus, pair, composition-free scalars, reaction: the value's
+  /// text as written; reference: the record's name; path: the path (without quotes); nuisance with `reference`: the
+  /// name of the record that stands for it.
+  std::string text;
+  bool quoted = false;  ///< path: written in quotes
+  std::string epoch;    ///< reference: the epoch after '@' ("" none)
+  std::string number;   ///< number with unit, nuisance: the number
+  std::string unit;     ///< number with unit, range, nuisance, grid: the unit token ("" none)
+  std::string lo, hi;   ///< range; a grid's span
+  // nuisance
+  bool reference = false;  ///< written as the name of a record (`text`)
+  bool fit = false;        ///< mode fit (else fixed)
+  bool profiled = false;   ///< 'profiled' (no number)
+  bool hasPrior = false;
+  std::string priorCentre, priorWidth;
+  bool priorPercent = false;  ///< the width is a percentage of the centre
+  std::string gridMax;        ///< "" none
+  // formula: the expression in x and its parameters (name, number)
+  std::string expression;
+  std::vector<std::pair<std::string, std::string>> params;
+  std::vector<std::string> numbers;  ///< number list; a list grid's values
+  std::vector<std::pair<std::string, std::string>> composition;  ///< (element symbol, atoms)
+  // columns
+  bool fromFile = false;  ///< the roles are in the data file's header
+  std::vector<std::pair<std::string, std::string>> columns;  ///< (role, unit or "")
+  // grid
+  std::string gridKind;  ///< a word of GridKinds()
+  std::string frame;     ///< a word of Frames()
+  bool byPoints = false; ///< a range grid by its number of points (else by its step)
+  std::string step, points;
+  bool log = false;
+  std::string tolerance, maxPoints, startStep;
+  // form
+  std::string alternative;        ///< the alternative's keyword
+  std::vector<NamedValue> parts;  ///< the parts given, by their name, in the alternative's order
+  const ValueParts *Part(const std::string &name) const;
+};
+struct NamedValue {
+  std::string name;
+  ValueParts value;
+};
+
+/// The value `text` of field `key` of a record of `kind` (with the record's `quantity` for the units "@quantity", ""
+/// when unknown) split into its pieces by the engine's parser (the one --validate reads it with).  False with `why`,
+/// the validator's message for that field, when the parser refuses the text.
+bool ParseFieldValue(const std::string &kind, const std::string &key, const std::string &text,
+                     const std::string &quantity, ValueParts &out, std::string &why);
+/// The text of a value from its pieces, as a writer of format 3 puts it (one blank between tokens, quotes where the
+/// reader needs them; a nuisance by the engine's NuisanceText).  Parsing that text gives the pieces back.
+std::string FieldValueText(const std::string &kind, const std::string &key, const ValueParts &parts);
+/// The same for a value of shape `info` (a part of a structured value).
+std::string ValueText(const ValueInfo &info, const ValueParts &parts);
+/// The field's value as a cell of a table shows it, short: a nuisance "1 (fit)", a form its alternative and numbers.
+std::string ShortValueText(const std::string &kind, const std::string &key, const std::string &text);
+
+/// One kind of grid (section 3.8) and what it is given by.
+struct GridKind {
+  std::string word;
+  std::string doc;
+  bool span = false;      ///< lo, hi
+  bool spacing = false;   ///< step or points [log]
+  bool list = false;      ///< a list of values
+  bool file = false;      ///< a file of values
+  bool adaptive = false;  ///< tolerance, max_points, start_step
+  bool unit = true;       ///< unit and frame follow ('none' has none)
+};
+/// The kinds of grid ('none' last, when `withNone`).
+std::vector<GridKind> GridKinds(bool withNone);
+/// The frames of an energy or angle ("lab", "cm").
+std::vector<std::string> Frames();
+/// The units of a dimension ("energy", "angle", ...), in the unit table's order.
+std::vector<std::string> DimensionUnits(const std::string &dimension);
+/// The column roles of a data file (section 3.4.1): the role and the dimension of its unit ("" for a role without).
+std::vector<std::pair<std::string, std::string>> ColumnRoles();
+
+/// The columns a new data set of `quantity` starts with: its first energy role and, for a quantity with an angle, its
+/// first angle role (each in the first unit of its dimension), then the value and its error.
+std::vector<std::pair<std::string, std::string>> DefaultColumns(const std::string &quantity);
+
+/// The shape of an apparatus record's kernel for a small preview: x and y of a curve, its title and axis label.
+struct ShapeCurve {
+  std::string title;
+  std::string xLabel;
+  std::vector<double> x, y;
+};
+/// The shape a record's kernel gives where the engine can evaluate it from the record alone: a beam's energy profile
+/// (the sum of its skewed-Gaussian components, truncated as the record says: the kernel's own weight,
+/// experiment::BeamProfileWeight, over its support, lab MeV).  False (`why` says why) for a record without one, or
+/// whose values do not read; a Doppler broadening needs the pair and the energy of a point and has none here.
+bool PreviewShape(const Record &record, int points, ShapeCurve &out, std::string &why);
+
+/// One pair of the project's <levels> (its first row), as a reaction picker lists it.
+struct PairChoice {
+  int key = 0;
+  std::string label;       ///< "p+15N", "g+16O[6.13]" (experiment::PairLabel)
+  int kind = 0;            ///< 0 particle pair, 10 photon, 20 beta
+  std::string nucleus;     ///< the compound nucleus it forms ("16O")
+  double threshold = 0;    ///< MeV
+};
+std::vector<PairChoice> Pairs(const Project &project);
+/// The label of the reaction from pair `entrance` to pair `exit` ("15N(p,a)12C"), `exit` 0 the total capture of
+/// the entrance ("12C(p,g)13N[total]"); "" for a key the project has not.  The converter's ReactionLabel.
+std::string ReactionLabel(const Project &project, int entrance, int exit);
+/// The pair keys a one-term reaction names (0 for a side that names no pair or several: then the record's
+/// entrance_pair / exit_pair decides); exit -1 for a total capture.  False for a sum, a ratio or a text the parser
+/// refuses.
+bool ReactionPairs(const Project &project, const std::string &reaction, int &entrance, int &exit);
 
 /// The <config> keys and positional entries as JSON: [{"name", "kind", "title", "group", "doc", "values",
 /// "positional", "option", "flag", "negation", "default", "rare", "absent"}] from io::ConfigPositionals() and

@@ -443,6 +443,33 @@ bool Project::RemoveRecord(const std::string &section, const std::string &name, 
   return false;
 }
 
+bool Project::MoveRecord(const std::string &section, const std::string &name, int delta, std::string &why) {
+  const io::RecordReadResult read = impl_->Read(section);
+  const std::vector<io::Record> &records = read.set.records;
+  std::size_t at = records.size();
+  for (std::size_t i = 0; i < records.size(); i++)
+    if (records[i].name == name) at = i;
+  if (at == records.size()) {
+    why = "<" + section + "> has no record named " + name;
+    return false;
+  }
+  if ((delta < 0 && at == 0) || (delta > 0 && at + 1 >= records.size()) || delta == 0) {
+    why = name + " is already the " + std::string(delta < 0 ? "first" : "last") + " record of <" + section + ">";
+    return false;
+  }
+  const io::Record &upper = records[delta < 0 ? at - 1 : at], &lower = records[delta < 0 ? at : at + 1];
+  std::size_t a1 = 0, a2 = 0, b1 = 0, b2 = 0;
+  Impl::Span(upper, a1, a2);
+  Impl::Span(lower, b1, b2);
+  // the lower record's lines, the lines between the two (blank lines, comments of no record), the upper record's
+  std::vector<std::string> lines;
+  for (std::size_t i = b1; i <= b2; i++) lines.push_back(impl_->doc.Line(i));
+  for (std::size_t i = a2 + 1; i < b1; i++) lines.push_back(impl_->doc.Line(i));
+  for (std::size_t i = a1; i <= a2; i++) lines.push_back(impl_->doc.Line(i));
+  impl_->doc.ReplaceLines(a1, b2 + 1, lines);
+  return true;
+}
+
 Validation Project::Validate() const {
   Validation out;
   const ProjectValidation v = ValidateProjectBytes(Text(), impl_->path);

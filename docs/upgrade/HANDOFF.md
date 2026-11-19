@@ -133,6 +133,43 @@ shapes need a set-up call that builds a record's `KernelParameters` outside a ru
 (5.3); (6) `PhysicsSession::Poles` gives `totalWidth` as the sum of |W| of the width-kind channels (photon included),
 which the Qt page should label as such.
 
+## 2026-11-19 (agent forms, `feature/upgrade-7-gui-forms`) — record tabs: tables with real columns, forms that choose
+
+**Why**: the PI: "too many things must be inserted by hand and are not selectable, look at the previous dev GUI";
+"the Doppler window and beam-profile reading must be easy and intuitive".  Design: `docs/upgrade/qt_gui.md` section 11.
+
+**Done**:
+- Facade (`api/front/`, new `src/FrontForms.cpp`): `FieldInfo::value` (the schema's whole value shape, FormSpec
+  included), `group`, `KindInfo::summaryFields` / `includeField` / `oneOf`, `Quantities` with titles,
+  `ParseFieldValue` (pieces by the engine's parsers, its message in plain words) and `FieldValueText` / `ValueText`
+  (`io::WriteTokens`, `NuisanceText`), `ShortValueText`, `GridKinds`, `Frames`, `ColumnRoles`, `DimensionUnits`,
+  `DefaultColumns`, `Pairs`, `ReactionLabel`, `ReactionPairs`, `Project::MoveRecord`, `PreviewShape` (a beam profile
+  from `BeamProfileWeight`).  No engine file changed.
+- GUI: `ValueEditor` (a widget per value type, everything a drop-down that can be: units, words, record names,
+  epochs, quantities by title, a structured value's alternatives and named parameters, nuisance = number + unit +
+  Fit + Prior..., grids, columns, reaction by entrance/exit pair; "T" = edit as text; the parser's message under the
+  field as the user types), `RecordTableModel` (summary columns, Use and Fit? boxes, in-place cells, sort, filter,
+  multi-select), `RecordsPanel` rewritten (Add dialog pre-filled, Duplicate, Remove, Up/Down, Use/Leave out, context
+  menu, shortcuts; boxes per field and its group, closed unless used; Apply validates with the engine and names the
+  refused field; Used by / Assign to; the beam-profile curve), Experimental Effects as three lists.
+- Round-trip rule: an editor returns its text unchanged until a widget is changed; every record of T1, T2, T3, 13N and
+  `section_examples.azr` shown by its widgets and applied unedited moves no byte (gui_forms; shown to fail with the
+  rule broken).
+
+**Run**: build with `-DBUILD_GUI=ON` 0 warnings; `ctest -L gui` (gui_window, gui_forms) and `api_front`,
+`repo_consistency` pass; the full `-LE slow` run is in the agent's report.  Screenshots: `work/qt-shots/u7-forms/`
+(before_* from stage 2, the rest after).
+
+**Not done / open**: no Doppler preview (the free-gas kernel's width needs the pair's masses and a point's energy:
+it would need a facade function taking a data set and an energy; the Doppler field is a form: temperature, unit,
+Fit, prior); a sum or ratio of reactions stays text (no term editor); the Add dialog's columns follow the quantity
+first chosen (a changed quantity does not redo them); the old program's per-group dialogs (norm groups as a
+drop-down in the Add dialog) are the shared-normalization reference drop-down of the norm field; `<modelData>`,
+`<potentials>`, `<channelRadii>`, `<gammaDecays>` and `<isospin>` get the same forms and tables but were not looked
+at one by one in screenshots; the fields a quantity decides (J, l, s, spin operator, expansion, ...) are shown for
+every quantity (the facade does not yet say which quantity allows which field: `Quantity::fields` would give it); an
+optional yes/no word shows "(none)" for its default.
+
 ## 2026-11-19 (director) — `feature/upgrade-6` joined and checked: the owner's answers, the Qt program, the page's navigation
 
 **What it is**: `98a4cf60` (GitHub's `feature/upgrade` `a405a9e9` + the owner's `feature/upgrade-5-fixes` and

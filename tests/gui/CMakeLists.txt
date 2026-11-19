@@ -29,3 +29,10 @@ if(Qt6Test_FOUND)
 else()
   message(STATUS "Qt 6 Test not found: gui_levels is not built")
 endif()
+
+# The forms of the record tabs (docs/upgrade/qt_gui.md section 11): every record through its widgets byte for byte,
+# values set through the widgets, the table, the engine's words as the user types.  AZURE2_QT_SHOTS/u7-forms: grabs.
+add_executable(gui_forms_test gui_forms_test.cpp)
+target_link_libraries(gui_forms_test PRIVATE AZURESetupLib)
+add_test(NAME gui_forms COMMAND gui_forms_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/forms)
+set_tests_properties(gui_forms PROPERTIES LABELS gui TIMEOUT 600 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")

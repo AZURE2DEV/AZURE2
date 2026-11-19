@@ -225,9 +225,9 @@ int main(int argc, char **argv) {
     bool allApplied = true;
     for (SectionsTab *tab : {w.getSegmentsTab(), w.getEffectsTab()})
       for (const char *section : {"data", "extrapolations", "modelData", "targets"}) {
-        RecordsPanel *panel = tab->records(section);
-        if (!panel) continue;
+        if (!tab->records(section)) continue;
         for (const azure2::front::Record &r : w.holder()->records(section)) {
+          RecordsPanel *panel = tab->panelFor(section, QString::fromStdString(r.name));
           allApplied = allApplied && panel->selectRecord(QString::fromStdString(r.name)) && panel->applyForm(why);
           applied++;
         }
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
     // a field broken in the form: the engine names it
     RecordsPanel *data = w.getSegmentsTab()->records("data");
     data->selectRecord("el_lab090");
-    if (QComboBox *q = qobject_cast<QComboBox *>(data->fieldWidget("unit"))) q->setCurrentText("barn_per_furlong");
+    data->setFieldText("unit", "barn_per_furlong");
     data->applyForm(why);
     w.getDiagnostics()->validate();
     Check(w.getDiagnostics()->errorCount() > 0 && !w.getDiagnostics()->codes().isEmpty(),
@@ -324,7 +324,8 @@ int main(int argc, char **argv) {
     std::map<std::string, int> expected;
     for (const List &l : lists) {
       RecordsPanel *panel = l.panel;
-      const int before = panel ? panel->recordCount() : -1;
+      // the records of the section (the Experimental Effects tab lists each kind of <targets> on its own)
+      const int before = panel ? (int)w.holder()->records(QString::fromStdString(l.section)).size() : -1;
       std::string first;
       for (const azure2::front::Record &r : w.holder()->records(QString::fromStdString(l.section)))
         if (first.empty() && r.kind == l.kind) first = r.name;
@@ -351,12 +352,16 @@ int main(int argc, char **argv) {
     std::string reason;
     const bool opened = azure2::front::Project::Open(copy.string(), back, reason);
     bool counts = opened;
-    for (const auto &e : expected) counts = counts && (int)back.Records(e.first).size() == e.second;
+    std::string found;
+    for (const auto &e : expected) {
+      counts = counts && (int)back.Records(e.first).size() == e.second;
+      found += " " + e.first + " " + std::to_string(back.Records(e.first).size()) + "/" + std::to_string(e.second);
+    }
     const azure2::front::Validation v = back.Validate();
     std::string errors;
     for (const azure2::front::Diagnostic &d : v.diagnostics)
       if (d.severity == "error") errors += " " + d.text;
-    Check(opened && counts && v.ok, "T2: reopened with the new records, valid" + errors);
+    Check(opened && counts && v.ok, "T2: reopened with the new records (" + found + " ), valid" + errors);
   }
   {
     const fs::path copy = CopyProject(projects[0], work / "levels_T1");

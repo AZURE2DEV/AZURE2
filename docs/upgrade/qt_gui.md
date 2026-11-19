@@ -220,6 +220,93 @@ from the facade's rows (a value set in an editor reaches the command line); the 
 (rows = data sets, total = the engine's); the plot's wheel zoom, pan, cursor read-out, check-box lists and the CSV
 export (rows = points of the files).
 
+
+## 14. Forms of values: what is chosen is chosen, not typed (upgrade 7, 2026-11-19)
+
+The record tabs of stage 2 showed a record as one line of text and its fields as text lines in which the grammar was
+typed by hand (`2e+17 atoms/cm2 fit prior 2e+17 10% grid_max 3e+17`).  The PI's measure is dev's Segments tab:
+everything that can be chosen is chosen.  This section is the design of the forms and the tables that replace them.
+
+### 11.1 Where the choices come from
+
+`gui/` spells no keyword, unit, kind, quantity or grid word.  The facade adds, from `experiment/`'s table:
+
+- `FieldInfo::value`, a `ValueInfo`: the value type and, recursively, the schema's `FormSpec` (alternatives led by a
+  keyword, positional and keyword parts, each with its own `ValueInfo`: type, dimension, its units, enum words, the
+  kinds a reference may name, positive / minimum, epoch, profiled, none).
+- `ParseFieldValue(kind, key, text, quantity)`: the value split into its pieces (`ValueParts`: a nuisance's number,
+  unit, fit flag, prior centre and width (and whether in per cent), grid_max; a form's alternative and its parts by
+  name; a formula's expression and parameters; a grid's kind, span, unit, frame, step or points; the column roles
+  and their units ...), by the engine's own parsers (`experiment/Parsers.h`), the ones `--validate` reads the field
+  with.  A text the parser refuses gives its message, without the "dataset 'x', field 'y':" head, for the form to
+  show beside the field.
+- `FieldValueText(kind, key, parts)` / `ValueText(info, parts)`: the text from the pieces, written as the record
+  writer writes tokens (`io::WriteTokens`) and a nuisance as `experiment::NuisanceText` writes it.  The words of
+  the grid grammar (`GridKinds()`, `Frames()`) and the column roles (`ColumnRoles()`, `experiment::AxisRoles` and
+  `PlainRoles`) are lists of the facade; front_test writes every grid kind and reads it back with the engine.
+- `Quantities(kind)` (name, title, doc, units), `Pairs(project)` and `ReactionLabel(project, in, out)` (the
+  converter's `experiment::ReactionLabel`), `ReactionPairs(project, reaction)` (the pair keys a one-term reaction
+  names, by the engine's `PairsNamed`).
+- `KindInfo::summaryFields` (the columns of a table: the required fields first, then the references to other
+  records, the windows and grids, and, for a kind with at most eight fields set often, all of these; never free text
+  or the column roles), `KindInfo::includeField` (an optional yes/no word whose default is its first: a data set's and
+  an extrapolation's `active`), `FieldInfo::group` (the field this one belongs with: the one its condition names,
+  e.g. a stopping's `phase` with `stopping`, a profile's `truncation` with `profile`).
+- `Project::MoveRecord` (a record and its comment lines change places with a neighbour; no other line moves).
+
+### 11.2 Which widget for which value
+
+| Value type | Widget | Choices from |
+|---|---|---|
+| enum | drop-down (empty item for an optional field) | `ValueInfo::values` |
+| reference | drop-down of the names of the records of those kinds in the project, "(none)" when optional; epoch drop-down for a target with epochs | `ValueInfo::values` (kinds), `KindInfo::sections`, the records |
+| number, integer | line with a numeric validator (> 0, minimum) | `positive`, `min` |
+| unit | drop-down | `units`, or `QuantityUnits` of the record's quantity |
+| number with unit, range | number field(s) and a unit drop-down | `units` |
+| nuisance | number, unit drop-down, check box "Fit", an expandable "Prior" group (centre, width, "%" check box, grid_max); "(record)" drop-down when it may name a shared record; "profiled" check box where allowed | `refKinds`, `profiled` |
+| structured (form) | drop-down of the alternatives (with their doc), then one row per part, each its own widget; an optional part has a check box | `alternatives` |
+| formula | expression line and a small table of parameters | |
+| path | line and "Browse..." (relative to the project) | |
+| grid | drop-down of the grid kinds, then lo, hi, unit, frame, step or points (+ log), or the list, or the file | `GridKinds()`, `Frames()` |
+| columns | a row of columns, each a role drop-down and a unit drop-down for an axis role; "+"/"-"; "from the file" check box | `ColumnRoles()` |
+| reaction | entrance and exit pair drop-downs (the pairs of `<levels>`; the exit pairs of the same compound nucleus, and total capture) | `Pairs`, `ReactionLabel`, `ReactionPairs` |
+| quantity | drop-down of the quantities with their titles | `Quantities(kind)` |
+| number list, composition, spin, nucleus, pair, text | a line | |
+
+Each field has an "Edit as text" toggle: the text line with the grammar as placeholder.  A value the parser refuses or
+the facade cannot split opens as text, with the parser's message under it.
+
+### 11.3 The round-trip rule
+
+A field's editor keeps the text it was given.  Until a widget of the field is changed, the editor returns that text
+unchanged; after a change, the text is written from the pieces, and every piece not changed keeps its spelling (a
+number keeps the text it was written with, `6.0e-20` stays `6.0e-20`).  Apply writes the record through
+`Project::SetRecord`, which rewrites only the lines whose value changed.  So opening and applying an unedited record
+leaves the project byte for byte the same; front_test checks that every field of every record of T1, T2, T3, 13N and
+`section_examples.azr` splits and writes back to the same text, and gui_forms_test that Apply of every record
+through the new forms moves no byte.
+
+### 11.4 Checking as the user types
+
+Each editor parses its text with `ParseFieldValue` on every change and shows the message under the field in plain
+words (red).  Apply validates the project as it would be after the edit (`Validate` of a copy): an error of this
+record is shown beside its field, and the user is asked before the record is written anyway (a '?' placeholder of a
+new record is such an error until it is filled).
+
+### 11.5 The tables
+
+A section's records are a table (`RecordTableModel`): a check box column for the include field, the name, the kind
+(when the section holds several), then the union of the summary fields of its kinds, each cell the field's short
+text (`ShortValueText`: a nuisance "1 (fit)", a form its alternative and numbers), the whole record as the row's
+tooltip.  Sortable, a filter line, multi-selection; Add (a dialog with the kind, the name and the required fields as
+forms, pre-filled: the first reaction of the project's pairs, the first quantity and unit, norm 1 fixed), Remove,
+Duplicate, Move up / down, include / exclude of the selected records; a context menu with the same, Ins, Del, Ctrl+D,
+Ctrl+Up/Down.  A cell of an enum or reference field is a drop-down in place; a nuisance's "fit" a check box in place.
+The Experimental Effects tab shows targets, beams and detectors as three tables, each with its form below; the form
+groups a field with the fields of its `group` in a collapsible box, open when the record sets one of them, with the
+field's doc as one line and its unit.  "Used by" lists the data sets that name the record, with "Assign to selected
+data sets".
+
 Code: `api/front/` (facade and test), `src/ProgramMain.cpp`, `include/ProgramObserver.h`, `gui/`.
 
 ## 12. The Levels and Channels tab and the Particle Pairs tab as easy as dev's, and quicker (U7, agent levels)
