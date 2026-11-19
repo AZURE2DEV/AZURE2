@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -381,8 +382,24 @@ std::vector<InputFile> InputFiles(const Project &project) {
 bool ReadRunParameters(const std::string &projectFile, const std::string &parameterFile, bool fit,
                        RunParameters &out, std::string &why) {
   out = RunParameters();
+  // the set-up writes its external-capture integrals where its output directory is: a scratch directory, so that the
+  // project's outputs are read, never written (an intEC.dat of the output directory is copied there to be reused)
+  std::error_code ec;
+  const fs::path scratch = fs::temp_directory_path(ec) /
+                           ("azure2-overview-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+                            "-" + std::to_string(reinterpret_cast<std::uintptr_t>(&out)));
+  fs::create_directories(scratch, ec);
+  if (ec) {
+    why = "no scratch directory for the set-up: " + ec.message();
+    return false;
+  }
+  const fs::path outputs = !parameterFile.empty() ? fs::path(parameterFile).parent_path() : fs::path();
+  for (const char *cache : {"intEC.dat", "intEC.dat.sig"})
+    if (!outputs.empty() && fs::is_regular_file(outputs / cache, ec)) fs::copy_file(outputs / cache, scratch / cache, ec);
   std::vector<Parameter> parameters;
-  if (!ReadParameters(projectFile, parameters, why)) return false;
+  const bool read = ReadParameters(projectFile, scratch.string(), parameters, why);
+  fs::remove_all(scratch, ec);
+  if (!read) return false;
   std::map<std::string, ParameterValue> values;
   if (!parameterFile.empty()) {
     std::vector<ParameterValue> rows;

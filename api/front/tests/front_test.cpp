@@ -415,8 +415,16 @@ void OverviewChecks(const fs::path &source, const std::string &binary) {
               fit.calls > 0 && fit.parameterFile.find("param.sav") != std::string::npos,
           "overview: the fit's files: status '" + fit.status + "' by " + fit.minimizer + " in " +
               std::to_string(fit.calls) + " calls, " + fit.parameterFile);
+    auto outputs = [&t1s]() {
+      std::map<std::string, std::string> files;
+      for (const auto &e : fs::directory_iterator(t1s.parent_path() / "output"))
+        if (e.is_regular_file()) files[e.path().filename().string()] = Bytes(e.path());
+      return files;
+    };
+    const std::map<std::string, std::string> before = outputs();
     front::RunParameters parameters;
     const bool read = front::ReadRunParameters(t1s.string(), fit.parameterFile, true, parameters, why);
+    Check(outputs() == before, "overview: the parameters' set-up writes nothing into the output directory");
     std::vector<front::Parameter> all;
     front::ReadParameters(t1s.string(), all, why);
     int free = 0, byKind = 0;

@@ -93,6 +93,11 @@ std::string SettingText(const ParameterSetting &r) {
 }  // namespace
 
 bool ReadParameters(const std::string &projectFile, std::vector<Parameter> &out, std::string &why) {
+  return ReadParameters(projectFile, std::string(), out, why);
+}
+
+bool ReadParameters(const std::string &projectFile, const std::string &scratchDirectory, std::vector<Parameter> &out,
+                    std::string &why) {
   out.clear();
   const azure2::support::ExtendedPrecisionScope fpPrecision;
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
@@ -106,6 +111,10 @@ bool ReadParameters(const std::string &projectFile, std::vector<Parameter> &out,
   if (status < 0) {
     why = projectFile + " cannot be set up (status " + std::to_string(status) + "): " + notes.str();
     return false;
+  }
+  if (!scratchDirectory.empty()) {  // what the set-up writes (an intEC.dat) goes there, not into the outputs
+    config.outputdir = scratchDirectory + (scratchDirectory.back() == '/' ? "" : "/");
+    config.checkdir = config.outputdir;
   }
   config.ResolveMatrixRoute();
   try {

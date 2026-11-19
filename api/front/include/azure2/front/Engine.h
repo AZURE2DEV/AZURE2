@@ -645,6 +645,10 @@ struct Parameter {
 /// The parameters of a fit of the SAVED project file (the levels' and the data sets' nuisances): the session's set-up (levels, data, external capture), nothing written but what a session
 /// writes (an intEC.dat it computes).  False with `why` when the project cannot be set up.
 bool ReadParameters(const std::string &projectFile, std::vector<Parameter> &out, std::string &why);
+/// The same with what the set-up writes (an intEC.dat it computes) written into `scratchDirectory` (an existing
+/// directory) instead of the project's output directory, which is left as it is.
+bool ReadParameters(const std::string &projectFile, const std::string &scratchDirectory, std::vector<Parameter> &out,
+                    std::string &why);
 
 /// One line of a parameter file (param.sav, param.par, param.errors' first three columns): name, value, error.
 struct ParameterValue {
