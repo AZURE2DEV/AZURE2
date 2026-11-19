@@ -1054,8 +1054,10 @@ Dimensionless widths
 check for capture. AZURE2's Wigner limit (``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
 Teichmann-Wigner sum-rule unit 3ħ²/(2μa²) (``pyazr.physics.wigner_limit``); a θ² quoted against the other common
 unit, ħ²/(μa²), is 1.5 times larger.  The Weisskopf estimate (``pyazr.weisskopf_width``, in eV) is the engine's
-too, the row ``weisskopf_width`` of :doc:`physics_functions` (two-digit textbook coefficients for
-:math:`R = 1.2\,A^{1/3}` fm): every number of the table is the engine's.
+too, the row ``weisskopf_width`` of :doc:`physics_functions` (the closed form of Blatt and Weisskopf for
+:math:`R = 1.2\,A^{1/3}` fm; until 2026-11-18 the two-digit textbook coefficients, whose W.u. differ from the
+present ones by +0.8 % (E1), +2.3 % (E2), +3.1 % (E3), −3.1 % (E4), +1.3 % (M1), +1.9 % (M2), −0.8 % (M3) and −7.2 %
+(M4), new / old): every number of the table is the engine's.
 
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the

@@ -775,10 +775,11 @@ re-read against its design at the hand-over.
    well, the DWBA transfer cross sections, continuum bins: each takes several potentials and a reaction, a door
    of its own design). The Weisskopf width is a function of `physics/` since the PI's approval of 2026-11-16
    (pyazr 3.0.0.dev5; `physics/Widths.h`, `weisskopf_width_eV`; the row `weisskopf_width` of `pyazr.physics`):
-   the total width of an E1-E4 or M1-M4 transition in eV, with the two-digit textbook coefficients for R = 1.2
-   A^(1/3) fm that pyazr's Python formula had; `pyazr.weisskopf_width` calls it and gives the same numbers, bit
-   for bit. The coefficients are 0.8 to 3.1 % from the closed form they round, M4 7.2 % (the unit test holds
-   each); whether to replace them by the closed form is the owner's decision (it would move every W.u.).
+   the total width of an E1-E4 or M1-M4 transition in eV; `pyazr.weisskopf_width` calls it. Since 2026-11-18 (the
+   owner's answer) it is the closed form for R = 1.2 A^(1/3) fm (Bohr and Mottelson eqs. 3C-38, 3C-39), no longer
+   the two-digit textbook coefficients pyazr's Python formula had: every W.u. moved by table / closed form = +0.79 %
+   (E1), +2.28 % (E2), +3.05 % (E3), -3.11 % (E4), +1.34 % (M1), +1.94 % (M2), -0.80 % (M3), -7.23 % (M4); no
+   output file of the engine reads it.
    `Session.wigner_widths` is Gamma_W = 2 P_l(E_r) gamma_W^2 since the same approval (it was a probe of the
    transformation): P of the session's channel functions at the level's physical energy, gamma_W^2 the engine's
    3 hbar^2 / (2 mu a^2); the name and the return shape are kept. theta^2 of `dimensionless_widths` changes

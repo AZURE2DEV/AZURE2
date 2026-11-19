@@ -61,8 +61,9 @@ def weisskopf_width(radiation_type, L, e_gamma, mass_number):
 
     ``radiation_type`` is ``'E'`` or ``'M'``, ``L`` the multipolarity, ``e_gamma`` the transition energy in MeV and
     ``mass_number`` the mass number A of the emitting nucleus.  The estimate is the engine's (``physics/Widths.h``:
-    the two-digit textbook coefficients for R = 1.2 A^(1/3) fm).  Returns ``None`` for a multipolarity outside the
-    tabulated E1-E4 / M1-M4 range or for a non-positive transition energy.
+    the closed form of Blatt and Weisskopf for R = 1.2 A^(1/3) fm; until 2026-11-18 the two-digit textbook
+    coefficients, 0.8 to 3.1 % from it, M4 7.2 %).  Returns ``None`` for a multipolarity outside E1-E4 / M1-M4 or
+    for a non-positive transition energy.
     """
     from . import physics
 

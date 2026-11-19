@@ -283,9 +283,9 @@ def main():
         P = ph.photon_penetrability(eg, L_)
         row_test("photon_penetrability", f"L = {L_}: (E / hbar c)^(2L+1) (mpmath) to 1e-14",
                  all(rel(P[i], (mp.mpf(eg[i]) / HC) ** (2 * L_ + 1)) <= 1e-14 for i in range(eg.size)))
-    # The Weisskopf estimate: the table's coefficients against the closed form with R = 1.2 A^(1/3) fm (Bohr and
-    # Mottelson vol. 1, eqs. 3C-38, 3C-39) in mpmath.  The coefficients have two digits: E1-E3, M1-M3 within 4 %, E4
-    # and M4 within 8 % (physics/tests/widths_test.cpp holds each multipole's distance to 0.1 %).
+    # The Weisskopf estimate: the closed form with R = 1.2 A^(1/3) fm (Bohr and Mottelson vol. 1, eqs. 3C-38, 3C-39)
+    # in mpmath, to 1e-13 (the engine's function since 2026-11-18; the two-digit table before it: within 4 %, E4 and M4
+    # 8 %, as physics/tests/widths_test.cpp records).
     ALPHA_, MP_ = mp.mpf(1) / mp.mpf("137.035999084"), mp.mpf("938.27208816")
 
     def mp_weisskopf(kind, L_, e, A):
@@ -302,11 +302,11 @@ def main():
             worst_W[kind + str(L_)] = max(rel(got[i, j], mp_weisskopf(kind, L_, eg[i], A))
                                           for i in range(eg.size) for j, A in enumerate((4, 13, 27, 208)))
     row_test("weisskopf_width", "E1-E4, M1-M4 against the closed form with r0 = 1.2 fm (mpmath), A = 4-208, E = "
-             "0.01-20 MeV: largest rel diff " + ", ".join(f"{k} {v:.3f}" for k, v in worst_W.items())
-             + " (<= 0.04; E4, M4 <= 0.08: two-digit coefficients)",
-             all(v <= (0.08 if k[1] == "4" else 0.04) for k, v in worst_W.items()))
-    row_test("weisskopf_width", "E1 of 1 MeV in A = 125 is 6.8e-2 x 25 = 1.7 eV; M1 has no A",
-             rel(ph.weisskopf_width(1.0, 1, 125.0), 1.7) <= 1e-14
+             "0.01-20 MeV: largest rel diff " + ", ".join(f"{k} {v:.1e}" for k, v in worst_W.items())
+             + " (<= 1e-13)",
+             all(v <= 1e-13 for k, v in worst_W.items()))
+    row_test("weisskopf_width", "E1 of 1 MeV in A = 125 is 1.68669 eV (the textbook's 6.8e-2 x 25 = 1.7 eV); M1 has no A",
+             rel(ph.weisskopf_width(1.0, 1, 125.0), mp_weisskopf("E", 1, 1.0, 125)) <= 1e-13
              and ph.weisskopf_width(2.0, 1, 13.0, "M") == ph.weisskopf_width(2.0, 1, 208.0, "M"))
     _, st = ph.weisskopf_width(np.array([1.0, -1.0, 1.0]), np.array([1, 1, 5]), 13.0, errors="mask")
     row_test("weisskopf_width", "status: E <= 0 is argument 1, L = 5 argument 2", list(st) == [0, 1, 2], st)

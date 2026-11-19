@@ -30,15 +30,18 @@ double photon_penetrability(double E_gamma_MeV, int L) {
 }
 
 double weisskopf_width_eV(bool magnetic, int L, double E_gamma_MeV, double mass_number) {
-  // eV MeV^-(2L+1), L = 1..4: the two-digit textbook coefficients for r0 = 1.2 fm (Widths.h).
-  constexpr double kElectric[4] = {6.8e-2, 4.9e-8, 2.3e-14, 6.8e-21};
-  constexpr double kMagnetic[4] = {2.1e-2, 1.5e-8, 6.8e-15, 2.0e-21};
   if (L < 1 || L > 4 || !(E_gamma_MeV > 0.0) || !(mass_number > 0.0)) return std::numeric_limits<double>::quiet_NaN();
-  const double coefficient = magnetic ? kMagnetic[L - 1] : kElectric[L - 1];
-  const int thirds = magnetic ? 2 * L - 2 : 2 * L;  // the power of A, in thirds: R^(2L) or R^(2L-2)
-  // A whole power is written as one (A^2, not A^(6/3)), as the table has it.
-  const double a_power = thirds == 0 ? 1.0 : std::pow(mass_number, thirds % 3 == 0 ? thirds / 3 : thirds / 3.0);
-  return coefficient * a_power * std::pow(E_gamma_MeV, 2 * L + 1);
+  // The closed form (Widths.h; Bohr and Mottelson vol. 1, eqs. 3C-38, 3C-39), R = r0 A^(1/3).
+  constexpr double kR0_fm = 1.2;
+  double doubleFactorial = 1.0;  // (2L+1)!!
+  for (int k = 2 * L + 1; k > 1; k -= 2) doubleFactorial *= k;
+  const double R = kR0_fm * std::cbrt(mass_number);
+  const double common = 2.0 * (L + 1) / (L * doubleFactorial * doubleFactorial) * std::pow(3.0 / (L + 3), 2) *
+                        kFineStructure * kHbarC_MeV_fm * std::pow(E_gamma_MeV / kHbarC_MeV_fm, 2 * L + 1);  // MeV fm^-2L
+  const double width_MeV =
+      magnetic ? common * 40.0 * std::pow(kHbarC_MeV_fm / (2.0 * kProtonMass_MeV), 2) * std::pow(R, 2 * L - 2)
+               : common * std::pow(R, 2 * L);
+  return width_MeV * 1.0e6;
 }
 
 }  // namespace physics
