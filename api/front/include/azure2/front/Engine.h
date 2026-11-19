@@ -206,6 +206,15 @@ struct Option {
   double low = 0, high = 0, defaultValue = 0;
   std::string help;
   std::vector<std::string> words;  ///< "word": the words it takes ("rwa", "physical")
+  bool lowOpen = false;            ///< the range excludes `low` ("--delta-chi2": above 0)
+  /// The unit of a number, as the row's help names it last ("the rate's lowest temperature, GK": "GK"); "" for none.
+  std::string unit;
+  /// When the option is asked, in words ("with --covariance-band"); "" for always.
+  std::string when;
+  /// The flag it applies with ("--covariance-band" for --scale-covariance); "" for none.
+  std::string needs;
+  /// For a required option that is one of two ways: the other way ("--temperature-file"); "" for none.
+  std::string instead;
 };
 std::vector<Option> Options();
 

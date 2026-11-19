@@ -4,6 +4,7 @@
 #include "azure2/front/Engine.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -224,6 +225,21 @@ std::vector<Command> Commands() {
   return out;
 }
 
+namespace {
+
+/// The unit a row's help names last: the token after its last ", " when that is one word of letters ("GK", "keV").
+std::string UnitOfHelp(const std::string &help) {
+  const std::size_t comma = help.rfind(", ");
+  if (comma == std::string::npos) return "";
+  const std::string tail = help.substr(comma + 2);
+  if (tail.empty() || tail.size() > 6) return "";
+  for (const char c : tail)
+    if (!std::isalpha(static_cast<unsigned char>(c))) return "";
+  return tail;
+}
+
+}  // namespace
+
 std::vector<Option> Options() {
   std::vector<Option> out;
   for (const RunQuestion &q : RunQuestions()) {
@@ -245,6 +261,16 @@ std::vector<Option> Options() {
       o.words.push_back(words.substr(from, bar == std::string::npos ? std::string::npos : bar - from));
       if (bar == std::string::npos) break;
       from = bar + 1;
+    }
+    o.lowOpen = q.lowOpen;
+    o.unit = UnitOfHelp(o.help);
+    o.instead = q.instead ? q.instead : "";
+    switch (q.when) {
+      case AskedWhen::kAlways: break;
+      case AskedWhen::kBandChosen: o.when = "with --covariance-band", o.needs = "--covariance-band"; break;
+      case AskedWhen::kTemperaturesFromFile: o.when = "temperatures from a file"; break;
+      case AskedWhen::kTemperaturesInRange: o.when = "without --temperature-file"; break;
+      case AskedWhen::kProjectNeedsCapture: o.when = "when the run has external capture"; break;
     }
     out.push_back(o);
   }

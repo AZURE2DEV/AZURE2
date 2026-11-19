@@ -10,6 +10,7 @@
 // Each check prints PASS or FAIL; exit 1 on a failure.
 #include "azure2/front/Engine.h"
 
+#include <map>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
@@ -138,6 +139,24 @@ int main(int argc, char **argv) {
   Check(calculate && fit, "the commands calculate and fit");
   Check(!front::Options().empty() && !front::Fitters().empty(), "the options and the fitters");
   Check(front::ConfigTableJson().find("\"use_brune\"") != std::string::npos, "the <config> table names use_brune");
+  {
+    // the options' editors (the GUI's Calculate tab): the unit the row's help names, when it applies, its other way
+    std::map<std::string, front::Option> byName;
+    for (const front::Option &o : front::Options()) byName[o.option] = o;
+    Check(byName.count("--temperature-min=") && byName["--temperature-min="].unit == "GK" &&
+              byName["--temperature-min="].instead == "--temperature-file" &&
+              byName["--temperature-min="].when == "without --temperature-file",
+          "--temperature-min: unit GK, the other way --temperature-file, asked without it: unit '" +
+              byName["--temperature-min="].unit + "', instead '" + byName["--temperature-min="].instead + "'");
+    Check(byName["--energy-spread="].unit == "keV" && byName["--walkers="].unit.empty() &&
+              byName["--covariance-band"].unit.empty(),
+          "units: --energy-spread keV, none for --walkers and a flag ('" + byName["--walkers="].unit + "')");
+    Check(byName["--scale-covariance"].needs == "--covariance-band" && byName["--covariance-band"].needs.empty() &&
+              byName["--scale-covariance"].when == "with --covariance-band",
+          "--scale-covariance applies with --covariance-band");
+    Check(byName["--delta-chi2="].lowOpen && byName["--delta-chi2="].low == 0 && !byName["--walkers="].lowOpen,
+          "--delta-chi2: above 0 (an open range), --walkers at least its low");
+  }
   {
     bool reaction = false;
     for (const front::KindInfo &k : front::RecordKinds())
