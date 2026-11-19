@@ -149,7 +149,7 @@ failure for a test), **speed**.  "Used by": tests (count of files under `tests/`
 | `AZURE_GRAD_CHECK`, `_H`, `_IDX`, `_N`, `_ROWS`, `_SEGS`, `AZURE_SHIFT_GRAD_CHECK`, `AZURE_TE_WEIGHTS_CHECK` | `AZURECalc.cpp`, `AZUREGrad.cpp` | diag (may exit) | tests 49 / 8 / 0 / 22 / 10 / 0 / 2 / 0 | diagnostics record (one `--check-gradient` option later) |
 | `AZURE_PROFILE`, `AZURE_GRAD_TIMING`, `AZURE_GRID_TIMING` | `Profile.h`, `WorkingCopy.cpp`, `AZURECalc.cpp`, `AZUREGrad.cpp`, `TargetSetup.cpp` | diag (timing) | tests 5 / 0 / 1 | diagnostics record |
 | `AZURE_PLAN_CHECK`, `AZURE_NODE_CHECK`, `AZURE_POOL_CHECK`, `AZURE_CHANNEL_VERIFY`, `AZURE2_EC_TABLE_CHECK` | `CalculationPlan.cpp`, `NodeTable.cpp`, `AZURECalc.cpp`, `AMatrixFunc.cpp`, `ECTable.cpp` | diag (checks) | tests 4 / 3 / 0 / 1 / 2 | diagnostics record (`AZURE_POOL_CHECK` goes with the pools) |
-| `AZURE_TRACE_FCN`, `AZURE_DUMP_NONFINITE`, `AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`, `AZR_DEBUG_GRID` | `AZURECalc.cpp`, `AZUREGrad.cpp`, `ChannelSpace.cpp`, `AdaptiveIntegrationGrid.cpp` | diag (prints) | tests 1 / 0 / 0 / 0 / 0 | the first two: diagnostics record; the last three go |
+| `AZURE_TRACE_FCN`, `AZURE_DUMP_NONFINITE`, `AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`, `AZR_DEBUG_GRID` | `AZURECalc.cpp`, `AZUREGrad.cpp`, `ChannelSpace.cpp`, `AdaptiveIntegrationGrid.cpp` | diag (prints) | tests 1 / 0 / 0 / 0 / 0 | the first two: diagnostics record; `AZR_DEBUG_GRID` kept (read by `tests/gamma_decay`); `AZURE_GRAD_DEBUG` and `AZURE_CHANNEL_DEBUG` removed on the owner's answer of 2026-11-18 |
 | `AZURE_POISON_RESULTS` | `Results.h` | diag (NaN-filled buffers) | tests 3 | diagnostics record |
 | `AZURE_TEST_FAIL_E`, `AZURE_TEST_FAIL_EXIT` | `PointPass.cpp` | test (injected failure) | tests 3 / 2 | diagnostics record, marked test-only |
 | `AZURE2_SPEC_INJECT`, `AZURE2_WRITE_CONVERT_FIXTURES` | `convert/tests/` | test | tests | stay (test programs, not the engine) |
@@ -607,8 +607,8 @@ it and is lent by reference; a method that writes a member of its own object is 
   working copies with their buffers (`idleData`, a `StatePool<WorkingData>`; the fitter's own stack and its lock are
   gone), the copies an intermediate output is written from (`output`, `outputData`, `outputResults`, `outputMutex`)
   and the last gradient (`gradient`: where it was taken, its value, the Gauss-Newton curvature, their lock).
-  `SetFixedMask` is not `const`; the least-squares solvers (`LeastSquares.h`, `FitLeastSquares.cpp`,
-  `FitGslTrustRegion.cpp`) take `AZURECalc &`.
+  `SetFixedMask` is not `const`; the least-squares solver (`LeastSquares.h`, `FitLeastSquares.cpp`; GSL's, removed
+  on 2026-11-18) takes `AZURECalc &`.
 - **The sampler** (`AZURECalcMCMC`).  `SamplerStates` (the caller's: the walkers' levels and the idle working copies,
   two `StatePool`s) replaces the sampler's own pool and lock.  The parameter layout and the priors (14 members) are
   plain members written by `BuildAutoPriors` and `SetUpPriorCovariance`, which are not `const`.

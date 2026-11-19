@@ -1,6 +1,6 @@
-// The Levenberg-Marquardt fitter on the residual rows and their analytic Jacobian, and what it shares with the GSL
-// trust-region fitter (LeastSquares.h): the free parameters with their priors, the covariance (J^T J + priors)^-1, the
-// row driver with its MIGRAD fallback (docs/upgrade/fit.md).
+// The Levenberg-Marquardt fitter on the residual rows and their analytic Jacobian, and its parts (LeastSquares.h): the
+// free parameters with their priors, the covariance (J^T J + priors)^-1, the row driver with its MIGRAD fallback
+// (docs/upgrade/fit.md).
 #include "LeastSquares.h"
 
 #include <algorithm>

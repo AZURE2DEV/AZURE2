@@ -456,20 +456,29 @@ MINOS error analysis.
 covariance.dat
 ^^^^^^^^^^^^^^
 
-Written by a fit (MIGRAD, ``--use-lm``, ``--use-gsl-lm``, MINOS) when the
-cross-section uncertainty band is on (``--covariance-band``), and read back by a later run's band. It is the covariance of the fit's
-**free level energies and reduced-width amplitudes** only -- the parameters a
-calculated cross section depends on; normalizations, energy shifts and the other
-nuisance parameters are left out -- in parameter-vector order (``param.sav``'s
-order with every fixed and every non-R-matrix parameter dropped) and in
+Written by a fit (MIGRAD, ``--use-lm``, MINOS) when the
+cross-section uncertainty band is on (``--covariance-band``), and read back by a later run's band. It is the covariance of the
+fit's free parameters the band propagates: the **level energies and reduced-width amplitudes**, the THM coherent
+background, and (since 2026-11-18) the **free parameters of targets, samples and apparatus** that change the model
+of a point (isotopic abundances, screening potentials, areal densities, Doppler temperatures, sample thicknesses,
+stopping scales and kernel parameters); normalizations and energy shifts, which scale or move the data and not the
+model, are left out. Its order is the parameter vector's (``param.sav``'s order with every fixed and every other
+parameter dropped), in
 ``param.sav``'s space (Minuit's external parameters: MeV and the reduced-width
 amplitudes of the run's parametrization). MIGRAD's is HESSE's matrix, a
 least-squares fit's :math:`(J^TJ + \text{priors})^{-1}`. With
 ``--scale-covariance`` it is multiplied by the reduced χ² when that is above 1.
 The matrix is written one row per line; since 2026-11-05 it is preceded by
-``#columns <name> ...`` (the column parameters' names) and, when scaled,
-``#scaled <factor>`` -- comment lines that ``numpy.loadtxt``, the engine's own
-reader and older builds skip. ``pyazr.prior_from_fit`` turns it and
+``#columns <name> ...`` (the column parameters' names; not written when a THM
+coherent background is free) and, when scaled, ``#scaled <factor>`` -- comment
+lines that ``numpy.loadtxt`` and older builds skip. The engine's reader keeps the
+names: a later run with fewer band parameters (an extrapolation after a fit with a
+free areal density, which the extrapolation has not) takes the matrix on its own
+columns by name, which is exact because its curves do not depend on the others.
+The band of each point is :math:`\sigma^2 = g^T C g`, with g the derivatives of
+the point's model in the columns: the adjoint's for the level parameters, central
+differences of the model (step :math:`10^{-6}(|x|+1)`) for the target and
+apparatus parameters. ``pyazr.prior_from_fit`` turns it and
 ``param.sav`` into a prior covariance file (:doc:`../user_guide/chi_squared`).
 
 covariance_matrix.out

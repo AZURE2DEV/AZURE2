@@ -161,4 +161,20 @@ void BindFit(py::module_ &m) {
         return rows;
       },
       "The engine's fitters (the rows of Fitters()), in the program's precedence.");
+  m.def(
+      "removed_fitters",
+      []() {
+        py::list rows;
+        for (const RemovedFitterRow &row : RemovedFitters()) {
+          py::dict d;
+          d["name"] = row.name;
+          d["option"] = row.option;
+          d["removed"] = row.removed;
+          d["message"] = RemovedFitterMessage(row, std::string("method '") + row.name + "'");
+          rows.append(d);
+        }
+        return rows;
+      },
+      "The fitters the engine no longer has (RemovedFitters()): name, option, removed (the date), message (the "
+      "refusal of the method, with what to use instead).");
 }

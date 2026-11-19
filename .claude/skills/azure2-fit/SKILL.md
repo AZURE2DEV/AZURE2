@@ -119,11 +119,11 @@ ignored).
 
 **The same fitters from Python.** `s.fit_with_engine(method)` runs the program's fitter on a session (methods:
 `pyazr.kinds()["fitters"]`, the table of `docs/source/user_guide/fitting.rst`, "The Engine's Fitters"): `migrad`,
-`migrad-gradient`, `lm`, `gsl-lm`, `nlopt` where built; `minos=True` after a MIGRAD row; HESSE always follows a
+`migrad-gradient`, `lm`, `nlopt` where built (`gsl-lm` is removed and refused); `minos=True` after a MIGRAD row; HESSE always follows a
 MIGRAD row; it writes no file and leaves the session's values alone. The result: `x`/`objective` (the lowest
 objective reached; at a call limit the lowest evaluated), `status` (the fitter's word) and `outcome` (shared words:
 converged, call_limit, iteration_limit, stopped, invalid, failed), `notices` (fallback to MIGRAD, a setting ignored:
-`max_calls` on `lm`/`gsl-lm`, whose rows have `call_limit` false), `minos` and `minos_valid` (per side: valid,
+`max_calls` on `lm`, whose row have `call_limit` false), `minos` and `minos_valid` (per side: valid,
 at_limit, call_limit, new_minimum; trust an interval only with `valid`). `scripts/engine_fit.py` runs several methods
 from one start and writes their status, objective, errors and MINOS intervals to JSON.
 
@@ -137,13 +137,13 @@ engine-failure guards of `references/pyazr-fitting.md`, `--save-fit` for the sna
 **Which fitter.** On `tests/upgrade/T3/T3_start.azr` (8 free parameters) the objective has at least four minima:
 `lm` and a single least-squares start end at 755.22, `migrad` at 591.83, `migrad-gradient` at 509.348 (129
 calls), and `lsq_fit.py --starts 8 --jitter 3` reaches 509.3479 (its other starts end at 580.33, 591.83, 755.22)
-in about a second. So: least squares (lsq_fit, `lm`, `gsl-lm`) for speed, staging and a covariance
+in about a second. So: least squares (lsq_fit, `lm`) for speed, staging and a covariance
 (JᵀJ + priors)⁻¹ near a minimum; MIGRAD with the gradient as the reference and for MINOS; several starts whenever
 amplitudes interfere. MIGRAD stops slightly above the minimum least squares finds (9e-6 relative here, 9e-4 on
 T2): compare fitters at that level, not bit for bit.
 
 **Convergence.** Read `output/fitStatus.out` (every fitter: `status converged|call_limit|iteration_limit|invalid|...`,
-`fitter_status`, `minimizer`, EDM, calls, `call_limit` with `ignored` for LM/GSL-LM) or the final
+`fitter_status`, `minimizer`, EDM, calls, `call_limit` with `ignored` for LM) or the final
 `MIGRAD converged` / `WARNING: MIGRAD did NOT converge` line. `chiSquared.out` and `param.sav` are written either way.
 A plateau of a few hundred evaluations on a model with hundreds of free parameters is not a minimum
 (`references/running-fits.md`).

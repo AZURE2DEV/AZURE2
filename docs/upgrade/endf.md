@@ -214,7 +214,7 @@ Brune set with no formal equivalent (`M` not positive definite: the engine's own
 | MF=6 MT=2 LAW=5 | LTP=12 first: P_NI(mu) from the engine's dsigma/dOmega on an angle grid; LTP=1 needs the nuclear amplitudes (a new door, stage 5) | c.m. mu, lab E | LIDP for identical particles is set from the pair |
 | MF=6 MT=600.. LAW=2 | the engine's Legendre coefficients (`legendre`, normalised) | c.m. (LCT=2, p. 143) | — |
 | MF=6 MT=102 | primary photon per final state: yield sigma_f/sigma, LAW=2 angular distribution from the engine; recoil LAW=4 | c.m. | the cascade below each final state (ENSDF), MF=12 LO=2 if preferred |
-| MF=32 LCOMP=1 | the covariance of the formal parameters: HESSE (or the LM covariance) in a formal-basis session at the transformed best fit, scaled to eV and eV^1/2 | — | which levels to include |
+| MF=32 LCOMP=1 | the covariance of the formal parameters: the fit's covariance carried through the transformation at the written B_c, J C J^T (section 13.13), scaled to eV and eV^1/2 | — | which levels to include |
 | MF=33 | sensitivities and the parameter covariance on an energy grid (`pyazr.bands`), NI-type sub-subsections | groups | the long-range (normalisation) components |
 
 The engine computes every number on a grid it is given; the module writes the TAB1 and LIST records. Nothing is
@@ -389,7 +389,7 @@ needs the R-matrix, a Coulomb function or a basis conversion is the engine's, re
 | formal levels with a caller's B_c → observed | the reader's conversion: a System (pairs), a block's channels, E, gamma, B → Brune E, widths or ANCs (and the status per level) | `brune_from_formal(system, b, E, gamma, B, cf)` and `observed_from_amplitudes` in `physics/` take B as an argument | a free function of the binding (`pyazr.physics`-like, on pair records; about 150 lines C++ with the System built from the pairs, a test: formal parameters of T1 with the engine's B give T1's levels; with B = -l, the 3He + 4He levels of section 6.2) |
 | cross sections on a given grid | the reaction and quantity at energies (and angles) | an extrapolation record and `Session(extrapolations=True)`; `pyazr3.md`'s planned `Session.evaluate` on given energies | none for stage 1-3 |
 | nuclear amplitude coefficients a_l, b_l (LAW=5 LTP=1) | from the collision matrix | no | stage 5, a session function row |
-| covariance of formal parameters | HESSE in a formal-basis session at the transformed best fit | yes (engine HESSE, iminuit recipe) | none |
+| covariance of formal parameters | the fit's covariance through the Jacobian of the transformation at the written B_c (section 13.13; HESSE in a formal-basis session until 2026-11-18) | door 2 and iminuit's HESSE | none |
 
 ### 8.3 The module `pyazr.endf`
 
@@ -588,7 +588,8 @@ pair, the file's Q values for the others) are in the code.
    kinematics, and the differences reported. **Recommended: so** (section 6.1: the file's masses alone gave 1.1 keV).
 10. **Covariances (MF=32)**: from HESSE in a formal-basis session at the transformed best fit (no new Jacobian), or
     the fit's covariance propagated through the Brune → formal Jacobian (a new door). **Recommended: the first**,
-    stage 5.
+    stage 5. *The owner's answer (2026-11-18): the second, the fit's covariance carried through the transformation;
+    built (section 13.13).*
 
 ## 12. The order of work
 
@@ -1170,19 +1171,38 @@ The amplitude form has no sigma_NI.
 
 ### 13.13 Covariances: MF=32 LCOMP=1 for LRF=7
 
-`pyazr/endf/covariance.py`: `formal_covariance(session, x)` -> `FormalCovariance`, `rows(record, covariance)` (the
-records), `read_covariance(material)` -> `ResonanceCovariance` behind `Material.covariance()`; `write(...,
-covariance=None | "hesse" | FormalCovariance)`; the own format check counts the records of MF=32 (`_read_mf32`).
+`pyazr/endf/covariance.py`: `formal_covariance(session, x, covariance=None)` -> `FormalCovariance` (with `jacobian`
+and `fit_covariance`), `jacobian(session, x, record)`, `rows(record, covariance)` (the records),
+`read_covariance(material)` -> `ResonanceCovariance` behind `Material.covariance()`; `write(...,
+covariance=None | "hesse" | the fit's covariance (array) | FormalCovariance)`; the own format check counts the records of MF=32 (`_read_mf32`).
 
-**What is computed** (the PI's decision 10): the session's fit vector written as a project beside it
-(`Session.save_fit`, a hidden file removed afterwards: its data and covariance files are named relative to the
-project) and opened with `use_brune=False`; its objective at its start must equal the fit's at x (T1 at its MIGRAD
-minimum: 462.2735112936359 and ...363933, 7e-15; the fitted T2: 1.9e-7, the snapshot's round trip through the
-observed widths; refused above 1e-5); iminuit's HESSE of that objective (the recipe of `pyazr/objective.py`,
-errordef 1 from the objective), symmetrised; refused when not positive definite (the unfitted T2 start, and T2 after
-an engine MIGRAD whose gradient stays at 38-72: both refused). The rows of MF=2's parameters are taken out (norms,
-shifts and the photon channels are marginalised), scaled to the file's units (ER: lab factor x 1e6; GAM: the
-amplitude scale) and checked against MF=2's values (door 1; 1e-7). T1: 0.7 s.
+**What is computed** (the owner's answer of 2026-11-18 to decision 10, replacing HESSE in a formal-basis session):
+C_32 = J C J^T. C is the fit's covariance of the session's free parameters in its own basis (Brune or Park) with
+its own fixed parameters: HESSE of the session's objective at x by iminuit (errordef 1 from the objective,
+symmetrised, refused when not positive definite), or the matrix the caller passes (`EngineFitResult.covariance`).
+J = d(ER, GAM of MF=2)/d(free parameters) at the B_c the file writes (BND): a reader varies ER and GAM with BND held,
+so the derivative holds B_c too. Per J^pi group J = D2^-1 D_b, D2 the Jacobian of door 2 (formal levels at B_c ->
+Brune levels) at MF=2's levels, D_b that of the group's Brune parameters in the session's (identity in the Brune
+basis; door 2 after door 1 in the Park basis), central differences with steps 1e-5 (|E| + 1) MeV and 1e-5 max(|gamma|,
+1e-3) MeV^1/2, door 2 iterated to 1e-12 MeV; then the file's units (ER: lab factor x 1e6; GAM: the amplitude
+scale). Columns of norms, shifts, target parameters and photon widths are zero (marginalised). A resonance is listed
+when a parameter of it has a non-zero row of J; the other parameters of a listed resonance have zero rows (on T1:
+the formal ER of the lowest level of the two groups whose lowest Brune energy is fixed: at B_c = S_c(E_1) it equals
+that energy).
+
+**What it changed on T1** (fitted by MIGRAD; the method of `98a4cf60` run on the same build against this one, both
+with iminuit's HESSE): 14 parameters listed instead of 10 (the two background poles' resonances, whose formal ER and
+GAM move with the free parameters of their groups, are now listed); on the 10 parameters both list, the elements
+differ by up to 3.89 sigma_i sigma_j of the new matrix; the sigmas move by factors 0.33 (a background level's ER, 512
+-> 1565 eV) to 2.2 (a GAM, 17.8 -> 8.0 eV^1/2), five within 5 %. No MF=32 file is committed as an expected result
+(the test writes and reads its own), so no file was regenerated.
+
+**The check** (`tests/pyazr/endf_covariance_test.py`): J against central differences of the transformation at the
+written B_c (the formal levels at theta +- 3h found by Newton's iteration on door 2, to 1e-11): 1.1e-8 of each row's
+largest element; J C J^T taken back to the Brune basis through door 2's Jacobian equals the fit's own covariance of
+its free level parameters to 1.2e-6 sigma_i sigma_j (the formal-basis HESSE differed from it by 3.9). Door 1's own
+derivative (B_c = S_c(E_1) following E_1, what `from_session` does at each x) gives a matrix 0.93 sigma_i sigma_j
+from this one (printed by the test). iminuit's HESSE against the engine fit's covariance as C: 8.5e-3 sigma_i sigma_j.
 
 **The records** (pp. 253-259): HEAD, isotope, range (LRU=1, LRF=7, NRO=0); `0, 0, 0, LCOMP=1, 0, ISR=0`;
 `AWRI, 0, 0, 0, NSRS=1, NLRS=0`; one block: `0, 0, NJSX, 0, 0, 0`, per spin group with a listed resonance a LIST
@@ -1201,26 +1221,21 @@ What the manual leaves open, and the reading taken:
   (p. 256: the parameters are listed "for positive identification"); names `"<J^pi>#<k>.ER"`, `"...GAM<c>"`.
 - The covariance LIST header is printed `[MAT,2,151]` on p. 259: taken as MF=32 (a misprint).
 
-**Tests** (`tests/pyazr/endf_covariance_test.py`, T1 fitted by MIGRAD, 40 s): the two objectives equal to 1e-9;
-symmetric, positive semi-definite, zero rows for the fixed parameters; written and read back (`Material.covariance`)
-to 1e-6 of each row's largest element (measured 2.9e-9; the number form keeps 7-10 digits), the values exactly
-MF=2's; the own format check without error; the Brune fit's covariance as `covariance=` and a session of the
+**Tests** (`tests/pyazr/endf_covariance_test.py`, T1 fitted by MIGRAD, 45 s): J and the door-2 round trip (above);
+symmetric, positive semi-definite, zero rows exactly where J's row is zero; written and read back
+(`Material.covariance`) to 1e-6 of each row's largest element (measured 2.7e-10; the number form keeps 7-10
+digits), the values exactly MF=2's; the own format check without error; the fit's covariance as `covariance=`
+written and read back; a matrix of the wrong shape, a word other than "hesse" and HESSE of a session of the
 extrapolations refused with three parts. The off-diagonal layout injected wrong (1.001 on every off-diagonal
 element) fails the read-back check. The real codes on the written T1 file: CHECKR, FIZCON and PSYCHE report nothing
 on MF=32 (their findings are those of 13.12). No library file of `work/endf/evals` has MF=32 (the only one, 3He +
 4He, holds MF=1, 2, 3, 6): no library file was read.
 
-**A finding for the PI (decision 10).** The formal-basis session fixes the parameters the project marks fixed *in
-the formal basis*: a fixed observed energy (T1's bound states at 0 and 1.0 MeV) or a fixed width (T1's background
-poles, its fixed photon widths) becomes a fixed formal E_lambda or gamma, which is another constraint than the fit's.
-So the covariance written is the formal parameters' covariance with those formal values held, not the fit's
-uncertainty mapped to the formal basis. Measured on T1: the formal covariance taken back to the Brune basis through
-the Jacobian of door 2 (central differences of `observed_levels_of_block`) differs from the Brune fit's own
-covariance by up to 3.9 sigma_i sigma_j (the formal sigma of the free level energies, on the c.m. scale, 1.6 to 8.7
-times the Brune ones). Not separated by a run of mine from any other cause: a T1 with every level parameter free
-did not fit (MIGRAD invalid). The alternative needs no new C++: the fit's covariance (Brune or Park basis, with the
-fit's own fixed parameters) times the Jacobian of door 1 (`formal_levels_of_block`, central differences), C_formal =
-J C_fit J^T, which the test's lines already form for door 2. Not built (the PI's decision stands until he answers).
+**The finding that led to the change.** HESSE in a formal-basis session (built until 2026-11-18) fixed the
+parameters the project marks fixed *in the formal basis*: a fixed observed energy or a fixed width became a fixed
+formal E_lambda or gamma, another constraint than the fit's, so the covariance was not the fit's uncertainty mapped to
+the formal basis (on T1 up to 3.9 sigma_i sigma_j from it, through door 2). The owner chose the fit's covariance
+carried through the transformation.
 
 **For `pyazr.priors`** (not changed): a part kind `"endf"` (fields: the file, the isotope) would read
 `Material.covariance()`; its parameters are formal ER and GAM on the lab scale, while `to_project` makes a Brune

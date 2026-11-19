@@ -192,12 +192,6 @@ std::vector<double> AZURECalc::GradientBy(const std::vector<double> &p, const Gr
   const std::unique_ptr<ThmAdjointContext> hoes = azure2::ThmGradientContext(lc, ls, *ld, configure(), sdp);
   bool eg = AccumulateEGammaGradient(lc, ls, ld, results, configure(), pmap, sdp, fitBarFn, accum, hoes.get());
   const auto tg1 = std::chrono::steady_clock::now();
-  if (!eg && azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug)) {
-    std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
-                 "differences (no speed-up). An unsupported segment/config is "
-                 "present (RMC, or a not-yet-handled case)."
-              << std::endl;
-  }
   // The terms' own gradients (ObjectiveTerm::AddGradient: Park's wall, the abundances, the model data, the gamma_decay
   // records); where one is not available every parameter falls back to finite differences.
   if (eg && !Objective::Engine().AddGradient(ObjectiveContext{lc, ls, inputs_, ld, results, p, configure()}, pmap, sdp, accum))

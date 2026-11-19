@@ -1292,6 +1292,15 @@ try:
     _fitters_src = read("src/Fitters.cpp")
     _fitter_rows += [(_n, _o, "absent") for _n, _o in
                      re.findall(r'\{"([\w-]+)", "(--[\w-]+)", "[^"]*"\}', _fitters_src)]
+    # A removed fitter (RemovedFitters(): name, switch, date, what instead) is no row, and the manual lists its switch
+    # as removed.
+    _removed = re.findall(r'\{"([\w-]+)", "(--[\w-]+)", "(\d{4}-\d\d-\d\d)",', _fitters_src)
+    for _name, _option, _date in _removed:
+        if _name in {_n for _n, _o, _b in _fitter_rows}:
+            problems.append(f"src/Fitters.cpp: the removed fitter '{_name}' is still a row (check 46)")
+        if f"``{_option}``" not in read("docs/source/reference/command_line.rst"):
+            problems.append(f"docs/source/reference/command_line.rst: the switch {_option} of the removed fitter "
+                            f"'{_name}' is not listed as removed (check 46)")
     _parser = read("src/AZURE2.cpp") + read("src/ProgramMain.cpp")
     for _call in ("ApplyFitterSwitch(configure, *it)", "FitterSwitchesHelp()"):
         if _call not in _parser:
@@ -1736,7 +1745,7 @@ BINDING_WITHOUT_ARITHMETIC = {
     "api/src/pybind_records.cpp": {"parameter_record_fields", "pair_record_fields"},
     "api/src/pybind_physics.cpp": {"physics_functions", "element_symbols"},
     "api/src/pybind_stopping.cpp": {"light_projectile", "functions"},
-    "api/src/pybind_fit.cpp": {"StopRequest()", "set", "clear", "is_set", "fitters"},
+    "api/src/pybind_fit.cpp": {"StopRequest()", "set", "clear", "is_set", "fitters", "removed_fitters"},
     # the diagnostic reads the calling thread's word before its own scope; the test hook sets it (a scope would undo it)
     "api/src/pybind_precision.cpp": {"_x87_control_words", "_set_x87_control_word"},
 }

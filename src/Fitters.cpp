@@ -18,10 +18,6 @@ const std::vector<FitterRow> &Fitters() {
        "NLopt's derivative-free algorithm (nlopt_algorithm=, default SBPLX) on the objective; no covariance.",
        &FitNLopt},
 #endif
-      {"gsl-lm", "--use-gsl-lm", false, true, true, true, false, false, "migrad",
-       "GSL-LM iteration",
-       "GSL's geodesic-accelerated trust-region least squares on the residual rows; covariance (J^T J + priors)^-1.",
-       &FitGslTrustRegion},
       {"lm", "--use-lm", false, true, true, true, false, false, "migrad", "LM iteration",
        "Levenberg-Marquardt on the residual rows and their analytic Jacobian; covariance (J^T J + priors)^-1.",
        &FitLevenbergMarquardt},
@@ -41,6 +37,29 @@ const std::vector<AbsentFitterRow> &AbsentFitters() {
 #endif
   };
   return rows;
+}
+
+const std::vector<RemovedFitterRow> &RemovedFitters() {
+  static const std::vector<RemovedFitterRow> rows = {
+      // The owner's answer of 2026-11-18 (docs/upgrade/OWNER_ANSWERS.md, section 10 item 8: "Remove both").
+      {"gsl-lm", "--use-gsl-lm", "2026-11-18",
+       "GSL's trust-region least squares minimised the same residual rows as lm and reached the same minima.  Use "
+       "--use-lm (method \"lm\": Levenberg-Marquardt on the same rows and analytic Jacobian, the same covariance "
+       "(J^T J + priors)^-1) or --use-gradient (method \"migrad-gradient\": MIGRAD with the analytic gradient, HESSE "
+       "and MINOS)"},
+  };
+  return rows;
+}
+
+const RemovedFitterRow *RemovedFitterNamed(const std::string &name) {
+  for (const RemovedFitterRow &row : RemovedFitters())
+    if (name == row.name || name == row.option) return &row;
+  return nullptr;
+}
+
+std::string RemovedFitterMessage(const RemovedFitterRow &row, const std::string &asked) {
+  return asked + " asks for the fitter " + row.name + ", which was removed from AZURE2 on " + row.removed + ".  " +
+         row.instead + ".";
 }
 
 const FitterRow *FitterNamed(const std::string &name) {
@@ -124,6 +143,8 @@ bool ApplyFitterSwitch(Config &configure, const std::string &option) {
       ChooseFitter(configure, row.name);
       return true;
     }
+  for (const RemovedFitterRow &row : RemovedFitters())
+    if (option == row.option) throw std::invalid_argument(RemovedFitterMessage(row, option));
   for (const AbsentFitterRow &row : AbsentFitters())
     if (option == row.option) {
       std::string allowed;

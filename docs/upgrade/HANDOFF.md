@@ -129,6 +129,38 @@ switch, `-DBUILD_GUI=ON`, `QT_QPA_PLATFORM=offscreen`, `ctest -L gui`). The GUI'
 schema, not dev's hand-made dialogs: a closed choice, a unit, a file chooser per field, the rest typed in the
 grammar the tool tip shows.
 
+## 2026-11-19 (fit agent, U6) — `feature/upgrade-6-fit`: five of the owner's answers (sections 8 and 10)
+
+Branch `feature/upgrade-6-fit` from `98a4cf60`, build `work/b-u6-fit`; one commit per answer, nothing pushed or merged.
+
+- `84a46473` **The print-only switches** `AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`: dropped (table, readers, manual,
+  skill). 37 switches in the manual. No number moves.
+- `15022b4d` **Minuit2's call counter**: `#pragma omp atomic` before `fNumCall++` in `MnUserFcn.cxx` and `MnFcn.cxx`,
+  the one listed local change of `external/minuit2` (`developer/architecture.rst`). `--max-calls` is exact under
+  threads: `fit_threads` check 3 (T1, MIGRAD, 200 calls, 1 and 4 threads: 205 evaluations each, calls 204, outputs
+  identical; the base build: 205 against 234). FOR_THE_OWNER section 9 updated. The TSan ignore entry is kept until a
+  TSan run without it passes (not run).
+- `65ee057f` **MF=32**: the fit's covariance carried through the transformation, J C J^T, J at the written B_c
+  (inverse of door 2's Jacobian; door 1's own derivative, with B_c following E_1, differs by 0.93 sigma_i sigma_j on
+  T1 and does not reproduce the fit's covariance when read back with BND fixed: the reading taken). `covariance=`
+  takes "hesse" (iminuit at x, the fit's basis) or `EngineFitResult.covariance`. T1: 14 parameters listed instead of
+  10, up to 3.89 sigma_i sigma_j from the old matrix; no MF=32 file is committed as expected, none regenerated
+  (`endf.md` 13.13).
+- `ce7a9363` **The GSL fitter** removed; `--use-gsl-lm` and `method="gsl-lm"` refused with the date and `lm`,
+  `migrad-gradient` (`RemovedFitters()`, binding `removed_fitters()`, check 46 extended). GSL stays (LM's Cholesky,
+  quadratures). **`numcmc/` not removed**: it is the engine's sampler behind `AZURE2 mcmc`,
+  `Session.sample_with_engine` and `<mcmc>`; the director asked to wait for the PI (FOR_THE_OWNER section 10 item 8).
+- `04220c8f` **Fitted target parameters in the band**: abundance, screening, density, Doppler, thickness and
+  apparatus parameters are band columns (`IsBandParameter`), their sensitivities central differences of the model;
+  covariance.dat names them; an extrapolation takes covariance.dat by name. Without such a parameter every output is
+  identical (T1, 13N with the band against `work/b-join3`). Test `pyazr_band_target_parameters`.
+
+**Run:** every project in three bases against `tab-join3-1`: 1029, 993, 1029 files, all identical (tag
+`tab-u6fit-1`); `ctest -LE slow` 392 of 393 (`rmfit_enginepin`, failing at the base too); `tests/run_tests.sh` at 4 threads 184 of 185 (the one failure, `cli_help`, counted the removed `--use-gsl-lm` as accepted: repaired in the last commit, `cli_help` then passes); the slow
+tests `pyazr_fit_with_engine` (764 s) and `pyazr_endf_write_slow`; sphinx `-W` without a warning. **Not run:** the other slow tests, the
+sanitizers, macOS, Windows. **Open:** numcmc (the PI); pyazr's version not bumped (FormalCovariance's fields, the
+`band` column of the kinds, `removed_fitters`): the merge's.
+
 ## 2026-11-18 (agent) — fix/param-duplicate-name: two stopping scales of one name
 
 **Symptom.** `Session(...).objective()` and `AZURE2 calculate` failed with "AZUREParams: N parameters but N+1 records"

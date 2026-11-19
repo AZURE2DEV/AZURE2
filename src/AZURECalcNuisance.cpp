@@ -5,7 +5,6 @@
 // exists (HasNuisanceParameters, which switches the analytic G2 off).  One unit because the four must index the
 // parameters the same way.
 #include "AZURECalc.h"
-#include "azure2/support/Environment.h"
 #include "Objective.h"
 #include "InferenceTypes.h"
 #include <algorithm>
@@ -50,13 +49,8 @@ bool AZURECalc::HasNuisanceParameters() const {
   int nf = 0;
   for (int i = 0; i < (int)fp.GetMinuitParams().Params().size(); i++) {
     const ROOT::Minuit2::MinuitParameter &mp = fp.GetMinuitParams().Parameter(i);
-    const std::string &name = mp.GetName();
     if (mp.IsFixed() && !fp.Record(i).Row().segmentField) continue;  // the limits manager's numbering
-    if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nf)) {
-      if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug))
-        std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
-      return true;
-    }
+    if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nf)) return true;
     nf++;
   }
   return false;

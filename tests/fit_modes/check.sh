@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Every way of fitting on every kind of free-parameter set (2026-11-11).
 #
-# The four minimizer routes (MIGRAD with the numerical gradient, --use-gradient, --use-lm, --use-gsl-lm), each with
+# The three minimizer routes (MIGRAD with the numerical gradient, --use-gradient, --use-lm), each with
 # --covariance-band, on five projects that differ in what is free:
 #
 #   none     tests/thick_target_resonance      no free parameter at all
@@ -20,9 +20,11 @@
 # with dev; src/AZUREMain.cpp now skips HESSE there.
 #
 # Checked: every run exits 0 and prints a total chi-squared; in "none" it is the calculation's, digit for digit; in
-# the others the four routes end at the same minimum (1e-5 relative; they agree to 1e-7 today); the band is written
-# where a level parameter is free and skipped with a message that says why where none is.  (The --use-lm and
-# --use-gsl-lm runs of "target" take half a minute each: only --use-gradient and --use-lm are run there.)
+# the others the routes end at the same minimum (1e-5 relative; they agree to 1e-7 today); the band is written
+# where a parameter the band propagates is free (a level parameter, and since 2026-11-18 a target or apparatus
+# parameter too: "target" and "apparatus" have a band) and skipped with a message that says why where none is.  (The --use-lm run of
+# "target" takes half a minute: only --use-gradient and --use-lm are run there.)  --use-gsl-lm, the fourth route
+# until 2026-11-18, was removed with its fitter.
 # A route whose log says "MIGRAD did NOT converge" is noted and its end point not compared (since 2026-11-15: on the
 # CI's Linux machine "target" with --use-gradient stops at 8539 after 103 calls and says so; here it reaches 71.67);
 # the routes that reached a minimum agree, and at least one of a project must.
@@ -66,7 +68,7 @@ same() { awk -v a="$1" -v b="$2" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(a
 
 FIT=fit
 CALC=calculate
-MODES="plain --use-gradient --use-lm --use-gsl-lm"
+MODES="plain --use-gradient --use-lm"
 flag() { [ "$1" = plain ] || echo "$1"; }
 
 echo "none: no free parameter (tests/thick_target_resonance)"
@@ -109,8 +111,8 @@ fitted() {
       if [ "$n" -gt 0 ] && [ -s "$dir/output/covariance.dat" ]; then ok "$m: $n band file(s) and covariance.dat"
       else bad "$m: $n band files, covariance.dat $([ -s "$dir/output/covariance.dat" ] && echo there || echo missing)"; fi
     else
-      if [ "$n" = 0 ] && grep -q "no free level parameter" "$dir/run.log"; then ok "$m: the band is skipped, the message says why"
-      else bad "$m: $n band files; expected none and 'no free level parameter' in the log"; fi
+      if [ "$n" = 0 ] && grep -q "no free level parameter, THM coherent" "$dir/run.log"; then ok "$m: the band is skipped, the message says why"
+      else bad "$m: $n band files; expected none and 'no free level parameter, THM coherent ...' in the log"; fi
     fi
   done
   [ -n "$first" ] || bad "$label: no route reached a minimum"
@@ -123,10 +125,10 @@ echo "mixed: level parameters and an areal density (tests/layer_yield/models/fit
 fitted mixed "$HERE/../layer_yield/models" fit.azr yes $MODES
 
 echo "target: two areal densities and a stopping scale (tests/stopping_yield/models/fit.azr)"
-fitted target "$HERE/../stopping_yield/models" fit.azr no --use-gradient --use-lm
+fitted target "$HERE/../stopping_yield/models" fit.azr yes --use-gradient --use-lm
 
 echo "apparatus: the width of a detector's resolution alone (tests/rectangular_resolution/models/fit.azr)"
-fitted apparatus "$HERE/../rectangular_resolution/models" fit.azr no $MODES
+fitted apparatus "$HERE/../rectangular_resolution/models" fit.azr yes $MODES
 
 echo
 if [ "$failures" = 0 ]; then echo "fit_modes: all checks passed"; else echo "fit_modes: $failures check(s) FAILED"; fi

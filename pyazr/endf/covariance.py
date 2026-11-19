@@ -12,21 +12,29 @@ there (p. 253): ER in eV (lab), GAM the reduced-width amplitude in eV^1/2 (IFG=1
 spin group carries no J in MF=32: its resonances are identified by their ER and GAM against MF=2 ("for positive
 identification", p. 256).
 
-The covariance written (the PI's decision, endf.md section 11 decision 10): HESSE in a session of the formal basis
-at the transformed best fit -- the session's fit vector written as a project (``Session.save_fit``) and opened with
-``use_brune=False``, so that its parameters are the formal E and gamma of MF=2 and its objective is the fit's; the
-second derivatives of that objective by iminuit's HESSE (the recipe of :mod:`pyazr.objective`), errordef 1 (a
-chi-squared), the covariance the inverse of half the Hessian; the rows of MF=2's parameters taken out (the norms and
-other nuisances of the fit, and the photon channels, are marginalised: their rows are dropped) and scaled to the
-file's units (ER: the lab factor of the incident pair x 1e6; GAM: the amplitude scale of :mod:`pyazr.endf.
-resonances`).  A resonance whose every parameter is fixed in the fit is not listed; a fixed parameter of a listed
-resonance has a zero row and column (the format lists every parameter of a resonance it includes), and MF=1 says
-which.
+The covariance written (the owner's answer of 2026-11-18 to decision 10 of endf.md section 11, which replaced HESSE
+in a session of the formal basis): the fit's covariance C of the session's free parameters, in the fit's own basis
+(Brune or Park) with the fit's own fixed parameters, carried through the transformation to MF=2's parameters,
+C_32 = J C J^T.  C is HESSE (iminuit, errordef 1: a chi-squared; the inverse of half the Hessian) of the session's
+objective at x, or the matrix a caller passes (``EngineFitResult.covariance`` of the engine's fit).  J is the
+derivative of MF=2's ER and GAM in the session's free parameters at the boundary values B_c the file writes (BND):
+a reader of the file varies ER and GAM with BND held, so J must hold B_c too.  Per J^pi group, J = D2^-1 D_b: D2 the
+Jacobian of door 2 (``observed_levels_of_block``: formal levels at B_c -> Brune levels) at MF=2's levels, D_b that of
+the group's Brune parameters in the session's (the identity in the Brune basis), both by central differences
+(steps ``ENERGY_STEP``, ``AMPLITUDE_STEP``), then the file's units (ER: the lab factor of the incident pair x 1e6,
+GAM: the amplitude scale of :mod:`pyazr.endf.resonances`).  So J C J^T taken back through door 2 is the fit's
+covariance of its level parameters.  (Door 1's own derivative, with B_c = S_c(E_1) following the levels, is another
+matrix: on T1 its J C J^T differs from this one by up to 0.93 sigma_i sigma_j, and read back with BND fixed it would
+not reproduce the fit's covariance.)  Every other free parameter of the fit (norms, shifts, target parameters, the
+photon widths) has a zero column of J: it is marginalised.  The transformation mixes the levels of a group, so a
+formal parameter moves with every free parameter of its group: a resonance is listed when a parameter of it has a
+non-zero row of J, and a parameter with a zero row (in a group none of whose parameters the fit varied, or the formal
+energy of the lowest level, which equals its fixed Brune energy at B_c = S_c(E_1)) has a zero row and column, which
+MF=1 names.
 """
 
 import dataclasses
 import os
-import tempfile
 
 import numpy as np
 
@@ -35,21 +43,23 @@ from .records import RecordWriter
 from .resonances import amplitude_scale, lab_factor
 
 EV_PER_MEV = 1e6
-#: The formal session's objective at its start must equal the fit's at x to this (relative): the same model, up to the
-#: snapshot's round trip through the observed widths (measured 1.9e-7 on the fitted T2).
-SAME_MODEL_TOLERANCE = 1e-5
-#: The formal session's level values must equal MF=2's (door 1) to this (relative to the largest of each kind).
-SAME_LEVELS_TOLERANCE = 1e-7
+#: Central-difference steps of the Jacobians of the doors: a level energy (MeV) by ENERGY_STEP x (|E| + 1), an
+#: amplitude (MeV^1/2) by AMPLITUDE_STEP x max(|gamma|, 1e-3).  Door 2's iteration is taken to DOOR2_TOLERANCE_MEV,
+#: so that its rounding (tolerance / step, 1e-7) stays below the step's truncation error.
+ENERGY_STEP = 1e-5
+AMPLITUDE_STEP = 1e-5
+DOOR2_TOLERANCE_MEV = 1e-12
 
 
 @dataclasses.dataclass(frozen=True)
 class FormalCovariance:
     """The covariance of MF=2's parameters in the file's units: ``parameters`` [(group, level, column)] in the order
     of MF=32 (group and level positions in the LRF7 record, column 0 for ER, k >= 1 for GAM of channel k), their
-    ``values`` (ER in eV, GAM in eV^1/2, as MF=2 writes them), ``matrix`` (eV^2, eV^3/2, eV), ``fixed`` (True where
-    the fit did not vary the parameter: a zero row), ``groups`` (the spin groups of the record that have a listed
-    resonance) and ``levels`` {group: [levels listed]}, the two objectives (``objective_fit`` of the session at x,
-    ``objective_formal`` of the formal session at its start) and ``source`` (in words)."""
+    ``values`` (ER in eV, GAM in eV^1/2, as MF=2 writes them), ``matrix`` (eV^2, eV^3/2, eV) = J C J^T, ``fixed``
+    (True where the row of J is zero: a zero row), ``groups`` (the spin groups of the record that have a listed
+    resonance) and ``levels`` {group: [levels listed]}, ``objective_fit`` (the session's objective at x; NaN when the
+    caller gave C), ``jacobian`` J (rows: ``parameters``, file units per the fit's unit; columns: the session's free
+    parameters), ``fit_covariance`` C and ``source`` (in words)."""
     parameters: tuple
     values: np.ndarray
     matrix: np.ndarray
@@ -57,7 +67,8 @@ class FormalCovariance:
     groups: tuple
     levels: dict
     objective_fit: float = float("nan")
-    objective_formal: float = float("nan")
+    jacobian: np.ndarray = None
+    fit_covariance: np.ndarray = None
     source: str = ""
 
     @property
@@ -65,134 +76,161 @@ class FormalCovariance:
         return np.sqrt(np.clip(np.diag(self.matrix), 0.0, None))
 
 
-def formal_covariance(session, x=None, record=None):
-    """The covariance of the formal parameters of MF=2 at the fit vector ``x`` (default the session's start) from
-    HESSE in a formal-basis session (the module's text).  ``record``: the LRF7 of ``from_session(session, x)``
-    (computed when None).  Refused (:class:`pyazr.FormatRefused`): a session of the extrapolations, no iminuit, a
-    formal session whose objective or levels are not the fit's, a Hessian that is not positive definite."""
+def formal_covariance(session, x=None, record=None, covariance=None):
+    """The covariance of the formal parameters of MF=2 at the fit vector ``x`` (default the session's start): the
+    fit's covariance carried through the transformation, J C J^T (the module's text).  ``covariance``: C, the
+    covariance of the session's free parameters in their order (``EngineFitResult.covariance``); None: HESSE
+    (iminuit) of the session's objective at x.  ``record``: the LRF7 of ``from_session(session, x)`` (computed when
+    None).  Refused (:class:`pyazr.FormatRefused`): HESSE asked of a session of the extrapolations or without
+    iminuit, a C of the wrong shape or not finite, a HESSE that is not positive definite."""
     from .model import from_session
-    if session.mode != "data":
-        raise FormatRefused(what="a session of the extrapolations has no objective", allowed="a session of the data "
-                            "(the fit's)", fix="open the project without extrapolations=True")
-    try:
-        import iminuit
-    except ImportError:
-        raise FormatRefused(what="iminuit is not installed (HESSE of the formal-basis session)",
-                            allowed="pyazr with iminuit", fix="install iminuit, or write without a covariance") from None
     if record is None:
         record, _ = from_session(session, x)
     x = session.parameters.x0 if x is None else np.asarray(x, float)
-    objective_fit = float(session.evaluate(x).objective)
-    # the snapshot lies beside the project (its data files and covariance files are named relative to it) under a
-    # name of its own, and is removed after the formal session has read it
-    handle, snapshot = tempfile.mkstemp(prefix=".endf_covariance_", suffix=".azr",
-                                        dir=os.path.dirname(os.path.abspath(session.file)))
-    os.close(handle)
-    try:
-        session.save_fit(snapshot, x, param_sav=False, verify=False)
-        return _hesse(session, record, snapshot, objective_fit)
-    finally:
-        os.remove(snapshot)
+    n_free = int(np.size(x))
+    objective_fit = float("nan")
+    if covariance is None:
+        C, objective_fit = _hesse(session, x)
+        source = ("HESSE (iminuit, errordef 1) of the fit's objective in the session's basis at x, carried through the "
+                  "transformation to MF=2's parameters (J C J^T)")
+    else:
+        C = np.asarray(covariance, float)
+        if C.shape != (n_free, n_free) or not np.all(np.isfinite(C)):
+            raise FormatRefused(what=f"a covariance of shape {C.shape} (finite: {bool(np.all(np.isfinite(C)))})",
+                                allowed=f"the finite covariance of the session's {n_free} free parameters in their "
+                                "order (EngineFitResult.covariance)",
+                                fix="pass the fit's covariance, or covariance=None for HESSE at x")
+        C = 0.5 * (C + C.T)
+        source = ("the fit's covariance in the session's basis, carried through the transformation to MF=2's "
+                  "parameters (J C J^T)")
+    J, params, values = jacobian(session, x, record)
+    return _assemble(record, J, params, values, C, objective_fit, source)
 
 
-def _hesse(session, record, snapshot, objective_fit):
-    """HESSE of the objective of the formal-basis session of ``snapshot`` (the module's text)."""
-    import iminuit
-    from ..session import Session
-    from .engine_values import SWEEP_OPTIONS
-    options = {k: v for k, v in session.options.items() if k in SWEEP_OPTIONS and k not in ("use_brune", "use_park")}
-    formal = Session(snapshot, use_brune=False, **options)
+def _hesse(session, x):
+    """C = HESSE (iminuit, errordef 1) of the session's objective at x, symmetrised, and the objective at x."""
+    if session.mode != "data":
+        raise FormatRefused(what="a session of the extrapolations has no objective", allowed="a session of the data "
+                            "(the fit's), or the fit's covariance as covariance=",
+                            fix="open the project without extrapolations=True")
     try:
-        f = formal.objective()
-        x0 = np.asarray(f.x0, float)
-        objective_formal = float(f(x0))
-        if abs(objective_formal - objective_fit) > SAME_MODEL_TOLERANCE * max(abs(objective_fit), 1.0):
-            raise FormatRefused(what=f"the formal-basis session's objective {objective_formal!r} is not the fit's "
-                                f"{objective_fit!r}", allowed="the same model in both bases",
-                                fix="report the project to the AZURE2 developers")
-        rows = [p.to_dict() for p in formal.parameters]
-        free_of = {}
-        k = 0
-        for i, p in enumerate(formal.parameters):
-            if not p.fixed:
-                free_of[i] = k
-                k += 1
-        m = iminuit.Minuit(f, x0, grad=f.grad, name=list(f.names))
-        m.hesse()
-        cov_free = np.array(m.covariance, float)
-        cov_free = 0.5 * (cov_free + cov_free.T)  # Minuit's matrix is symmetric to its rounding
-        full_values = [float(x0[free_of[i]]) if i in free_of else float(p.start)
-                       for i, p in enumerate(formal.parameters)]
-    finally:
-        formal.close()
-    if not np.all(np.isfinite(cov_free)) or np.any(np.linalg.eigvalsh(0.5 * (cov_free + cov_free.T)) <= 0):
-        raise FormatRefused(what="HESSE of the formal-basis session gives no positive definite covariance",
+        import iminuit
+    except ImportError:
+        raise FormatRefused(what="iminuit is not installed (HESSE of the fit's objective)",
+                            allowed="pyazr with iminuit, or the fit's covariance as covariance=",
+                            fix="install iminuit, pass EngineFitResult.covariance, or write without a covariance"
+                            ) from None
+    f = session.objective()
+    objective_fit = float(f(x))
+    m = iminuit.Minuit(f, np.asarray(x, float), grad=f.grad, name=list(f.names))
+    m.hesse()
+    C = np.array(m.covariance, float)
+    C = 0.5 * (C + C.T)  # Minuit's matrix is symmetric to its rounding
+    if not np.all(np.isfinite(C)) or np.any(np.linalg.eigvalsh(C) <= 0):
+        raise FormatRefused(what="HESSE of the fit's objective gives no positive definite covariance",
                             allowed="a fit at a minimum with every free parameter determined",
                             fix="fit the project to its minimum first; fix the parameters the data do not determine")
-    entrance = next(p.to_dict() for p in session.pairs if p.is_entrance)
-    s_ent = entrance["sep_energy"] + entrance["excitation"]
-    return _assemble(record, s_ent, rows, full_values, free_of, cov_free, objective_fit, objective_formal)
+    return C, objective_fit
 
 
-def _assemble(record, s_ent, rows, values, free_of, cov_free, objective_fit, objective_formal):
-    """The parameters of MF=2 in MF=32's order, their covariance in the file's units (the module's text)."""
+def _door2(pairs, g, chans, E, gamma, B):
+    """Door 2 (``observed_levels_of_block``) on one J^pi group: the Brune E and gamma of formal levels E, gamma with
+    the boundary values B, the iteration taken to ``DOOR2_TOLERANCE_MEV``."""
+    from .model import _engine
+    out = _engine().observed_levels_of_block(pairs, int(round(2 * g["J"])), g["parity"], chans, list(E), list(gamma),
+                                             list(B), DOOR2_TOLERANCE_MEV)
+    return np.concatenate([np.asarray(out["E"], float), np.asarray(out["gamma"], float)])
+
+
+def _central(f, v0, steps):
+    """The Jacobian of the vector function f at v0 by central differences with the given steps, one column each."""
+    cols = []
+    for k, h in enumerate(steps):
+        vp, vm = np.array(v0, float), np.array(v0, float)
+        vp[k] += h
+        vm[k] -= h
+        cols.append((f(vp) - f(vm)) / (2.0 * h))
+    return np.array(cols).T
+
+
+def _steps(v, n_energies):
+    return [ENERGY_STEP * (abs(t) + 1.0) if k < n_energies else AMPLITUDE_STEP * max(abs(t), 1e-3)
+            for k, t in enumerate(v)]
+
+
+def jacobian(session, x, record):
+    """J = d(MF=2's ER and GAM, file units) / d(the session's free parameters) at x (the module's text): per J^pi
+    group, the formal levels at the boundary values B_c the file writes, J = D2^-1 D_b, D2 the Jacobian of door 2 at
+    MF=2's levels and B_c, D_b that of the group's Brune parameters in the session's (the identity for a Brune
+    session; door 2 after door 1 for a Park session), both by central differences.  Returns J, the parameters
+    [(group, level, column)] of every resonance of ``record`` in MF=32's order and their values (MF=2's).  Columns
+    of free parameters that are no level energy or particle amplitude are zero."""
+    from .model import _block_of, _full_values, _level_groups, formal_levels
+    rows = [p.to_dict() for p in session.parameters]
+    free_of = {i: p.free_index for i, p in enumerate(session.parameters) if not p.fixed}
+    values = _full_values(session, x)
+    pairs = [p.to_dict() for p in session.pairs]
+    groups = _level_groups(rows, values)
+    order = [gk for gk in sorted(groups) if groups[gk]["channels"]]
+    if len(order) != len(record.groups):
+        raise FormatRefused(what="the session's spin groups are not MF=2's", allowed="the record of this session",
+                            fix="pass record=None (from_session of this session at x)")
     ent = record.pairs[0]
     e_scale = lab_factor(ent) * EV_PER_MEV
     g_scale = amplitude_scale(ent)
-    # the formal session's rows by (jgroup, level) and (jgroup, level, channel), as from_session builds the record:
-    # groups in jgroup order that have a particle channel, levels and channels in their id order
-    groups = {}
-    for i, r in enumerate(rows):
-        if r["kind"] == "energy":
-            groups.setdefault(r["jgroup"], {"levels": {}, "channels": {}})["levels"][r["level"]] = i
-    for i, r in enumerate(rows):
-        if r["kind"] == "width" and r.get("radiation_type") == "P":
-            g = groups[r["jgroup"]]
-            g["channels"][r["channel"]] = True
-            g.setdefault("widths", {})[(r["level"], r["channel"])] = i
-    order = [gk for gk in sorted(groups) if groups[gk]["channels"]]
-    if len(order) != len(record.groups):
-        raise FormatRefused(what="the formal-basis session's spin groups are not MF=2's", allowed="the same project",
-                            fix="report the project to the AZURE2 developers")
-    params, index, fixed, file_values, levels_listed, groups_listed = [], [], [], [], {}, []
-    worst = 0.0
+    params, file_values = [], []
+    J = np.zeros((sum(len(sg.levels) * (len(sg.channels) + 1) for sg in record.groups), np.size(x)))
     for gi, gk in enumerate(order):
         g = groups[gk]
-        lev_ids = sorted(g["levels"])
-        ch_ids = sorted(g["channels"])
+        block = _block_of(g)
+        chans = block["chans"]
+        n_lev, nch = len(block["E"]), len(block["chan_ids"])
         spin_group = record.groups[gi]
-        for li, lid in enumerate(lev_ids):
-            cols = [g["levels"][lid]] + [g.get("widths", {}).get((lid, c)) for c in ch_ids]
-            if not any(c is not None and c in free_of for c in cols):
-                continue
-            levels_listed.setdefault(gi, []).append(li)
-            if gi not in groups_listed:
-                groups_listed.append(gi)
-            lv = spin_group.levels[li]
-            written = [lv.energy] + list(lv.gam)
-            for col, c in enumerate(cols):
+        first = len(params)
+        for li, lv in enumerate(spin_group.levels):
+            for col, v in enumerate([lv.energy] + list(lv.gam)):
                 params.append((gi, li, col))
-                index.append(None if c is None else free_of.get(c))
-                fixed.append(c is None or c not in free_of)
-                v = (values[c] - s_ent) * e_scale if col == 0 else (0.0 if c is None else values[c] * g_scale)
                 file_values.append(v)
-                # ER relative to 1 eV at least, GAM relative to its value
-                worst = max(worst, abs(v - written[col]) / max(abs(written[col]), 1.0 if col == 0 else 1e-300))
-    if worst > SAME_LEVELS_TOLERANCE:
-        raise FormatRefused(what=f"the formal-basis session's levels differ from MF=2's by {worst:.2e}",
-                            allowed="the levels of from_session (door 1)", fix="report the project to the AZURE2 "
-                            "developers")
-    n = len(params)
-    cov = np.zeros((n, n))
-    scale = np.array([e_scale if p[2] == 0 else g_scale for p in params])
-    for a in range(n):
-        for b in range(a, n):
-            if index[a] is not None and index[b] is not None:
-                cov[a, b] = cov[b, a] = cov_free[index[a], index[b]] * scale[a] * scale[b]
-    return FormalCovariance(tuple(params), np.array(file_values), cov, tuple(fixed), tuple(groups_listed),
-                            levels_listed, objective_fit, objective_formal,
-                            "HESSE (iminuit, errordef 1) of the objective in a formal-basis session at the transformed "
-                            "best fit")
+        inputs = list(block["E"]) + list(block["gam"])
+        free_slots = [(k, free_of[r]) for k, r in enumerate(block["rows"]) if r is not None and r in free_of]
+        if not free_slots:
+            continue
+        base = formal_levels(session, pairs, g, chans, block["E"], block["gam"])
+        B = list(base["B"])
+        formal = np.concatenate([np.asarray(base["E"], float), np.asarray(base["gamma"], float)])
+        D2 = _central(lambda f: _door2(pairs, g, chans, f[:n_lev], f[n_lev:], B), formal, _steps(formal, n_lev))
+        if session.basis == 2:  # Park: the group's Brune parameters as functions of the Park inputs
+            def brune_of(v):
+                out = formal_levels(session, pairs, g, chans, v[:n_lev], v[n_lev:])
+                return _door2(pairs, g, chans, out["E"], out["gamma"], out["B"])
+            Db = _central(brune_of, inputs, _steps(inputs, n_lev))
+        else:
+            Db = np.eye(len(inputs))
+        Jg = np.linalg.solve(D2, Db)  # rows: formal E (levels), then formal gamma (level-major); columns: inputs
+        for li in range(n_lev):
+            a = first + li * (nch + 1)
+            for k, col in free_slots:
+                J[a, col] = Jg[li, k] * e_scale
+                for c in range(nch):
+                    J[a + 1 + c, col] = Jg[n_lev + li * nch + c, k] * g_scale
+    return J, params, np.array(file_values, float)
+
+
+def _assemble(record, J, params, values, C, objective_fit, source):
+    """The listed resonances (a parameter with a non-zero row of J), their covariance J C J^T, symmetrised."""
+    moved = np.any(J != 0.0, axis=1)
+    listed_levels = sorted({(gi, li) for (gi, li, _), m in zip(params, moved) if m})
+    keep = [k for k, (gi, li, _) in enumerate(params) if (gi, li) in set(listed_levels)]
+    Jk = J[keep]
+    cov = Jk @ C @ Jk.T
+    cov = 0.5 * (cov + cov.T)
+    levels_listed, groups_listed = {}, []
+    for gi, li in listed_levels:
+        levels_listed.setdefault(gi, []).append(li)
+        if gi not in groups_listed:
+            groups_listed.append(gi)
+    return FormalCovariance(tuple(params[k] for k in keep), values[keep], cov, tuple(not moved[k] for k in keep),
+                            tuple(groups_listed), levels_listed, objective_fit, Jk, C, source)
 
 
 def rows(record, covariance, number_form="widest"):

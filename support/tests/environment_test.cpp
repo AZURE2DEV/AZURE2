@@ -31,6 +31,9 @@ int main() {
   }
   check("one row per switch, unique names", (int)names.size() == kSwitchCount);
   check("every row has its value when unset, what it does and its page", filled);
+  // The two print-only switches the owner dropped (2026-11-18, docs/upgrade/OWNER_ANSWERS.md section 8) are no rows.
+  check("AZURE_GRAD_DEBUG and AZURE_CHANNEL_DEBUG are gone", !names.count("AZURE_GRAD_DEBUG") &&
+                                                                 !names.count("AZURE_CHANNEL_DEBUG"));
   check("RowOf finds the row", std::string(RowOf(Switch::kProfile).name) == "AZURE_PROFILE" &&
                                    std::string(RowOf(Switch::kTestFailExit).name) == "AZURE_TEST_FAIL_EXIT");
   check("kinds by name", std::string(KindName(SwitchKind::kNumbers)) == "numbers" &&

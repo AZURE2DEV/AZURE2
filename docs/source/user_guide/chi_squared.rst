@@ -56,7 +56,7 @@ uncorrelated sum exactly. The covariance covers only the rows actually fitted:
 points removed by the energy or angle limits drop out of the matrix (the
 marginal distribution). Normalization and energy-shift penalties, normalization
 groups and every fitter (MIGRAD with or without ``--use-gradient``,
-``--use-lm``, ``--use-gsl-lm``, the MCMC likelihood) work unchanged; the
+``--use-lm``, the MCMC likelihood) work unchanged; the
 least-squares fitters see whitened residuals :math:`w = W r` with
 :math:`W^T W = M^{-1}`, so :math:`\sum w_i^2 = \chi^2_{\text{cov}}`.
 
@@ -382,7 +382,7 @@ of the file. :doc:`prior_builder` says so in its notes.
 evaluation forms the whitened residuals :math:`\mathbf{r} = L^{-1}
 (\mathbf{p}-\boldsymbol{\mu})` and adds :math:`\mathbf{r}\cdot\mathbf{r}`.
 MIGRAD's analytic gradient adds :math:`2 C^{-1}(\mathbf{p}-\boldsymbol{\mu})`;
-``--use-lm``, ``--use-gsl-lm`` and the Jacobian-path gradient append the
+``--use-lm`` and the Jacobian-path gradient append the
 :math:`n` rows :math:`\mathbf{r}` with the constant Jacobian :math:`L^{-1}` to the
 data rows, so the fitted covariance (``covariance.dat``, parameter errors)
 includes the prior's information. Parameter limits act as they do for every

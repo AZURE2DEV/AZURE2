@@ -306,7 +306,8 @@ Calls ``pyazr.endf.write``.
 - ``--number-form``: how numbers are written (one of widest, classic, e; default widest).
 - ``--elastic-form``: charged-particle elastic scattering as the nuclear amplitude expansion (LTP=1) or tabulated
   (LTP=12) (default: pyazr.endf.writer.ELASTIC_FORM) (one of amplitudes, tabulated).
-- ``--covariance``: write MF=32: HESSE in a formal-basis session (an option without a value).
+- ``--covariance``: write MF=32: the fit's covariance (HESSE at x) carried through the transformation (an option
+  without a value).
 - ``--overwrite``: replace NEW if it exists (an option without a value).
 - ``--json``: one JSON document on standard output.
 

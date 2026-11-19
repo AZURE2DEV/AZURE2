@@ -14,9 +14,9 @@ priors behave, and how to run fits of days on a batch cluster. Behaviour referen
   `MIGRAD converged: valid minimum, EDM ...`, or `WARNING: MIGRAD did NOT converge: stopped at the call limit ...` /
   `... invalid minimum ...`, and writes `output/fitStatus.out` (`minimizer`, `fitter`, `status
   converged|call_limit|iteration_limit|stopped|invalid|failed`, `fitter_status`, `valid`, `edm`, `edm_goal` (`none`
-  except MIGRAD), `calls`, `call_limit`); every fitter writes it, LM and GSL-LM too. Read it before calling a fit
+  except MIGRAD), `calls`, `call_limit`); every fitter writes it, LM too. Read it before calling a fit
   converged; `chiSquared.out` and `param.sav` are written either way, at the lowest objective the fit reached (at the
-  call limit: the lowest MIGRAD evaluated). LM and GSL-LM ignore `--max-calls` (`call_limit N (--max-calls) ignored`
+  call limit: the lowest MIGRAD evaluated). LM ignores `--max-calls` (`call_limit N (--max-calls) ignored`
   and a `Note:` line).
 - builds before 2026-10-31 (expires: 2027-02-01) stopped MIGRAD and NLopt at a fixed 50,000 function calls without a
   message; one 145-parameter refit stopped there in most of its J^π fits and looked converged. On such a build a log
@@ -36,8 +36,7 @@ priors behave, and how to run fits of days on a batch cluster. Behaviour referen
 - The engine supplies a Gauss–Newton G2 from the residual Jacobian to seed MIGRAD (log line
   `Seeding MIGRAD with the analytic Gauss-Newton G2.`) and takes gradient and G2 from one Jacobian per step (about
   1.3 s per step for 79 free parameters on 11k points at 8 threads). `Analytic G2 unavailable ...` means the old
-  numerical seed is in use; `AZURE_GRAD_DEBUG=1` names the segment or reason when the adjoint gives up and the fit falls
-  back to finite differences.
+  numerical seed is in use.
 - **Compare a test and its control with the same minimizer**, preferably `--use-gradient`. On one model the analytic
   fit converged about 490 below a numerical-gradient fit that MIGRAD had declared converged early on its noisy
   gradient, so a numerical control overstated a level-add gain (−902 against the numerical control, −545 against the
@@ -59,7 +58,6 @@ Diagnostics (environment variables; standard error):
 | `AZURE_GRAD_CHECK=1` (or `exit`) | compare sampled analytic derivatives, and the Jacobian path, with central finite differences; `exit` stops after the check |
 | `AZURE_GRAD_CHECK_N=12`, `_IDX`, `_SEGS`, `_H` | number of sampled parameters, which parameters or segments, the step |
 | `AZURE_GRAD_TIMING=1` | per-call timing breakdown |
-| `AZURE_GRAD_DEBUG=1` | why and where the adjoint gave up |
 | `AZURE_GRAD_ADJOINT=1` | force the adjoint gradient instead of the Jacobian path |
 | `AZURE_TE_WEIGHTS_CHECK=1`, `AZURE_TE_WEIGHTS_FD=1` | check the target-effect combiner weights |
 | `AZURE_POOL_CHECK=1` | compare the pooled, parallel χ² with a fresh serial one |

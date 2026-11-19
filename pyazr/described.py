@@ -299,7 +299,8 @@ def _build_kinds():
                for cls in (Objective, Evaluation, EvaluatedData)}
     parameters = {row["key"]: {"unit": row["unit"], "owner": list(row["owner"]),
                                "own_prior": bool(row["own_prior"]), "segment_field": bool(row["segment_field"]),
-                               "vary_from_project": bool(row["vary_from_project"]), "doc": row["doc"]}
+                               "vary_from_project": bool(row["vary_from_project"]), "band": bool(row["band"]),
+                               "doc": row["doc"]}
                   for row in engine.parameter_kinds()}
     parameter_fields = {f["name"]: {k: (list(v) if isinstance(v, (list, tuple)) else v)
                                     for k, v in f.items() if k != "name"} for f in engine.parameter_record_fields()}
@@ -416,7 +417,7 @@ def kinds():
       what builds each and its fields with a line of doc;
     - ``parameters``: the kinds of fit parameter (``Parameter.kind``), in their order in the vector: unit (of the
       value in the fit vector), ``owner`` (the record fields that say what it belongs to), own_prior, segment_field,
-      vary_from_project, doc;
+      vary_from_project, band (the uncertainty band propagates it), doc;
     - ``parameter_fields``, ``pair_fields``: the fields of a parameter's and a pair's record (:class:`pyazr.Parameter`,
       :class:`pyazr.system.Pair`): unit (``"unit"``: the parameter's own), doc; a parameter field also the ``kinds`` it
       describes, ``every_kind`` and ``owner`` (shown in ``Parameters.table()`` as what the parameter belongs to);

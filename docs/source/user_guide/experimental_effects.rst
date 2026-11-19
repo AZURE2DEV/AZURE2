@@ -748,8 +748,8 @@ nothing else.
   it. Measured values of :math:`U_e` are often larger than the adiabatic limit.
 - **Fit U_e** makes :math:`U_e` a fit parameter, ``screening_<n>`` (eV), with
   :math:`n` the line's place among the *active* experimental-effect lines. It
-  is fitted by every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``,
-  ``--use-gsl-lm``) and sampled by MCMC; its derivative is analytic.
+  is fitted by every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``) and
+  sampled by MCMC; its derivative is analytic.
 - **Prior Sigma [eV]** adds :math:`((U_e - U_e^{0})/\sigma)^2` to
   :math:`\chi^2`, :math:`U_e^{0}` being the value entered; 0 means no prior.
   It is reported as ``Total-Screening-Chi-Squared`` in ``chiSquared.out``.
@@ -811,8 +811,8 @@ largest density is ``max`` when given, otherwise :math:`N_0 + 3\sigma` (at least
 :math:`1.1\,N_0`), or :math:`1.5\,N_0` without a prior. MIGRAD has it as the
 parameter's upper limit; a density asked for beyond it (pyazr, rmfit) is computed
 at ``max``, with a warning printed once, so give a larger ``max`` if a fit
-presses against it. Every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``,
-``--use-gsl-lm``) moves the density, and MCMC samples it with the prior above;
+presses against it. Every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``)
+moves the density, and MCMC samples it with the prior above;
 its derivative is taken by finite differences. ``densityfit`` is refused on a
 line without target integration, on a thick target (density 0) and beside a
 beam profile or a UDR kernel.

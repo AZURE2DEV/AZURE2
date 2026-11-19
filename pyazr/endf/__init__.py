@@ -13,7 +13,7 @@ sections, the S-factor conversion) is a row of :mod:`pyazr.physics`, the engine'
     project, report = pyazr.endf.to_project(r, "new.azr", material=m)   # a new project, Brune basis, all fixed
     record, losses = pyazr.endf.from_session(s, x)  # a session's particle channels as LRF=7, formal basis
     written = pyazr.endf.write(s, "new.endf", x)  # MF=1, MF=2 (LRF=7), MF=3 and MF=6 from the engine; LRP=2
-    written = pyazr.endf.write(s, "new.endf", x, covariance="hesse")  # and MF=32: HESSE in the formal basis
+    written = pyazr.endf.write(s, "new.endf", x, covariance="hesse")  # and MF=32: the fit's covariance, J C J^T
     cov = m.covariance()                          # MF=32 (LRF=7, LCOMP=1): names, values, matrix
     findings = pyazr.endf.check_format(path)      # the module's own check of the format, each finding with its page
     result = pyazr.endf.check(path)               # the own check, then CHECKR, FIZCON, PSYCHE when they are found

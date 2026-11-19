@@ -139,9 +139,9 @@ Minimizer Selection
    Least squares on the analytic Jacobian (CLI ``--use-lm``); falls back to
    MIGRAD where the Jacobian is not available.
 
-**GSL Trust-Region**
-   GSL's trust-region least squares with geodesic acceleration (CLI
-   ``--use-gsl-lm``); falls back to MIGRAD likewise.
+**GSL Trust-Region** (removed on 2026-11-18)
+   The switch ``--use-gsl-lm`` is refused with the fitters to use instead
+   (``--use-lm``, ``--use-gradient``).
 
 **NLopt** (if built with ``USE_NLOPT``; CLI ``--use-nlopt``)
    Alternative minimizer with several algorithms:
@@ -157,7 +157,12 @@ The minimizer selection is only available for fitting modes.
    Compute the analytic cross-section uncertainty band from the fitted
    parameter covariance (CLI ``--covariance-band``): at the data energies for
    a fit, on the extrapolation grid for "Calculate Segments Without Data",
-   from the covariance a previous fit saved (``covariance.dat``).
+   from the covariance a previous fit saved (``covariance.dat``).  The band
+   propagates every free parameter that changes the model: the level
+   parameters and, since 2026-11-18, a fitted areal density, stopping scale or
+   other target or apparatus parameter (``covariance.dat`` in
+   :doc:`../reference/output_files`); normalizations and energy shifts are not
+   in it.
    **Scale covariance** inflates the covariance by the reduced chi-squared
    when it exceeds 1 (``--scale-covariance``).
 

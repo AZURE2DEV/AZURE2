@@ -1,5 +1,5 @@
 """The engine's own fitters on a session (docs/upgrade/fit.md): :meth:`SessionFit.fit_with_engine` runs the program's
-fit -- MIGRAD with or without the analytic gradient, Levenberg-Marquardt, the GSL trust region, NLopt where built --
+fit -- MIGRAD with or without the analytic gradient, Levenberg-Marquardt, NLopt where built --
 on the session's objective, through the same engine functions as ``AZURE2`` (the table ``pyazr.kinds()["fitters"]``),
 with progress records and a stop request another thread can set.  Mixed into the session class
 (``class Session(..., SessionFit)``).
@@ -41,9 +41,9 @@ class EngineFitResult:
     objective the fitter reached: a MIGRAD that stops at its call limit ends at the lowest objective it evaluated
     (a notice says so when that is not Minuit2's last state);
     ``edm`` MIGRAD's estimated distance to the minimum (NaN for the other fitters); ``calls`` the evaluations of the
-    objective (LM, GSL-LM: residual passes); ``covariance`` of the free parameters (HESSE after MIGRAD,
-    (J^T J + priors)^-1 after LM and GSL-LM; None without one, e.g. NLopt or a stopped fit), ``errors`` the errors
-    the program writes into param.sav (the square roots of the diagonal after LM and GSL-LM; Minuit's parabolic errors
+    objective (LM: residual passes); ``covariance`` of the free parameters (HESSE after MIGRAD,
+    (J^T J + priors)^-1 after LM; None without one, e.g. NLopt or a stopped fit), ``errors`` the errors
+    the program writes into param.sav (the square roots of the diagonal after LM; Minuit's parabolic errors
     after MIGRAD, which differ from them for a parameter with limits); ``minos`` name -> (lower, upper) when MINOS ran;
     ``minos_valid`` name -> {"lower": side, "upper": side} beside it, each side Minuit2's verdict as a dict: ``valid``
     (the crossing was found), ``at_limit`` (the scan reached the parameter's limit), ``call_limit`` (it ran out of
@@ -147,6 +147,9 @@ class SessionFit:
         """
         require_data_mode(self, "fit_with_engine()")
         rows = {row["name"]: row for row in _azure2.fitters()}
+        removed = {row["name"]: row for row in _azure2.removed_fitters()}
+        if method in removed:  # the engine's words: when it was removed and what to use instead
+            raise ValueError(removed[method]["message"])
         if method not in rows:
             raise ValueError(f"unknown fit method {method!r}; the engine's fitters: {', '.join(rows)}.")
         if minos and not rows[method]["minos"]:

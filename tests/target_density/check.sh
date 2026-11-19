@@ -5,7 +5,7 @@
 # Models from make_models.py (deleted; README.md: how the models were made): tests/13N, 12C(p,p) at 84.3 (and 114.5) deg lab, 0.3-0.9 MeV, levels fixed, a thin
 # target with a constant stopping cross section (10 keV at 1e18 atoms/cm^2).
 #
-#   1. data made at N = 1.1e18 (true.azr, 1 % errors): MIGRAD with the analytic gradient, --use-lm and --use-gsl-lm
+#   1. data made at N = 1.1e18 (true.azr, 1 % errors): MIGRAD with the analytic gradient and --use-lm
 #      recover the areal density N = 1.1e18 from 1e18 to 1e-4, with a final chi2 below 0.01 (122 at the start);
 #   2. the gradient: d chi2 / d N from finite differences agrees with the Jacobian path (AZURE_GRAD_CHECK);
 #   3. a 2 % prior about 1e18 pulls the fit between the two, Total-Density-Chi-Squared = ((N - 1e18)/2e16)^2;
@@ -68,7 +68,7 @@ else
 fi
 
 # ---- 1. fits recover the density --------------------------------------------------------------
-for v in "fit:--use-gradient" "fit_lm:--use-lm" "fit_gsl:--use-gsl-lm"; do
+for v in "fit:--use-gradient" "fit_lm:--use-lm"; do
   name="${v%%:*}"; flags="${v#*:}"
   run "$name" "$HERE/fit.azr" fit "$flags"
   n="$(par "$name" tgt_meyer_84.areal_density)"; c="$(chi "$name" Total-Chi-Squared)"

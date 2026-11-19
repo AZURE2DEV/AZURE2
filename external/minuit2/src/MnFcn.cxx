@@ -23,6 +23,7 @@ MnFcn::~MnFcn()
 double MnFcn::operator()(const MnAlgebraicVector &v) const
 {
    // evaluate FCN converting from from MnAlgebraicVector to std::vector
+#pragma omp atomic
    fNumCall++;
    return fFCN(MnVectorTransform()(v));
 }

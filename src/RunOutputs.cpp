@@ -113,14 +113,15 @@ void WriteRunOutputs(ProgramRun &run) {
                                 << std::endl;
         }
       }
-      // Name the columns ("#columns" header, which LoadBandCovariance and numpy.loadtxt skip): the free level
-      // energies and reduced-width amplitudes in parameter order, as param.sav holds them (pyazr.prior_from_fit).
+      // Name the columns ("#columns" header, which numpy.loadtxt skips and LoadBandCovariance reads): the free level
+      // energies and reduced-width amplitudes, and the free target and apparatus parameters, in parameter order, as
+      // param.sav holds them (pyazr.prior_from_fit).  A THM coherent background is no named column (no header then).
       {
         const ROOT::Minuit2::MnUserParameters &mp = run.params.GetMinuitParams();
         std::vector<std::string> names;
         for (unsigned int i = 0; i < mp.Params().size(); i++) {
           const ParamKind kind = run.params.Kind((int)i);
-          if (!mp.Parameter(i).IsFixed() && IsRMatrixParameter(kind))
+          if (!mp.Parameter(i).IsFixed() && (IsRMatrixParameter(kind) || IsApparatusBandParameter(kind)))
             names.push_back(mp.GetName(i));
         }
         if ((int)names.size() == run.bandCov.size()) run.bandCov.names = names;
@@ -136,9 +137,9 @@ void WriteRunOutputs(ProgramRun &run) {
       // The fit ran but produced no usable covariance (already reported above);
       // don't fall back to a stale saved file.
       if (BandPackedColumns(FreeParameterMap(run)).empty())
-        run.configure.outStream << "Uncertainty band skipped: the fit has no free level parameter. The band "
-                                 "propagates the covariance of level energies, widths and the THM coherent "
-                                 "background; the parameters of targets and data sets are not in it."
+        run.configure.outStream << "Uncertainty band skipped: the fit has no free level parameter, THM coherent "
+                                 "background or target or apparatus parameter. The band propagates the covariance "
+                                 "of those; normalizations and energy shifts are not in it."
                               << std::endl;
       else
         run.configure.outStream << "Uncertainty band skipped: this fit produced no usable covariance."
@@ -154,8 +155,9 @@ void WriteRunOutputs(ProgramRun &run) {
     if (!cov.empty()) {
       bool built = false, refusedByLineWindow = false;
       try {
+        const vector_r bestFit = run.params.GetMinuitParams().Params();
         built = BuildBandData(run.compound.get(), run.state, run.inputs, run.data, run.results, run.configure, cov,
-                              bandData, &run.fitFixedMask);
+                              bandData, &run.fitFixedMask, &bestFit);
       } catch (const azure2::LineWindowDerivativeRefused &refused) {
         // The band's sensitivities are the adjoint's, which a line window refuses: no band, said so; the outputs go on.
         run.configure.outStream << "Cross-section bands unavailable: " << refused.what() << "." << std::endl;

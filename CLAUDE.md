@@ -98,7 +98,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `pyazr/` | Python package | In-process engine; reads project format 3 only: `Project` (`project.py`, `nuclear_part.py`) edits the engine's document with the engine's grammars; old files are refused with the conversion command (`convert.py`: the converter) |
 | `rmfit/` | Global fitting campaigns on pyazr | Pure Python, not in the pip package; runs on pyazr 2 and pyazr 3 (`rmfit/backend.py`, `docs/upgrade/rmfit_two_backends.md`); its own README, DESIGN.md, tests (ctest `rmfit_*`, `rmfit/tests/CMakeLists.txt`) and skill; user guide `docs/source/user_guide/rmfit.rst` |
 | `numcmc/` | Ensemble MCMC sampler | |
-| `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code |
+| `external/` | Vendored Minuit2 (Coulomb functions: `physics/coulomb/`, from pycoulomb; stopping: `stopping/`) | **Do not edit**; it is upstream code. One listed local change (the atomic call counter, `docs/source/developer/architecture.rst`, "Local changes of `external/minuit2`") |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
 | `docs/source/` | Sphinx site, built with `-W` | The user-facing source of truth |
 | `.claude/skills/` | How to *use* AZURE2 | See "Skills" below; `tools/check_skills.py` |
@@ -263,7 +263,7 @@ whole term is one class in `src/Objective.cpp` and one line in the `Objective` c
      differences. The program's gradient (`AZURECalcGradient.cpp`), pyazr's `chi2_and_grad` (model-only terms) and
      its objective gradient (the others, `AZUREAPIGradient.cpp`) all call it.
    - `AppendRows(c, rows)` if it is a sum of squares: `rows.Append(r, &accum or nullptr, &direct or nullptr)` per
-     row; LM, the GSL trust region, the Jacobian-path gradient, G2 and pyazr's `objective_rows` read them. A term the
+     row; LM, the Jacobian-path gradient, G2 and pyazr's `objective_rows` read them. A term the
      project does not use adds no rows (return at once: tests count the rows of a project). The number of rows may
      depend on the project, never on the parameter vector: a row of 0 is for a term the project uses that is inactive
      at this vector.

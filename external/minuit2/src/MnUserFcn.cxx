@@ -18,6 +18,7 @@ namespace Minuit2 {
 double MnUserFcn::operator()(const MnAlgebraicVector &v) const
 {
    // call Fcn function transforming from a MnAlgebraicVector of internal values to a std::vector of external ones
+#pragma omp atomic
    fNumCall++;
 
    // calling fTransform() like here was not thread safe because it was using a cached vector

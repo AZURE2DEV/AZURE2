@@ -28,7 +28,7 @@
 #   (h) a capture cascade (`secondary_gamma` on the capture exit) with a line window is refused: the line-shape
 #       integration has no secondary-gamma form (dev's rule; the two features meet on the combined branch only).
 #   (i) a fit of a windowed data set with a fitter that reads the analytic gradient or the residual rows' Jacobian
-#       (its row of Fitters(): lm, gsl-lm, migrad-gradient) is refused at set-up with no output: the adjoint does not
+#       (its row of Fitters(): lm, migrad-gradient) is refused at set-up with no output: the adjoint does not
 #       run over the line shape; plain MIGRAD (numerical gradient) fits it and writes its outputs.
 #
 #   ./tests/ec_unbound_broad/check.sh path/to/AZURE2
@@ -199,7 +199,7 @@ fit_run() {
   (cd "$WORK/$name" && $(guard_command 900) "$AZURE2_BIN" fit $switch --max-calls=40 t.azr < /dev/null > run.log 2>&1)
 }
 help_text="$("$AZURE2_BIN" --help 2>&1)"
-for fitter in "lm --use-lm" "gsl-lm --use-gsl-lm" "migrad-gradient --use-gradient"; do
+for fitter in "lm --use-lm" "migrad-gradient --use-gradient"; do
   name="${fitter%% *}" switch="${fitter#* }"
   if ! grep -q -- "$switch" <<< "$help_text"; then
     echo "  skip  (i) $switch: not in this build"

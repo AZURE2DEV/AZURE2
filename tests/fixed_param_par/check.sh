@@ -5,17 +5,17 @@
 #
 # MIGRAD minimizes the AZUREParams it is handed, whose fixed flags include an
 # external param.par's ("fixed" in the fourth column).  The Levenberg-Marquardt
-# (--use-lm) and GSL trust-region (--use-gsl-lm) solvers built their free set
-# from a fresh mask of the .azr alone, so they fitted a parameter the user had
+# solver (--use-lm; and GSL's trust region, removed on 2026-11-18) built its free
+# set from a fresh mask of the .azr alone, so it fitted a parameter the user had
 # fixed there -- and the band covariance of such a fit had a column too many.
 #
 # Model: the one-level p+7Li -> a+a project of tests/identical_entrance_reaction
 # (2+, E, Gamma_p, Gamma_a all free in the .azr) against nine synthetic points
 # made with E = 17.762 MeV, Gamma_p = 0.9, Gamma_a = 0.15.  param.par starts
-# from the .azr values and fixes width_1_1 (Gamma_p) at 0.857457.  Each of
-# MIGRAD, --use-lm and --use-gsl-lm must leave width_1_1 exactly there, move
-# energy_1 and width_1_2, and reach the same chi2 (to 1e-5); --use-lm
-# --covariance-band must save a 2x2 covariance.  Seven fits of ~0.1 s.
+# from the .azr values and fixes width_1_1 (Gamma_p) at 0.857457.  MIGRAD and
+# --use-lm must each leave width_1_1 exactly there, move energy_1 and
+# width_1_2, and reach the same chi2 (to 1e-5); --use-lm --covariance-band must
+# save a 2x2 covariance.  Fits of ~0.1 s.
 #
 #   ./tests/fixed_param_par/check.sh path/to/AZURE2
 
@@ -83,7 +83,7 @@ fit() {
 value() { awk -v n="$2" '$1 == n { print $2 }' "$1"; }
 
 chis=()
-for m in migrad lm gsl-lm; do
+for m in migrad lm; do
   flag=""; [ "$m" = migrad ] || flag="--use-$m"
   # Menu 2 asks about the band first (n), then the parameter file.
   fit "$m" "fit --parameter-file=fix.par" $flag || continue
@@ -104,10 +104,9 @@ for m in migrad lm gsl-lm; do
     echo "  FAIL  $m did not move energy_1 and width_1_2"; fail=1
   fi
 done
-if [ "${#chis[@]}" -eq 3 ] && awk -v a="${chis[0]}" -v b="${chis[1]}" -v c="${chis[2]}" 'BEGIN {
-      d1 = (b - a) / a; d2 = (c - a) / a; if (d1 < 0) d1 = -d1; if (d2 < 0) d2 = -d2
-      exit !(d1 < 1e-5 && d2 < 1e-5) }'; then
-  echo "  ok    MIGRAD, LM and GSL-LM reach the same minimum"
+if [ "${#chis[@]}" -eq 2 ] && awk -v a="${chis[0]}" -v b="${chis[1]}" 'BEGIN {
+      d1 = (b - a) / a; if (d1 < 0) d1 = -d1; exit !(d1 < 1e-5) }'; then
+  echo "  ok    MIGRAD and LM reach the same minimum"
 else
   echo "  FAIL  the minimizers disagree: ${chis[*]}"; fail=1
 fi
@@ -126,4 +125,4 @@ if fit lmband "fit --parameter-file=fix.par" --use-lm --covariance-band; then
 fi
 
 if [ "$fail" -ne 0 ]; then echo "FAIL"; exit 1; fi
-echo "PASS: a param.par-fixed parameter stays fixed under MIGRAD, LM and GSL-LM"
+echo "PASS: a param.par-fixed parameter stays fixed under MIGRAD and LM"

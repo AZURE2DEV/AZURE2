@@ -42,7 +42,7 @@ Upstream project: <https://azure.nd.edu/> · Source:
 | `.claude/`     | [Claude Code](https://claude.com/claude-code) project skills (see below). |
 
 > **Note:** Minuit2 is vendored under `external/` and compiled as part of the
-> build; the Coulomb functions (`physics/coulomb/`), the SRIM stopping
+> build (one local change, listed in `docs/source/developer/architecture.rst`); the Coulomb functions (`physics/coulomb/`), the SRIM stopping
 > (`stopping/`) and the MCMC sampler (`numcmc/`) are part of the source tree. None of these need to be
 > downloaded or installed separately, unlike in older versions of AZURE2.
 > The web interface's page ships one third-party file, plotly.js 4.1.2 (the

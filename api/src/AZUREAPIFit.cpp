@@ -19,6 +19,9 @@
 
 AZUREAPI::EngineFit AZUREAPI::FitWithEngine(const EngineFitRequest &request) {
   const FitterRow *row = FitterNamed(request.method);
+  if (!row)
+    if (const RemovedFitterRow *removed = RemovedFitterNamed(request.method))
+      throw std::invalid_argument(RemovedFitterMessage(*removed, "method '" + request.method + "'"));
   if (!row) {
     std::string names;
     for (const FitterRow &r : Fitters()) names += (names.empty() ? "" : ", ") + std::string(r.name);

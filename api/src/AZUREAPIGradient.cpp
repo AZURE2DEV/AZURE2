@@ -409,9 +409,9 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) {
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed_);
 
-  // A band is sensitive only to the R-matrix (and THM coherent-background)
-  // parameters, and covariance.dat spans exactly those columns
-  // (BandPackedColumns) -- so reduce each full packed row to them here
+  // A band is sensitive only to the R-matrix, THM coherent-background and
+  // target and apparatus parameters, and covariance.dat spans exactly those
+  // columns (BandPackedColumns) -- so reduce each full packed row to them here
   // rather than shipping zero columns for every normalization.
   const std::vector<int> rc = BandPackedColumns(pmap);
   const int nCols = (int)rc.size();
@@ -438,6 +438,8 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) {
       }
     }
   }
+  // The target and apparatus columns: central differences of the model (CovarianceBand.h), as the program's band.
+  AddApparatusSensitivities(lc, state(), inputs(), ld, configure(), pmap, full, grad);
 
   // Walk the segments exactly as UpdateSegments does, so row k of segment s
   // lines up with GET_CALCULATED_SEGMENT's point k: segments sharing a segment

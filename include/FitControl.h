@@ -23,7 +23,7 @@ class FunctionMinimum;
 }  // namespace ROOT
 
 /// One step of a fit, handed to the caller's sink.  An evaluation record comes from every evaluation of the objective
-/// (AZURECalc::operator()); an iteration record from a fitter that counts its own steps (LM, GSL-LM).
+/// (AZURECalc::operator()); an iteration record from a fitter that counts its own steps (LM).
 struct FitProgress {
   enum class Kind { kEvaluation, kIteration };
   Kind kind = Kind::kEvaluation;
@@ -91,7 +91,7 @@ struct FitResult {
   bool converged = false;             ///< a minimum by the fitter's own criterion
   double edm = std::numeric_limits<double>::quiet_NaN();      ///< MIGRAD's estimated distance to the minimum
   double edmGoal = std::numeric_limits<double>::quiet_NaN();  ///< MIGRAD's EDM goal (0.002 x tolerance x Up)
-  long calls = 0;                     ///< objective evaluations (MIGRAD, NLopt); LM, GSL-LM: residual passes
+  long calls = 0;                     ///< objective evaluations (MIGRAD, NLopt); LM: residual passes
   std::vector<int> freeIndices;       ///< full indices of the rows and columns of covariance
   std::vector<double> covariance;     ///< covariance over freeIndices, row-major; empty: none
   bool covarianceFromHesse = false;   ///< MIGRAD's matrix refined by HESSE (RunHesse)
@@ -100,9 +100,9 @@ struct FitResult {
   std::vector<double> errors;         ///< per full index, the errors param.sav gets (Minuit's, or sqrt diag of LM's)
   std::vector<std::string> notices;   ///< what the caller should know of this fit, one sentence each: a fallback to
                                       ///< another fitter, a setting the fitter ignored, a best point kept at a limit
-  bool fellBackToMigrad = false;      ///< LM, GSL-LM: no analytic Jacobian, MIGRAD (numerical) ran instead
+  bool fellBackToMigrad = false;      ///< LM: no analytic Jacobian, MIGRAD (numerical) ran instead
   std::shared_ptr<ROOT::Minuit2::FunctionMinimum> minimum;  ///< MIGRAD's state, for HESSE and MINOS
-  BandCovariance leastSquaresBand;    ///< LM, GSL-LM: the band block of (J^T J + priors)^-1; empty: none
+  BandCovariance leastSquaresBand;    ///< LM: the band block of (J^T J + priors)^-1; empty: none
 };
 
 /// The outcome of `result` in the words every fitter shares (fitStatus.out's status): converged (FitResult::converged),

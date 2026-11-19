@@ -10,7 +10,7 @@ the same start, and compares what the program writes and prints:
   digits) equals result.covariance; the errors of param.sav equal result.errors (8 significant digits);
 - MINOS: param.errors (8 significant digits) equals result.minos.
 Cases: tests/13N with migrad (band, call limit 300); T2 (tests/upgrade, THM data, so the program's plain fit is
-migrad-gradient) with migrad-gradient (MINOS and band), lm and gsl-lm (band); T2 with a nuisance prior
+migrad-gradient) with migrad-gradient (MINOS and band) and lm (band); T2 with a nuisance prior
 (<parameterSettings>) on energy_1, 12.4215 +- 0.001 MeV (lm); tests/data_covariance rel.azr, a data covariance with
 relvector terms (migrad-gradient
 with a call limit of 400, then the re-freeze of the model).  The fitters are deterministic at one thread (the same
@@ -163,8 +163,6 @@ def main():
         ("T2 migrad-gradient", t2, "T2.azr", (), None, [switch("migrad-gradient"), "--covariance-band"],
          ["minos", "--delta-chi2=1"], "migrad-gradient", True, None, False),
         ("T2 lm", t2, "T2.azr", (), None, [switch("lm"), "--covariance-band"], ["fit"], "lm", False, None, True),
-        ("T2 gsl-lm", t2, "T2.azr", (), None, [switch("gsl-lm"), "--covariance-band"], ["fit"], "gsl-lm",
-         False, None, True),
         ("T2 with a nuisance prior on energy_1, lm", t2, "T2.azr", (), with_prior, [switch("lm")], ["fit"], "lm",
          False, None, False),
         ("data covariance with relvector terms, migrad-gradient", os.path.join(TESTS, "data_covariance"), "rel.azr",

@@ -11,7 +11,7 @@
 #       gradient agrees with finite differences (AZURE_GRAD_CHECK) and a fit
 #       from 0.5/0.5 recovers 0.6/0.4; a normgroup over a natural SUM and a
 #       plain segment: the shared norm's gradient agrees too; an abundance prior
-#       acts the same in --use-lm and --use-gsl-lm as in MIGRAD;
+#       acts the same in --use-lm as in MIGRAD;
 #   (d) a level with channels of both nuclei and "natural 1" on a RATIO are refused by the run; a component
 #       naming a missing pair key and a sample <abundances> lacks (old files, tests/convert/fixtures) by the
 #       converter.  The models are format 3 (M_thick.azr: the layer target twice, without and with the isotopes).
@@ -210,15 +210,15 @@ RECORDS
   # an abundance prior must act in the least-squares minimizers as in MIGRAD (prior 0.5 +- 0.002 against data that
   # want 0.6).  Guards AZURECalc::Chi2On, which took the prior from compound() instead of the evaluated copy until
   # 2026-10-17; that copy is refreshed between LM/GSL steps, so this case passed with the old code as well -- the
-  # check keeps the three minimizers in agreement rather than reproducing a failure.
+  # check keeps the minimizers in agreement rather than reproducing a failure.
   sed 's/^\(    isotope  *12C 0.5 fit\)$/\1 prior 0.5 0.002/' "$M/M_data.azr" > "$WORK/M_prior.azr"
   grep -q '12C 0.5 fit prior 0.5 0.002$' "$WORK/M_prior.azr" || bad "the abundance prior was not written into M_prior.azr"
-  for mz in migrad lm gsl; do
-    case $mz in migrad) fl="--use-gradient" ;; lm) fl="--use-lm" ;; gsl) fl="--use-gsl-lm" ;; esac
+  for mz in migrad lm; do
+    case $mz in migrad) fl="--use-gradient" ;; lm) fl="--use-lm" ;; esac
     run "prior_$mz" "$WORK/M_prior.azr" true "$fl" fit || true
   done
   pm="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$WORK/prior_migrad/output/param.sav" 2>/dev/null)"
-  for mz in lm gsl; do
+  for mz in lm; do
     pv="$(awk '$1 == "natural.isotope.12C" { print $2 }' "$WORK/prior_$mz/output/param.sav" 2>/dev/null)"
     if [ -n "$pm" ] && [ -n "$pv" ] && awk -v a="$pm" -v b="$pv" 'BEGIN { exit !((a - b)^2 < 1e-8 && (a - 0.6)^2 > 1e-6) }'; then
       ok "abundance prior acts in --use-$mz as in MIGRAD (natural.isotope.12C $pv vs $pm; data alone 0.6)"

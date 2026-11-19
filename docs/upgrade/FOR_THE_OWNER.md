@@ -388,11 +388,12 @@ estimate from the 65 commits read, not a measurement).
   Answered 2026-11-18: as proposed, retire the flag on `dev` too (a matter of the other branch); see OWNER_ANSWERS.md.
 - **The covariance written to ENDF MF=32**: HESSE in a formal-basis session (as built); the alternative, the fit's
   covariance carried through the transformation, differs on T1 by up to 3.9 σ_i σ_j.
-  Answered 2026-11-18: the fit's covariance carried through the transformation (not HESSE in a formal-basis session); see OWNER_ANSWERS.md.
+  *Answered 2026-11-18: the fit's covariance carried through the transformation, built (`endf.md` 13.13); on T1
+  MF=32 moves by up to 3.9 sigma_i sigma_j and lists 14 parameters instead of 10.*
 - **The ten switches the history page lists as used by no test**: seven now have an option and a case in
   `tests/switch_options`, `AZR_DEBUG_GRID` is read by `tests/gamma_decay`; proposed: drop the two print-only
-  switches no test reads (`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`) unless you use them.
-  Answered 2026-11-18: drop both; see OWNER_ANSWERS.md.
+  switches no test reads (`AZURE_GRAD_DEBUG`, `AZURE_CHANNEL_DEBUG`) unless you use them. *Answered 2026-11-18:
+  both dropped (switch table, readers and manual).*
 - **`rmfit-campaign`**: follow `dev` (the skill lives with rmfit) and drop the ported copy here.
   Answered 2026-11-18: as proposed; see OWNER_ANSWERS.md. The ported copy is dropped (`.claude/skills/rmfit-campaign`); rmfit's own stays.
 - **The logo**: the original on the web page and in the packages (as now), or `dev`'s new one.
@@ -407,9 +408,10 @@ estimate from the 65 commits read, not a measurement).
   resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.
   Answered 2026-11-18: all three should follow the shifted energy; see OWNER_ANSWERS.md.
 - **Fitted target parameters in the band**: today an areal density or a stopping scale does not widen it.
-  Answered 2026-11-18: include them in the band; see OWNER_ANSWERS.md.
+  *Answered 2026-11-18: included (`output_files.rst`, covariance.dat); a band without such a parameter is unchanged
+  bit for bit.*
 - **Minuit2's call counter**: two atomic increments in `external/` (not applied; AZURE2 counts its own calls).
-  Answered 2026-11-18: apply the two-line change to the bundled Minuit2; see OWNER_ANSWERS.md.
+  *Answered 2026-11-18: applied, the listed local change of `external/minuit2` (`developer/architecture.rst`).*
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the
   proton mass of the M1 capture integral (`include/Constants.h`).
   Answered 2026-11-18: update both to the current values and accept that results move; see OWNER_ANSWERS.md.
@@ -447,9 +449,10 @@ Each checked against the start commit of this page, by a run (R) or by reading t
 - A project file cannot hold two levels of one J^π at the identical energy: their lines are read as one level, with
   a warning (R). Levels within 1e-6 MeV, and a fit that brings two together, work.
 - A repeated top-level section: the run reads the first and warns; `--validate` passes a repeated empty section (R).
-- `--max-calls` acts on Minuit2's own counter, approximate by a few calls under threads; the `param.fit` snapshot
-  depends on the thread schedule, every other output does not (C; `fit_threads.md` sections 3 and 4).
-- Levenberg-Marquardt and GSL's trust region ignore `--refreeze-covariance` without a word (C).
+- `--max-calls` acts on Minuit2's own counter, exact under threads since its increment is atomic (2026-11-18; R:
+  `fit_threads` check 3, T1 at 1 and 4 threads); the `param.fit` snapshot depends on the thread schedule, every
+  other output does not (`fit_threads.md` sections 3 and 4).
+- Levenberg-Marquardt ignores `--refreeze-covariance` without a word (C).
 - A `<parameterSettings>` row names a level by its running number, which moves when a level is added (C).
 - An options file is applied after the command line: its calculation options win over the command line's (C).
 - `pyazr.Session` has no threads argument: a session uses the process's OpenMP threads (C).
@@ -814,7 +817,10 @@ re-read against its design at the hand-over.
    No Windows wheel (the job `wheels-windows`, MinGW, was added 2026-11-18 and has not run); the Coulomb table is not
    published (the owner, 2026-11-18: users build it); no wheel was installed on a second machine.
 8. **Kept for the owner to remove or keep:** `numcmc/`, the GSL fitter (`src/FitGslTrustRegion.cpp`), the
-   environment switches (section 8). **Answered 2026-11-18: remove `numcmc/` and the GSL fitter; see OWNER_ANSWERS.md.**
+   environment switches (section 8). *Answered 2026-11-18 ("Remove both"): the GSL fitter is removed (its switch and
+   method name refused with the alternatives, `fit.md`); the two print-only switches of section 8 are dropped.
+   `numcmc/` is the engine's ensemble sampler behind `AZURE2 mcmc`, `Session.sample_with_engine` and the `<mcmc>`
+   section, not dead code: its removal waits for the PI's word.*
 9. **pyazr.** Bound since 2026-11-16 (pyazr 3.0.0.dev4): the level matrix with Brune's or Park's parameters and
    photon channels (`pyazr.physics.collision_matrix`, item 5), and elastic scattering on an optical potential
    (`pyazr.physics.optical_scattering`: S per partial wave, sigma/sigma_R, the reaction cross section; against
@@ -855,7 +861,7 @@ re-read against its design at the hand-over.
     against FRESCO (`transfer.md`).
 12. **Conventions.** No project key states the angular-momentum convention; the invariance test is at the level of
     parameters only; the relative sign of internal and external capture has no independent check.
-13. **ENDF.** The method of the covariance written to MF=32 is the owner's decision (section 8).
+13. **ENDF.** The method of the covariance written to MF=32: answered and built (2026-11-18, section 8).
 14. **Not audited at the hand-over:** β-delayed spectra and the optical-theorem total among the observables per
     mesh energy; the analytic derivative of a kernel in its own parameters; the comparison of lab-frame data in
     the frame of the data; THM against `THM.md` sections 1–2; the second round of validation of the project format;

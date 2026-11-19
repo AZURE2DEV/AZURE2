@@ -662,7 +662,8 @@ in-memory keys (the channel tables' pair signature, the external-capture table's
 within one run and lose the entry.
 
 *What still links GSL.* The engine keeps GSL for the quadratures of the capture integrals and the folds
-(`gsl_integration_*`), the fitter `FitGslTrustRegion`, Bessel and Gamma functions in `ThmFunc`,
+(`gsl_integration_*`), the Cholesky inverse of the LM fitter's covariance (the fitter `FitGslTrustRegion` was removed
+on 2026-11-18), Bessel and Gamma functions in `ThmFunc`,
 `IntegratedFermiFunc` and others, and the opt-in numerical bound-shift route; `azure2-coulomb-table validate`
 keeps its one call of GSL's Coulomb functions (section 9.2). The dependency stays.
 

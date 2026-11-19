@@ -560,8 +560,14 @@ def linear_sigma(e, x, covariance, names):
     out_grids = []
     if any(x_.active for x_ in e.s.extrapolations):
         n_grids = sum(1 for x_ in e.s.extrapolations if x_.active)
-        grids = bands.uncertainty_bands(e._extrapolations(), segments=list(range(n_grids)), params=x[cols],
-                                        covariance=block)
+        # the extrapolations' band columns by name (a fitted target parameter is no parameter there: its row and
+        # column drop out, exactly, since the extrapolations do not depend on it)
+        ext = e._extrapolations()
+        ext_free = [p.name for p in ext.parameters if not p.fixed]
+        ext_names = [ext_free[c] for c in bands.rmatrix_columns(ext)]
+        pick = [[free[c] for c in cols].index(n) for n in ext_names]
+        grids = bands.uncertainty_bands(ext, segments=list(range(n_grids)), params=x[[cols[k] for k in pick]],
+                                        covariance=block[np.ix_(pick, pick)])
         out_grids = [grids[key].sigma for key in sorted(grids, key=lambda k: grids[k].segment)]
     return out_data, out_grids, [free[c] for c in cols]
 

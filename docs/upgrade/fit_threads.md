@@ -94,11 +94,13 @@ end exactly where the 1-thread fits end; every output agrees except `param.fit` 
 cross the limit varies with timing, which is the rest of symptom (b): one of three 8-thread runs of the merged head
 had ended at 691.608.
 
-**Not fixed here.** The fix is two lines in `external/minuit2` (an atomic increment), and the root `CLAUDE.md` forbids
-editing `external/` without the maintainer's decision. Until then: a fit that runs to convergence (no `--max-calls`)
-is not affected except for the `calls` line of `fitStatus.out`; a fit bounded by `--max-calls` depends on the thread
-count by up to one MIGRAD iteration. An alternative that leaves Minuit untouched would be AZURE2's own numerical
-gradient (an `FCNGradientBase` with the same step rules), which is larger than this note's scope.
+**Fixed (2026-11-18, the owner's answer to `FOR_THE_OWNER.md` section 8).** `#pragma omp atomic` before the
+increment in `MnUserFcn.cxx` and in `MnFcn.cxx`: the one listed local change of `external/minuit2`
+(`docs/source/developer/architecture.rst`). A fit bounded by `--max-calls` now ends at the same evaluation at every
+thread count, and the `calls` line of `fitStatus.out` counts every call. Check 3 of `tests/fit_threads/check.sh`
+(T1, plain MIGRAD, `--max-calls=200`, 1 and 4 threads: the same number of evaluations, the same `calls`, `param.sav`
+and `chiSquared.out` identical) fails with the engine before the change. A fit that runs to convergence moves only
+in its `calls` line, which was too low under threads before.
 
 ## 4. A third, cosmetic dependence: the `param.fit` snapshot
 

@@ -520,16 +520,6 @@ bool azure2::PointCotangents(WorkingCopy &data, const GradPoint &p, const Compou
 
 namespace {
 
-void ReportBail(WorkingCopy &data, const char *what, const Segment *segment, int i) {
-  if (!azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug) || !segment) return;
-  Unit *pt = segment->GetPoint(data, 1);
-  std::cerr << "[grad] " << what << " adjoint bailed on segment " << i << " (key " << segment->GetSegmentKey()
-            << ", entrance " << segment->GetEntranceKey() << ", exit " << segment->GetExitKey()
-            << ", components " << segment->HasComponents() << ", angular-dist " << (pt && pt->IsAngularDist())
-            << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect " << (pt && pt->IsTargetEffect())
-            << ")" << std::endl;
-}
-
 // The formal-basis parts that the adjoint does not differentiate: the Brune amplitude of an external-capture final
 // state that shares its block (CompoundSystem::ECFinalStatesFromFormal, an iteration on the block's formal parameters) and the
 // --ignore-externals projector of a channel capture (CompoundSystem::FormalCaptureMasksOutsideAdjoint, external_capture.md
@@ -562,25 +552,6 @@ bool AccumulateEGammaGradient(const CompoundSystem *compound, const LevelState &
   if (FormalPartsOutsideAdjoint(compound, state, pmap)) return false;
   int bailSeg = 0;
   if (!azure2::EnergyTaskGradient(compound, state, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
-    if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kGradDebug)) {
-      if (config.FirstTime("AZURE_GRAD_DEBUG energy-task gradient declined")) {
-        bool inactiveLevel = false;
-        for (int j = 1; j <= compound->NumJGroups(); j++) {
-          const JGroup *jg = compound->GetJGroup(j);
-          if (!jg->IsInRMatrix()) continue;
-          for (int la = 1; la <= jg->NumLevels(); la++)
-            if (!jg->GetLevel(la)->IsInRMatrix()) inactiveLevel = true;
-        }
-        const Segment *segment = data->Data().GetSegment(bailSeg);
-        Unit *pt = segment ? segment->GetPoint(*data, 1) : nullptr;
-        std::cerr << "[grad] adjoint bailed on segment " << bailSeg << " (entrance "
-                  << (segment ? segment->GetEntranceKey() : 0) << ", exit " << (segment ? segment->GetExitKey() : 0)
-                  << ", components " << (segment && segment->HasComponents()) << ", angular-dist "
-                  << (pt && pt->IsAngularDist()) << ", A_y " << (pt && pt->IsAnalyzingPower()) << ", target effect "
-                  << (pt && pt->IsTargetEffect()) << "); a level outside the R matrix in an "
-                  << "R-matrix J group: " << (inactiveLevel ? "YES" : "no") << std::endl;
-      }
-    }
     // On bail the caller ignores `accum` and falls back to finite differences.
     return false;
   }
@@ -652,9 +623,7 @@ bool ComputeResidualJacobian(const CompoundSystem *compound, const LevelState &s
   int bailSeg = 0, numTasks = 0;
   const bool ok = azure2::EnergyTaskRows(compound, state, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points,
                                          models, rows, bailSeg, numTasks);
-  if (!ok) {
-    ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
-  } else {
+  if (ok) {
     for (std::size_t k = 0; k < points.size(); k++) {
       const azure2::GradPoint &m = points[k];
       const int row = rowOf[m.segNum][m.pointIdx];
@@ -719,7 +688,6 @@ bool ComputeModelGradients(const CompoundSystem *compound, const LevelState &sta
   int bailSeg = 0, numTasks = 0;
   if (!azure2::EnergyTaskRows(compound, state, data, results, config, shiftDeriv, pmap, &mask, fitBarOf, points, models, rows,
                               bailSeg, numTasks)) {
-    ReportBail(*data, "Jacobian/gradient", data->Data().GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();
     return false;
   }

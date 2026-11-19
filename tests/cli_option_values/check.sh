@@ -83,6 +83,13 @@ accepted "--use-gradient --use-brune" "" --use-gradient --use-brune
 refused "--no-readline (the menu is gone)" "Unknown option --no-readline\.  AZURE2 has no menu" "" --no-readline
 grep -q "Drop --no-readline and give the command" <<< "$out" && ok "  ... the refusal says how to fix it" ||
   bad "  ... no fix in the refusal"
+# The fitter gsl-lm was removed (2026-11-18): its switch is refused with when and the alternatives, on the command line
+# and in an options file, never run by another fitter.
+refused "--use-gsl-lm (a removed fitter)" "--use-gsl-lm asks for the fitter gsl-lm, which was removed from AZURE2 on 2026-11-18" "" --use-gsl-lm
+grep -q -- "Use --use-lm" <<< "$out" && grep -q -- "--use-gradient" <<< "$out" && ok "  ... it names --use-lm and --use-gradient" ||
+  bad "  ... the refusal names no alternative"
+printf -- '--use-gsl-lm\n' > "$WORK/gsl.txt"
+refused "--use-gsl-lm in AZURE_OPTIONS_FILE" "which was removed from AZURE2 on 2026-11-18" "AZURE_OPTIONS_FILE=$WORK/gsl.txt"
 printf -- '--no-readline\n' > "$WORK/readline.txt"
 refused "--no-readline in AZURE_OPTIONS_FILE" "Unknown option --no-readline" "AZURE_OPTIONS_FILE=$WORK/readline.txt"
 printf -- '--use-gradiant\n' > "$WORK/unknown.txt"
