@@ -75,8 +75,25 @@ accepted() {
   local out
   [ "$1" = --help ] && { grep -q "^Syntax: AZURE2" "$WORK/help.txt"; return; }
   out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$1" no_such_project.azr < /dev/null 2>&1 | head -c 100000 | tr -d '\r')"
-  ! grep -qF "Unknown option $1." <<< "$out" && ! grep -qF "which this build of AZURE2 does not have" <<< "$out"
+  ! grep -qF "Unknown option $1." <<< "$out" && ! grep -qF "which this build of AZURE2 does not have" <<< "$out" &&
+    ! grep -qF "which was removed from AZURE2 on" <<< "$out"
 }
+
+# A removed fitter's switch (RemovedFitters() of src/Fitters.cpp, 2026-11-18: --use-gsl-lm) is refused (exit 2) with
+# when it was removed and the switches to use instead, and is not printed by --help.
+removed="$(sed -n '/RemovedFitters()/,/^}/s/.*{"[a-z-]*", "\(--[a-z-]*\)", "[0-9-]*",.*/\1/p' "$SRC_FITTERS")"
+[ -n "$removed" ] || bad "could not read the removed fitters' switches from src/Fitters.cpp (check this test)"
+for f in $removed; do
+  out="$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$f" no_such_project.azr < /dev/null 2>&1 | head -c 100000 |
+    tr -d '\r')"
+  status=$(cd "$WORK" && $RUN "$AZURE2_BIN" --no-gui "$f" no_such_project.azr < /dev/null > /dev/null 2>&1; echo $?)
+  if [ "$status" = 2 ] && grep -qF "which was removed from AZURE2 on" <<< "$out" && grep -qF -- "--use-lm" <<< "$out" &&
+     ! grep -qF -- "$f" "$WORK/help.txt"; then
+    ok "$f: a removed fitter, refused (exit 2) with when and what instead, not printed"
+  else
+    bad "$f: a removed fitter: exit $status, not the refusal, or printed: $out"
+  fi
+done
 
 # A fitter's switch whose fitter this build leaves out (the absent rows of src/Fitters.cpp) is refused in three
 # parts: what (the fitter is not in this build), the switches allowed, how to build it; exit 2.
