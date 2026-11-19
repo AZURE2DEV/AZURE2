@@ -71,7 +71,8 @@ What the server keeps
   ``"nan"``, never a refusal), the arguments as used, ``python`` (the pyazr call that makes the same arrays; run it
   to check) and, for stopping, ``citation``; at most 20000 elements per request.  ``GET /api/session/functions`` and
   ``POST /api/session/functions/<fn>`` do the same for the session's own functions, the rows of
-  ``Session.describe()["functions"]`` (``channel_functions`` of a pair of the project, and the THM diagnostics
+  ``Session.describe()["functions"]`` (``channel_functions`` of a pair of the project, ``jpi_block`` of one of its
+  J^π groups, and the THM diagnostics
   ``thm_experiments``, ``thm_background``, ``thm_lineshape``, ``thm_vertex``, ``thm_distortion`` with an
   ``experiment`` argument), in the session worker at the working parameters (the fit vector ``params`` is not an
   argument of the route); an argument with ``"required": false`` may be left out.  An answer adds ``lines`` (a field

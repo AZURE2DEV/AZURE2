@@ -127,6 +127,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
 }  // namespace
 
 void AddModelData(py::dict &terms, AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
+py::dict JpiBlockDict(const JpiBlockReport &r);                          // pybind_jpi_block.cpp
 class Session {
  public:
   // rateEntrance != 0: a reaction-rate session (the rate's pair keys; exit -1 the total radiative capture), set up as
@@ -566,6 +567,20 @@ class Session {
     }
     return to_array(out);
   }
+  // One J^pi block on excitation energies at every parameter value (AZUREAPIBlockMatrices.cpp, pybind_jpi_block.cpp).
+  py::dict jpi_block(const py::array_t<double, py::array::forcecast> &p, int jgroup,
+                     const py::array_t<double, py::array::forcecast> &excitation) {
+    const vector_r v = to_vector(p), e = to_vector(excitation);
+    expect_all(v, "jpi_block");
+    JpiBlockReport r;
+    try {
+      EngineCallScope engine;
+      r = api_->JpiBlockAllRWA(v, jgroup, e);
+    } catch (const std::invalid_argument &x) {
+      throw py::value_error(x.what());
+    }
+    return JpiBlockDict(r);
+  }
   py::array_t<double> ec_integrals(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
@@ -843,6 +858,10 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa, PrecisionGuard(),
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, PrecisionGuard(), py::arg("request"))
+      .def("jpi_block", &Session::jpi_block, PrecisionGuard(), py::arg("params"), py::arg("jgroup"),
+           py::arg("excitation"),
+           "One J^pi group (1-based) at every parameter value `params` on excitation energies E_x (MeV): its channel "
+           "functions, U and T of its open particle channels, the phase shifts, |A_lm| and det A^-1 (JpiBlockReport.h).")
       .def("ec_integrals", &Session::ec_integrals, PrecisionGuard(), py::arg("request"))
       .def("cache_stats", &Session::cache_stats)
       .def("take_notices", &Session::take_notices,

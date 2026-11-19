@@ -45,7 +45,9 @@ public names are a contract.
   A session writes into the project's own output directory (the second line of `<config>`), which the project names.
 - `pyazr.physics.<name>`: the engine's physics functions on arrays (`help()` gives arguments, units, domains);
   `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
-  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`.
+  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`;
+  one J^pi group's U, T, phase shifts, |A| and det A^-1 on an E_x grid is `Session(...).jpi_block`
+  (`docs/upgrade/physics_tab.md`).
 - `pyazr.physics.collision_matrix(level_energies, reduced_widths, energy, penetrability=, shift=, boundary=,
   hard_sphere_phase=, coulomb_phase=, parametrization=, shift_at_levels=, shift_derivative_at_levels_per_MeV=,
   park_norms=, photon_channels=, use_rmc=)`: the level matrix A and the collision and T-matrices of one J^pi block

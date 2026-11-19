@@ -131,4 +131,4 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "Error", "ParameterError", "ParameterKeyError", "ParameterIndexError", "ParameterVectorError",
            "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed", "MissingFile",
            "FormatRefused", "EngineWarning", "Objective", "Evaluation", "EvaluatedData", "endf"]
-__version__ = '3.0.0.dev7'
+__version__ = '3.0.0.dev8'

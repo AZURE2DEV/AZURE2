@@ -1,5 +1,5 @@
-"""The session's diagnostic calls described as rows (``Session.describe()["functions"]``): :meth:`Session.channel_functions`
-and the five THM calls of :mod:`pyazr.session_thm`.
+"""The session's diagnostic calls described as rows (``Session.describe()["functions"]``): :meth:`Session.channel_functions`,
+:meth:`Session.jpi_block` and the five THM calls of :mod:`pyazr.session_thm`.
 
 Each row has the shape of a row of the physics table (``pyazr.kinds()["physics"]``): ``name``, ``summary``, ``doc``,
 ``axis`` (the argument a plot puts on its horizontal axis, None for none), ``at_x`` (the answer depends on the fit
@@ -46,6 +46,11 @@ _EXIT_LEVELS = {"over": "exits[].levels[]", "label": ["pair", "jgroup", "level",
 _CHANNELS = {"over": "channels[]", "label": ["jgroup", "channel", "J", "pi", "l", "s"]}
 _CHANNEL_LEVELS = {"over": "channels[].levels[]", "label": ["jgroup", "channel", "J", "pi", "l", "s", "level"]}
 _EXPERIMENTS = {"over": "{experiment}", "label": ["experiment"]}
+_BLOCK_LEVELS = {"over": "levels[]", "label": ["level", "E_level"]}
+_BLOCK_CHANNELS = {"over": "channels[]", "label": ["channel", "pair", "radiation", "l", "s"]}
+_BLOCK_ELEMENTS = {"over": "elements[]", "label": ["channel", "channel_out"]}
+_BLOCK_PHASES = {"over": "phase_shifts[]", "label": ["channel", "pair", "l", "s"]}
+_BLOCK_LEVEL_PAIRS = {"over": "level_pairs[]", "label": ["level", "level_out"]}
 
 
 def _profile(prefix, lines):
@@ -86,6 +91,57 @@ SESSION_FUNCTIONS = {
          _r("delta_hs", "rad", "hard-sphere phase shift"),
          _r("open", "", "E > 0 and the engine's functions defined there (bool)"), _r("e_cm", "MeV", "the energies")],
         axis="e_cm", at_x=False),
+    "jpi_block": _row(
+        "jpi_block", "One J^pi group on excitation energies: channel functions, U, T, phase shifts, |A| and det A^-1.",
+        "The level matrix A, the collision matrix U and T of the group's open particle channels (physics/"
+        "CollisionMatrix.h), the nuclear phase shift as the engine's phase_shift data kind forms it, |A_lm| per pair "
+        "of levels and det A^-1, whose modulus is least near each resonance (docs/upgrade/physics_tab.md sections 4 "
+        "and 5).  The energies are E_x of the compound nucleus; each channel's E_c = E_x - its threshold.  A photon "
+        "channel enters A only with R-matrix capture and has no U or T element here.",
+        [dict(_ARG, name="jgroup", kind="integer", doc="the J group, 1-based as parameters.out numbers them",
+              domain="integer >= 1", lower=1.0, example=1),
+         dict(_ARG, name="e_x", kind="real", unit="MeV", doc="excitation energy E_x of the compound nucleus",
+              domain="finite", example=2.0, sweep={"lower": 0.5, "upper": 10.0, "spacing": "linear"}),
+         _PARAMS],
+        [_r("E_x", "MeV", "the energies"), _r("jgroup", "", "the J group", "scalar"),
+         _r("J", "", "its spin", "scalar"), _r("pi", "", "its parity", "scalar"),
+         _r("parametrization", "", "standard, brune or park", "text"),
+         _r("levels[].level", "", "a level in the R-matrix (1-based in the group)", "scalar", _BLOCK_LEVELS),
+         _r("levels[].E_level", "MeV", "its energy E_lambda at params (formal in the standard basis)", "scalar",
+            _BLOCK_LEVELS),
+         _r("channels[].channel", "", "the channel (1-based)", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].pair", "", "its pair key", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].radiation", "", "P particle, E or M photon", "text", _BLOCK_CHANNELS),
+         _r("channels[].l", "", "orbital angular momentum (a photon's multipolarity)", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].s", "", "channel spin", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].radius", "fm", "channel radius a_c (0 for a photon)", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].threshold", "MeV", "E_x of the pair's threshold", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].boundary", "", "boundary value B_c as the level matrix reads it", "scalar", _BLOCK_CHANNELS),
+         _r("channels[].E_c", "MeV", "c.m. energy of the channel's pair", "axis", _BLOCK_CHANNELS),
+         _r("channels[].P", "", "penetrability (0 closed)", "axis", _BLOCK_CHANNELS),
+         _r("channels[].S", "", "shift function", "axis", _BLOCK_CHANNELS),
+         _r("channels[].L_re", "", "S - B_c, the real part of L_c - B_c", "axis", _BLOCK_CHANNELS),
+         _r("channels[].L_im", "", "P, the imaginary part of L_c - B_c", "axis", _BLOCK_CHANNELS),
+         _r("elements[].channel", "", "entrance channel c", "scalar", _BLOCK_ELEMENTS),
+         _r("elements[].channel_out", "", "exit channel c'", "scalar", _BLOCK_ELEMENTS),
+         _r("elements[].U_re", "", "Re U_cc'", "axis", _BLOCK_ELEMENTS),
+         _r("elements[].U_im", "", "Im U_cc'", "axis", _BLOCK_ELEMENTS),
+         _r("elements[].U_abs", "", "|U_cc'|", "axis", _BLOCK_ELEMENTS),
+         _r("elements[].T_re", "", "Re T_cc'", "axis", _BLOCK_ELEMENTS),
+         _r("elements[].T_im", "", "Im T_cc'", "axis", _BLOCK_ELEMENTS),
+         _r("phase_shifts[].channel", "", "the channel", "scalar", _BLOCK_PHASES),
+         _r("phase_shifts[].pair", "", "its pair key", "scalar", _BLOCK_PHASES),
+         _r("phase_shifts[].l", "", "orbital angular momentum", "scalar", _BLOCK_PHASES),
+         _r("phase_shifts[].s", "", "channel spin", "scalar", _BLOCK_PHASES),
+         _r("phase_shifts[].delta", "deg", "nuclear phase shift arg(U)/2", "axis", _BLOCK_PHASES),
+         _r("phase_shifts[].eta", "", "inelasticity |U_cc|", "axis", _BLOCK_PHASES),
+         _r("level_pairs[].level", "", "level l", "scalar", _BLOCK_LEVEL_PAIRS),
+         _r("level_pairs[].level_out", "", "level m", "scalar", _BLOCK_LEVEL_PAIRS),
+         _r("level_pairs[].A_abs", "MeV^-1", "|A_lm|", "axis", _BLOCK_LEVEL_PAIRS),
+         _r("det_re", "MeV^n", "Re det A^-1"), _r("det_im", "MeV^n", "Im det A^-1"),
+         _r("log10_abs_det", "", "log10 |det A^-1|, least near a resonance"),
+         _r("singular", "", "A^-1 singular at E_x (bool)")],
+        axis="e_x"),
     "thm_experiments": _row(
         "thm_experiments", "Every THM experiment as a chi-squared evaluation at params profiles it.",
         "Per experiment (the answer's keys are their names): its data sets, the profiled norm n* and background b(E) = "

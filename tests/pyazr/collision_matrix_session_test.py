@@ -28,6 +28,10 @@ sigma(p, alpha_1) / sigma(p, alpha_0) of p + 15N (three coupled 1- levels, two 3
 T3: the d-wave phase shift of alpha + alpha (identical particles, the hybrid potential's channel functions, a
 beta-decay channel in the block), the total and the (n,p) cross section of n + 7Be, and 7Li(p,n).
 
+Session.jpi_block (the engine's own gather of a block, AZUREAPI::JpiBlockAllRWA) is compared with the same arrays:
+U and T of every pair of open particle channels of every block, on a fifth of the energies of one data set per
+project.
+
 The function and the session share physics/CollisionMatrix.h's arithmetic of one pathway; what this test adds to
 tests/pyazr/collision_matrix_test.py (numpy, no session) is that the arrays mean what the docstring says: a
 parametrization, a boundary value, a shift at a level energy or a photon factor read differently from the engine's
@@ -89,7 +93,7 @@ class Model:
             for r in widths:
                 gamma[r["level"] - 1, numbers.index(r["channel"])] = r["start"]
             self.blocks.append(dict(
-                J=levels[0]["J"], parity=levels[0]["parity"], channels=[channels[n] for n in numbers],
+                group=group, numbers=numbers, J=levels[0]["J"], parity=levels[0]["parity"], channels=[channels[n] for n in numbers],
                 E=np.array([r["start"] for r in levels]), gamma=gamma,
                 norms=np.array([norms[energy_rows.index(r)] for r in levels])))
         for block in self.blocks:  # S_c at each level energy; B_c = S_c at the lowest level
@@ -166,6 +170,31 @@ class Model:
         return np.pi / k ** 2 * pair["i1i2factor"] * total / 100.0  # fm^2 -> b
 
 
+def compare_blocks(s, model, energies, what):
+    """Session.jpi_block against the arrays assembled here (Model.matrices): U and T of every pair of open particle
+    channels of every block, and the phase shift of each, on `energies` (E_x, MeV).  The two take the level
+    parameters and the channel functions by different roads (the parameter records and channel_functions here, the
+    engine's level state and channel rows there) and share the arithmetic of physics/CollisionMatrix.h."""
+    import numpy as np
+    got, want = [], []
+    for block in model.blocks:
+        answer = s.jpi_block(block["group"], energies)
+        for k, e in enumerate(energies):
+            out = model.matrices(block, e)[0]
+            for el in answer["elements"]:
+                if el["channel"] not in block["numbers"] or el["channel_out"] not in block["numbers"]:
+                    continue
+                u = complex(el["U_re"][k], el["U_im"][k])
+                if not np.isfinite(u.real):
+                    continue
+                i, j = block["numbers"].index(el["channel"]), block["numbers"].index(el["channel_out"])
+                got += [u.real, u.imag, el["T_re"][k], el["T_im"][k]]
+                want += [out["U"][i, j].real, out["U"][i, j].imag, out["T"][i, j].real, out["T"][i, j].imag]
+    check(f"{what}: Session.jpi_block has U and T elements to compare", len(got) > 0)
+    if got:
+        compare(f"{what}: U and T of Session.jpi_block (|U| <= 1)", got, want, absolute=True)
+
+
 def without_external_capture(src, dest):
     """A copy of a project whose photon pairs take no external capture: the multipole mask (the last column of a
     <levels> row, io/LevelRows.h) of every photon row (pair kind 10, the fifth column from the end) set to 0.
@@ -228,6 +257,7 @@ def main():
                         [model.phase_shift(e, 0.5, 1, 1, 0, 0.5) for e in d.excitation_energies], d.model,
                         absolute=True)
                 capture_with_ec = {n: np.array(data[n].model) for n in ("cap_g0", "cap_g1")}
+                compare_blocks(s, model, list(d.excitation_energies)[::5], "T1 blocks")
             with pyazr.Session(t1_internal, **options) as s:
                 model, ev = Model(s, parametrization), s.evaluate(s.parameters.x0)
                 data = {d.name: d for d in ev.data}
@@ -245,6 +275,7 @@ def main():
                 d = {x.name: x for x in ev.data}["s09_ratio"]
                 compare("sigma(p, alpha_1) / sigma(p, alpha_0) of p + 15N",
                         [model.sigma(e, 1, 3) / model.sigma(e, 1, 2) for e in d.excitation_energies], d.model)
+                compare_blocks(s, model, list(d.excitation_energies)[::5], "T2 blocks")
 
             print(f"T3, {parametrization}")
             with pyazr.Session(os.path.join(work, "T3", "T3.azr"), **options) as s:
@@ -261,6 +292,7 @@ def main():
                 compare("sigma of 7Be(n,p)7Li", [model.sigma(e, 3, 2) for e in d.excitation_energies], d.model)
                 d = data["p7li_pn"]
                 compare("sigma of 7Li(p,n)7Be", [model.sigma(e, 2, 3) for e in d.excitation_energies], d.model)
+                compare_blocks(s, model, list(d.excitation_energies)[::5], "T3 blocks")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

@@ -1,7 +1,7 @@
 include_directories(../include ${AZURE2_SOURCE_DIR}/include)
 
 set (AZUREAPI_SOURCES AZUREAPI.cpp AZUREAPIReports.cpp AZUREAPIChi2.cpp AZUREAPIGradient.cpp AZUREAPIDiagnostics.cpp
-     AZUREAPIChannelFunctions.cpp AZUREAPIFit.cpp AZUREAPIModelData.cpp AZUREAPIObjective.cpp)
+     AZUREAPIChannelFunctions.cpp AZUREAPIBlockMatrices.cpp AZUREAPIFit.cpp AZUREAPIModelData.cpp AZUREAPIObjective.cpp)
 # The engine's sampler on a session (AZUREAPISampler.h): with the sampler only, as src/SamplerRun.cpp.
 if(USE_MCMC)
     list(APPEND AZUREAPI_SOURCES AZUREAPISampler.cpp)
@@ -37,7 +37,7 @@ if(NOT pybind11_FOUND)
                     "so `pyazr` can drive AZURE2 in-process.")
 else()
     pybind11_add_module(_azure2 pybind_api.cpp pybind_describe.cpp pybind_notices.cpp pybind_convert.cpp pybind_model_data.cpp pybind_nuclear_part.cpp pybind_physics.cpp pybind_level_doors.cpp pybind_collision_matrix.cpp pybind_optical.cpp pybind_elastic_amplitudes.cpp pybind_stopping.cpp pybind_potentials.cpp pybind_project.cpp pybind_schema.cpp
-                      pybind_records.cpp pybind_thm.cpp pybind_evaluation.cpp pybind_fit.cpp pybind_sampler.cpp pybind_data_rows.cpp pybind_precision.cpp pybind_thm_reports.cpp)
+                      pybind_records.cpp pybind_thm.cpp pybind_evaluation.cpp pybind_fit.cpp pybind_sampler.cpp pybind_data_rows.cpp pybind_precision.cpp pybind_thm_reports.cpp pybind_jpi_block.cpp)
     # AZUREAPI carries AZURE2Core, which carries the engine's own dependencies
     # (Minuit2, GSL, BLAS, OpenMP) in the right link order -- see
     # src/CMakeLists.txt.  Repeating them here would only risk contradicting it.
