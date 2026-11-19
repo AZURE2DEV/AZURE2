@@ -34,7 +34,9 @@ models and its undo stack); experiment::AllowedChannels itself lacks the identic
 rules (pyazr's `allowed_channels` offers those channels; the facade filters them; fixing it is an engine edit);
 a model datum's level and J are not picked from the levels (spin box and number); the spin of a heavy nucleus that
 is not even-even is not filled (no spin table in the repository); the UDR kernel and the target integration have
-no preview.
+no preview; T3's 2+ level at 3.03 MeV carries a Gamow-Teller channel of s = 1 to the 2+ 8Li parent, which neither
+experiment::AllowedChannels nor the GUI's former copy offers (both give s = 0 for J = J_parent): the rule or the file
+needs the owner's look.
 
 ## 2026-11-19 (agent shell) — `feature/upgrade-7-gui-shell`: CI for the Qt program, a modern shell
 
