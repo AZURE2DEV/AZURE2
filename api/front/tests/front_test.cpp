@@ -238,8 +238,12 @@ int main(int argc, char **argv) {
     const std::string name = f.stem().string();
     const fs::path a = CopyProject(f, fs::path("front_test_work") / ("cli_" + name));
     const fs::path b = CopyProject(f, fs::path("front_test_work") / ("front_" + name));
-    const std::string command = "\"" + binary + "\" calculate --threads=2 \"" + a.string() + "\" > \"" +
-                                (a.parent_path() / "stdout.txt").string() + "\" 2>&1";
+    std::string command = "\"" + binary + "\" calculate --threads=2 \"" + a.string() + "\" > \"" +
+                          (a.parent_path() / "stdout.txt").string() + "\" 2>&1";
+#ifdef _WIN32
+    // cmd.exe drops the first and the last quote of a line that starts with one: an outer pair keeps the inner ones.
+    command = "\"" + command + "\"";
+#endif
     const int status = std::system(command.c_str());
     Collect observer;
     front::RunRequest request;

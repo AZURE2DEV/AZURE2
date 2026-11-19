@@ -157,6 +157,14 @@ jobs:
           "$PYAZR_PYTHON" -m pip wheel . --no-deps -w wheelhouse-raw -v 2>&1 | tee wheel-build.log
           ls -l wheelhouse-raw
 
+      # The log of a failed build as annotations (readable without the job's log): its error lines and its end.
+      - name: The failed build's error lines
+        if: failure()
+        run: |
+          [ -f wheel-build.log ] || { echo "::error::wheel-build.log was not written: the build step did not start pip"; exit 0; }
+          msg="$( { grep -n -i -E 'error|undefined reference|cannot find|not found|No such file' wheel-build.log | head -25; echo ...; tail -15 wheel-build.log; } | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          echo "::error title=wheel build (MinGW)::$msg"
+
       # delvewheel copies the DLLs of the module (GSL, the OpenMP runtime, the MinGW runtime) into pyazr.libs and
       # points the module at them.  --no-mangle-all keeps their names: the program pyazr/bin/AZURE2.exe, which
       # delvewheel does not patch, loads the same DLLs by their own names, from the PATH pyazr/program.py gives it.
