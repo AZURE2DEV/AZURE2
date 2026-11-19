@@ -1,15 +1,20 @@
-#include <QCompleter>
-#include <QRegularExpression>
-#include <QRegularExpressionValidator>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
+#include <QDoubleValidator>
+#include <QFormLayout>
 #include <QGridLayout>
-#include <QSpacerItem>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QIntValidator>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QGroupBox>
-#include <QCheckBox>
-
+#include <QRegularExpression>
+#include <QSpinBox>
+#include <QToolButton>
+#include <QVBoxLayout>
 
 #include "AddPairDialog.h"
 #include "MassTable.h"
@@ -17,86 +22,205 @@
 
 #include <cmath>
 
-AddPairDialog::AddPairDialog(QWidget *parent) :
-  QDialog(parent) {
-  // this->setMaximumSize(370,440);
-  // this->setMinimumSize(370,440);
-  this->setMaximumWidth(420);
-  this->setMinimumWidth(420);
+namespace {
 
-  excitationEnergyLabel = new QLabel(tr("Heavy Excitation [MeV]:"));
-  excitationEnergyText = new QLineEdit;
+// Full precision, as the .azr writer keeps it (LevelsTab::writeNuclearFile).
+QString full(double v) { return QString::number(v, 'g', 15); }
+
+/// The elements of the mass table, by Z: (Z, symbol), the neutron first as "n".
+QList<QPair<int, QString>> Elements() {
+  QList<QPair<int, QString>> out;
+  QSet<int> seen;
+  for (const QString &label : MassTable::instance().labels()) {
+    int Z = 0, A = 0;
+    if (!MassTable::instance().parseNuclide(label, &Z, &A) || seen.contains(Z)) continue;
+    seen.insert(Z);
+    QString symbol = label;
+    symbol.remove(QRegularExpression("^\\d+"));
+    out << qMakePair(Z, symbol);
+  }
+  std::sort(out.begin(), out.end(), [](const QPair<int, QString> &a, const QPair<int, QString> &b) { return a.first < b.first; });
+  return out;
+}
+
+/// The ground state's J and parity where they are known without a spin table: the light particles (n, p, d, t, 3He,
+/// alpha) and the 0+ of every even-even nucleus.  False otherwise (the user gives them).
+bool KnownGroundState(int Z, int A, double &J, int &parity) {
+  struct Light {
+    int Z, A;
+    double J;
+    int parity;
+  };
+  static const Light light[] = {{0, 1, 0.5, 1}, {1, 1, 0.5, 1}, {1, 2, 1.0, 1}, {1, 3, 0.5, 1}, {2, 3, 0.5, 1}, {2, 4, 0.0, 1}};
+  for (const Light &l : light)
+    if (l.Z == Z && l.A == A) {
+      J = l.J;
+      parity = l.parity;
+      return true;
+    }
+  if (Z % 2 == 0 && (A - Z) % 2 == 0 && A > 0) {
+    J = 0.0;
+    parity = 1;
+    return true;
+  }
+  return false;
+}
+
+void SetParity(QToolButton *b, int parity) {
+  b->setChecked(parity >= 0);
+  b->setText(parity >= 0 ? "+" : QString::fromUtf8("−"));
+}
+
+}  // namespace
+
+void AddPairDialog::buildParticle(Particle &p, const QString &title, QGroupBox *&group) {
+  group = new QGroupBox(title);
+  QFormLayout *form = new QFormLayout(group);
+  p.element = new QComboBox;
+  p.element->setEditable(true);
+  p.element->setInsertPolicy(QComboBox::NoInsert);
+  p.element->setToolTip(tr("The element, by its symbol (or type it)"));
+  for (const auto &e : Elements()) p.element->addItem(QString("%1  (Z = %2)").arg(e.second).arg(e.first), e.first);
+  p.element->setCurrentIndex(-1);
+  p.massNumber = new QSpinBox;
+  p.massNumber->setRange(1, 320);
+  p.massNumber->setToolTip(tr("The mass number A"));
+  p.nucleusRow = new QWidget;
+  QHBoxLayout *n = new QHBoxLayout(p.nucleusRow);
+  n->setContentsMargins(0, 0, 0, 0);
+  n->addWidget(p.element, 1);
+  n->addWidget(new QLabel(tr("A")));
+  n->addWidget(p.massNumber);
+  form->addRow(tr("Nucleus:"), p.nucleusRow);
+  p.z = new QLineEdit;
+  p.z->setValidator(new QIntValidator(-1, 130, p.z));
+  p.mass = new QLineEdit;
+  p.mass->setValidator(new QDoubleValidator(0.0, 1e4, 15, p.mass));
+  p.mass->setToolTip(tr("The atomic mass in u (%1 when the nucleus is chosen)").arg(MassTable::version()));
+  form->addRow(tr("Z:"), p.z);
+  form->addRow(tr("M [u]:"), p.mass);
+  p.j = new QDoubleSpinBox;
+  p.j->setDecimals(1);
+  p.j->setSingleStep(0.5);
+  p.j->setRange(0.0, 30.0);
+  p.j->setToolTip(tr("The spin J (in halves)"));
+  p.parity = new QToolButton;
+  p.parity->setCheckable(true);
+  p.parity->setToolTip(tr("The parity: click to switch between + and -"));
+  SetParity(p.parity, 1);
+  connect(p.parity, &QToolButton::toggled, this, [b = p.parity](bool on) { SetParity(b, on ? 1 : -1); });
+  QWidget *spin = new QWidget;
+  QHBoxLayout *s = new QHBoxLayout(spin);
+  s->setContentsMargins(0, 0, 0, 0);
+  s->addWidget(p.j);
+  s->addWidget(p.parity);
+  s->addStretch(1);
+  form->addRow(tr("J and parity:"), spin);
+  p.note = new QLabel;
+  p.note->setWordWrap(false);
+  p.note->setStyleSheet("color: palette(mid);");
+  form->addRow(p.note);
+  Particle *which = &p;
+  connect(p.element, QOverload<int>::of(&QComboBox::activated), this, [this, which]() { nucleusChosen(*which); });
+  connect(p.element->lineEdit(), &QLineEdit::editingFinished, this, [this, which]() {
+    // a symbol typed: the item of that symbol
+    const QString typed = which->element->currentText().trimmed().section(' ', 0, 0);
+    for (int i = 0; i < which->element->count(); i++)
+      if (which->element->itemText(i).section(' ', 0, 0).compare(typed, Qt::CaseInsensitive) == 0) {
+        if (which->element->currentIndex() != i || which->z->text() != QString::number(which->element->itemData(i).toInt())) {
+          which->element->setCurrentIndex(i);
+          nucleusChosen(*which);
+        }
+        return;
+      }
+  });
+  connect(p.massNumber, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, which]() {
+    if (which->element->currentIndex() >= 0) nucleusChosen(*which);
+  });
+  connect(p.z, &QLineEdit::textEdited, this, [which]() {
+    const int at = which->element->findData(which->z->text().toInt());
+    which->element->blockSignals(true);
+    which->element->setCurrentIndex(at);
+    which->element->blockSignals(false);
+  });
+}
+
+bool AddPairDialog::chooseNucleus(Particle &p, const QString &symbol, int A) {
+  for (int i = 0; i < p.element->count(); i++)
+    if (p.element->itemText(i).section(' ', 0, 0) == symbol) {
+      p.massNumber->blockSignals(true);
+      p.massNumber->setValue(A);
+      p.massNumber->blockSignals(false);
+      p.element->setCurrentIndex(i);
+      nucleusChosen(p);
+      return true;
+    }
+  return false;
+}
+
+void AddPairDialog::nucleusChosen(Particle &p) {
+  if (p.element->currentIndex() < 0) return;
+  const int Z = p.element->currentData().toInt(), A = p.massNumber->value();
+  const MassEntry *e = MassTable::instance().lookup(Z, A);
+  p.z->setText(QString::number(Z));
+  if (!e) {
+    p.note->setText(tr("%1 has no nuclide Z = %2, A = %3: give the mass by hand.").arg(MassTable::version()).arg(Z).arg(A));
+    updateMassCheck();
+    return;
+  }
+  p.mass->setText(full(e->atomicMass));
+  double J = 0.0;
+  int parity = 1;
+  if (KnownGroundState(Z, A, J, parity)) {
+    p.j->setValue(J);
+    SetParity(p.parity, parity);
+    p.note->setText(tr("%1: M, J and parity filled").arg(e->label()));
+  } else {
+    p.note->setText(tr("%1: M filled; give J and parity").arg(e->label()));
+    p.note->setToolTip(tr("The mass table has no spins: give the J and parity of the state of the pair (the ground "
+                          "state's from a level table)."));
+  }
+  updateMassCheck();
+}
+
+void AddPairDialog::showNucleus(Particle &p) {
+  const MassEntry *e = MassTable::instance().identify(p.z->text().toInt(), p.mass->text().toDouble());
+  p.element->blockSignals(true);
+  p.massNumber->blockSignals(true);
+  p.element->setCurrentIndex(p.element->findData(p.z->text().toInt()));
+  if (e) p.massNumber->setValue(e->A);
+  else if (p.mass->text().toDouble() >= 1.0) p.massNumber->setValue((int)std::lround(p.mass->text().toDouble()));
+  p.element->blockSignals(false);
+  p.massNumber->blockSignals(false);
+  p.note->clear();
+}
+
+AddPairDialog::AddPairDialog(QWidget *parent) : QDialog(parent) {
+  setObjectName("addPairDialog");
+  setMinimumWidth(560);
+  pairTypeCombo = new QComboBox;
+  pairTypeCombo->setObjectName("pairType");
+  pairTypeCombo->addItem(tr("Particle, Particle"));
+  pairTypeCombo->addItem(tr("Particle, Gamma (capture to a level)"));
+  pairTypeCombo->addItem(tr("Beta Decay"));
+  pairTypeCombo->setToolTip(tr("A particle pair (two nuclei), a photon pair (the compound nucleus in a final level) or "
+                               "a beta decay"));
+
+  buildParticle(light, tr("Light Particle"), lightGroup);
+  buildParticle(heavy, tr("Heavy Particle"), heavyGroup);
+
+  excitationEnergyText = new QLineEdit("0");
   excitationEnergyText->setToolTip(tr("Excitation energy of the heavy particle (for a gamma pair: of the final level)."));
-  lightExcitationLabel = new QLabel(tr("Light Excitation [MeV]:"));
-  lightExcitationText = new QLineEdit;
+  lightExcitationText = new QLineEdit("0");
   lightExcitationText->setObjectName("lightExcitationText");
-  lightExcitationText->setText("0");
   lightExcitationText->setToolTip(tr("Excitation energy of the light particle (particle pairs only): a scattering or "
                                      "reaction of a particle in an excited state.  Give the light particle the J and "
                                      "parity of that state.  The channel opens at S + heavy + light excitation; two "
                                      "particles with the same Z, M, J, parity and excitation are identical."));
-  seperationEnergyLabel = new QLabel(tr("Separation Energy [MeV]:"));
   seperationEnergyText = new QLineEdit;
-  channelRadiusLabel = new QLabel(tr("Channel Radius [fm]:"));
   channelRadiusText = new QLineEdit;
-  pairTypeLabel = new QLabel(tr("Particle Pair Type:"));
-  pairTypeCombo = new QComboBox;
-  pairTypeCombo->addItem(tr("Particle, Particle"));
-  pairTypeCombo->addItem(tr("Particle, Gamma"));
-  pairTypeCombo->addItem(tr("Beta Decay"));
-  connect(pairTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(updateLightParticle(int)));
-
-  QRegularExpression rx("^\\d{0,2}(\\.[05]{0,1})?$");
-  QValidator *validator = new QRegularExpressionValidator(rx, this);
-  lightJLabel = new QLabel(tr("J:"));
-  lightJText = new QLineEdit;
-  lightJText->setValidator(validator);
-  lightPiLabel = new QLabel(tr("Pi:"));
-  lightPiCombo = new QComboBox;
-  lightPiCombo->addItem(tr("-"));
-  lightPiCombo->addItem(tr("+"));
-  lightZLabel = new QLabel(tr("Z:"));
-  lightZText = new QLineEdit;
-  lightMLabel = new QLabel(tr("M:"));
-  lightMText = new QLineEdit;
-  // lightGLabel = new QLabel(tr("g:"));
-  // lightGText = new QLineEdit;
-
-  heavyJLabel = new QLabel(tr("J:"));
-  heavyJText = new QLineEdit;
-  heavyJText->setValidator(validator);
-  heavyPiLabel = new QLabel(tr("Pi:"));
-  heavyPiCombo = new QComboBox;
-  heavyPiCombo->addItem(tr("-"));
-  heavyPiCombo->addItem(tr("+"));
-  heavyZLabel = new QLabel(tr("Z:"));
-  heavyZText = new QLineEdit;
-  heavyMLabel = new QLabel(tr("M:"));
-  heavyMText = new QLineEdit;
-  // heavyGLabel = new QLabel(tr("g:"));
-  // heavyGText = new QLineEdit;
-
-  lightIsotopeLabel = new QLabel(tr("Isotope:"));
-  lightIsotopeText = new QLineEdit;
-  lightIsotopeText->setObjectName("lightIsotopeText");
-  lightIsotopeText->setPlaceholderText(tr("p, n, d, a, 3He ..."));
-  lightIsotopeText->setToolTip(tr("Optional: an isotope (\"p\", \"a\", \"7Li\" or \"Li7\") fills Z and the atomic mass from %1.")
-                                   .arg(MassTable::version()));
-  heavyIsotopeLabel = new QLabel(tr("Isotope:"));
-  heavyIsotopeText = new QLineEdit;
-  heavyIsotopeText->setObjectName("heavyIsotopeText");
-  heavyIsotopeText->setPlaceholderText(tr("12C, 16O ..."));
-  heavyIsotopeText->setToolTip(lightIsotopeText->toolTip());
-  // the isotopes are chosen, not only typed: a completer over the mass table (docs/upgrade/qt_gui.md section 11.6)
-  for (QLineEdit *field : {lightIsotopeText, heavyIsotopeText}) {
-    auto *completer = new QCompleter(QStringList{"p", "d", "t", "a"} + MassTable::instance().labels(), field);
-    completer->setCaseSensitivity(Qt::CaseInsensitive);
-    completer->setFilterMode(Qt::MatchStartsWith);
-    completer->setMaxVisibleItems(12);
-    field->setCompleter(completer);
-  }
-  connect(lightIsotopeText, SIGNAL(editingFinished()), this, SLOT(lightIsotopeEdited()));
-  connect(heavyIsotopeText, SIGNAL(editingFinished()), this, SLOT(heavyIsotopeEdited()));
+  for (QLineEdit *e : {excitationEnergyText, lightExcitationText, seperationEnergyText, channelRadiusText})
+    e->setValidator(new QDoubleValidator(-1e6, 1e6, 15, e));
 
   fillButton = new QPushButton(tr("Fill masses and S from %1").arg(MassTable::version()));
   fillButton->setObjectName("fillMassesButton");
@@ -110,163 +234,124 @@ AddPairDialog::AddPairDialog(QWidget *parent) :
   massCheckLabel->setTextFormat(Qt::RichText);
 
   e1Check = new QCheckBox(tr("E1"));
-  e1Check->setChecked(false);
-  // m1Check = new QCheckBox(tr("M1"));
-  // m1Check->setChecked(false);
   e2Check = new QCheckBox(tr("E2"));
-  e2Check->setChecked(false);
 
-  cancelButton = new QPushButton(tr("Cancel"));
-  okButton = new QPushButton(tr("Accept"));
-  okButton->setDefault(true);
-
-
-  QGridLayout *pairTypeLayout = new QGridLayout;
-  pairTypeLayout->addWidget(pairTypeLabel, 0, 0);
-  pairTypeLayout->addWidget(pairTypeCombo, 0, 1);
-  pairTypeLayout->setColumnStretch(1, 1);
+  QFormLayout *top = new QFormLayout;
+  top->addRow(tr("Pair type:"), pairTypeCombo);
 
   QGroupBox *channelGroup = new QGroupBox(tr("Channel Properties"));
-  QGridLayout *channelLayout = new QGridLayout;
-  channelLayout->addWidget(excitationEnergyLabel, 0, 0, Qt::AlignRight);
-  channelLayout->addWidget(excitationEnergyText, 0, 1);
-  channelLayout->addWidget(lightExcitationLabel, 1, 0, Qt::AlignRight);
-  channelLayout->addWidget(lightExcitationText, 1, 1);
-  channelLayout->addWidget(seperationEnergyLabel, 2, 0, Qt::AlignRight);
-  channelLayout->addWidget(seperationEnergyText, 2, 1);
-  channelLayout->addWidget(channelRadiusLabel, 3, 0, Qt::AlignRight);
-  channelLayout->addWidget(channelRadiusText, 3, 1);
-  channelLayout->addWidget(fillButton, 4, 0, 1, 2);
-  channelLayout->addWidget(massCheckLabel, 5, 0, 1, 2);
-  channelGroup->setLayout(channelLayout);
+  QFormLayout *channel = new QFormLayout(channelGroup);
+  auto row = [channel](const QString &label, QWidget *field, QWidget *&host) {
+    host = field;
+    channel->addRow(label, field);
+  };
+  row(tr("Heavy excitation [MeV]:"), excitationEnergyText, excitationRow);
+  row(tr("Light excitation [MeV]:"), lightExcitationText, lightExcitationRow);
+  row(tr("Separation energy [MeV]:"), seperationEnergyText, separationRow);
+  row(tr("Channel radius [fm]:"), channelRadiusText, radiusRow);
+  channel->addRow(fillButton);
+  channel->addRow(massCheckLabel);
 
-  QGroupBox *lightGroup = new QGroupBox(tr("Light Particle"));
-  QGridLayout *lightLayout = new QGridLayout;
-  lightLayout->addWidget(lightJLabel, 0, 0, Qt::AlignRight);
-  QHBoxLayout *lightSpinLayout = new QHBoxLayout;
-  lightSpinLayout->addWidget(lightJText);
-  lightSpinLayout->addWidget(lightPiCombo);
-  lightLayout->addLayout(lightSpinLayout, 0, 1);
-  lightLayout->addWidget(lightIsotopeLabel, 1, 0, Qt::AlignRight);
-  lightLayout->addWidget(lightIsotopeText, 1, 1);
-  lightLayout->addWidget(lightZLabel, 2, 0, Qt::AlignRight);
-  lightLayout->addWidget(lightZText, 2, 1);
-  lightLayout->addWidget(lightMLabel, 3, 0, Qt::AlignRight);
-  lightLayout->addWidget(lightMText, 3, 1);
-  // lightLayout->addWidget(lightGLabel,4,0,Qt::AlignRight);
-  // lightLayout->addWidget(lightGText,4,1);
-  lightGroup->setLayout(lightLayout);
-
-  QGroupBox *heavyGroup = new QGroupBox(tr("Heavy Particle"));
-  QGridLayout *heavyLayout = new QGridLayout;
-  heavyLayout->addWidget(heavyJLabel, 0, 0, Qt::AlignRight);
-  QHBoxLayout *heavySpinLayout = new QHBoxLayout;
-  heavySpinLayout->addWidget(heavyJText);
-  heavySpinLayout->addWidget(heavyPiCombo);
-  heavyLayout->addLayout(heavySpinLayout, 0, 1);
-  heavyLayout->addWidget(heavyIsotopeLabel, 1, 0, Qt::AlignRight);
-  heavyLayout->addWidget(heavyIsotopeText, 1, 1);
-  heavyLayout->addWidget(heavyZLabel, 2, 0, Qt::AlignRight);
-  heavyLayout->addWidget(heavyZText, 2, 1);
-  heavyLayout->addWidget(heavyMLabel, 3, 0, Qt::AlignRight);
-  heavyLayout->addWidget(heavyMText, 3, 1);
-  // heavyLayout->addWidget(heavyGLabel,4,0,Qt::AlignRight);
-  // heavyLayout->addWidget(heavyGText,4,1);
-  heavyGroup->setLayout(heavyLayout);
-
-  QHBoxLayout *entryLayout = new QHBoxLayout;
-  entryLayout->addWidget(lightGroup);
-  entryLayout->addWidget(heavyGroup);
-
-  QHBoxLayout *buttonBox = new QHBoxLayout;
-  buttonBox->addWidget(cancelButton);
-  buttonBox->addWidget(okButton);
+  QHBoxLayout *particles = new QHBoxLayout;
+  particles->addWidget(lightGroup);
+  particles->addWidget(heavyGroup);
 
   multBox = new QGroupBox(tr("External Capture Multipolarities"));
   multBox->hide();
-  QHBoxLayout *multLayout = new QHBoxLayout;
+  QHBoxLayout *multLayout = new QHBoxLayout(multBox);
   multLayout->addWidget(e1Check);
-  // multLayout->addWidget(m1Check);
   multLayout->addWidget(e2Check);
-  multBox->setLayout(multLayout);
+  multLayout->addStretch(1);
 
-  QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addLayout(pairTypeLayout);
-  mainLayout->addLayout(entryLayout);
+  QDialogButtonBox *buttons = new QDialogButtonBox;
+  okButton = buttons->addButton(tr("Accept"), QDialogButtonBox::AcceptRole);
+  cancelButton = buttons->addButton(QDialogButtonBox::Cancel);
+  okButton->setDefault(true);
+  connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+  QVBoxLayout *mainLayout = new QVBoxLayout(this);
+  mainLayout->addLayout(top);
+  mainLayout->addLayout(particles);
   mainLayout->addWidget(channelGroup);
   mainLayout->addWidget(multBox);
-  mainLayout->addLayout(buttonBox);
+  mainLayout->addWidget(buttons);
 
-  setLayout(mainLayout);
-
-  connect(okButton, SIGNAL(clicked()), this, SLOT(accept()));
-  connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
-
-  for (QLineEdit *edit : {lightZText, lightMText, heavyZText, heavyMText, seperationEnergyText})
+  connect(pairTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(updateLightParticle(int)));
+  for (QLineEdit *edit : {light.z, light.mass, heavy.z, heavy.mass, seperationEnergyText})
     connect(edit, SIGNAL(textChanged(QString)), this, SLOT(updateMassCheck()));
   connect(pairTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(updateMassCheck()));
 
   setWindowTitle(tr("Add a Particle Pair"));
+  updateLightParticle(0);
   updateMassCheck();
 }
 
-namespace {
-
-// Full precision, as the .azr writer keeps it (LevelsTab::writeNuclearFile).
-QString full(double v) { return QString::number(v, 'g', 15); }
-
-}  // namespace
-
-bool AddPairDialog::isotopeEdited(QLineEdit *isotope, QLineEdit *zText, QLineEdit *mText) {
-  // editingFinished also fires when focus merely passes through: act only on a new entry, so tabbing past an
-  // isotope field never overwrites a mass typed by hand afterwards
-  const QString text = isotope->text().trimmed();
-  if (text.isEmpty() || !isotope->isEnabled() || !isotope->isModified()) return false;
-  isotope->setModified(false);
-  const MassTable &table = MassTable::instance();
-  int Z = 0, A = 0;
-  if (!table.parseNuclide(text, &Z, &A)) {
-    massCheckLabel->setText(tr("<span style=\"color:#d65000\">\"%1\" is not an isotope name (e.g. p, a, 12C, C12).</span>")
-                                .arg(text.toHtmlEscaped()));
-    return false;
-  }
-  const MassEntry *e = table.lookup(Z, A);
-  if (!e) {
-    massCheckLabel->setText(tr("<span style=\"color:#d65000\">%1 has no nuclide Z = %2, A = %3.</span>")
-                                .arg(MassTable::version()).arg(Z).arg(A));
-    return false;
-  }
-  zText->setText(QString::number(e->Z));
-  mText->setText(full(e->atomicMass));
-  return true;
+PairsData AddPairDialog::pair() const {
+  PairsData p{};
+  const int type = pairTypeCombo->currentIndex();
+  p.pairType = type == 1 ? 10 : type == 2 ? 20 : 0;
+  p.lightJ = light.j->value();
+  p.lightPi = light.parity->isChecked() ? 1 : -1;
+  p.lightZ = light.z->text().toInt();
+  p.lightM = light.mass->text().toDouble();
+  p.lightG = lightG_;
+  p.heavyJ = heavy.j->value();
+  p.heavyPi = heavy.parity->isChecked() ? 1 : -1;
+  p.heavyZ = heavy.z->text().toInt();
+  p.heavyM = heavy.mass->text().toDouble();
+  p.heavyG = heavyG_;
+  p.excitationEnergy = excitationEnergyText->text().toDouble();
+  p.lightExcitation = type == 0 ? lightExcitationText->text().toDouble() : 0.;
+  p.seperationEnergy = seperationEnergyText->text().toDouble();
+  p.channelRadius = channelRadiusText->text().toDouble();
+  unsigned int mask = 0;
+  if (e1Check->isChecked()) mask |= (1 << 0);
+  if (e2Check->isChecked()) mask |= (1 << 2);
+  p.ecMultMask = (int)mask;
+  return p;
 }
 
-void AddPairDialog::lightIsotopeEdited() {
-  isotopeEdited(lightIsotopeText, lightZText, lightMText);
-}
-
-void AddPairDialog::heavyIsotopeEdited() {
-  isotopeEdited(heavyIsotopeText, heavyZText, heavyMText);
+void AddPairDialog::setPair(const PairsData &p) {
+  pairTypeCombo->setCurrentIndex(p.pairType == 10 ? 1 : p.pairType == 20 ? 2 : 0);
+  light.j->setValue(p.lightJ);
+  SetParity(light.parity, p.lightPi);
+  light.z->setText(QString::number(p.lightZ));
+  light.mass->setText(full(p.lightM));
+  lightG_ = p.lightG;
+  heavy.j->setValue(p.heavyJ);
+  SetParity(heavy.parity, p.heavyPi);
+  heavy.z->setText(QString::number(p.heavyZ));
+  heavy.mass->setText(full(p.heavyM));
+  heavyG_ = p.heavyG;
+  excitationEnergyText->setText(full(p.excitationEnergy));
+  lightExcitationText->setText(full(p.lightExcitation));
+  seperationEnergyText->setText(full(p.seperationEnergy));
+  channelRadiusText->setText(full(p.channelRadius));
+  e1Check->setChecked(p.ecMultMask & (1 << 0));
+  e2Check->setChecked(p.ecMultMask & (1 << 2));
+  showNucleus(light);
+  showNucleus(heavy);
+  updateMassCheck();
 }
 
 void AddPairDialog::fillFromMassTable() {
   const MassTable &table = MassTable::instance();
   const int type = pairTypeCombo->currentIndex();
-  const MassEntry *heavy = table.identify(heavyZText->text().toInt(), heavyMText->text().toDouble());
-  const MassEntry *light = type == 0 ? table.identify(lightZText->text().toInt(), lightMText->text().toDouble()) : nullptr;
-  if (!heavy || (type == 0 && !light)) {
-    massCheckLabel->setText(tr("<span style=\"color:#d65000\">Enter Z and a mass (or an isotope) for %1 first: %2 has no "
-                               "nuclide with that charge and mass number.</span>")
+  const MassEntry *h = table.identify(heavy.z->text().toInt(), heavy.mass->text().toDouble());
+  const MassEntry *l = type == 0 ? table.identify(light.z->text().toInt(), light.mass->text().toDouble()) : nullptr;
+  if (!h || (type == 0 && !l)) {
+    massCheckLabel->setText(tr("<span style=\"color:#d65000\">Choose the nucleus (or give Z and a mass) of %1 first: %2 has "
+                               "no nuclide with that charge and mass number.</span>")
                                 .arg(type == 0 ? tr("both particles") : tr("the heavy particle"))
                                 .arg(MassTable::version()));
     return;
   }
-  heavyMText->setText(full(heavy->atomicMass));
+  heavy.mass->setText(full(h->atomicMass));
   if (type == 0) {
-    lightMText->setText(full(light->atomicMass));
+    light.mass->setText(full(l->atomicMass));
     double S = 0.0;
-    if (table.separationEnergy(light->Z, light->A, heavy->Z, heavy->A, &S))
-      seperationEnergyText->setText(full(S));
+    if (table.separationEnergy(l->Z, l->A, h->Z, h->A, &S)) seperationEnergyText->setText(full(S));
   }
   updateMassCheck();
 }
@@ -278,14 +363,7 @@ void AddPairDialog::updateMassCheck() {
     fillButton->setEnabled(false);
     return;
   }
-  PairsData pair{};
-  const int type = pairTypeCombo->currentIndex();
-  pair.pairType = type == 1 ? 10 : (type == 2 ? 20 : 0);
-  pair.lightZ = lightZText->text().toInt();
-  pair.lightM = lightMText->text().toDouble();
-  pair.heavyZ = heavyZText->text().toInt();
-  pair.heavyM = heavyMText->text().toDouble();
-  pair.seperationEnergy = seperationEnergyText->text().toDouble();
+  const PairsData pair = this->pair();
   const PairMassCheck c = table.check(pair);
   QStringList lines;
   if (c.hasS) {
@@ -312,56 +390,58 @@ void AddPairDialog::updateMassCheck() {
 }
 
 void AddPairDialog::updateLightParticle(int index) {
-  lightIsotopeText->setEnabled(index == 0);
-  if (index != 0) lightIsotopeText->clear();
-  if (index == 1) {
-    lightJText->setText("1.0");
-    lightJText->setEnabled(false);
-    lightPiCombo->setCurrentIndex(1);
-    lightPiCombo->setEnabled(false);
-    lightZText->setText("0");
-    lightZText->setEnabled(false);
-    lightMText->setText("0.0");
-    lightMText->setEnabled(false);
-    // lightGText->setText("0.0");
-    // lightGText->setEnabled(false);
+  // what the type does not use is hidden; the values a type fixes are set (the GUI's conventions of <levels>)
+  auto setRow = [](QWidget *field, bool on) {
+    if (QFormLayout *f = qobject_cast<QFormLayout *>(field->parentWidget() ? field->parentWidget()->layout() : nullptr))
+      f->setRowVisible(field, on);
+    else
+      field->setVisible(on);
+  };
+  const bool particle = index == 0, photon = index == 1, beta = index == 2;
+  // leaving the particle type keeps what it held, and coming back gives it back (a look at another type undoes nothing)
+  if (!particle && lastType_ == 0) {
+    held_ = pair();
+    haveHeld_ = true;
+  }
+  if (particle && lastType_ != 0 && haveHeld_) {
+    light.j->setValue(held_.lightJ);
+    SetParity(light.parity, held_.lightPi);
+    light.z->setText(QString::number(held_.lightZ));
+    light.mass->setText(full(held_.lightM));
+    seperationEnergyText->setText(full(held_.seperationEnergy));
+    channelRadiusText->setText(full(held_.channelRadius));
+    lightExcitationText->setText(full(held_.lightExcitation));
+    excitationEnergyText->setText(full(held_.excitationEnergy));
+    showNucleus(light);
+  }
+  lastType_ = index;
+  lightGroup->setVisible(!photon);
+  setRow(lightExcitationRow, particle);
+  setRow(separationRow, !photon);
+  setRow(radiusRow, !photon);
+  setRow(excitationRow, !beta);
+  if (QFormLayout *f = qobject_cast<QFormLayout *>(lightGroup->layout())) {
+    f->setRowVisible(light.nucleusRow, particle);
+    f->setRowVisible(light.mass, particle);
+    f->setRowVisible(light.j->parentWidget(), particle);
+    f->setRowVisible(light.note, particle);
+  }
+  multBox->setVisible(photon);
+  if (photon) {
+    light.j->setValue(1.0);
+    SetParity(light.parity, 1);
+    light.z->setText("0");
+    light.mass->setText("0.0");
     seperationEnergyText->setText("0.0");
-    seperationEnergyText->setEnabled(false);
-    excitationEnergyText->setEnabled(true);
     lightExcitationText->setText("0");
-    lightExcitationText->setEnabled(false);
     channelRadiusText->setText("0");
-    channelRadiusText->setEnabled(false);
-    multBox->show();
-  } else if (index == 2) {
-    lightJText->setEnabled(false);
-    lightJText->setText("0.5");
-    lightPiCombo->setEnabled(false);
-    lightPiCombo->setCurrentIndex(1);
-    lightZText->setEnabled(true);
-    lightMText->setEnabled(false);
-    lightMText->setText("0.0005");
-    // lightGText->setEnabled(false);
-    // lightGText->setText("2.0023");
-    seperationEnergyText->setEnabled(true);
-    excitationEnergyText->setEnabled(false);
+  } else if (beta) {
+    light.j->setValue(0.5);
+    SetParity(light.parity, 1);
+    light.mass->setText("0.0005");
+    light.z->setToolTip(tr("The beta's charge: -1 for beta-, +1 for beta+"));
     excitationEnergyText->setText("0.000");
     lightExcitationText->setText("0");
-    lightExcitationText->setEnabled(false);
-    channelRadiusText->setEnabled(true);
-    multBox->hide();
-    this->adjustSize();
-  } else {
-    lightJText->setEnabled(true);
-    lightPiCombo->setEnabled(true);
-    lightZText->setEnabled(true);
-    lightMText->setEnabled(true);
-    // lightGText->setEnabled(true);
-    seperationEnergyText->setEnabled(true);
-    excitationEnergyText->setEnabled(true);
-    lightExcitationText->setEnabled(true);
-    channelRadiusText->setEnabled(true);
-    multBox->hide();
-    this->adjustSize();
   }
+  adjustSize();
 }

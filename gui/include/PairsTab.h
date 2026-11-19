@@ -55,6 +55,8 @@ class PairsTab : public QWidget {
 
  public slots:
   void addPair();
+  /// The selected pair's copy in the pair dialog, added as a new pair when it differs (Ctrl+D).
+  void duplicatePair();
   void addPair(PairsData pair, int pairIndex, bool fromFile);
   void editPair();
   void editPair(PairsData pair, int pairIndex, bool fromFile);
@@ -79,6 +81,7 @@ class PairsTab : public QWidget {
  private:
   QPushButton *addButton;
   QPushButton *deleteButton;
+  QPushButton *duplicateButton = nullptr;
   QPushButton *massButton;
   QSignalMapper *mapper;
   QPushButton *infoButton[5];
