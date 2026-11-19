@@ -1,6 +1,6 @@
-// azure2::front's physics (Engine.h, "Physics"; docs/upgrade/physics_tab.md section 7): the rows of the physics table
-// (api/physics_table, the rows pyazr.physics reads) and one evaluated element-wise; a PhysicsSession, the engine's
-// session of a saved project (AZUREAPI, set up as pyazr's Session and front::ReadParameters set it up), whose calls
+// azure2::front's physics (Engine.h, "Physics"; docs/upgrade/physics_tab.md section 7): the rows of the physics and
+// stopping tables (api/physics_table, the rows pyazr.physics and pyazr.stopping read) and one evaluated element-wise;
+// a PhysicsSession, the engine's session of a saved project (AZUREAPI, set up as pyazr's Session and front::ReadParameters set it up), whose calls
 // hand on what the session computes: the channel functions (AZUREAPI::GetCoulombFunctions, pyazr's
 // Session.channel_functions), a J^pi block (AZUREAPI::JpiBlockAllRWA, pyazr's Session.jpi_block), the observed
 // levels (AZUREAPI::ObservedLevelRowsAllRWA) and the THM tables (AZUREAPI::GetThm*, pyazr's session_thm.py).  No
@@ -28,6 +28,8 @@
 #include "ThmExperiment.h"
 #include "azure2/physics/LevelParameters.h"
 #include "azure2/physics_table/PhysicsTable.h"
+#include "azure2/physics_table/StoppingTable.h"
+#include "azure2/stopping/Stopping.h"
 #include "azure2/support/FloatingPointPrecision.h"
 
 namespace azure2 {
@@ -150,6 +152,71 @@ std::string PhysicsStatusText(const std::string &name, int status) {
     return s.name + " outside its domain (" + table::DomainText(s) + ")";
   }
   return "status " + std::to_string(status) + " (the function's doc says what it means)";
+}
+
+// ---------------------------------------------------------------- the stopping table
+
+std::vector<PhysicsFunction> StoppingFunctions() {
+  std::vector<PhysicsFunction> out;
+  for (const table::StoppingRow &r : table::StoppingTable()) {
+    PhysicsFunction f;
+    f.name = r.name, f.summary = r.summary, f.doc = r.doc, f.library = r.library, f.axis = r.axis;
+    f.group = "stopping";
+    f.arguments.push_back(ArgumentOf(table::StoppingFormula()));
+    for (const table::ArgSpec &s : table::StoppingNumericArgs(r)) f.arguments.push_back(ArgumentOf(s));
+    for (const table::OutSpec &s : r.outs) f.returns.push_back({s.name, s.unit, s.doc});
+    out.push_back(f);
+  }
+  return out;
+}
+
+std::string StoppingCitation() { return azure2::stopping::kSrimCitation; }
+
+bool EvaluateStopping(const std::string &name, const std::string &formula,
+                      const std::vector<std::vector<double>> &arguments, PhysicsValues &out, std::string &why) {
+  out = PhysicsValues();
+  const table::StoppingRow *row = table::FindStoppingRow(name);
+  if (!row) {
+    why = "no stopping function named '" + name + "' (StoppingFunctions() lists them)";
+    return false;
+  }
+  const std::size_t na = table::StoppingNumericArgs(*row).size(), no = row->outs.size();
+  if (arguments.size() != na) {
+    why = name + ": " + std::to_string(na) + " numeric argument columns expected (after the formula), " +
+          std::to_string(arguments.size()) + " given";
+    return false;
+  }
+  std::size_t n = 1;
+  for (const std::vector<double> &c : arguments)
+    if (c.size() != 1) {
+      if (n != 1 && c.size() != n) {
+        why = name + ": the argument columns must have one length (or length 1, repeated)";
+        return false;
+      }
+      n = c.size();
+    }
+  for (const std::vector<double> &c : arguments)
+    if (c.empty()) n = 0;
+  const azure2::support::ExtendedPrecisionScope fpPrecision;
+  try {
+    table::StoppingMaterial(formula, "", 1.0);  // a formula the library refuses is refused here, before any element
+  } catch (const std::exception &e) {
+    why = name + ": the formula '" + formula + "' is refused: " + e.what();
+    return false;
+  }
+  std::vector<std::vector<double>> full(na);
+  std::vector<const double *> columns(na);
+  for (std::size_t k = 0; k < na; k++) {
+    full[k] = arguments[k].size() == 1 ? std::vector<double>(n, arguments[k][0]) : arguments[k];
+    columns[k] = full[k].data();
+  }
+  std::vector<double> values(no * n);
+  out.status.assign(n, 0);
+  table::EvaluateStoppingRow(*row, formula, columns, n, values.data(), out.status.data());
+  out.values.assign(no, std::vector<double>(n));
+  for (std::size_t j = 0; j < no; j++)
+    for (std::size_t i = 0; i < n; i++) out.values[j][i] = values[j * n + i];
+  return true;
 }
 
 double PhysicsSeries::Key(const std::string &key, double absent) const {

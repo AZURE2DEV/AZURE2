@@ -387,6 +387,29 @@ int main(int argc, char **argv) {
     const bool unknownRow = !front::EvaluatePhysics("no_such_row", {}, v, why);
     Check(unknownRow && !why.empty(), "an unknown row is refused: " + why);
 
+    // The stopping table (SRIM-2013): protons in Ta2O5.  total = electronic + nuclear, and two rows invert each
+    // other: the areal density between E_in and energy_after(E_in, N) is N again.
+    const std::vector<front::PhysicsFunction> stopping = front::StoppingFunctions();
+    Check(stopping.size() >= 5 && stopping[0].arguments[0].kind == "text" && !front::StoppingCitation().empty(),
+          std::to_string(stopping.size()) + " stopping rows, the formula first, SRIM's citation");
+    why.clear();
+    const bool sp = front::EvaluateStopping("stopping_power", "Ta2O5", {{0}, {1}, {1}, {1.00782503}, {0.3, 1.0}}, v,
+                                            why);
+    Check(sp && v.status == std::vector<int>({0, 0}) &&
+              std::fabs(v.values[2][1] - v.values[0][1] - v.values[1][1]) <= 1e-12 * v.values[2][1] &&
+              v.values[2][0] > v.values[2][1],
+          "stopping_power of p in Ta2O5: total = electronic + nuclear, falling from 0.3 to 1 MeV (" + why + ")");
+    front::PhysicsValues after, between;
+    front::EvaluateStopping("energy_after", "Ta2O5", {{0}, {1}, {1}, {1.00782503}, {1.0}, {1e18}}, after, why);
+    front::EvaluateStopping("areal_density_between", "Ta2O5", {{0}, {1}, {1}, {1.00782503}, {1.0}, after.values[0]},
+                            between, why);
+    Check(after.status[0] == 0 && between.status[0] == 0 && std::fabs(between.values[0][0] / 1e18 - 1.0) < 1e-6,
+          "energy_after and areal_density_between invert each other to " +
+              Sci(between.values.empty() ? 1.0 : std::fabs(between.values[0][0] / 1e18 - 1.0)));
+    why.clear();
+    const bool badFormula = !front::EvaluateStopping("range", "Xq7", {{0}, {1}, {1}, {1.0}, {1.0}}, v, why);
+    Check(badFormula && !why.empty(), "a formula stopping/ refuses is refused: " + why);
+
     // A session of T1 (Brune's basis): pairs, groups, poles.
     const fs::path t1 = CopyProject(source / "tests/upgrade/T1/T1.azr", fs::path("front_test_work") / "physics");
     front::PhysicsSession s;

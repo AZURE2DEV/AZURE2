@@ -456,6 +456,19 @@ bool EvaluatePhysics(const std::string &name, const std::vector<std::vector<doub
 /// The words of a status of row `name` ("e_cm outside its domain (finite > 0)", "not converged or failed", ...).
 std::string PhysicsStatusText(const std::string &name, int status);
 
+/// The stopping table (stopping/: SRIM-2013 stopping, energy loss, range and straggling; the rows of
+/// pyazr.kinds()["stopping"] and the web page's stopping functions): rows of the physics table's shape whose first
+/// argument is the material's formula (kind "text", one per call), then the numeric ones (phase, compound_correction,
+/// z1, mass_u, then the row's own).  Energies lab MeV of the projectile; stopping in eV/(1e15 atoms/cm^2) per atom of
+/// the material; areal densities atoms/cm^2; straggling MeV.  Every use cites SRIM (StoppingCitation()).
+std::vector<PhysicsFunction> StoppingFunctions();
+std::string StoppingCitation();
+/// Row `name` for the material `formula`: one column per NUMERIC argument (the arguments after the formula), each of
+/// length n or 1; as EvaluatePhysics (status -2 where a layer is at least the range).  False with `why` for an unknown
+/// row, columns of unequal lengths or a formula stopping/ refuses.  Bit for bit pyazr.stopping.evaluate.
+bool EvaluateStopping(const std::string &name, const std::string &formula,
+                      const std::vector<std::vector<double>> &arguments, PhysicsValues &out, std::string &why);
+
 /// One series of a per-session answer: a field over the answer's axis, for one line (a channel, a pair of channels,
 /// a level).  `keys` label the line with numbers ("jgroup", "channel", "channel_out", "level", "l", "s", "J", "pi",
 /// "pair"); `label` is the same in words.
