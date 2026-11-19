@@ -138,7 +138,7 @@ struct Model {
   bool ok = true;
   int N() const { return (int)params.GetMinuitParams().Params().size(); }
   bool Fixed(int i) const { return params.GetMinuitParams().Parameter(i).IsFixed(); }
-  // The sampler's start, as AZURE2.cpp makes it: the varying parameters, amplitudes or observed values; with `at`,
+  // The sampler's start, as src/ProgramMain.cpp (runMCMC) makes it: the varying parameters, amplitudes or observed values; with `at`,
   // the same at the fit vector *at instead of the project's.
   std::vector<double> Start(bool useRWA, const vector_r *at = nullptr) const {
     vector_r all;

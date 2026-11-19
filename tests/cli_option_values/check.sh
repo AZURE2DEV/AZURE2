@@ -2,7 +2,7 @@
 #
 # A value-taking flag given without its value, or with a value that does not parse, is an error: "ERROR: ..." naming
 # the flag, the usage line, exit status 2, and nothing is run (include/CommandLineValues.h, parseOptions in
-# src/AZURE2.cpp).  Before, --max-calls N (without "=") was an unknown option with a warning and the fit ran without a
+# src/ProgramMain.cpp).  Before, --max-calls N (without "=") was an unknown option with a warning and the fit ran without a
 # limit, --max-calls=x a warning, --refreeze-covariance=x read as 0, --coulomb-table= an empty file name, and an empty
 # AZURE_REFINE_QUADRATURE no refinement.  Each case below, and that the good values are still accepted (the run then
 # stops only at the missing project file, exit 255).  The same AZURE_REFINE_QUADRATURE in pyazr raises ValueError

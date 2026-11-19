@@ -2,7 +2,7 @@
 #
 # AZURE2 --help lists exactly the flags the command line accepts.
 #
-# The help text and the parser (parseOptions and main in src/AZURE2.cpp) are
+# The help text (src/AZURE2.cpp) and the parser (parseOptions, src/ProgramMain.cpp) are
 # two lists kept by hand; they had drifted: --help printed
 # "--no-long-wavelenth" (the parser takes --no-long-wavelength) and left out
 # --covariance-band, --scale-covariance and --use-api.  Checked here, on the
@@ -34,6 +34,7 @@ RUN="$(guard_command "${TEST_TIMEOUT:-60}")"
 export OMP_NUM_THREADS=1
 SRC="$HERE/../../src/AZURE2.cpp"
 SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
+SRC_PROGRAM="$HERE/../../src/ProgramMain.cpp"  # parseOptions: the run of a command (main's and the front ends' facade)
 SRC_OPTIONS="$HERE/../../io/src/ConfigSection.cpp"  # the flags of the options of the calculation (their table)
 SRC_SWITCHES="$HERE/../../support/src/Environment.cpp"  # the options of the switches that move numbers (their table)
 SRC_FITTERS="$HERE/../../src/Fitters.cpp"  # the fitters' switches (the fitter table, with the fitters not built)
@@ -54,7 +55,7 @@ fi
 # A flag that takes a value prints as "--flag[=FILE]:".
 printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z0-9-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp, src/ProjectCommands.cpp and the option table.
-literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_OPTIONS" "$SRC_SWITCHES" "$SRC_FITTERS" "$SRC_RUN" | tr -d '\r' |
+literals="$(cat "$SRC" "$SRC_COMMANDS" "$SRC_PROGRAM" "$SRC_OPTIONS" "$SRC_SWITCHES" "$SRC_FITTERS" "$SRC_RUN" | tr -d '\r' |
   grep -o '"--[a-z][a-z0-9-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
 # and the switch options without a value: the "Option" column of the list "Environment switches".
@@ -107,7 +108,7 @@ for f in $(printf '%s\n%s\n' "$printed" "$literals" | sort -u); do
   elif [ "$acc" = yes ] && [ "$in_help" = no ]; then
     bad "$f is accepted but --help does not print it"
   elif [ "$in_src" = no ]; then
-    bad "$f is printed and accepted but is no literal of src/AZURE2.cpp or src/ProjectCommands.cpp (check this test)"
+    bad "$f is printed and accepted but is no literal of src/AZURE2.cpp, src/ProgramMain.cpp or src/ProjectCommands.cpp (check this test)"
   elif [ "$acc" = yes ]; then
     ok "$f: accepted and printed"
   else
@@ -120,7 +121,7 @@ for f in $printed; do
   grep -qxF -- "$f" <<< "$documented" || bad "$f is printed but not in the table of command_line.rst"
 done
 for f in $documented; do
-  grep -qxF -- "$f" <<< "$literals" || bad "command_line.rst documents $f, which src/AZURE2.cpp does not have"
+  grep -qxF -- "$f" <<< "$literals" || bad "command_line.rst documents $f, which src/AZURE2.cpp and src/ProgramMain.cpp do not have"
 done
 [ "$fail" -eq 0 ] && ok "command_line.rst documents the $(echo $printed | wc -w) printed flags and no other"
 

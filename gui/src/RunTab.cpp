@@ -140,16 +140,21 @@ void RunTab::commandChanged() {
     if (!applies || o.option == "--max-calls=") continue;  // the call limit is the Fitting Settings tab's
     const QString option = QString::fromStdString(o.option);
     const QString help = QString::fromStdString(o.help);
-    QString label = option;
-    label.remove('=');
+    QString name = option;
+    name.remove('=');
+    // the option's words ("--rate-entrance" -> "Rate entrance"); the option itself and its help in the tool tip
+    QString label = name.mid(2).replace('-', ' ');
+    label[0] = label[0].toUpper();
     QWidget *editor = nullptr;
     if (o.kind == "flag") {
-      QCheckBox *box = new QCheckBox(help.left(90));
+      QCheckBox *box = new QCheckBox;
       box->setChecked(kept_.value(option) == "1");
       editor = box;
     } else {
       QLineEdit *edit = new QLineEdit(kept_.value(option));
-      edit->setPlaceholderText(o.required ? tr("required") : tr("default %1").arg(o.defaultValue));
+      edit->setPlaceholderText(o.required ? tr("required")
+                               : o.kind == "file" ? tr("none")
+                                                  : tr("default %1").arg(o.defaultValue));
       if (o.kind == "file") {
         QWidget *host = new QWidget;
         QHBoxLayout *h = new QHBoxLayout(host);
@@ -167,9 +172,11 @@ void RunTab::commandChanged() {
         editor = edit;
       }
     }
-    editor->setObjectName("option_" + label.mid(2));
-    editor->setToolTip(help);
-    optionsForm_->addRow(label + ":", editor);
+    editor->setObjectName("option_" + name.mid(2));
+    editor->setToolTip(name + ": " + help);
+    QLabel *labelWidget = new QLabel(label + ":");
+    labelWidget->setToolTip(name + ": " + help);
+    optionsForm_->addRow(labelWidget, editor);
     editors_.insert(option, editor);
   }
   optionsBox_->setVisible(!editors_.isEmpty());

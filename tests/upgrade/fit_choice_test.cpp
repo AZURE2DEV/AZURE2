@@ -85,7 +85,7 @@ int main() {
   check("--covariance-band: no fitter switch", !ApplyFitterSwitch(configure, "--covariance-band"));
   check("--covariance-band: the choice unchanged", configure.fitter == before);
 
-  // The THM rule (src/AZURE2.cpp): migrad-gradient under the same precedence.
+  // The THM rule (RunProgram, src/ProgramMain.cpp): migrad-gradient under the same precedence.
   if (FitterNamed("migrad-gradient")) {
     configure.Reset();
     ChooseFitter(configure, "migrad-gradient");

@@ -36,7 +36,12 @@ mcmc command and its options are in Calculate), EXFOR import, the Coulomb-table 
 392 of 393 (`rmfit_enginepin` fails, as on the base: HANDOFF 2026-11-17); `api_front` passes (T1 and 13N: calculate
 through the facade = `AZURE2 calculate`, 9 and 8 files identical; a stopped fit). GUI build `work/b-u6-qt-gui`
 (`-DQT_FORCE_MIN_CMAKE_VERSION_FOR_USING_QT=3.20`, `GUI_LINK_OPTIONS` for conda's libstdc++): 0 warnings in `gui/`;
-`ctest -L gui` 1 of 1 (`gui_window`); screenshots in `work/qt-shots/`.
+`ctest -L gui` 1 of 1 (`gui_window`); screenshots in `work/qt-shots/`. `tests/run_tests.sh` on the snapshot: 184 of
+185; `cli_help` failed because it read parseOptions in `src/AZURE2.cpp` (fixed: it reads `src/ProgramMain.cpp` too,
+then PASS on the same binary). The program against the base build `work/b-join3` (`work/u6-qt-cmp.sh`: calculate and
+extrapolate of T1, T2, T3, 13N, Brune and `--no-brune`, one thread): every output file identical (180 files), the
+exit codes the same, run.log different only in the timing of the progress bars.  Not run: `ctest -L slow`, the
+sanitizers, Windows, macOS, sphinx by hand (the ctest `docs_build` passed in the snapshot).
 
 **Open**: CI has no Qt job (the PI's decision; a job needs Qt 6 Widgets and Network, CMake >= 3.22 or the force
 switch, `-DBUILD_GUI=ON`, `QT_QPA_PLATFORM=offscreen`, `ctest -L gui`). The GUI's tabs of records are forms of the
