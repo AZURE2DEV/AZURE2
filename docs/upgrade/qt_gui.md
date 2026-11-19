@@ -531,6 +531,9 @@ the fit stand?".  It reads; it never edits the project and never runs the engine
   It sets up a session: up to seconds for a project with external capture.  The page runs it in a worker thread
   (`QThread::create`), not while a run is in progress, the newest request only.
 - `double ChiSquaredPerDegreeOfFreedom(const RunSummary &, const RunParameters &)`: chi^2/(N - p), NaN when N <= p.
+- `std::vector<InputFile> InputFiles(const Project &)`: the files the active records read (a data set's data and
+  covariance files, an extrapolation's grid file), resolved as the engine opens them; `ReadLastRun` names the
+  records whose file is newer than the run (`changedInputs`, stale too; `projectNewer` for the project file).
 
 **Which command made the files.**  The program does not write its command into the output directory, and the
 facade's run must keep writing the program's files byte for byte (`api_front` (d)).  The rule, from the order in
@@ -559,3 +562,52 @@ exists).
 one row per data set with the chi^2 of the run's `RunResult`; an edit and a save: the stale mark appears; a project
 with no outputs: "No run yet" and the two buttons.  `api_front`: `OverviewChecks` (a calculation and a fit run in the
 test, and the program's own files of a run of `AZURE2`).
+
+## 16. Changes on disk: the window follows its files (U8, agent overview, 2026-11-20)
+
+The PI (2026-11-20, passed on by the director): "I just want the GUI to auto update if something in the files
+changes."  A project is edited by more than this window: a text editor, pyazr, a script, the command line's runs.
+The window follows its files; it never overwrites either side without a click.
+
+**What is watched** (`ProjectWatcher`, `gui/src/ProjectWatcher.cpp`, a `QFileSystemWatcher`): the project file and its
+directory, the input files of the active records (the facade's `InputFiles`), the parameter file of the last run
+started (`--parameter-file=`), the output directory and in it the files the window shows: `chiSquared.out`,
+`fitStatus.out`, `AZUREOut_*`, `param.sav`, `samples.mcmc`.  A file written to a temporary name and renamed (as
+`Project::Save` and pyazr write) loses its watch: every path is added again after each report.  A change is reported
+once every watched file has kept its size and time for a quiet time (0.4 s), so a file being written is never read
+half-way; an output file the facade still cannot match (a block count against `chiSquared.out`) only gives a note,
+never an error, and is read again at the next change.
+
+**The project file** is compared by content (SHA-1), not by time: bytes equal to the window's own text (its own save,
+detected at the notification, before another edit can come) or to the bytes last seen are no change.  A real change:
+- no unsaved edit in the window: the project is read again at once; the tab shown and the record selected in each
+  records panel are kept where the record still exists; the status bar says "Project reloaded: changed on disk";
+- unsaved edits: neither side is overwritten.  A bar under the tool bar, not modal: "The project changed on disk,
+  and this window has unsaved changes", with **Reload (discard mine)**, **Keep mine** (the bytes on disk are taken as
+  seen: not asked again until they change again; the next Save writes the window's version) and **Show differences**
+  (a plain line diff, `ProjectWatcher::lineDiff`, of the disk's text against the window's, in a dialog that is not
+  modal either).
+
+**Outputs** of a run outside the window: the Overview, the Plot tab (its check boxes kept, and its zoom when the user
+had zoomed: the view is restored after the new curves are read) and the Calculate tab's list of data set names read
+again; the status bar says so.  While the window's own run is in progress nothing is reported (its files are being
+written); its end refreshes the window as before, and the watcher takes the outputs as they then stand as seen.
+**A data file** rewritten: the Overview's stale mark names the data set (`changedInputs`) and its step links to the
+record; the plot reads its files again (the data drawn are the last run's copy until the next run).
+
+**View > Follow Changes on Disk**: on by default, kept in `QSettings` (`view/followDisk`); off, nothing is watched.
+
+**Hooks**: the same block of `AZURESetup.cpp` as the Overview's (the watcher follows the project on open, edit and
+save; the run's start and end).  `ProjectHolder` is not changed.
+
+**Not done**: the Levels tab's selected level and the scroll positions of tables are not restored after a reload (the
+records panels' selections are); the Calculate tab's chi^2 summary is that of the window's last run (the Overview
+shows an outside run's); a change of a file the records name but the engine's build does not list (a stopping table, a
+beam profile file) is not watched.
+
+**Tests** (`tests/gui/gui_overview_test.cpp`, part (f)): the window's own Save causes no reload; the project edited
+outside with no unsaved edit is re-read (the Segments tab still shown, the new norm in its table, no click); with
+unsaved edits the bar appears, the window keeps its value and the disk its own, Show differences lists both lines,
+Keep mine hides the bar and changes nothing, a Save then writes the window's version without a reload; a run of the
+program outside changes the Overview's chi^2 without a click; a data file rewritten makes the stale mark name its data
+set; following off, an outside edit is not read and the choice is kept.
