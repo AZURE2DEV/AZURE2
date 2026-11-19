@@ -113,7 +113,13 @@ int LevelRow(LevelsTab *t, double j, int pi, double e) {
   return -1;
 }
 
-/// Open the editor of a cell of a view with F2, type `text` and press Enter.
+/// The key that opens a cell's editor: F2, and Return on macOS (QAbstractItemView::EditKeyPressed is the platform's).
+#ifdef Q_OS_MACOS
+const Qt::Key kEditKey = Qt::Key_Return;
+#else
+const Qt::Key kEditKey = Qt::Key_F2;
+#endif
+
 /// The window active again (a message box takes the activation and offscreen does not give it back) and `w` focused.
 void Focus(QWidget *w) {
   w->window()->activateWindow();
@@ -121,10 +127,11 @@ void Focus(QWidget *w) {
   w->setFocus();
 }
 
+/// Open the editor of a cell of a view with the edit key, type `text` and press Enter.
 void EditCell(QTableView *view, const QModelIndex &index, const QString &text) {
   Focus(view);
   view->setCurrentIndex(index);
-  QTest::keyClick(view, Qt::Key_F2);
+  QTest::keyClick(view, kEditKey);
   Spin(20);
   QWidget *editor = QApplication::focusWidget();
   if (!qobject_cast<QLineEdit *>(editor))
@@ -231,7 +238,7 @@ int main(int argc, char **argv) {
     // J^pi in place: the editor's spin box and parity toggle, Enter
     levelsView->setFocus();
     levelsView->setCurrentIndex(levels->getLevelsProxy()->mapFromSource(lm->index(row, 2)));
-    QTest::keyClick(levelsView, Qt::Key_F2);
+    QTest::keyClick(levelsView, kEditKey);
     Spin(20);
     HalfSpinBox *j = levelsView->viewport()->findChild<HalfSpinBox *>();
     ParityToggle *pi = levelsView->viewport()->findChild<ParityToggle *>();

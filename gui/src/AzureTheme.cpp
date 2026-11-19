@@ -120,8 +120,9 @@ void Apply(QApplication &app, ThemeChoice choice) {
   if (QStyle *fusion = QStyleFactory::create("Fusion")) app.setStyle(fusion);
   app.setPalette(azurePalette(dark));
   const Colours &c = dark ? kDark : kLight;
-  app.setStyleSheet((QString(kStyleSheet) + (dark ? QString() : QString(kWatermark)))
-                        .replace("%PLACEHOLDER%", c.placeholder)
+  // A named QString: with Qt 6.4 the sum is a const temporary, which replace() cannot take.
+  QString sheet = QString(kStyleSheet) + (dark ? QString() : QString(kWatermark));
+  app.setStyleSheet(sheet.replace("%PLACEHOLDER%", c.placeholder)
                         .replace("%TIPBASE%", c.toolTipBase)
                         .replace("%TIPTEXT%", c.toolTipText)
                         .replace("%INDICATOR%", c.indicator)
