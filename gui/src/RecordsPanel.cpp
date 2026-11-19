@@ -445,7 +445,9 @@ void RecordsPanel::clearForm() {
     if (QWidget *w = item->widget()) delete w;
     delete item;
   }
-  kindLabel_->clear();
+  kindLabel_->setText(model_->rowCount() ? tr("Choose a record in the table.")
+                                         : tr("No record yet: Add... (Ins) makes one, its required fields filled with the "
+                                              "project's first choices."));
   usedBy_->clear();
   usedBy_->setVisible(false);
   assignButton_->setVisible(false);

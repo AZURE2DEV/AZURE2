@@ -549,7 +549,7 @@ class FormEditor : public PieceEditor {
     alternative_ = new QComboBox;
     alternative_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     for (const front::AlternativeInfo &a : info.alternatives)
-      alternative_->addItem(a.keyword.empty() ? tr("(plain)") : Q(a.keyword), Q(a.keyword));
+      alternative_->addItem(a.keyword.empty() ? Q(a.doc) : Q(a.keyword), Q(a.keyword));  // an unkeyed one by its doc
     for (int i = 0; i < alternative_->count(); i++) alternative_->setItemData(i, Q(info.alternatives[i].doc), Qt::ToolTipRole);
     doc_ = new QLabel;
     doc_->setWordWrap(true);

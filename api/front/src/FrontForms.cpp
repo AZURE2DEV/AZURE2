@@ -366,6 +366,16 @@ std::string Short(const ValueParts &p) {
       return p.gridKind + (p.text.empty() ? "" : " " + p.text);
     case ex::ValueType::Path:
       return p.text;
+    case ex::ValueType::NumberList: {
+      std::string s;
+      for (const std::string &n : p.numbers) s += (s.empty() ? "" : " ") + n;
+      return s;
+    }
+    case ex::ValueType::Composition: {
+      std::string s;
+      for (const auto &c : p.composition) s += (s.empty() ? "" : " ") + c.first + " " + c.second;
+      return s;
+    }
     default:
       return p.text;
   }

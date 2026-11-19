@@ -23,6 +23,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -426,11 +427,13 @@ int main(int argc, char **argv) {
       w.grab().save(shots + "/" + file);
     };
     grab(w.getSegmentsTab()->records("data"), "s02_diff090", "segments_data.png", {});
-    grab(w.getSegmentsTab()->records("extrapolations"), w.getSegmentsTab()->records("extrapolations")->recordNames().value(0),
-         "segments_extrapolations.png", {});
+
     grab(PanelOf(w, "targets", "tgt_s05_implanted"), "tgt_s05_implanted", "effects_target.png", {});
     grab(PanelOf(w, "targets", "beam_s07_profile"), "beam_s07_profile", "effects_beam_profile.png", {});
     grab(PanelOf(w, "targets", "det_s07_profile"), "det_s07_profile", "effects_detector.png", {});
+    w.readProjectFile(QString::fromStdString(t1.string()), why);
+    grab(w.getSegmentsTab()->records("extrapolations"), w.getSegmentsTab()->records("extrapolations")->recordNames().value(0),
+         "segments_extrapolations.png", {});
     Check(QFileInfo::exists(shots + "/effects_target.png") && QFileInfo::exists(shots + "/segments_data.png"),
           "screenshots in " + S(shots));
   }

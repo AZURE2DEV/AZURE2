@@ -197,6 +197,7 @@ void FormsChecks(const fs::path &source) {
     const bool modeRefused = !front::ParseFieldValue("target", "areal_density", "2e17 atoms/cm2", "", b, why);
     Check(modeRefused, "a nuisance without its mode refused: " + why);
     Check(front::ShortValueText("dataset", "norm", "1 fit prior 1 5%") == "1 (fit)", "the short text of a fitted norm");
+    Check(front::ShortValueText("detector", "attenuation", "1 0.995  0.98") == "1 0.995 0.98", "the short text of a number list");
     // the beam profile's preview: the kernel's weight; a skewed Gaussian of alpha > 0 peaks above xi, and its
     // integral is the component's weight (the curve spans xi +- 5 omega)
     front::Record beam;
