@@ -3,6 +3,7 @@
 // main calls it with standard output; a front end in its own process (azure2::front::Run, api/front/) with its own
 // stream, so that the two run the same code and write the same files.
 #include "ProgramMain.h"
+#include "ProgramObserver.h"
 
 #include "AZUREMain.h"
 #include "CommandLineValues.h"
@@ -240,6 +241,8 @@ static int runMCMC(Config &configure, const RunRequest &request) {
       // A front end's stop request (ProgramObserver::stop) ends the run after this step; the command line has none.
       if (step == lastPrintedStep) return configure.StopRequested();
       lastPrintedStep = step;
+      if (configure.observer && configure.observer->samplerStep)
+        configure.observer->samplerStep(step, total, logprob, loglik, logprior);
       PrintMcmcProgress(configure.outStream, mcmcStart, step, total, logprob, loglik, logprior);
       return configure.StopRequested();
     };

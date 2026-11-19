@@ -9,9 +9,11 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QFileInfo>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QTabWidget>
 #include <QToolButton>
@@ -25,7 +27,11 @@
 #include "PairsTab.h"
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
+#include "MCMCTab.h"
+#include "PlotTab.h"
+#include "PythonTools.h"
 #include "RunTab.h"
+#include "ThmTab.h"
 
 AZURESetup::AZURESetup() {
   qRegisterMetaType<RunOutcome>("RunOutcome");
@@ -87,11 +93,32 @@ AZURESetup::AZURESetup() {
   segmentsTab = new SectionsTab(holder_, SegmentsParts());
   effectsTab = new SectionsTab(holder_, EffectsParts());
   potentialTab = new SectionsTab(holder_, PotentialParts());
-  thmTab = new SectionsTab(holder_, ThmParts());
+  thmTab = new ThmTab(holder_);
   fittingTab = new FittingTab(holder_);
   runTab = new RunTab;
+  plotTab = new PlotTab(holder_);
   connect(runTab, &RunTab::runRequested, this, &AZURESetup::SaveAndRun);
+  connect(fittingTab, &FittingTab::startFileChosen, this,
+          [this](const QString &file) { runTab->presetOption("--parameter-file=", file); });
+  connect(fittingTab, &FittingTab::parametersRequested, this, [this]() {
+    QString why;
+    if (running_) why = tr("a run is in progress");
+    else if (writeProjectFile(holder_->path(), why)) fittingTab->readParameters(holder_->path(), why);
+    if (!why.isEmpty()) QMessageBox::warning(this, tr("Parameters"), why);
+  });
   connect(runTab, &RunTab::stopRequested, this, &AZURESetup::stopRun);
+  // the rate's pair drop-downs follow the Pairs tab (key = place in the list, as <levels> numbers the pairs)
+  auto pairsToRun = [this]() {
+    QList<QPair<int, QString>> pairs;
+    const QList<PairsData> list = pairsTab->getPairsModel()->getPairs();
+    for (int i = 0; i < list.size(); i++)
+      pairs << qMakePair(i + 1, QString(pairsTab->getPairsModel()->getPairLabel(list[i])).remove(QRegularExpression("<[^>]*>")));
+    runTab->setPairs(pairs);
+  };
+  for (auto signal : {&QAbstractItemModel::rowsInserted, &QAbstractItemModel::rowsRemoved})
+    connect(pairsTab->getPairsModel(), signal, this, pairsToRun);
+  connect(pairsTab->getPairsModel(), &QAbstractItemModel::dataChanged, this, pairsToRun);
+  connect(pairsTab->getPairsModel(), &QAbstractItemModel::modelReset, this, pairsToRun);
 
   tabWidget->addTab(pairsTab, tr("&Particle Pairs"));
   tabWidget->addTab(levelsTab, tr("&Levels and Channels"));
@@ -101,6 +128,24 @@ AZURESetup::AZURESetup() {
   tabWidget->addTab(thmTab, tr("&THM"));
   tabWidget->addTab(fittingTab, tr("&Fitting Settings"));
   tabWidget->addTab(runTab, tr("&Calculate"));
+  // The MCMC tab only where the engine has the command (front::HasCommand): a sampler removed from the engine takes
+  // the tab with it, without a change here.
+  if (azure2::front::HasCommand("mcmc")) {
+    mcmcTab = new MCMCTab(holder_);
+    tabWidget->addTab(mcmcTab, tr("&MCMC"));
+    connect(mcmcTab, &MCMCTab::parametersRequested, this, [this]() {
+      QString why;
+      if (running_) why = tr("a run is in progress");
+      else if (writeProjectFile(holder_->path(), why)) mcmcTab->readParameters(holder_->path(), why);
+      if (!why.isEmpty()) QMessageBox::warning(this, tr("Parameters"), why);
+    });
+    connect(mcmcTab, &MCMCTab::runRequested, this, [this]() {
+      QString why;
+      if (!startMCMC(why)) QMessageBox::warning(this, tr("Not run"), why);
+    });
+    connect(mcmcTab, &MCMCTab::stopRequested, this, &AZURESetup::stopRun);
+  }
+  tabWidget->addTab(plotTab, tr("Pl&ot"));
   setCentralWidget(tabWidget);
 
   diagnostics = new DiagnosticsPanel(holder_);
@@ -119,6 +164,10 @@ AZURESetup::AZURESetup() {
   connect(this, &AZURESetup::startWorker, worker_, &RunWorker::run, Qt::QueuedConnection);
   connect(worker_, &RunWorker::message, runTab, &RunTab::appendLine, Qt::QueuedConnection);
   connect(worker_, &RunWorker::progress, runTab, &RunTab::showProgress, Qt::QueuedConnection);
+  if (mcmcTab) {
+    connect(worker_, &RunWorker::progress, mcmcTab, &MCMCTab::showProgress, Qt::QueuedConnection);
+    connect(worker_, &RunWorker::message, mcmcTab, &MCMCTab::appendLine, Qt::QueuedConnection);
+  }
   connect(worker_, &RunWorker::finished, this, &AZURESetup::runEnded, Qt::QueuedConnection);
   runThread_.start();
 
@@ -128,6 +177,9 @@ AZURESetup::AZURESetup() {
     updateLogo();
   });
 
+  tools_ = new PythonTools(this);
+  connect(tools_, &PythonTools::line, runTab, &RunTab::appendLine);
+  connect(tools_, &PythonTools::webPageReady, this, [](const QString &url) { QDesktopServices::openUrl(QUrl(url)); });
   createActions();
   createMenus();
   projectOpened();
@@ -186,6 +238,11 @@ void AZURESetup::createMenus() {
   configMenu->addSeparator();
   configMenu->addAction(tr("&Validate Project"), QKeySequence(Qt::Key_F7), this, &AZURESetup::validate);
   configMenu->addAction(diagnosticsDock->toggleViewAction());
+
+  // Tools: pyazr's commands as child processes (PythonTools.h), filled when the menu opens (pyazr importable or not)
+  QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
+  toolsMenu->setObjectName("toolsMenu");
+  connect(toolsMenu, &QMenu::aboutToShow, this, [this, toolsMenu]() { tools_->fillMenu(toolsMenu, holder_->path()); });
 
   QMenu *helpMenu = menuBar()->addMenu(tr("&Documentation"));
   helpMenu->addAction(tr("Show Documentation For Current Tab"), QKeySequence(Qt::CTRL | Qt::Key_D), this,
@@ -258,7 +315,12 @@ void AZURESetup::editChecks() {
 
 void AZURESetup::editDirs() {
   ConfigDialog dialog(holder_, tr("Directories"), {"Directories"}, {}, this);
-  dialog.exec();
+  QLineEdit *python = new QLineEdit(PythonTools::interpreter());
+  python->setObjectName("pythonInterpreter");
+  python->setToolTip(tr("The Python interpreter of the Tools menu (python -m pyazr ...): a setting of this computer, "
+                        "not of the project."));
+  dialog.addMachineRow(tr("Python interpreter (Tools):"), python);
+  if (dialog.exec() == QDialog::Accepted) PythonTools::setInterpreter(python->text());
 }
 
 void AZURESetup::editOptions() {
@@ -274,7 +336,11 @@ void AZURESetup::validate() {
 }
 
 void AZURESetup::showRecord(const QString &section, const QString &record) {
-  for (SectionsTab *tab : {segmentsTab, effectsTab, potentialTab, thmTab})
+  if (section == "thm") {
+    tabWidget->setCurrentWidget(thmTab);
+    return;
+  }
+  for (SectionsTab *tab : {segmentsTab, effectsTab, potentialTab})
     if (tab->show(section, record)) {
       tabWidget->setCurrentWidget(tab);
       return;

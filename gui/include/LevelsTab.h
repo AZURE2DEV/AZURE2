@@ -73,6 +73,8 @@ class LevelsTab : public QWidget {
   };
   EngineNumbering engineNumbering(const QList<int> &order);
   void reset();
+  /// Select level `row` (of the levels model) and remove it as the Remove button does (the tests).
+  void removeLevelAt(int row);
   LevelsModel *getLevelsModel() { return levelsModel; }
   /*! Hard-sphere scattering in every J^pi up to the maximum orbital momentum, levels or not
    *  (includeAllJPi in the .azr <config> block). On for a new project, off for a file that lacks the key. */

@@ -170,12 +170,15 @@ because the engine also searches the whole file for them.
 - [ ] File > New Project (Ctrl+N): resets every tab, A-matrix, THM off (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): File › New project from this one… (a new file with the pairs and
       levels, no data; POST /api/project/new); an empty project is `pyazr ui new.azr`.*
+      *Qt (2026-11-19): verified (`gui_window`): an empty project untitled.azr, no records, no levels*
 - [ ] File > Open... (Ctrl+O); a read error resets and shows "Can't Access File" (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): File › Open… (a .azr of the folder, POST /api/project/open); a
       refusal is shown in the dialog. No Ctrl+O (the browser's).*
 
       *Qt (2026-11-18): verified: an old file is refused with the converter's command (and offered to the converter in the dialog path, not tested)*
+      *Qt (2026-11-19): File > Convert an Old Project verified through its dialogs (the old 13N chosen, the new name typed, the report): the converted file opens and validates clean*
 - [ ] File > Open Recent: five most recent files, stored in QSettings, plus Clear (`AZURESetup.cpp`)
+      *Qt (2026-11-19): verified: the item of a saved T1 copy opens it*
 - [ ] File > Save (Ctrl+S; Save As when untitled), Save As... (Shift+Ctrl+S), Quit (Ctrl+Q) (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): File › Save (Ctrl+S) and Save as… (a file of the folder); Quit is
       closing the browser tab and Ctrl-C on the server.*
@@ -201,15 +204,19 @@ because the engine also searches the whole file for them.
       (`AZURESetup.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): the Configure menu's Run settings… opens the run settings
       (formalism, checks, directories, runtime options) of the Project tab.*
+      *Qt (2026-11-19): verified: R-Matrix writes the first <config> line false, A-Matrix true again; choosing the route that stands writes nothing (ProjectHolder::setConfig skips an unchanged value)*
 - [ ] Checks...: eight drop-downs None / Screen / File: Compound Nucleus, Boundary Conditions, Data, L-Matrix/Phases/
       Penetrabilities, Legendre Polynomials, Coulomb Amplitudes, Reaction Pathways, Angular Distributions
       (`EditChecksDialog.cpp`)
+      *Qt (2026-11-19): verified: the first check changed and written by the engine's edit; dialogs drawn from the engine's <config> table, so no control for what the engine no longer has*
 - [ ] Directories...: Output Directory and Checks Directory with Choose... (`EditDirsDialog.cpp`)
+      *Qt (2026-11-19): verified: output_dir written; the Python interpreter of the Tools menu is a row of this dialog (a computer setting, QSettings)*
 - [ ] Runtime Options...: Use GSL Coulomb functions; Use Brune formalism; Use Park parametrization (implies Brune);
       Ignore external width if internal width is zeroed (switches to A-matrix with a message); Use RMC capture
       formalism (neutron capture only); Do not perform parameter transformations; Use Hybrid Coulomb method (shows
       the Nuclear Potential tab); Use adaptive integration grid for target effects; Use Trojan Horse Method
       (`EditOptionsDialog.cpp`, `AZURESetup.cpp`)
+      *Qt (2026-11-19): verified: the first option (amatrix) written; no GSL Coulomb control (the engine has no such option)*
 - [ ] Runtime Options > Kinematics box: Relativistic kinematics, noted as saved in the project (`EditOptionsDialog.cpp`)
 - [ ] Runtime Options > Prior Parameter Covariance: file field + Choose..., relative to the project directory
       (`EditOptionsDialog.cpp`)
@@ -231,6 +238,7 @@ because the engine also searches the whole file for them.
 - [ ] `+` opens Add a Particle Pair; `-` deletes the selected pair; double-click edits (`PairsTab.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): Add pair and Remove pair at the table, the selected pair's numbers
       beside it.*
+      *Qt (2026-11-19): verified (`gui_window`, T1): a pair added and removed (the tab's slots; the dialog not driven)*
 - [ ] Pair dialog fields: Particle Pair Type (Particle, Particle / Particle, Gamma / Beta Decay); light and heavy J
       (validated), parity (- / +), Z, M (atomic mass, u); Heavy Excitation [MeV]; Light Excitation [MeV] (particle
       pairs only); Separation Energy [MeV]; Channel Radius [fm] (`AddPairDialog.cpp`)
@@ -268,6 +276,7 @@ because the engine also searches the whole file for them.
 - [ ] `+` Add a Level, `-` delete, double-click Edit a Level (`LevelsTab.cpp`)
       *Web page (2026-11-19, `web_navigation.md`): Add level and Remove level at the table (Remove level new: the page
       had no control), the selected level and its channels beside it.*
+      *Qt (2026-11-19): verified (T1): two levels added with their channels, one moved from 6 to 6.5 MeV, the other removed with its channels; saved, reopened, valid*
 - [ ] Level dialog: Compound Nucleus (several nuclei; fixed on edit), Excitation Energy [MeV], Spin-Parity
       (J^π) list of only the J^π that give channels; Accept disabled until the energy is a number
       (`AddLevelDialog.cpp`)
@@ -312,6 +321,7 @@ because the engine also searches the whole file for them.
       *Qt (2026-11-18): model data are the Model Data sub-tab of Segments (records of <modelData>)*
 - [ ] Buttons: `+`, `-`, up, down, Check All, Uncheck All, EXFOR; Filter by entrance and exit pair
       (`SegmentsTab.cpp`)
+      *Qt (2026-11-19): records of <data>, <extrapolations>, <targets>: verified (T2) Duplicate, rename (the form's name), Add (a new record with '?' placeholders) and Remove in each list; saved, reopened, valid.  A data set from a new data file is a new record whose `file` field names it (the form's file chooser): not tested beyond the duplicate*
 - [x] Moving or deleting a line renumbers what names segments: effect segment lists (line dropped when empty), THM
       `segments=` and `weight[k]`, `segment_N_*` settings and prior centres (`SegmentsTab.cpp`, `AZURESetup.cpp`)
       *Dropped (the PI, 2026-11-13): no renumbering: records are named.*
@@ -353,6 +363,7 @@ because the engine also searches the whole file for them.
       (`AddSegTestDialog.cpp`)
 
 ### 6.3 EXFOR import
+      *Qt (2026-11-19): Tools > Import an EXFOR Data Set... runs `python -m pyazr import exfor ID` (output in the log pane); not tested (network)*
 
 - [ ] Retrieve Experimental Data from EXFOR: entrance/exit pair, Target, Reaction (filled from the pairs, `EL` for
       elastic), Quantity (`SIG`, `DA`, editable), Search EXFOR (network, `nds.iaea.org/exfor/x4list`)
@@ -406,18 +417,23 @@ because the engine also searches the whole file for them.
 
 - [ ] Sub-tabs: Level Parameters, Abundances, Normalization, Energy Shifts, Screening, Target Densities, Doppler
       Temperatures, Sample Thicknesses, THM Coherent Background (THM on) (`FittingTab.cpp`, `FittingTabThm.cpp`)
+      *Qt (2026-11-19): one table, Parameters, of every parameter of a session of the project (`front::ReadParameters`, all kinds in the vector's order), beside the text view of `<parameterSettings>`; verified (`gui_window`): T1_start 48 rows*
 - [ ] Columns: Parameter, Value, Lower Limit, Upper Limit, Error, Fit Error (read-only), Use as Nuisance; Prior
       Centre on Normalization and Energy Shifts (`FittingTab.cpp`)
+      *Qt (2026-11-19): columns Name, Kind, Start (fit units), Fixed, Lower and Upper Limit, Prior (nuisance), Prior Centre, Prior Sigma, Fitted, Fit Error; verified: limits of energy_1 written as its `<parameterSettings>` row (`front::SetParameterSetting`), the project valid; emptied, the row is removed; the fit's values of param.sav beside the start*
 - [ ] Only free parameters are listed; names `Level N Energy (MeV)`, `Level N Channel M Width (eV|MeV^(1/2))`,
       `segment_N_norm`, `segment_N_energy_shift`, abundance, `screening_n`, `density_n`, `doppler_n`,
       `segment_<key>_thickness` (`FittingTab.cpp`)
+      *Qt (2026-11-19): every parameter, fixed ones marked, under the names of param.sav*
 - [ ] Level numbering follows the engine (active levels, J-group order) (`FittingTab.cpp`, `LevelsTab.cpp`)
 - [ ] Group members shown greyed, not editable, "tied to segment k (<keyword> <label>)" (`FittingTab.cpp`)
 - [ ] Edits go back to the source tab: value, error and vary flag of norms, shifts, abundances, screening,
       density (whole group), Doppler T, thickness, coherent background; non-numbers refused (`FittingTab.cpp`)
+      *Qt (2026-11-19): not ported: fixed/free and values are edited where they are written (Levels tab, the records' forms); the table edits limits and priors only*
 - [ ] Refresh from Current; Clear Limits (all limits to 0, count reported) (`FittingTab.cpp`)
 - [ ] Load from .sav file: backs up the `.azr` as `.azr.bk`, converts amplitudes to physical values against the
       current GUI state, NaN set to 0 with a warning, verification report (`FittingTab.cpp`, `AZURESetup.cpp`)
+      *Qt (2026-11-19): replaced by "Take the Fitted Values as the New Start": param.sav copied to `<project>.start.sav` and passed to the next run as `--parameter-file=` (the engine's mechanism; the project is not rewritten); verified: a calculate from it = `AZURE2 calculate --parameter-file=` byte for byte (11 of 11 files)*
 
 ## 10. Calculate tab
 
@@ -429,13 +445,17 @@ because the engine also searches the whole file for them.
       COBYLA, BOBYQA, NEWUOA, PRAXIS, Nelder-Mead (NLopt builds); MINOS forces Minuit2 (`RunTab.cpp`)
       *Qt (2026-11-18): the engine's fitters (front::Fitters) in the Fitting Settings tab; a call limit verified*
 - [ ] Chi-Sq Variance (MINOS only, default 1.0) (`RunTab.cpp`)
+      *Qt (2026-11-19): verified: minos --delta-chi2=1 from the window = AZURE2 minos, 10 of 10 files (identical_pp_res)*
 - [ ] Uncertainty (band) for fit, extrapolation and MINOS; Scale covariance (fit/MINOS with band); Set Wigner
       limits (`RunTab.cpp`)
+      *Qt (2026-11-19): verified: fit --covariance-band --scale-covariance (identical_pp_res, 10 of 10 files) and extrapolate --covariance-band (T1, 8 of 8) = the program's; the Plot tab shows the band of every data set (5 of 5)*
 - [ ] Parameters File: Create New / Use: <file> with Choose... (`RunTab.cpp`)
+      *Qt (2026-11-19): `--parameter-file` in the options (a file chooser); set by Fitting Settings' "Take the Fitted Values as the New Start"; verified*
 - [x] External Capture Integrals File: Create New / Use: <file> (hidden for rates) (`RunTab.cpp`)
       *Dropped (the PI, 2026-11-13): the session caches intEC.dat by its signature.*
 - [ ] Reaction Rate Parameters: Entrance Pair, Exit Pair (drop-downs), Minimum / Maximum Temperature (GK),
       Temperature Step (GK), or Use Temperature File (`RunTab.cpp`)
+      *Qt (2026-11-19): verified: entrance and exit pair as drop-downs of the project's pairs (exit also -1, total capture); rate from the window = AZURE2 rate, 4 of 4 files (reaction_rate p12C, temperature range); temperature file not tested*
 - [ ] Save and Run (Alt+R) saves first, then validates: no active segments; total capture without capture pair;
       undefined pair key; elastic rate; missing output/checks directory; missing parameter, integrals or temperature
       file; angular-distribution coefficients with convolution or target integration (`AZURESetup.cpp`)
@@ -453,45 +473,62 @@ because the engine also searches the whole file for them.
 ## 11. MCMC tab (MCMC builds)
 
 - [ ] Sub-tabs Parameters, Sampling Settings, Results; four "?" help buttons (`MCMCTab.cpp`)
+      *Qt (2026-11-19): the MCMC tab, shown only when the engine's commands include mcmc (`front::HasCommand`): Parameters and Sampling Settings; no Results page*
 - [ ] Parameters table: Parameter, Current Value, Prior Mean, Prior Std, Use Gaussian Prior, Category
       (`MCMCTab.cpp`)
+      *Qt (2026-11-19): present: the free parameters of a session merged with `<mcmc>` `<parameters>` rows (`front::SamplerPriors`/`SetSamplerPriors`, the sampler reader's grammar; rows written and read back in `api_front`); no Category column*
 - [ ] Load Physical Parameters; Load RWA Parameters (reads `output/param.par` by name) (`MCMCTab.cpp`)
 - [ ] Automatic priors for norms, energy shifts, sqrt(E) shifts, abundances, with prior centres honoured
       (`MCMCTab.cpp`)
 - [ ] Number of Walkers 2-1000 (50), Number of Steps 100-10⁶ (10000), Initial Chain Spread 0.001-50 % (5 %),
       Level Energy Spread 0.001-1 keV, Number of Threads 1-N (min(4, N)) (`MCMCTab.cpp`)
+      *Qt (2026-11-19): present from the engine's option table, with Sampled Parameters (rwa/physical) and Fresh start (--overwrite-samples)*
 - [ ] Run MCMC Sampling (saves, validates as Calculate), Stop Sampling, Fresh Start (deletes
       `output/samples.mcmc`), Use Reduced Widths (`MCMCTab.cpp`, `AZURESetup.cpp`, `AZUREMCMCThread.cpp`)
+      *Qt (2026-11-19): verified: Run from the tab (13N_fast, 4 walkers, 100 steps, rwa) = AZURE2 mcmc, 7 of 7 files; Stop sets the run's stop request (not tested for mcmc)*
 - [ ] Progress bar, status, current iteration, log probability, log likelihood, log prior; Sampling Log
       (`MCMCTab.cpp`)
+      *Qt (2026-11-19): verified: the sampler's steps through the facade's observer (stage mcmc, `ProgramObserver::samplerStep`): the bar reached step 100 of 100; the acceptance fraction shown as the program prints it*
 - [ ] Results: Statistics (Mean, Std Dev, 2.5 %, 50 %, 97.5 %), Chain Data, Refresh Results from File, warning
       row when stopped early (`MCMCTab.cpp`)
+      *Qt (2026-11-19): not ported (samples.mcmc is read by pyazr; burn-in is the reader's)*
 
-## 12. Plot tab (Qwt builds)
+## 12. Plot tab (Qwt builds; the Qt program of 2026-11-19 draws it with QPainter in every build)
 
 - [ ] Segment lists From Data and Without Data, each filtered by In and Out pair; multi-select; Draw, Clear
       (`PlotTab.cpp`)
+      *Qt (2026-11-19): verified (`gui_window`): the Plot tab lists the data sets and extrapolations of the last run (`front::ReadCurves`); several selected are overlaid with a legend; no In/Out filter, no Draw/Clear (a selection draws)*
 - [x] Reads `output/AZUREOut_aa=<in>_R=<out>.out` or `_TOTAL_CAPTURE.out` (data), `.extrap` (no data), and the
       `.band` sibling; block within the file by segment order (`PlotTab.cpp`, `AZUREPlot.cpp`)
       *Dropped (the PI, 2026-11-13): no AZUREOut files read: arrays from the API.*
+      *Qt (2026-11-19): verified: the facade reads the files and matches each block to its record by the engine's build of the project and chiSquared.out's keys; T1 after calculate: 442 data points in the plot = 442 rows of the AZUREOut_*.out files; no file is parsed in gui/*
 - [ ] X axis: CoM Energy, Excitation Energy, CoM Angle; log scale (`PlotTab.cpp`)
+      *Qt (2026-11-19): present (CoM Energy, Excitation Energy, CoM Angle, log x); log axes not checked by the test*
 - [ ] Y axis: Cross Section or S-Factor; log scale; title per quantity: Cross Section [b] / [b/sr], S-Factor
       [MeV b] / [MeV b/sr], Phase Shift [degrees], Analyzing Power, Angular Distribution Coefficient
       (`AZUREPlot.cpp`)
+      *Qt (2026-11-19): present: Cross Section or S-Factor (the S factor only for a cross section; another observable keeps its column), log y; the title names the observable in the engine's unit*
 - [ ] Analyzing power in the selection forces a linear axis and cross section (`PlotTab.cpp`)
+      *Qt (2026-11-19): not kept: a value that is not positive is left out on a log axis; the user chooses the axis*
 - [ ] Display: Grid, Legend, Levels (markers at E_x or E_c.m. per entrance pair, not on angle axis), Uncertainty
       (1σ band) (`PlotTab.cpp`, `AZUREPlot.cpp`)
+      *Qt (2026-11-19): Legend and Uncertainty (the band where the run wrote .band files; not checked by the test) present, grid always drawn; no level markers. New: residuals (data - calc)/error in a lower panel (seen in the screenshot `plot_T1_cap_g0.png`)*
 - [ ] Curve list with Customize... / double-click: label, data and calculation colour, marker (11 shapes), marker
       size, line width (`PlotTab.cpp`)
+      *Qt (2026-11-19): not ported: colours and markers from a fixed cycle*
 - [ ] THM segments labelled "(THM)"; label from the data file name (`PlotTab.cpp`)
+      *Qt (2026-11-19): label = the record's name and reaction*
 - [ ] Zoom by rubber band, right-click zoom out, middle-button pan, coordinate tracker (`AZUREPlot.cpp`)
+      *Qt (2026-11-19): zoom by a dragged rectangle, double-click or Reset Zoom to the whole range (`gui_window`: zoomTo/resetZoom); no pan, no tracker*
 - [ ] Export... (PDF, SVG, PS, image formats); Print... (landscape) (`AZUREPlot.cpp`)
+      *Qt (2026-11-19): verified (`gui_window`): PNG, SVG, PDF written by Export; no PS, no Print*
 
 ## 13. THM Workspace (Configure > THM Workspace...)
 
 - [ ] Dialog with pages Model, Experiments, Channels, Diagnostics (engine-API builds); Help opens the local or online
       user guide; Accept validates every page and applies; pages disabled when no THM segment exists
       (`ThmWorkspace.cpp`)
+      *Qt (2026-11-19): the THM tab: a form of the global options and of each experiment[<name>] line, built from the engine's tables of the keys (`front::ThmKinds`), written by the engine's edits of the lines (`front::SetThmOption`, `SetThmExperimentKey`), and a Text view of the whole section; verified (`gui_window`, T2): vertexModel=ff set and its field ffWell enabled only then, a wrong value refused with the reader's reason, an experiment added and removed, a global option set and removed, the file back byte for byte*
 - [ ] Model: Entrance partial waves (incoherent / coherent), Vertex boundary (constant / perlevel / onshell),
       Kinematic factors (lacognata / triple / kf3body / lambda32), External Coulomb term, Spectator energy (MeV)
       (`ThmModelPage.cpp`)
@@ -517,8 +554,17 @@ because the engine also searches the whole file for them.
 - [ ] Diagnostics: Segment, Compute (temporary copy, off the GUI thread, busy bar), J^π group; plots of entrance
       vertex |M_l|² with nodes, HOES vs on-shell, line shape |N_C|² and ζ(E), weight w(E), spectator window,
       distortion R(E), angular distribution at E (`ThmDiagnosticsPage.cpp`, `ThmDiagnostics.cpp`)
+      *Qt (2026-11-19): not ported (pyazr's THM reports; the web page)*
 
 ## 14. Cross-cutting
+
+- *Qt (2026-11-19), new:* the Tools menu starts pyazr's commands as child processes (`PythonTools.cpp`: ENDF-6 export,
+  import and summary, EXFOR and ENSDF import, the Coulomb table's build and check, the web page of the project via
+  `python -m pyazr ui FILE --json` on 127.0.0.1); the interpreter is set in Configure > Directories; with an
+  interpreter that cannot import pyazr every item is disabled with the reason.  Verified (`gui_window`): the items
+  disabled with "/no/such/python does not start", enabled with the build's Python, and Export ENDF-6 of T1 through the
+  item's code: exit 0, 166374 bytes, its output in the log pane.  The NUTS/emcee samplers and band jobs are no
+  commands of pyazr's command line: a disabled item says to use the web page or Python.
 
 - [ ] Runs on a worker thread with its own copy of the Config (every field the GUI sets, including hard-sphere,
       abundance prior, relativistic, prior covariance); output streamed to the log (`AZUREMainThread.h`)

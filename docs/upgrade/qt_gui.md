@@ -65,10 +65,67 @@ thread starts and not edited by the run. One run at a time (the OpenMP thread co
 The controls of what the PI removed do not come back: fold windows and `useAdaptiveGrid` (every fold is on the shared
 mesh), `--gsl-coul` and libcoul (one Coulomb library), the GSL fitter and the `numcmc/` sampler (being removed on
 another branch; the fit tab lists the fitters of `Fitters()`, the commands of `RunCommands()`, so a fitter or
-command gone from the engine is gone from the GUI). The Plot tab needs Qwt, which this environment lacks: it is
-behind `USE_QWT` (off), and the GUI builds without it.
+command gone from the engine is gone from the GUI). dev's Plot tab drew with Qwt and read the output
+files itself: it is replaced by a plot drawn with QPainter (section 6), and `USE_QWT` is gone.
 
-## 5. Tests
+## 5. The Plot tab: the run's output files as data
+
+`front::ReadCurves(project)` returns the curves of the last run: for every active data set and extrapolation, the
+file the engine wrote it to and its block there, found by the engine's own build of the project (each record's pair
+keys and observable, `experiment::ReadFormat3Text`) and by the writer's rule (`src/DataOutputFiles.cpp`: one file per
+pair keys, one block per segment in segment order, `.band` siblings with the same blocks); a data set the run left out
+is skipped through chiSquared.out's keys, and a block whose rows differ in number from chiSquared.out's N is refused
+with a note, as is a file with fewer blocks than the project's records (the file is older than the project). Each
+point carries E, E_x, theta, the calculated value and S column, the data and errors, and the band's 1 sigma. `gui/`
+parses nothing: `PlotTab` turns the curves into series and `PlotWidget` draws them with QPainter (linear or log axes,
+error bars, a single point as a marker, the band shaded, a legend, the residuals (data - calc)/error in a lower
+panel, zoom by a dragged rectangle) and writes PNG, SVG (QtSvg) or PDF (QPdfWriter). No plotting library.
+
+## 6. Fit parameters, the parameter settings and the sampler's priors
+
+`front::ReadParameters(file)` sets up a session of the saved project as pyazr's `Session` does (`Config` read from
+the file, the matrix route resolved, `AZUREAPI::Initialize`; `api/front` links `AZUREAPI` privately) and returns the
+parameter vector of `param.sav`: name, kind and unit (`ParamKindTable`), start value in fit units, fixed flag, the
+fit's limits (`GetParameterBounds`, `<parameterSettings>` applied), level number and channel.  It writes only what a
+session writes (an `intEC.dat` it computes).  `front::ReadParameterFile` reads a `param.sav`/`param.par` as the
+engine does ("name value error", the `#parametrization` line skipped).  `front::ParameterSettings` and
+`SetParameterSetting` read and write the rows of `<parameterSettings>` in the grammar of
+`ParameterLimitsManager::ReadParameterSettings` (9 tokens, or the GUI's 12- and 14-token "Level N ..." forms; a
+row is replaced by name, appended, or removed); `front::SamplerPriors` and `SetSamplerPriors` the `<parameters>`
+block of `<mcmc>` in the grammar of `src/SamplerRun.cpp`.  "Take the fitted values as the new start" is the engine's
+`--parameter-file`: the GUI copies `param.sav` beside the project and passes it to the next run; it does not rewrite
+the project (pyazr's `save_fit` does that, in Python).
+
+The sampler's progress: `ProgramObserver::samplerStep` (`include/ProgramObserver.h`), called from the program's step
+hook (`src/ProgramMain.cpp`, null on the command line), reaches the observer as a `RunProgress` with stage `mcmc`
+(step, steps asked, mean log-posterior and log-likelihood).  `front::HasCommand("mcmc")` decides whether the MCMC
+tab exists: a command removed from the engine's table removes the tab, without an edit of `gui/`.
+
+## 7. `<thm>` as forms
+
+`front::ThmKinds()` gives the engine's tables of the keys of `<thm>` (`ThmOptionKeys`, `ThmExperimentKeys`: the
+tables its parser reads) as two kinds in the schema's shape; a key that applies only when another is given says so
+(`FieldInfo::appliesWhen`, e.g. the `ff*` keys need `vertexModel`).  `front::ThmEntries` lists the key=value
+entries as the reader takes them (`ThmBlockEntries`); `SetThmOption` and `SetThmExperimentKey` are the engine's line
+edits (`ThmOptionEdits`, `ThmExperimentEdits`, `ApplyThmLineEdits`), the ones pyazr's `Project` calls: a value the
+reader would refuse is refused with its message.  The THM tab draws its forms from these and keeps a text view.
+
+## 8. The Tools menu: pyazr as a child process
+
+ENDF-6 export and import, EXFOR and ENSDF imports, the Coulomb table and the web page live in pyazr (Python); the
+GUI does not re-implement them.  `PythonTools` starts `<python> -m pyazr <command>` with `QProcess`, its output in
+the log pane, the interpreter a setting of the computer (`QSettings`, Configure > Directories), every item disabled
+with the reason when `import pyazr` fails.  The web page is `python -m pyazr ui FILE --json` (127.0.0.1; the URL
+from its JSON line), stopped with the window.  The samplers (NUTS, emcee) and the band jobs are no commands of the
+command line: a disabled item points to the web page and Python.
+
+## 9. What stage 2 did not do
+
+No Results page of the sampler (statistics of `samples.mcmc`); no per-curve style dialog, pan, tracker, print or
+level markers in the plot; the parameter table edits limits and priors, not values or fixed flags; dev's EXFOR
+search dialog, Coulomb-table builder dialog and THM diagnostics plots are not ported (Tools runs the pyazr commands).
+
+## 10. Tests
 
 - `api_front` (`api/front/tests/front_test.cpp`, no Qt, every build): T1, T2, T3 and 13N opened and saved byte for
   byte, also after every record, row and entry is set to what it holds; an edit changes one line and is undone; a
@@ -77,6 +134,13 @@ behind `USE_QWT` (off), and the GUI builds without it.
   through the facade ends with `stopped` and its outputs.
 - `gui_*` (label `gui`, registered only with `-DBUILD_GUI=ON`, `QT_QPA_PLATFORM=offscreen`): the window opens T1, T2,
   T3 and 13N and saves them byte for byte, runs `calculate` and `fit` through the worker thread, and grabs each tab
-  into `work/qt-shots/` (`AZURE2_QT_SHOTS`).
+  into `AZURE2_QT_SHOTS`.  Stage 2 (2026-11-19) adds: the Plot tab after calculate on T1 (data points = rows of the
+  output files, a grab not blank, zoom, PNG/SVG/PDF); extrapolate, fit and minos with the band, rate through the pair
+  drop-downs and mcmc from its tab, each equal byte for byte to the program's run of the same command line; the
+  parameter table, a `<parameterSettings>` row, the fitted start (= `--parameter-file`); the THM form; records added,
+  duplicated, renamed and removed, a pair and levels edited, saved, reopened and valid; the Configure dialogs, the
+  formalism, File > New, Open Recent and Convert through its dialogs; the Tools menu and the ENDF-6 export of T1.
+- `api_front` also checks `ReadCurves` (points = rows of the files = chiSquared.out's N on T1 and 13N),
+  `ReadParameters` and the `<parameterSettings>` and `<mcmc>` rows.
 
 Code: `api/front/` (facade and test), `src/ProgramMain.cpp`, `include/ProgramObserver.h`, `gui/`.

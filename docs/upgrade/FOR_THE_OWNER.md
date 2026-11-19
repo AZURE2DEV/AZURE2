@@ -106,6 +106,16 @@ $ ctest --test-dir build-gui -L gui                     # gui_window: round trip
 `Calculate > Save and Run` runs the program's own run (`RunProgram`) in a worker thread: its output files are those
 of `AZURE2 calculate` byte for byte (checked on T1 and 13N), and `Stop AZURE2` ends a fit at its best point.
 
+Stage 2 (2026-11-19) made it a whole tool again: a Plot tab drawn by the program (no Qwt: data with error bars, the
+calculated curve, the uncertainty band where the run wrote one, residuals below, log axes, zoom, export to PNG, SVG
+and PDF), the parameter table of Fitting Settings (limits and priors as `<parameterSettings>` rows; the fitted values
+beside the start; "take the fitted values as the new start" runs from `param.sav` with `--parameter-file`), an MCMC
+tab where the engine has the sampler, the rate's pairs as drop-downs, a THM form built from the engine's own key
+tables (with `vertexModel=ff` and its fields), and a Tools menu that starts pyazr's ENDF, EXFOR, Coulomb-table and
+web-page commands.  Every command run from the window (calculate, fit and minos with the band, extrapolate, rate,
+mcmc) writes the same files, byte for byte, as `AZURE2 <command>` with the same options; `ctest -L gui` checks each.
+Screenshots of every tab and dialog: `work/qt-shots/stage2/` on the analysis machine.
+
 ## 3. Where the numbers differ from `dev`, and why
 
 `dev` here is the commit where this branch left it (`aab1de0d`) unless a row says otherwise. "Decides": who has to

@@ -12,8 +12,8 @@ byte for byte, as ``AZURE2 <command>`` on the saved project.
 Building and starting the Qt program
 ------------------------------------
 
-The Qt program needs Qt 6 (Core, Gui, Widgets, Network) and is built only when
-asked::
+The Qt program needs Qt 6 (Core, Gui, Widgets, Network, Svg) and is built only
+when asked::
 
    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON \
          -Dpybind11_DIR="$(python3 -m pybind11 --cmakedir)"
@@ -23,10 +23,8 @@ asked::
 Qt 6 asks for CMake 3.22 or newer; with an older CMake add
 ``-DQT_FORCE_MIN_CMAKE_VERSION_FOR_USING_QT=3.20`` (Qt's own switch; the build
 of this program needs nothing newer). Without ``-DBUILD_GUI=ON`` nothing of the
-Qt program is built and every other target is unchanged. The Plot tab of earlier
-versions needs Qwt and is not part of this version (``-DUSE_QWT`` is kept for it
-and is off): plot the files in ``output/`` (:doc:`../reference/output_files`)
-or use the browser page.
+Qt program is built and every other target is unchanged. The Plot tab is drawn
+by the program itself (no Qwt is needed; ``-DUSE_QWT`` is gone).
 
 Opening and saving a project
 ----------------------------
@@ -74,24 +72,83 @@ The tabs
    * - Nuclear Potential
      - Hybrid-potential channels (``<potentials>``).
    * - THM
-     - The Trojan horse experiments (``<thm>``), as text checked by the engine,
-       including ``vertexModel=ff``, the full transfer form factor.
+     - The Trojan horse experiments (``<thm>``): a form of the global options
+       and one of each ``experiment[<name>]`` line, with the keys of the
+       engine's own table (beam, target, spectator, beam energy, momentum
+       distribution, distortion, the vertex model with ``vertexModel=ff``, the
+       full transfer form factor, and its well, volume term and nodes, which
+       are enabled once the vertex model is given; the background); a value the
+       engine's reader refuses is named under the form.  ``Text`` shows the
+       whole section; both edit the same lines.
    * - Fitting Settings
-     - The fitter (the engine's list of fitters), the call limit and the
-       covariance refreeze passes; the prior covariance file; the parameter
-       settings (``<parameterSettings>``) and the sampler's block (``<mcmc>``).
+     - The fitter (the engine's list of fitters; MIGRAD unless another is
+       chosen), the call limit and the covariance refreeze passes; the prior
+       covariance file; the parameter table (below); the parameter settings
+       (``<parameterSettings>``) and the sampler's block (``<mcmc>``) as text.
    * - Calculate
      - The command (calculate, fit, extrapolate, MINOS, reaction rate, and the
        sampler where the build has it) with its options: the uncertainty band
        and its scaling, the parameter and capture files, the rate's pairs and
        temperatures, the sampler's walkers and steps; the threads; the run's
        lines, the chi-squared of each data set and the files the run wrote.
+       The rate's entrance and exit pairs are chosen from the project's pairs
+       (the exit also as -1, the total radiative capture).
+   * - MCMC
+     - Shown only when the engine has the ``mcmc`` command. The Gaussian priors
+       of the sampler (the ``<parameters>`` rows of ``<mcmc>``: Load Parameters
+       lists the free parameters), and the run's settings: walkers, steps,
+       initial spread, level-energy spread, threads, the sampled basis (rwa or
+       physical) and a fresh start (overwrite ``samples.mcmc``). Run starts
+       ``AZURE2 mcmc`` with them; the progress bar follows the steps and the
+       acceptance fraction is shown as the program prints it. The samples are
+       in ``output/samples.mcmc``; the burn-in is dropped when they are read
+       (pyazr), not by the sampler.
+   * - Plot
+     - The data sets and extrapolations of the last run (below).
 
 A record's form is drawn from the engine's table of project format 3: a closed
 choice is a list, a unit one of its dimension's (or of the data set's quantity),
 a file a chooser; the tool tip of each field gives its meaning and grammar.
 Fields set rarely are behind ``Every field`` unless the record sets them.
 ``Apply`` writes the record; nothing is written before.
+
+The parameter table
+-------------------
+
+``Read Parameters`` (Fitting Settings) saves the project and lists every
+parameter of a fit as the engine sets it up, under the names of ``param.sav``:
+its kind, its start value in the fit's units (a width as its reduced-width
+amplitude, MeV^1/2), whether it is fixed, its limits and its Gaussian prior.
+The limits and the prior are the parameter's row of ``<parameterSettings>``;
+for a level width they are partial widths in eV, which the engine converts;
+empty limits are none. They apply to free parameters. Whether a parameter is
+fixed, and its start value, are edited where they are written: the Levels tab,
+a record's ``fixed``/``fit``. ``Show Fitted Values`` puts the values and errors
+of the last fit's ``param.sav`` beside the start values. ``Take the Fitted
+Values as the New Start`` copies ``param.sav`` to ``<project>.start.sav`` beside
+the project and gives it to the next run as ``--parameter-file``: the run starts
+from it, as ``AZURE2 <command> --parameter-file=<project>.start.sav`` does; the
+project's own values are not changed (``pyazr``'s ``Session.save_fit`` writes
+fitted values into a project).
+
+The Plot tab
+------------
+
+The Plot tab shows what the last run wrote: for each data set the data with
+their error bars and the calculated curve, for each extrapolation its curve,
+read from the output files (``AZUREOut_*``, :doc:`../reference/output_files`)
+and matched to the records by the engine. Several can be selected; each gets
+its colour and marker in the legend, and a set of one point is a marker. The
+x axis is the c.m. energy, the excitation energy or the c.m. angle; the y axis
+the calculated column (the cross section in b, dσ/dΩ in b/sr, or the data set's
+observable such as A_y or a phase shift) or the S factor (MeV b, for a cross
+section). Either axis can be logarithmic (points that are not positive are then
+left out). Where the run wrote the uncertainty band (``--covariance-band``) the
+1σ band is shaded. The lower panel shows the residuals (data − calculation) /
+error. Drag a rectangle to zoom; a double click or ``Reset Zoom`` shows the
+whole range. ``Export`` writes PNG, SVG or PDF. The tab is read again after
+every run; a file older than the project (records added since the run) is
+named in a note below the plot.
 
 Runs
 ----
@@ -109,8 +166,25 @@ The configuration menu
 ``Configure > Formalism`` sets the A-matrix or R-matrix route; ``Checks``,
 ``Directories`` and ``Runtime Options`` set the entries of ``<config>``
 (:doc:`configure_menu`), each with the old program's title and the engine's
-description. Options the engine no longer has (fold windows, the adaptive-grid
-switch, GSL Coulomb functions) have no control.
+description. The dialogs are drawn from the engine's table of ``<config>``, so
+an entry the engine no longer has has no control: fold windows, the
+adaptive-grid switch and GSL Coulomb functions are not offered.
+
+The Tools menu
+--------------
+
+What lives in ``pyazr`` and not in the engine is started from ``Tools`` as
+``python -m pyazr ...`` (:doc:`pyazr_command_line`), a separate process whose
+output appears in the Calculate tab's log: Export ENDF-6 (``endf write``),
+Import an ENDF-6 Evaluation as a New Project (``endf to-project``), ENDF-6
+File Summary, Import an EXFOR Data Set (``import exfor``), ENSDF Levels of a
+Nuclide (``import ensdf``), Build and Check the Coulomb Table
+(``coulomb-table``), and Open the Web Page of This Project (``pyazr ui``,
+served on 127.0.0.1 and opened in the browser; it stops with the window). The
+Python interpreter is set in ``Configure > Directories`` (a setting of this
+computer, ``python3`` by default); when it cannot import ``pyazr`` every item
+is disabled and says why. The pyazr samplers (NUTS, emcee) and band jobs are
+not commands of pyazr's command line: they are in the web page and in Python.
 
 From the command line and Python
 --------------------------------

@@ -40,6 +40,8 @@ class PairsTab : public QWidget {
   void addExtraPanel(const QString &title, QWidget *panel);
   /*! A new file: no pairs. */
   void reset();
+  /// Select pair `row` and remove it as the Remove button does (the tests).
+  void removePairAt(int row);
 
  public slots:
   void addPair();

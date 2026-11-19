@@ -24,6 +24,9 @@ struct ProgramObserver {
   std::function<void(int segment, double chiSquared, int points)> dataSetChiSquared;
   /// The final evaluation's total chi^2 (data and priors).
   std::function<void(double chiSquared)> totalChiSquared;
+  /// After each step of the sampler (command mcmc): the step (from 1), the steps asked, the walkers' mean
+  /// log-posterior, log-likelihood and log-prior after it (the numbers of the console's progress line).
+  std::function<void(int step, int total, double logPosterior, double logLikelihood, double logPrior)> samplerStep;
 };
 
 #endif

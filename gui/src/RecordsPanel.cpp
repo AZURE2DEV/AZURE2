@@ -401,6 +401,11 @@ void RecordsPanel::addRecord() {
   bool ok = false;
   const QString name = QInputDialog::getText(this, tr("Add a record"), tr("Name:"), QLineEdit::Normal, uniqueName(kind), &ok);
   if (!ok || name.trimmed().isEmpty()) return;
+  QString why;
+  if (!addNamedRecord(kind, name, why)) QMessageBox::warning(this, tr("Record not added"), why);
+}
+
+bool RecordsPanel::addNamedRecord(const QString &kind, const QString &name, QString &why) {
   front::Record r;
   r.kind = kind.toStdString();
   r.name = name.trimmed().toStdString();
@@ -408,32 +413,58 @@ void RecordsPanel::addRecord() {
   if (const front::KindInfo *k = holder_->kind(r.kind))
     for (const front::FieldInfo &f : k->fields)
       if (f.required) r.fields.push_back({f.key, "?", ""});
-  QString why;
-  if (!holder_->setRecord(section_, r, why)) {
-    QMessageBox::warning(this, tr("Record not added"), why);
-    return;
-  }
+  if (!holder_->setRecord(section_, r, why)) return false;
   selectRecord(name.trimmed());
   emit edited();
+  return true;
 }
 
 void RecordsPanel::duplicateRecord() {
-  if (list_->currentRow() < 0) return;
+  QString name, why;
+  if (list_->currentRow() >= 0 && !duplicateShown(name, why)) QMessageBox::warning(this, tr("Record not added"), why);
+}
+
+bool RecordsPanel::duplicateShown(QString &newName, QString &why) {
+  if (list_->currentRow() < 0) {
+    why = tr("no record is shown");
+    return false;
+  }
   front::Record r = shown_;
   r.name = uniqueName(Q(shown_.name) + "_copy").toStdString();
-  QString why;
-  if (!holder_->setRecord(section_, r, why)) {
-    QMessageBox::warning(this, tr("Record not added"), why);
-    return;
-  }
-  selectRecord(Q(r.name));
+  if (!holder_->setRecord(section_, r, why)) return false;
+  newName = Q(r.name);
+  selectRecord(newName);
   emit edited();
+  return true;
 }
 
 void RecordsPanel::removeRecord() {
-  if (list_->currentRow() < 0) return;
-  const QString name = list_->item(list_->currentRow(), 0)->text();
   QString why;
-  if (!holder_->removeRecord(section_, name, why)) QMessageBox::warning(this, tr("Record not removed"), why);
-  else emit edited();
+  if (list_->currentRow() >= 0 && !removeShown(why)) QMessageBox::warning(this, tr("Record not removed"), why);
+}
+
+bool RecordsPanel::removeShown(QString &why) {
+  if (list_->currentRow() < 0) {
+    why = tr("no record is shown");
+    return false;
+  }
+  const QString name = list_->item(list_->currentRow(), 0)->text();
+  if (!holder_->removeRecord(section_, name, why)) return false;
+  emit edited();
+  return true;
+}
+
+bool RecordsPanel::renameShown(const QString &newName, QString &why) {
+  if (!nameEdit_) {
+    why = tr("no record is shown");
+    return false;
+  }
+  nameEdit_->setText(newName);
+  return applyForm(why);
+}
+
+QStringList RecordsPanel::recordNames() const {
+  QStringList out;
+  for (const front::Record &r : holder_->records(section_)) out << Q(r.name);
+  return out;
 }

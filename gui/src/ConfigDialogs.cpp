@@ -82,9 +82,13 @@ ConfigDialog::ConfigDialog(ProjectHolder *holder, const QString &title, const QS
   connect(buttons, &QDialogButtonBox::rejected, this, &ConfigDialog::reject);
   QVBoxLayout *layout = new QVBoxLayout(this);
   layout->addWidget(scroll, 1);
+  machine_ = new QFormLayout;
+  layout->addLayout(machine_);
   layout->addWidget(buttons);
   resize(640, 520);
 }
+
+void ConfigDialog::addMachineRow(const QString &label, QWidget *editor) { machine_->addRow(label, editor); }
 
 bool ConfigDialog::write(QString &why) {
   for (auto it = editors_.constBegin(); it != editors_.constEnd(); ++it) {

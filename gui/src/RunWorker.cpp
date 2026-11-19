@@ -20,11 +20,13 @@ class SignalObserver : public azure2::front::RunObserver {
   void Progress(const azure2::front::RunProgress &p) override {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto now = std::chrono::steady_clock::now();
-    const bool better = !std::isnan(p.best) && (std::isnan(best_) || p.best < best_);
-    if (!better && now - last_ < std::chrono::milliseconds(50)) return;
+    const bool sampler = p.stage == "mcmc";  // a sampler's step: its last always arrives
+    const bool better = !sampler && !std::isnan(p.best) && (std::isnan(best_) || p.best < best_);
+    const bool last = sampler && p.evaluation == p.calls;
+    if (!better && !last && now - last_ < std::chrono::milliseconds(50)) return;
     last_ = now;
     if (better) best_ = p.best;
-    emit worker_->progress(QString::fromStdString(p.stage), p.evaluation, p.objective, p.best);
+    emit worker_->progress(QString::fromStdString(p.stage), p.evaluation, p.calls, p.objective, p.best);
   }
 
  private:

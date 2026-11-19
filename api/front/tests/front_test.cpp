@@ -1,4 +1,4 @@
-// The front ends' facade without Qt (docs/upgrade/qt_gui.md section 5): front_test <source dir> <AZURE2 binary>.
+// The front ends' facade without Qt (docs/upgrade/qt_gui.md section 10): front_test <source dir> <AZURE2 binary>.
 //  (a) the tables: schema, commands, options, fitters, <config> keys;
 //  (b) the test projects T1, T2, T3 and 13N opened and written back byte for byte, also after every record, every
 //      <levels> row and every <config> entry is set to what it holds; an edit changes only its lines and is undone;
@@ -262,6 +262,67 @@ int main(int argc, char **argv) {
     bool sawTotal = false;
     for (const std::string &l : observer.lines) sawTotal = sawTotal || l.rfind("Total Chi-Squared: ", 0) == 0;
     Check(sawTotal, name + ": the messages carry the program's lines");
+
+    // (f) the run's curves as data: every row of every AZUREOut_*.out file in one curve, each data set's points
+    // as many as chiSquared.out's N
+    front::Project opened;
+    front::Project::Open(b.string(), opened, why);
+    const front::Curves curves = front::ReadCurves(opened);
+    std::size_t rows = 0, points = 0;
+    for (const auto &e : fs::directory_iterator(b.parent_path() / "output")) {
+      const std::string file = e.path().filename().string();
+      if (file.rfind("AZUREOut_aa=", 0) != 0 || e.path().extension() != ".out") continue;
+      std::ifstream in(e.path());
+      std::string line;
+      while (std::getline(in, line)) rows += line.find_first_not_of(" \t") != std::string::npos;
+    }
+    for (const front::Curve &c : curves.curves) points += c.points.size() + c.coefficients.size();
+    std::size_t chiN = 0;
+    for (const front::DataSetChiSquared &d : result.dataSets) chiN += d.points;
+    std::string notes;
+    for (const std::string &n : curves.notes) notes += " " + n;
+    Check(!curves.curves.empty() && points == rows && points == chiN,
+          name + ": the curves hold " + std::to_string(points) + " points, the files " + std::to_string(rows) +
+              " rows, chiSquared.out " + std::to_string(chiN) + notes);
+    bool named = true;
+    for (const front::Curve &c : curves.curves) named = named && !c.record.empty() && c.section == "data";
+    Check(named, name + ": every curve names its data set");
+  }
+
+  // (g) the fit's parameters, <parameterSettings> and <mcmc> rows through their grammars
+  {
+    const fs::path b = CopyProject(projects[0], fs::path("front_test_work") / "params_T1");
+    std::vector<front::Parameter> params;
+    std::string why;
+    const bool read = front::ReadParameters(b.string(), params, why);
+    Check(read && !params.empty(),
+          "T1: " + std::to_string(params.size()) + " parameters of a session (" + why + ")");
+    bool energy = false;
+    for (const front::Parameter &p : params) energy = energy || (p.name == "energy_1" && p.kind == "energy");
+    Check(energy, "T1: energy_1 among them, of kind energy");
+    front::Project p;
+    front::Project::Open(b.string(), p, why);
+    const std::string original = p.Text();
+    front::ParameterSetting row;
+    row.name = "energy_1";
+    row.nominal = 0.5;
+    row.lower = 0.4;
+    row.upper = 0.6;
+    Check(front::SetParameterSetting(p, row, why) && front::ParameterSettings(p).size() == 1 &&
+              front::ParameterSettings(p)[0].upper == 0.6,
+          "T1: a <parameterSettings> row written and read back");
+    Check(p.Validate().ok, "T1: valid with the row");
+    Check(front::SetParameterSetting(p, row, why, true) && front::ParameterSettings(p).empty(), "T1: the row removed");
+    front::SamplerPrior prior{"energy_1", 0.5, 0.5, 0.01, true};
+    front::SetSamplerPriors(p, {prior});
+    const std::vector<front::SamplerPrior> back = front::SamplerPriors(p);
+    Check(back.size() == 1 && back[0].name == "energy_1" && back[0].sigma == 0.01 && back[0].use,
+          "T1: an <mcmc> prior row written and read back");
+    front::SetSamplerPriors(p, {});
+    Check(front::SamplerPriors(p).empty(), "T1: the <mcmc> prior rows cleared");
+    std::vector<front::ParameterValue> values;
+    Check(!front::ReadParameterFile((b.parent_path() / "none.sav").string(), values, why), "a missing parameter file");
+    (void)original;
   }
 
   // (e) a fit stopped through the facade
