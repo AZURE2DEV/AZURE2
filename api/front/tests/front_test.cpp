@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -26,6 +27,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -316,6 +318,167 @@ void FormsChecks(const fs::path &source) {
 }
 
 }  // namespace
+
+/// The program's run of `command` on `project` (its own files, as a user's run writes them); true for exit 0.
+bool RunProgram(const std::string &binary, const std::string &command, const fs::path &project) {
+  std::string line = "\"" + binary + "\" " + command + " --threads=2 \"" + project.string() + "\" > \"" +
+                     (project.parent_path() / (command + ".txt")).string() + "\" 2>&1";
+#ifdef _WIN32
+  line = "\"" + line + "\"";
+#endif
+  return std::system(line.c_str()) == 0;
+}
+
+/// The Overview page's calls (docs/upgrade/qt_gui.md section 15): the project summary against the project's own
+/// tables; the last run against a calculation run here (RunResult) and against the program's own files of a fit and
+/// a calculation after it; the stale mark after an edit saved; a project without outputs.
+void OverviewChecks(const fs::path &source, const std::string &binary) {
+  const fs::path t1 = CopyProject(source / "tests/upgrade/T1/T1.azr", fs::path("front_test_work") / "overview_t1");
+  front::Project p;
+  std::string why;
+  Check(front::Project::Open(t1.string(), p, why), "overview: T1 opens");
+  {
+    const front::ProjectSummary s = front::SummarizeProject(p);
+    const std::vector<front::PairChoice> pairs = front::Pairs(p);
+    int levels = 0;
+    for (const front::LevelGroupCount &g : s.levelGroups) levels += g.levels;
+    std::size_t options = 0;
+    for (const front::OptionState &o : s.options) options += o.on == o.defaultOn || o.written;
+    Check(s.built && s.pairs.size() == pairs.size() && !s.nuclei.empty() && s.nuclei[0] == pairs[0].nucleus,
+          "overview: T1's pairs and compound nucleus " + (s.nuclei.empty() ? std::string() : s.nuclei[0]));
+    Check(levels == s.levels && s.levels > 0 && !s.levelGroups.empty() && !s.levelGroups[0].label.empty(),
+          "overview: T1: " + std::to_string(s.levels) + " levels in " + std::to_string(s.levelGroups.size()) +
+              " J^pi groups (first " + (s.levelGroups.empty() ? std::string() : s.levelGroups[0].label) + ")");
+    Check(s.dataSets == (int)p.Records("data").size() - 0 && s.activeDataSets <= s.dataSets && s.activeDataSets > 0,
+          "overview: T1: " + std::to_string(s.activeDataSets) + " of " + std::to_string(s.dataSets) + " data sets active");
+    Check(s.basis == "Brune" && s.matrix == "A-matrix" && options == s.options.size() && !s.options.empty(),
+          "overview: T1's basis " + s.basis + ", " + s.matrix + ", " + std::to_string(s.options.size()) + " options");
+    front::Project q = front::Project::FromText(p.Text(), p.Path());
+    q.SetConfig("use_park", "1", why);
+    const front::ProjectSummary park = front::SummarizeProject(q);
+    q.SetConfig("use_park", "0", why);
+    q.SetConfig("use_brune", "0", why);
+    Check(park.basis == "Park" && front::SummarizeProject(q).basis == "formal (Lane-Thomas)",
+          "overview: the basis follows use_park and use_brune");
+  }
+  {
+    const front::RunSummary none = front::ReadLastRun(p);
+    Check(!none.present && none.command.empty() && none.dataSets.empty() && !none.notes.empty(),
+          "overview: no run yet (" + (none.notes.empty() ? std::string() : none.notes[0]) + ")");
+  }
+  // a calculation through the facade: the page's rows are the run's
+  Collect observer;
+  front::RunRequest request;
+  request.command = "calculate";
+  request.project = t1.string();
+  request.threads = 2;
+  const front::RunResult result = front::Run(request, observer, nullptr);
+  {
+    const front::RunSummary run = front::ReadLastRun(p);
+    bool same = run.dataSets.size() == result.dataSets.size() && !run.dataSets.empty();
+    double sum = 0;
+    for (std::size_t i = 0; same && i < run.dataSets.size(); i++) {
+      const front::DataSetResult &a = run.dataSets[i];
+      const front::DataSetChiSquared &b = result.dataSets[i];
+      same = a.key == b.segment && a.points == b.points &&
+             std::fabs(a.chiSquared - b.chiSquared) <= 1e-5 * std::max(1.0, b.chiSquared) && !a.record.empty() &&
+             std::fabs(a.chiSquaredPerPoint - a.chiSquared / a.points) < 1e-12;
+      sum += a.chiSquared;
+    }
+    Check(result.exitCode == 0 && run.present && run.command == "calculate" && run.haveChiSquared && !run.stale,
+          "overview: T1 calculated: command " + run.command + ", not stale");
+    Check(same, "overview: T1: " + std::to_string(run.dataSets.size()) + " rows of chiSquared.out = the run's data sets");
+    Check(std::fabs(run.totalChiSquared - sum) <= 1e-5 * sum && run.points > 0 && run.fitStatus.empty() &&
+              run.parameterFile.find("param.par") != std::string::npos,
+          "overview: T1: total " + std::to_string(run.totalChiSquared) + " over " + std::to_string(run.points) +
+              " points, " + run.parameterFile);
+    // the stale mark: an edit saved after the run
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    front::Record r = p.Records("data")[0];
+    for (front::Field &f : r.fields)
+      if (f.key == "norm") f.value = "1.01 fixed";
+    Check(p.SetRecord("data", r, why) && !front::ReadLastRun(p).stale && p.Save("", why) && front::ReadLastRun(p).stale,
+          "overview: an edit is not stale until it is saved; saved, the outputs are stale");
+  }
+  // the program's own files: a fit of T1_start (a few calls), then a calculation after it
+  const fs::path t1s = CopyProject(source / "tests/upgrade/T1/T1_start.azr", fs::path("front_test_work") / "overview_fit");
+  front::Project f;
+  front::Project::Open(t1s.string(), f, why);
+  Check(RunProgram(binary, "fit --max-calls=40", t1s), "overview: the program's fit of T1_start");
+  {
+    const front::RunSummary fit = front::ReadLastRun(f);
+    std::string fileStatus;
+    std::ifstream in(t1s.parent_path() / "output" / "fitStatus.out");
+    for (std::string line; std::getline(in, line);)
+      if (line.rfind("status ", 0) == 0) fileStatus = line.substr(line.find_first_not_of(' ', 6));
+    Check(fit.command == "fit" && !fit.status.empty() && fit.status == fileStatus && !fit.minimizer.empty() &&
+              fit.calls > 0 && fit.parameterFile.find("param.sav") != std::string::npos,
+          "overview: the fit's files: status '" + fit.status + "' by " + fit.minimizer + " in " +
+              std::to_string(fit.calls) + " calls, " + fit.parameterFile);
+    front::RunParameters parameters;
+    const bool read = front::ReadRunParameters(t1s.string(), fit.parameterFile, true, parameters, why);
+    std::vector<front::Parameter> all;
+    front::ReadParameters(t1s.string(), all, why);
+    int free = 0, byKind = 0;
+    for (const front::Parameter &x : all) free += !x.fixed;
+    for (const auto &k : parameters.freeByKind) byKind += k.second;
+    Check(read && parameters.free == free && free > 0 && byKind == free && parameters.parameters == (int)all.size(),
+          "overview: " + std::to_string(free) + " free parameters of " + std::to_string(all.size()) + " in " +
+              std::to_string(parameters.freeByKind.size()) + " kinds (" + why + ")");
+    const double dof = front::ChiSquaredPerDegreeOfFreedom(fit, parameters);
+    Check(std::fabs(dof - fit.totalChiSquared / (fit.points - free)) < 1e-12 * dof,
+          "overview: chi^2/dof = " + std::to_string(dof));
+    // a parameter at a limit: limits +-0.1 MeV given to the first free level energy (<parameterSettings>), and a
+    // parameter file with that energy on its lower limit and every error non-zero
+    std::string target;
+    double lower = 0;
+    int level = -1;
+    for (const front::Parameter &x : all)
+      if (target.empty() && !x.fixed && x.kind == "energy") target = x.name, lower = x.value - 0.1, level = x.levelNumber;
+    front::ParameterSetting limit;
+    limit.name = "Level " + std::to_string(level) + " Energy (MeV)";  // the engine's name of a level energy's row
+    limit.nominal = lower + 0.1;
+    limit.lower = lower;
+    limit.upper = lower + 0.2;
+    limit.error = 0.01;
+    limit.fitError = 0.01;
+    Check(!target.empty() && front::SetParameterSetting(f, limit, why) && f.Save("", why),
+          "overview: limits given to " + target);
+    std::vector<front::ParameterValue> values;
+    front::ReadParameterFile(fit.parameterFile, values, why);
+    const fs::path edited = t1s.parent_path() / "edited.sav";
+    {
+      std::ofstream out(edited);
+      out.precision(10);
+      for (const front::ParameterValue &v : values)
+        out << v.name << " " << (v.name == target ? lower : v.value) << " " << (v.error == 0 ? 0.01 : v.error) << "\n";
+    }
+    front::ReadRunParameters(t1s.string(), edited.string(), true, parameters, why);
+    bool atLimit = false, others = true;
+    for (const front::ParameterFlag &x : parameters.flagged) {
+      atLimit = atLimit || (x.name == target && x.atLimit);
+      others = others && (x.name == target || !x.atLimit);
+    }
+    std::string bounds;
+    std::vector<front::Parameter> limited;
+    front::ReadParameters(t1s.string(), limited, why);
+    for (const front::Parameter &x : limited)
+      if (x.name == target) bounds = std::to_string(x.lower) + " .. " + std::to_string(x.upper) + ", at " + std::to_string(lower);
+    Check(atLimit && others, "overview: a parameter put on its limit is flagged (" + target + " " + bounds + "; " +
+                                 std::to_string(parameters.flagged.size()) + " flagged), no other");
+    front::RunParameters calculated;
+    front::ReadRunParameters(t1s.string(), edited.string(), false, calculated, why);
+    bool noErrorFlag = false;
+    for (const front::ParameterFlag &x : calculated.flagged) noErrorFlag = noErrorFlag || x.noError;
+    Check(!noErrorFlag, "overview: no 'no error' flag for a calculation's parameter file");
+  }
+  Check(RunProgram(binary, "calculate", t1s), "overview: the program's calculation after the fit");
+  {
+    const front::RunSummary calc = front::ReadLastRun(f);
+    Check(calc.command == "calculate" && calc.status.empty() && calc.parameterFile.find("param.par") != std::string::npos,
+          "overview: a calculation after a fit is the calculation (" + calc.command + ")");
+  }
+}
 
 int main(int argc, char **argv) {
   if (argc < 3) {
@@ -843,6 +1006,7 @@ int main(int argc, char **argv) {
   }
 
   FormsChecks(source);
+  OverviewChecks(source, binary);
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;
   return failures ? 1 : 0;

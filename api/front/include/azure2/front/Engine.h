@@ -502,6 +502,132 @@ struct Curves {
 /// is refused with a note (the file is older than the project).
 Curves ReadCurves(const Project &project);
 
+// ---- The Overview page: the project and its last run at a glance (docs/upgrade/qt_gui.md section 15) ----
+
+/// The levels of one J^pi group of a compound nucleus (the engine's grouping, experiment::LevelTablesOfRows).
+struct LevelGroupCount {
+  std::string nucleus;  ///< "16O"
+  int twoJ = 0;
+  int parity = 1;
+  std::string label;    ///< "3/2-"
+  int levels = 0;
+};
+/// One option of the calculation (a row of io::ConfigKeys() that is an option) as the project sets it.
+struct OptionState {
+  std::string name, title, effect;  ///< effect: "physics", "convention", "numerics"
+  bool on = false;                  ///< the value the run takes from the project (the key, else the default)
+  bool defaultOn = false;
+  bool written = false;             ///< the project's <config> writes the key
+};
+/// The records of one kind of a section, and how many of them an active data set names.
+struct RecordUse {
+  std::string section, kind;
+  int records = 0;
+  int used = 0;
+};
+/// What the project holds, as the Overview page's first card shows it.
+struct ProjectSummary {
+  std::string file;
+  bool built = false;  ///< the engine's build of the project succeeded (else the counts the text gives, no activity)
+  std::vector<std::string> nuclei;           ///< the compound nuclei of the levels, in pair order
+  std::vector<PairChoice> pairs;             ///< as Pairs() gives them
+  std::vector<LevelGroupCount> levelGroups;  ///< in the engine's group order
+  int levels = 0;                            ///< levels of the active <levels> rows
+  int dataSets = 0, activeDataSets = 0;
+  int extrapolations = 0, activeExtrapolations = 0;
+  std::vector<RecordUse> effects;            ///< the records of <targets> by kind
+  std::string basis;   ///< "Brune", "formal (Lane-Thomas)" or "Park" (use_brune, use_park)
+  std::string matrix;  ///< "A-matrix" or "R-matrix" (the positional amatrix)
+  std::vector<int> externalCapturePairs;     ///< pairs with external capture on an active row (empty: off)
+  std::vector<OptionState> options;          ///< every option row, in the table's order
+  std::vector<std::string> notes;            ///< what could not be read, in words
+};
+/// The project as it stands (its text, not the saved file): pairs, levels per J^pi, records, options.  No set-up of
+/// the levels: milliseconds.
+ProjectSummary SummarizeProject(const Project &project);
+
+/// One data set of the last run (a line of chiSquared.out), matched to its record by key.
+struct DataSetResult {
+  int key = 0;
+  std::string record, reaction, quantity;  ///< "" when the key matches no record of the project as it stands
+  int points = 0;
+  double chiSquared = 0;
+  double chiSquaredPerPoint = 0;  ///< chiSquared / points (NaN for no point)
+  double norm = 1;                ///< the norm the run used
+  double normChiSquared = 0;      ///< the norm's prior chi^2 as the file gives it (0 without a prior)
+  bool normPrior = false;         ///< the record's norm has a prior (the build's normError > 0)
+  double normPull = 0;            ///< sign(norm - centre) sqrt(normChiSquared); NaN without a prior
+};
+/// One output file and its modification time.
+struct OutputFileTime {
+  std::string name;
+  long long time = 0;  ///< seconds since 1970-01-01 UTC
+};
+/// The last run as its files in the project's output directory tell it (nothing recomputed).
+struct RunSummary {
+  std::string outputDirectory;
+  bool present = false;      ///< a run's outputs are there (chiSquared.out, or an extrapolation's files)
+  bool haveChiSquared = false;  ///< chiSquared.out was read
+  /// "fit", "calculate" or "extrapolate", inferred from the files (docs/upgrade/qt_gui.md section 15); "" none.
+  std::string command;
+  long long runTime = 0;      ///< chiSquared.out's time (an extrapolation: its newest .extrap), seconds since 1970
+  long long projectTime = 0;  ///< the project file's time on disk (0 when it is not on disk)
+  bool stale = false;         ///< projectNewer, or an input file is newer (changedInputs)
+  bool projectNewer = false;  ///< the project file is newer than the run's outputs
+  // fitStatus.out (a fit's; empty for a calculation)
+  std::vector<std::pair<std::string, std::string>> fitStatus;  ///< its key / value lines, in order
+  std::string status;     ///< "converged", "call_limit", "stopped", ... (the engine's FitOutcome words)
+  std::string minimizer;  ///< the fitter that ran
+  long calls = 0;
+  // chiSquared.out
+  double totalChiSquared = 0;  ///< Total-Chi-Squared: the data's chi^2
+  int points = 0;              ///< Total-N
+  std::vector<std::pair<std::string, double>> totals;  ///< every field of the total line, in the file's order
+  std::vector<DataSetResult> dataSets;                 ///< in the file's order
+  /// The active data sets of the project that the run did not use (no point in their window), by record name.
+  std::vector<std::string> leftOut;
+  /// The records whose input file (InputFiles) is newer than the run's outputs, by name; each makes the run stale.
+  std::vector<std::string> changedInputs;
+  std::string parameterFile;  ///< the run's parameter file: param.sav after a fit, else param.par ("" none)
+  std::vector<OutputFileTime> files;  ///< the files of the output directory, by name
+  std::vector<std::string> notes;
+};
+/// The files of the project's output directory as they stand.  Milliseconds.
+RunSummary ReadLastRun(const Project &project);
+
+/// A file a record of the project reads (the engine's build of the project: a data set's data and covariance files,
+/// an extrapolation's grid file), resolved against the project's directory as the engine opens it.
+struct InputFile {
+  std::string path;
+  std::string section, record;
+  std::string role;  ///< "data", "covariance", "grid"
+};
+/// The input files of the active records (none when the project does not build).  Milliseconds.
+std::vector<InputFile> InputFiles(const Project &project);
+
+/// A parameter of the run's parameter file that ended at a limit of the fit or, after a fit, without an error.
+struct ParameterFlag {
+  std::string name, kind, unit;
+  double value = 0, error = 0, lower = 0, upper = 0;
+  bool atLimit = false;
+  bool noError = false;
+};
+/// The parameters of the saved project as the engine sets them up, against the run's parameter file.
+struct RunParameters {
+  int parameters = 0;
+  int free = 0;
+  std::vector<std::pair<std::string, int>> freeByKind;  ///< kind key (ParamKindTable) -> free ones, in vector order
+  std::string file;                    ///< the parameter file read ("" none)
+  std::vector<ParameterFlag> flagged;  ///< at a limit or without an error, in vector order
+};
+/// ReadParameters on `projectFile`, then `parameterFile` ("" none) read by name: a free parameter is at a limit when
+/// |value - limit| <= 1e-6 max(1, |limit|) (fit units), without an error when `fit` and its error is 0 or missing.
+/// Sets up a session (seconds for a project with external capture): call it off a window's thread.
+bool ReadRunParameters(const std::string &projectFile, const std::string &parameterFile, bool fit,
+                       RunParameters &out, std::string &why);
+/// chi^2 / (N - p) with chi^2 and N of the run and p its free parameters; NaN when N <= p.
+double ChiSquaredPerDegreeOfFreedom(const RunSummary &run, const RunParameters &parameters);
+
 // ---- Fit parameters (the Fitting Settings tab) ----
 
 /// One parameter of the fit as the engine sets it up (a session of the project, as pyazr's Session): the vector of
