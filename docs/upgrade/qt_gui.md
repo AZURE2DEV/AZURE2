@@ -143,4 +143,69 @@ search dialog, Coulomb-table builder dialog and THM diagnostics plots are not po
 - `api_front` also checks `ReadCurves` (points = rows of the files = chiSquared.out's N on T1 and 13N),
   `ReadParameters` and the `<parameterSettings>` and `<mcmc>` rows.
 
+## 11. Stage 3, the shell: a modern, friendly window (agent shell, 2026-11-19)
+
+The PI (2026-11-19): "the GUI could be much more modern. Make some CI for GUI compilation ... Try to get everything
+green on CI."  This section is the window around the tabs: its look, its toolbar, status bar and start page, the
+Calculate tab, the Plot tab and the CI job.  The tabs of records, Pairs and Levels belong to the agents "forms" and
+"levels"; the look reaches their widgets through the application-wide style only.
+
+**CI** (`.github/workflows/gui.yml`, a workflow of its own: the GUI needs a Qt the engine's legs do not install, and
+its red or its time must not hide the engine's).  ubuntu-24.04 with Qt 6.4.2 from apt (`qt6-base-dev`,
+`qt6-svg-dev`, `qt6-qpa-plugins` for the offscreen platform): configure with `-DBUILD_GUI=ON`, build everything (the
+tests need `AZURE2` and pyazr's module), count the warnings of `gui/` and `api/front/` (a warning annotation, as
+build.yml, which does not fail on a warning), run `api_front` and `ctest -L gui` offscreen, keep the screenshots as an
+artifact.  A failure's first lines become `::error` annotations (`scripts/ci_first_errors.sh`).  macOS (Homebrew
+`qt`) and Windows (MSYS2 `qt6-base`, `qt6-svg`) are written but untested, marked `continue-on-error`.  `gui/` keeps
+to the API of Qt 6.4: a newer call (the colour scheme of Qt 6.5) is guarded with `QT_VERSION_CHECK`.
+
+**Look** (`AzureTheme`).  Fusion on every platform with two palettes, light and dark, built from one table of
+roles; the choice is a View menu item (System, Light, Dark) kept in `QSettings` ("System" follows the platform's
+colour scheme where Qt >= 6.5 tells it, else the lightness of the platform's window colour).  One restrained style
+sheet over the palette: spacing in em, no font size in pixels, readable table headers, alternating rows in every
+table, a visible focus frame, the selection in the accent colour, primary buttons (Run, Save and Run) drawn in the
+accent (`property primary=true`), dangerous ones (Stop) in red when enabled.  Icons for the main actions are SVGs drawn
+for this program (`gui/images/actions/`, strokes only, one colour that reads on both palettes), scaled by Qt for any
+device pixel ratio.
+
+**Window** (`AZURESetup`).
+- A tool bar: New, Open, Save, Validate, Calculate, Fit, Stop, Plot, each with its shortcut in the tool tip
+  (Ctrl+N, Ctrl+O, Ctrl+S, F7, F5, F6, Esc, Ctrl+P).  Calculate and Fit set the Calculate tab's command and run it;
+  Stop sets the run's stop request; Plot shows the Plot tab.  Disabled while they cannot act (no project, a run).
+- A status bar: the project file and a modified mark; the validity ("valid", "2 errors, 1 warning"), which opens the
+  Diagnostics when clicked; the running job (its command, a progress bar that is busy for a run without a known end
+  and counts steps for the sampler, the last chi^2) and a Stop button.
+- Diagnostics in a dock that is hidden while the project is valid with no warning and opens by itself when a
+  validation finds a problem; a double click goes to the tab and record (`showRecord`).
+- A start page while no project is open: New, Open, the recent projects, the example projects found beside the
+  program or in a checkout (`tests/upgrade/T1`-`T3`, `13N`), and one line per tab saying what it is for.  Opening or
+  creating a project shows the tabs; closing it (File > Close) the start page again.
+- Unsaved changes are asked about before New, Open, Close and Quit; the window's geometry, its dock and tool bar,
+  the last tab and the recent files are kept in `QSettings`; an `.azr` dropped on the window is opened; an old project
+  offers the converter (`ConvertProject`) rather than refusing.
+
+**Calculate** (`RunTab`).  Every option an editor of its kind, made from the facade's row (`front::Options`): a flag a
+check box, a whole number or a number a spin box with the row's range, default and unit (`Option::unit`, new: the
+unit the row's help names), a word a drop-down, a file a path with a chooser; under each its help in one line; an
+option asked only with another (`Option::when`, new: "with --covariance-band") enabled only then.  Run and Stop as
+the two primary buttons; while a fit runs a progress strip shows the evaluation, chi^2 and the best so far and a small
+curve of the best chi^2 against the evaluation (from the observer's `RunProgress`).  The log highlights warnings and
+errors (a line the program starts with "Warning", "WARNING", "Error", "ERROR" or "refused").  At the end a summary:
+the total chi^2 and, per data set, its record's name, N, chi^2 and chi^2/N in a sortable table, with "Open Plot".
+
+**Plot** (`PlotTab`, `PlotWidget`).  Wheel zoom about the cursor (Ctrl: x only, Shift: y only), drag a rectangle with
+the left button, pan with the right or middle button (or Shift + left), double click or Reset to the whole range,
+the cursor's coordinates in the corner, log/linear per axis, legend on/off, the residual panel; the data sets and
+extrapolations as check-box lists with All and None; export PNG, SVG, PDF and CSV (the points drawn, one block per
+series).  The plot is drawn in the window's palette on screen and on white in a file.
+
+**Facade additions** (`api/front/`, each with its case in `front_test.cpp`): `Option::unit` and `Option::when`.
+
+**Tests** `tests/gui/gui_shell_test.cpp` (label `gui`): the theme's palettes and the View menu choice; the tool bar's
+actions and their state; the status bar's file, modified mark and validity, the dock hidden on a valid project and
+opened by an error, its double click; the start page and its recent and example entries; the options' editors made
+from the facade's rows (a value set in an editor reaches the command line); the summary after a calculation of T1
+(rows = data sets, total = the engine's); the plot's wheel zoom, pan, cursor read-out, check-box lists and the CSV
+export (rows = points of the files).
+
 Code: `api/front/` (facade and test), `src/ProgramMain.cpp`, `include/ProgramObserver.h`, `gui/`.
