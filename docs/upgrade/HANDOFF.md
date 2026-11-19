@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-20 (agent physqt) — `feature/upgrade-8-physqt`: the Physics tab in the Qt program
+
+**Design** `docs/upgrade/qt_gui.md` section 15 (the engine side: `physics_tab.md`).  Cut from `feature/upgrade-6` at
+`8e74e8db`.
+
+**GUI** (`gui/`): a tab "Physics" after Plot, six pages in a list: Functions (every row of `PhysicsFunctions`, its
+arguments as fields with units and example values, the swept argument a drop-down, curves overlaid, points outside a
+domain as gaps counted with `PhysicsStatusText`), Channels of the project (`ChannelFunctions`), R-matrix of the
+project (`Block` of one J^pi group: delta, eta, |U|, Argand, |T|, P, S, |A|, det; dashed pole markers and a pole
+table from `Poles()`, a click centres on the pole), Pole map (`HeatmapWidget`: log10 |det A^-1| per J group, |U| or
+|A| of one group; own viridis-like colour map, colour bar, read-out, zoom/pan, poles on the map, a row's cut below;
+the page says it is a real-energy map and why the complex plane is not available), THM (vertex, line shape,
+distortion in cancellable chunks), Stopping (`StoppingFunctions`, SRIM's citation under the plot).  Two worker
+threads (`PhysicsWorker`): the session's (opened on the saved file at the start values, the last fit's `param.sav` or
+a chosen file; re-opened when the file's time stamp or the parameters change) and the session-free one; busy bar
+and Cancel.  `PlotWidget`: vertical markers; ticks moved to `PlotAxis.h` (shared with the map); a range at round-off
+no longer loops in the tick code (found by a |U| = 1 map: an endless loop to bad_alloc).
+**Facade** (`api/front/src/FrontPhysicsPlots.cpp`, its own line in CMake; cases in `PhysicsQtChecks` of
+`front_test.cpp`): `PhysicsCalls()`, `PhysicsPlots(call)`, `LastParameterFile(project)`, `StoppingStatusText`;
+`PhysicsArgument::exampleText`; `Block`'s series `T_abs`.  No engine number moves.
+
+**Run** (`work/b-u8-physqt`, `work/build_gui.sh`): build 0 warnings; `api_front` passed (physqt cases included);
+`ctest -L gui` 5 of 5 (`gui_physqt` new, 40 checks; shown to bite: l + 1 passed to `ChannelFunctions` fails the
+channels check); `repo_consistency` passed; `sphinx-build -W` clean; `ctest -LE slow -j4` 399 of 401: `rmfit_enginepin`
+(as on the base) and `pyazr_ui_smoke` (headless Chrome of this machine, as in the shell agent's entry) fail, six
+rmfit tests skipped.  Screenshots light and dark: `work/qt-shots/u8-physqt/`.
+
+**Not run**: `tests/run_tests.sh` (no engine file touched); the GUI on a real display; Qt 6.4 (CI's) headers.
+
+**Open**: without a project the window shows the start page, so pages 1 and 6 are reached after File > New (or with
+a project open); a start-page entry to them would touch `StartPage`.  No pages for kernel shapes or the level /
+interference decomposition (no facade call: `physics_tab.md` 6.1, 6.2).  The default E_x range of the maps spans
+every level of the project, background poles included (T1: 2-16 MeV).  The Argand plot's markers sit at the grid
+point nearest each level (no interpolation).  The THM line shape was not exercised (T2 has `lineshape` off).
+
 ## 2026-11-19 (agent shell) — `feature/upgrade-7-gui-shell`: CI for the Qt program, a modern shell
 
 **Design** `docs/upgrade/qt_gui.md` section 11.  Cut from `feature/upgrade-6` at `35cfcffe`.
