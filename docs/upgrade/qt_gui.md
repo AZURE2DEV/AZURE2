@@ -470,3 +470,121 @@ channel functions, one J^pi group's U, T, phase shifts, |A| and det A^-1 on an E
 and distortion), each answer a `PhysicsCurves` of series over one axis.  The design, the engine function behind
 every curve, the shapes and units, and which calls are slow: `docs/upgrade/physics_tab.md` (section 7 is the
 interface).  Test: `api_front`, section (f).
+
+## 15. Round 8, polish: what the quantity decides, kernels drawn, sums of reactions, the pair dialog (agent polish, 2026-11-20)
+
+The PI (2026-11-19): "too many things must be inserted by hand and are not selectable", "the Doppler window and
+beam-profile reading must be easy and intuitive", "the level and channels tab should be easy as in the old version,
+with some QoL improvements".  Sections 12 and 13 did most of it; this section is what their lists left open, in the
+order of the brief, and what a look at the merged program's screenshots (`work/b-u6c-gui/qt-shots/`) found.
+
+### 15.1 What the screenshots show (before)
+
+- A data set's form shows `J`, `l`, `s`, `operator`, `expansion`, `orders`, `shape`, `reference`, ... for every
+  quantity: the fields the record's quantity decides (`ByQ` in the schema) are all shown, typed lines that mean
+  nothing for a cross section.
+- "T" beside every field: an unexplained letter (it switches the field to its text).
+- An optional yes/no word (`active`, `detailed_balance`) shows "(none)" where the default ("yes") applies.
+- The Segments tab opens with a three-line sentence over the table; an empty section (Per-channel radii, Gamma
+  Decays, Isospin) shows a large empty grey frame under its empty table.
+- Headers spell "J^pi" where the Levels tab writes J with a superscript pi.
+- No Doppler, beam-spread or energy-resolution curve: only a beam profile is drawn, without its width in numbers.
+- A sum or a ratio of reactions is a text line.
+- The pair dialog: J a validated text line, the nuclei text lines with a completer; no "duplicate a pair"; every
+  field shown for every pair type.
+
+### 15.2 Fields decided by the quantity
+
+Facade: `QuantityFieldRules(quantity, rules)`: the rows of the quantity's `Quantity::fields`
+(`experiment/src/Quantities.cpp`): field, required, and the condition in words when the rule holds only under one
+(`Describe(Condition)`, "every reaction term has a photon exit").  False for a quantity the table has not.
+
+Form (`RecordsPanel`): a field with `FieldInfo::byQuantity` is shown only when the record's quantity lists it; its
+label carries " *" when the quantity requires it, and its tool tip the condition.  A change of the quantity shows and
+hides the rows at once; a field that disappears keeps its editor and its text (the user may change the quantity
+back).  On Apply a hidden field is not written; when it held a value, the status line says which values were dropped
+and why ("dropped J, l: quantity 'sigma' does not use them").  An unknown quantity (being typed) hides nothing.
+
+Add dialog: the quantity's required fields are added to the dialog's rows; when the quantity changes, the rows are
+made again with the values of the fields both quantities have kept, and the unit and the columns prefilled anew for
+the new quantity (`DefaultColumns`, `QuantityUnits`).
+
+### 15.3 Kernels drawn: Doppler, beam spread, energy resolution, beam profile
+
+Facade (`api/front/src/FrontPolish.cpp`): `KernelPreviewOf(project, section, record, user, E_lab, points, preview,
+why)`, the set-up call physics_tab.md section 6.2 asked for, for the kernels a record of `<targets>` selects:
+
+1. The record (as the form holds it, applied or not) is put into a copy of the project, which is built by the
+   engine's reader (`experiment::ReadFormat3Text`, as `PairUses`): the data set or extrapolation `user` (default:
+   the first that names the record) gives its entrance pair (masses, charges: `experiment::BeamCMFactor`) and its
+   `TargetEffectSpec` (the target, beam and detector it names, as the engine builds them).
+2. One reduced spec per kernel of the effect (the Doppler block alone, the beam spread alone, the table kernel alone,
+   the profile alone) makes an engine `TargetEffect(spec, Config)` (`src/TargetEffect.cpp`, the constructor a run
+   uses), whose `Kernels()` and `KernelParametersFor(config)` are the run's: the Doppler layout temperatures, a
+   sigma formula through the engine's `Equation`, a table kernel's values in engine units.
+3. The shape at E_0: the kernel's own weights on a uniform mesh of nodes over its support (`EffectSupport`), a
+   resolution kernel's by its `LinearForm` fold (the weights the gradient reads), the Doppler broadening's by its
+   `broadeningWeights` at E_0; the density is weight / node spacing, in the lab frame of the beam (x = E_c.m. / f,
+   y per lab MeV); the FWHM by linear interpolation at half the maximum, in keV lab (and c.m.).  The beam profile is
+   a lab distribution by itself: `BeamProfileWeight` over `BeamProfileSupport`, independent of E_0.
+4. E_0 (lab MeV): given, or the middle of the user's data (its data file's energy column through the engine's
+   `RowToEngine`, inside its energy window), or of an extrapolation's grid.
+
+Cases (`front_test.cpp`, `PolishChecks`): the closed forms the kernels' own tests use (`experiment/tests/
+kernels_test.cpp`, E_0 = 1 MeV c.m., f = 1/1.2): rectangular of width w = 20 keV lab: FWHM 20 keV, area 1;
+triangular of base 20 keV: FWHM 10 keV; Gaussian sigma 1 keV lab: FWHM 2 sqrt(2 ln 2) keV; free-gas Doppler at T:
+FWHM = 2 sqrt(2 ln 2) sqrt(2 E kT m/M) (lab-equivalent energy, E >> kT; the kernel is a Gaussian in velocity of
+standard deviation u/sqrt 2, u^2 = kT m/M), and its area 1.
+
+Form: beside the Doppler, beam spread, energy resolution and profile boxes, one preview panel: the curves (one per
+kernel the record selects), "FWHM 1.23 keV (lab)" under each, the data set drop-down (the records that use it) and
+the energy E_lab; redrawn as the form is edited.  A record no data set uses is drawn for the first particle pair at
+the energy typed (1 MeV to start), and says so.
+
+### 15.4 Sums and ratios of reactions
+
+Facade: `ParseReactionExpression(project, text, expr, why)` / `ReactionExpressionText(expr)`: the engine's parser
+(`experiment::ParseReaction`) gives the operation (one reaction, sum, ratio) and per term its scale (as written), the
+reaction as written, its entrance and exit pair keys (`PairsNamed`, as `ReactionPairs`) and its fixed angle (number,
+unit, frame).  The text is written term by term as the grammar has it (`0.5*20Ne(n,a)17O + 15N(p,a)12C`,
+`15N(p,a)12C @ 90 deg cm / 15N(p,p)15N @ 90 deg cm`).  Editor: the operation as a drop-down; one row per term: weight,
+entrance and exit pair drop-downs, an optional fixed angle; "+" and "-" rows.  A term whose pairs the project has not
+(another compound nucleus) keeps its reaction text in a line.  The round-trip rule of section 12 holds: unedited, the
+text is the text read.
+
+### 15.5 Defaults shown
+
+An optional word field (enum) offers its default as the empty item, written "yes (default)" in grey; an optional
+number or word line shows "default: <value>" as its placeholder.  Nothing is written for the default.
+
+### 15.6 The pair dialog and the Pairs tab
+
+Each particle: element by symbol (a drop-down of the mass table's elements, or Z typed) and A by a spin box, mass,
+spin and parity filled from the table (dev's `AddPairDialog`), still editable; J by a spin box of halves and the
+parity by a +/- toggle; the pair type by a drop-down that hides what that type does not use (a photon pair: no light
+particle, no channel radius; a beta pair: no external capture).  Pairs tab: Duplicate (Ctrl+D) opens the dialog on a
+copy.
+
+### 15.7 Levels: the channel rule behind the facade
+
+Facade: `AllowedChannels(pairRows, 2J, parity, limits, pairKeys, channels, why)`: the engine's
+`experiment::AllowedChannels` on a document whose `<levels>` holds one pair row per unsaved pair (the tab's pairs,
+made by the tab's own row writer), so that the tab and pyazr offer one rule.  Two rules the GUI's copy had and the
+engine's function lacks are applied after it, each naming the engine's refusal it avoids: identical particles take
+l + s even only (`CNuc::CheckIdenticalChannels`), and a photon channel needs J and J_f both integer or both
+half-integer.  Test: for every J^pi up to the pairs' largest J of T1, T2, T3 and 13N, the facade's list equals the
+tab's old `calculateChannels` (then the copy is deleted).  The tab's edits per action through
+`experiment::LevelEdits` stay open: the tab holds its three models and the undo stack on them, and writes
+`<levels>` on save; moving every action to the document's edits is a rewrite of the tab, not a contained change.
+
+### 15.8 Small things
+
+The "T" toggle becomes a tool button with a text-cursor icon and the tool tip "Edit this field as text (its
+grammar: ...)"; the Segments help is one short line; an empty section shows its hint and no empty form frame; a
+schema title "J^pi" is shown as J with a superscript pi.  The sections not looked at in round 7 (`<modelData>`,
+`<potentials>`, `<channelRadii>`, `<gammaDecays>`, `<isospin>`) are grabbed and read one by one.
+
+### 15.9 Tests
+
+`tests/gui/gui_polish_test.cpp` (label gui): each behaviour through the widgets, the project text read back; the
+round-trip check of section 12 (`gui_forms`) covers the new widgets.  `api_front` (`PolishChecks`).
