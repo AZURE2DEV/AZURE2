@@ -61,7 +61,8 @@ public names are a contract.
 
 1. The library computes it (`physics/`, `experiment/`, `stopping/`); if it does not, a thin free function there with
    its unit test (as `physics/include/azure2/physics/Widths.h`).  New physics is a design note first, not a row.
-2. One row in `BuildTable()` of `api/src/pybind_physics.cpp`: name, summary, doc, library function, axis, arguments
+2. One row in `BuildTable()` of `api/physics_table/src/PhysicsTable.cpp` (plain C++; the binding `api/src/pybind_physics.cpp`
+   and the Qt GUI's facade `api/front` read it): name, summary, doc, library function, axis, arguments
    (`Real`/`Integer`/`Flag`/`Choice` with unit and domain: `.gt`, `.ge`, `.lt`, `.le`, `.otherwise` for a default),
    returns (name, unit, doc), and an adapter that converts the arguments and calls the library (no formula there);
    the adapter returns 0, `kJointly` (-2) for arguments outside the domain together, `kFailed` (-1), or the 1-based

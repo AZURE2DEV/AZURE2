@@ -500,14 +500,15 @@ A physics function of the binding
    with its unit test against an independent value; ``physics/`` includes no
    engine header and no GSL (check 8) and takes its constants from
    ``Constants.h`` (check 10).
-2. One row in ``BuildTable()`` of ``api/src/pybind_physics.cpp``: name,
+2. One row in ``BuildTable()`` of ``api/physics_table/src/PhysicsTable.cpp``
+   (plain C++, read by the binding and by the Qt GUI's facade): name,
    summary, its group in the list, arguments with unit and domain, returns,
    and an adapter that only converts and calls the library. Each argument
    without a default carries an ``example``, and the argument a plot runs
    over a ``sweep``; ``tests/pyazr/physics_table_test.py`` fails without
    them, because the web UI's Physics tab draws every row from these values
    without typing. The row types (``ArgSpec``, ``OutSpec``, ``ArgKind``) are
-   in ``api/src/pybind_rows.h``.
+   in ``api/physics_table/include/azure2/physics_table/PhysicsTable.h``.
 3. A ``row_test`` in ``tests/pyazr/physics_table_test.py`` against mpmath, a
    published table or the engine's own use (check 41 fails without one).
 4. ``python3 tools/gen_physics_docs.py`` (the user-guide page;
@@ -519,7 +520,7 @@ A stopping function is one row of ``BuildStoppingTable()`` in
 ``tests/pyazr/ui/physics_tab_test.py`` plots every row of both tables and
 runs the Python text the page offers for it. Neither kind of row needs
 anything in ``pyazr/ui`` or in the page. A new kind of argument is a value
-of ``ArgKind`` with its name in ``KindName`` (``api/src/pybind_rows.h``) and
+of ``ArgKind`` with its name in ``KindName`` (``PhysicsTable.h``) and
 one row of ``ARGUMENT_KINDS`` in ``pyazr/ui/static/physicsform.js``
 (``tests/pyazr/ui/js/physics.test.mjs`` fails until it exists).
 

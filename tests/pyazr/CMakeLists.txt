@@ -857,7 +857,7 @@ add_test(NAME pyazr_optical_scattering
                  ${CMAKE_CURRENT_SOURCE_DIR}/optical_scattering_test.py)
 set_tests_properties(pyazr_optical_scattering PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
 
-# pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against mpmath, the engine's
+# pyazr.physics: every row of the binding's physics table (api/physics_table/src/PhysicsTable.cpp) against mpmath, the engine's
 # own use on 13N and the Python formula it replaces (the largest difference per formula is printed); broadcasting,
 # errors="mask", DomainError (docs/upgrade/pyazr3.md section 2.7).  tests/consistency check 41 asks for a row_test per row.
 add_test(NAME pyazr_physics_table

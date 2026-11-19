@@ -44,6 +44,8 @@ else()
     target_link_libraries(_azure2 PRIVATE AZUREAPI)
     # convert/: format-3 validation and the converter (pybind_convert.cpp)
     target_link_libraries(_azure2 PRIVATE azure2_convert)
+    # the physics table's rows (pybind_physics.cpp; plain C++, read by the facade api/front too)
+    target_link_libraries(_azure2 PRIVATE azure2_physics_table)
 
     # Build directly into the pyazr package so ``import pyazr._azure2`` resolves
     # without any path fiddling.

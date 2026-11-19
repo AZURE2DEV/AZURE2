@@ -1,6 +1,6 @@
 """Physics functions of the engine's libraries as free functions on arrays (docs/upgrade/pyazr3.md section 2.7).
 
-One Python function per row of the binding's table (``api/src/pybind_physics.cpp``), built here at import from
+One Python function per row of the binding's table (``api/physics_table/src/PhysicsTable.cpp``), built here at import from
 ``_azure2.physics_functions()``: its signature, docstring, units and domains are the row's, and each call evaluates
 the row's library function element by element in C++ (no session, no project, no physics in Python).
 
