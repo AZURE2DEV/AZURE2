@@ -87,7 +87,10 @@ def main(repo, scratch):
     for name in ("index.html", "vendor/plotly-cartesian-4.1.2.min.js"):
         try:
             full, _ = routes.static_file(name)
-            check(f"the web page's {name} is found", os.path.isfile(full) and full.startswith(where), full)
+            # The same directory may be spelled two ways (Windows: `lib` of a Python 3.10 venv against `Lib` of the
+            # resolved path): compare the resolved, case-folded names.
+            same = os.path.normcase(os.path.realpath(full)).startswith(os.path.normcase(os.path.realpath(where)))
+            check(f"the web page's {name} is found", os.path.isfile(full) and same, (full, where))
         except Exception as e:
             check(f"the web page's {name} is found", False, e)
     p = subprocess.run([sys.executable, "-m", "pyazr", "--help"], capture_output=True, text=True, cwd=scratch)
