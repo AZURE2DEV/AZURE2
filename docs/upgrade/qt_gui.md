@@ -150,8 +150,9 @@ Code: `api/front/` (facade and test), `src/ProgramMain.cpp`, `include/ProgramObs
 The PI (2026-11-19): "the level and channels tab should be easy as in the old version, with some QoL improvements
 for easier navigations, removal, or addition on the go", and "too many things must be inserted by hand and are not
 selectable". The measure is dev's program (`wt-devgui/gui`); the tabs below keep its layout (levels | channels |
-configuration and details, the records of the level scheme below) and its every action (the parity table, 11.6), and
-add what makes a level scheme of tens of levels quick to work through.
+configuration and details, the records of the level scheme below) and its every action (the parity table, 11.8), and
+add what makes a level scheme of tens of levels quick to work through.  (Implemented on branch
+`feature/upgrade-7-gui-levels`, 2026-11-19; parity in 11.8.)
 
 ### 11.1 What stays as it is
 
@@ -188,7 +189,9 @@ its new J^pi, the widths of the channels it keeps kept.
   tab: an add, a removal, a duplicate, an edit in place, a bulk fix, a change of the limits, a pair added, edited or
   removed, a level import.  An entry of the stack is the tab's state before and after (the three models and the
   limits, `LevelsUndo`); the project text is not touched until a save, as for any edit of the tab.  The stack is
-  emptied when a project is opened.
+  emptied when a project is opened.  Undone back to the opened state with no save in between, the project is
+  saved byte for byte as opened; after a save, the rows the save rewrote come back with their content but not
+  always their blanks (`SetLevels` writes a row over the line at its place).
 
 ### 11.3 Navigation
 
@@ -260,3 +263,37 @@ two levels removed with Del after one confirmation; duplicate; undo of each back
 redo; the filter, the search and "only included" (rows shown); bulk fix of the selection; the details pane's numbers
 equal to the facade's; the channel value's unit by kind; a pair's cell edited in place; a pair's removal message
 naming its data sets.
+
+### 11.8 Parity with dev's two tabs, item by item
+
+"dev" is `wt-devgui/gui` (the PI's measure); "stage 2" the program before this section; "now" after it.  Open rows
+are marked **open**.
+
+| dev's action or display | Stage 2 | Now |
+|---|---|---|
+| Pairs: table of light/heavy particle, spins, excitation, separation energy, radius, light excitation | same columns | same; header units (11.6) |
+| Pairs: "+" add dialog (light and heavy particle by isotope text "12C", J, parity, Z, M, excitation energies, separation energy, radius, pair type, E1/E2 external capture) | same dialog | same dialog; the isotope fields complete from the mass table (p, d, t, a and every AME2020 nuclide: chosen, not typed). **Open**: J by a spin box of halves and the isotope as element drop-down + A spin box (11.6) are not done; J is still a validated text field (0, 0.5, 1, ...) |
+| Pairs: duplicate a pair (11.6) | none | **open** (not done) |
+| Pairs: "-" remove; first pair must be a particle pair; no photon entrance | same | same, plus a confirmation naming the channels and the data sets that use the pair (`PairUses`) |
+| Pairs: double click edits the pair in the dialog | same | same; simple cells also in place |
+| Pairs: "Masses from AME2020..." (compare and fill every pair, MassCheckDialog) | same | same |
+| Pairs: "Fill masses and S" in the dialog from the mass table by Z and A | same | same |
+| Pairs: compound-nucleus column when several nuclei | same | same |
+| Pairs: per-channel radii table (every particle channel of the active levels, own radius bold, "Clear own radius") | the generic records panel of `<channelRadii>` (forms agent's `RecordsPanel`) | records panel unchanged; the channel's own radius shown in the Levels tab's details ("own; pair a"), from `ChannelRadius` |
+| Pairs: isotopic abundances of samples (natural targets) | moved to the target records' `isotope` field (Experimental Effects tab) | unchanged (not this tab in format 3) |
+| Levels: table Include?/Fix?/J^pi/Energy, compound nucleus column, nucleus filter | same | same, plus search, J^pi filter with counts, only included, count, J^pi group in bold |
+| Levels: "+" dialog (J^pi from a list of those with channels, energy, nucleus) | same | same, plus the add bar, Insert, Ctrl+D, background pole |
+| Levels: "-" remove one level | same | Del / "-" / menu for several, one confirmation |
+| Levels: double click edits J^pi and E in the dialog | same | in place (J spin box + parity toggle, E); the dialog in the context menu |
+| Levels: "NDS" import of ENSDF levels from the IAEA (IAEALevelDialog: J^pi choices for ambiguous assignments) | same | same (an undo entry) |
+| Levels: Fix All Widths, Fix All Energies | same | same; on the selection when several are selected; fix/free both ways in the menu |
+| Levels: Export LaTeX (clipboard or file) | same | same |
+| Levels: header click on Include?/Fix? does not sort (LevelsHeaderView) | same | same |
+| Channels: Fix?, pair, s, l (E1/M1/GT/F) of the selected level, bold when the width is not 0 | same; empty until a level is clicked | the first level selected on opening; value, meaning and unit, theta^2 columns; value in place |
+| Configuration: maximum l, multipolarity, multipolarities per decay | same, plus hard-sphere option and missing-J^pi text | the text says what to do, links fill the add bar |
+| Details: level, pair, particles' spins, Z, M, g, excitation, separation energy, channel radius (own from the radii table) | same, pair radius only | same, own radius from `<channelRadii>`; E_c, P, S, dS/dE, gamma_W^2, Gamma_sp, gamma^2, theta^2 from the facade |
+| Details: reduced width / ANC / mu / Q / B box with its unit | same (kind decided in `gui/`) | same box; the kind from the facade (`ChannelAtLevel`) |
+| Details: "Wigner Limit" button (Gamma_sp of the channel, eV) | same, `SingleParticleWidth` | shown at once (the facade's Gamma_sp at the level energy) |
+| Undo | none | Ctrl+Z / Ctrl+Shift+Z over both tabs |
+| Pairs: the pair type as a column | hidden | shown in words |
+| Levels: the Insert/Del/Ctrl+D keys, the context menus | none | as 11.2, 11.3 |
