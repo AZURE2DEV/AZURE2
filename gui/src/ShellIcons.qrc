@@ -1,0 +1,17 @@
+<!DOCTYPE RCC><RCC version="1.0">
+ <!-- the main actions' icons (tool bar, start page): SVGs drawn for this program, scaled by Qt for any screen -->
+ <qresource prefix="/actions">
+     <file alias="new.svg">../images/actions/new.svg</file>
+     <file alias="open.svg">../images/actions/open.svg</file>
+     <file alias="save.svg">../images/actions/save.svg</file>
+     <file alias="validate.svg">../images/actions/validate.svg</file>
+     <file alias="calculate.svg">../images/actions/calculate.svg</file>
+     <file alias="fit.svg">../images/actions/fit.svg</file>
+     <file alias="stop.svg">../images/actions/stop.svg</file>
+     <file alias="plot.svg">../images/actions/plot.svg</file>
+     <file alias="close.svg">../images/actions/close.svg</file>
+     <!-- the check mark of check boxes (AzureTheme's style sheet) -->
+     <file alias="check.svg">../images/actions/check.svg</file>
+     <file alias="partial.svg">../images/actions/partial.svg</file>
+ </qresource>
+</RCC>
