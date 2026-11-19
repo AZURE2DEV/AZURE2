@@ -10,6 +10,8 @@
      <file alias="stop.svg">../images/actions/stop.svg</file>
      <file alias="plot.svg">../images/actions/plot.svg</file>
      <file alias="close.svg">../images/actions/close.svg</file>
+     <!-- a field of a form edited as its text (ValueEditor's toggle) -->
+     <file alias="edit-text.svg">../images/actions/edit-text.svg</file>
      <!-- the check mark of check boxes (AzureTheme's style sheet) -->
      <file alias="check.svg">../images/actions/check.svg</file>
      <file alias="partial.svg">../images/actions/partial.svg</file>

@@ -285,7 +285,10 @@ int main(int argc, char **argv) {
     FieldEditor *reaction = data->fieldEditor("reaction");
     Check(reaction && !reaction->textMode(), "T2: the reaction shown by its pair drop-downs");
     const std::vector<front::PairChoice> pairs = front::Pairs(w.holder()->project());
-    QList<QComboBox *> combos = reaction ? reaction->piece()->findChildren<QComboBox *>() : QList<QComboBox *>();
+    QList<QComboBox *> combos;  // the entrance and exit drop-downs (round 8: beside the list of one reaction / sum / ratio)
+    if (reaction)
+      for (QComboBox *c : reaction->piece()->findChildren<QComboBox *>())
+        if (c->objectName() != "reactionMode" && c->isVisibleTo(reaction)) combos << c;
     std::string other;
     if (combos.size() == 2)
       for (int i = 0; i < combos[1]->count(); i++)

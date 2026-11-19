@@ -35,6 +35,9 @@ struct EditorContext {
   ProjectHolder *holder = nullptr;
   std::string kind;                     ///< the record's kind
   std::function<QString()> quantity;    ///< the record's quantity as the form holds it ("" none)
+  /// The value an optional field or part takes when it is left out ("" none): shown greyed as the empty choice
+  /// ("yes (default)") or as a line's placeholder, never written.
+  std::string defaultText;
 };
 
 class PieceEditor : public QWidget {

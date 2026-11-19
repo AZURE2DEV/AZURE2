@@ -1,8 +1,11 @@
 #include "ValueEditor.h"
 
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
+#include <QIcon>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -16,6 +19,8 @@
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <cmath>
+#include <functional>
 
 #include "ProjectHolder.h"
 
@@ -52,13 +57,26 @@ void SelectWord(QComboBox *combo, const QString &word) {
 
 QString Word(const QComboBox *combo) { return combo->currentIndex() >= 0 ? combo->currentData().toString() : QString(); }
 
-/// A drop-down of words: `labels` shown, `words` written; "(none)" first when `optional`.
-void FillCombo(QComboBox *combo, const QStringList &words, const QStringList &labels, bool optional) {
+/// The empty choice of an optional value: its default greyed ("yes (default)"), or "(none)" without one.
+void AddEmptyChoice(QComboBox *combo, const QString &defaultText) {
+  if (defaultText.isEmpty()) {
+    combo->addItem(QObject::tr("(none)"), QString());
+    return;
+  }
+  combo->addItem(QObject::tr("%1 (default)").arg(defaultText), QString());
+  combo->setItemData(combo->count() - 1, QColor(Qt::gray), Qt::ForegroundRole);
+  combo->setItemData(combo->count() - 1, QObject::tr("Left out: the default, %1, applies").arg(defaultText), Qt::ToolTipRole);
+}
+
+/// A drop-down of words: `labels` shown, `words` written; the empty choice first when `optional` ("(none)", or the
+/// default greyed).
+void FillCombo(QComboBox *combo, const QStringList &words, const QStringList &labels, bool optional,
+               const QString &defaultText = QString()) {
   const QString was = Word(combo);
   const bool hadChoice = combo->count() > 0;
   combo->blockSignals(true);
   combo->clear();
-  if (optional) combo->addItem(QObject::tr("(none)"), QString());
+  if (optional) AddEmptyChoice(combo, defaultText);
   for (int i = 0; i < words.size(); i++) combo->addItem(i < labels.size() ? labels[i] : words[i], words[i]);
   if (hadChoice) SelectWord(combo, was);
   combo->blockSignals(false);
@@ -85,10 +103,11 @@ QStringList UnitsOf(const front::ValueInfo &info, const EditorContext &c) {
 // ---------------------------------------------------------------- one line
 class WordEditor : public PieceEditor {
  public:
-  WordEditor(const front::ValueInfo &info) : info_(info) {
+  WordEditor(const front::ValueInfo &info, const std::string &defaultText) : info_(info) {
     const bool number = Is(info, "number") || Is(info, "integer");
     edit_ = number ? NumberLine(Q(info.grammar), Is(info, "integer")) : new QLineEdit;
     if (!number) edit_->setPlaceholderText(Q(info.grammar));
+    if (!defaultText.empty()) edit_->setPlaceholderText(tr("default: %1").arg(Q(defaultText)));
     Row(this)->addWidget(edit_, number ? 0 : 1);
     if (number) static_cast<QHBoxLayout *>(layout())->addStretch(1);
     connect(edit_, &QLineEdit::textEdited, this, &PieceEditor::changed);
@@ -159,7 +178,7 @@ class ChoiceEditor : public PieceEditor {
     } else {
       words = Words(info_.values);
     }
-    FillCombo(combo_, words, labels, optional_ || combo_->count() == 0);
+    FillCombo(combo_, words, labels, optional_ || combo_->count() == 0, optional_ ? Q(context_.defaultText) : QString());
     if (epoch_) fillEpochs(Word(epoch_));
   }
   bool set(const front::ValueParts &p) override {
@@ -571,7 +590,9 @@ class FormEditor : public PieceEditor {
       for (const front::PartInfo &p : a.parts) {
         Part part;
         part.info = p;
-        part.editor = MakePieceEditor(p.value, c, p.optional);
+        EditorContext partContext = c;
+        partContext.defaultText = p.optional ? p.defaultText : std::string();
+        part.editor = MakePieceEditor(p.value, partContext, p.optional);
         part.editor->setToolTip(Q(p.doc));
         QString title = Q(p.name);
         title.replace('_', ' ');
@@ -914,9 +935,11 @@ class ColumnsEditor : public PieceEditor {
 };
 
 // ---------------------------------------------------------------- a reaction: entrance and exit pairs
-class ReactionEditor : public PieceEditor {
+/// The entrance and exit drop-downs of one reaction (the pairs of <levels>; the exits of the entrance pair's compound
+/// nucleus, and its total capture).
+class PairPicker : public QWidget {
  public:
-  ReactionEditor(const front::ValueInfo &info, const EditorContext &c) : info_(info), context_(c) {
+  PairPicker(const EditorContext &c, std::function<void()> changed) : context_(c), changed_(std::move(changed)) {
     QHBoxLayout *h = Row(this);
     entrance_ = new QComboBox;
     exit_ = new QComboBox;
@@ -928,15 +951,14 @@ class ReactionEditor : public PieceEditor {
     h->addWidget(entrance_);
     h->addWidget(new QLabel(tr("exit")));
     h->addWidget(exit_);
-    h->addStretch(1);
     connect(entrance_, QOverload<int>::of(&QComboBox::activated), this, [this]() {
       fillExits(exit_->currentData().toInt());
-      emit changed();
+      changed_();
     });
-    connect(exit_, QOverload<int>::of(&QComboBox::activated), this, &PieceEditor::changed);
+    connect(exit_, QOverload<int>::of(&QComboBox::activated), this, [this]() { changed_(); });
     refresh();
   }
-  void refresh() override {
+  void refresh() {
     pairs_ = front::Pairs(context_.holder->project());
     const int keep = entrance_->currentData().toInt(), keepExit = exit_->currentData().toInt();
     entrance_->blockSignals(true);
@@ -948,27 +970,26 @@ class ReactionEditor : public PieceEditor {
     entrance_->blockSignals(false);
     fillExits(keepExit);
   }
-  bool set(const front::ValueParts &p) override {
-    int in = 0, out = 0;
-    if (!front::ReactionPairs(context_.holder->project(), S(Q(p.text)), in, out) || in <= 0 || out == 0) return false;
+  /// Show pair keys `in`, `out` (-1 total capture); false when the project has not them.
+  bool setPairs(int in, int out) {
     const int at = entrance_->findData(in);
-    if (at < 0) return false;
+    if (in <= 0 || out == 0 || at < 0) return false;
     entrance_->setCurrentIndex(at);
     fillExits(out);
     return exit_->currentData().toInt() == out;
   }
-  void prefill() override {
+  void prefill() {
     refresh();
     if (entrance_->currentIndex() < 0 && entrance_->count()) entrance_->setCurrentIndex(0);
     fillExits(0);
     if (exit_->count()) exit_->setCurrentIndex(0);
   }
-  front::ValueParts get() const override {
-    front::ValueParts p;
-    p.type = info_.type;
-    const int in = entrance_->currentData().toInt(), out = exit_->currentData().toInt();
-    if (in > 0 && out != 0) p.text = front::ReactionLabel(context_.holder->project(), in, out > 0 ? out : 0);
-    return p;
+  int entrance() const { return entrance_->currentData().toInt(); }
+  int exit() const { return exit_->currentData().toInt(); }
+  /// The label of the reaction chosen ("" when none is).
+  QString label() const {
+    const int in = entrance(), out = exit();
+    return in > 0 && out != 0 ? Q(front::ReactionLabel(context_.holder->project(), in, out > 0 ? out : 0)) : QString();
   }
 
  private:
@@ -990,10 +1011,358 @@ class ReactionEditor : public PieceEditor {
     exit_->setCurrentIndex(at >= 0 ? at : -1);
     exit_->blockSignals(false);
   }
-  front::ValueInfo info_;
   EditorContext context_;
+  std::function<void()> changed_;
   std::vector<front::PairChoice> pairs_;
   QComboBox *entrance_, *exit_;
+};
+
+/// A reaction expression (section 3.5): one reaction by its pairs, or a sum or a ratio of terms, each a weight, a
+/// reaction by its pairs (or as written, when the project has not its pairs) and an optional fixed angle.
+class ReactionEditor : public PieceEditor {
+ public:
+  ReactionEditor(const front::ValueInfo &info, const EditorContext &c) : info_(info), context_(c) {
+    QVBoxLayout *v = new QVBoxLayout(this);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(2);
+    QWidget *top = new QWidget;
+    QHBoxLayout *h = Row(top);
+    mode_ = new QComboBox;
+    mode_->setObjectName("reactionMode");
+    // the operations of the grammar (front::ReactionExpression::op), in words
+    mode_->addItem(tr("one reaction"), "single");
+    mode_->addItem(tr("sum of reactions"), "sum");
+    mode_->addItem(tr("ratio of two"), "ratio");
+    mode_->setToolTip(tr("A data set of one reaction, of a weighted sum of reactions (a total, unresolved states, a "
+                         "natural target) or of the ratio of two"));
+    single_ = new PairPicker(c, [this]() { emit changed(); });
+    h->addWidget(mode_);
+    h->addWidget(single_);
+    h->addStretch(1);
+    v->addWidget(top);
+    termsHost_ = new QWidget;
+    termsLayout_ = new QVBoxLayout(termsHost_);
+    termsLayout_->setContentsMargins(16, 0, 0, 0);
+    termsLayout_->setSpacing(2);
+    v->addWidget(termsHost_);
+    addTerm_ = new QPushButton(tr("Add term"));
+    addTerm_->setObjectName("addReactionTerm");
+    QHBoxLayout *more = new QHBoxLayout;
+    more->setContentsMargins(16, 0, 0, 0);
+    more->addWidget(addTerm_);
+    more->addStretch(1);
+    v->addLayout(more);
+    connect(addTerm_, &QPushButton::clicked, this, [this]() {
+      addTerm()->picker->prefill();
+      showMode();
+      emit changed();
+    });
+    connect(mode_, QOverload<int>::of(&QComboBox::activated), this, [this]() {
+      // a sum or a ratio starts from the reaction shown, and a second term
+      if (Word(mode_) != "single" && terms_.isEmpty()) {
+        Term *first = addTerm();
+        first->picker->refresh();
+        first->picker->setPairs(single_->entrance(), single_->exit());
+        addTerm()->picker->prefill();
+      }
+      while (Word(mode_) == "ratio" && terms_.size() > 2) removeTerm(terms_.last());
+      while (Word(mode_) == "ratio" && terms_.size() < 2) addTerm()->picker->prefill();
+      showMode();
+      emit changed();
+    });
+    showMode();
+  }
+  ~ReactionEditor() override { qDeleteAll(terms_); }
+  void refresh() override {
+    single_->refresh();
+    for (Term *t : terms_)
+      if (t->picker) t->picker->refresh();
+  }
+  bool set(const front::ValueParts &p) override {
+    clearTerms();
+    front::ReactionExpression e;
+    std::string why;
+    if (!front::ParseReactionExpression(context_.holder->project(), S(Q(p.text)), e, why)) return false;
+    const bool plain = e.op == "single" && e.terms.size() == 1 && e.terms[0].scale.empty() && e.terms[0].angle.empty();
+    if (plain) {
+      SelectWord(mode_, "single");
+      single_->refresh();
+      const bool ok = single_->setPairs(e.terms[0].entrance, e.terms[0].exit);
+      showMode();
+      return ok;
+    }
+    SelectWord(mode_, Q(e.op));
+    for (const front::ReactionTermInfo &t : e.terms) {
+      Term *row = addTerm();
+      row->original = t;
+      row->weight->setText(Q(t.scale));
+      if (!row->picker->setPairs(t.entrance, t.exit)) {
+        // the project has not its pairs (another compound nucleus): the reaction as written
+        row->asText = true;
+        row->picker->setVisible(false);
+        row->text->setVisible(true);
+        row->text->setText(Q(t.reaction));
+      }
+      row->useAngle->setChecked(!t.angle.empty());
+      row->angle->setText(Q(t.angle));
+      if (!t.angle.empty()) {
+        SelectWord(row->angleUnit, Q(t.angleUnit));
+        SelectWord(row->frame, Q(t.angleFrame));
+      }
+      row->showAngle();
+    }
+    showMode();
+    return true;
+  }
+  void prefill() override {
+    SelectWord(mode_, "single");
+    single_->prefill();
+    showMode();
+  }
+  front::ValueParts get() const override {
+    front::ValueParts p;
+    p.type = info_.type;
+    if (Word(mode_) == "single") {
+      p.text = S(single_->label());
+      return p;
+    }
+    front::ReactionExpression e;
+    e.op = S(Word(mode_));
+    for (const Term *t : terms_) {
+      front::ReactionTermInfo term;
+      term.scale = S(t->weight->text());
+      if (t->asText) {
+        term.reaction = S(t->text->text());
+      } else if (t->picker->entrance() == t->original.entrance && t->picker->exit() == t->original.exit &&
+                 !t->original.reaction.empty()) {
+        term.reaction = t->original.reaction;  // the pairs as read: the reaction as written
+      } else {
+        term.reaction = S(t->picker->label());
+      }
+      if (t->useAngle->isChecked()) {
+        term.angle = S(t->angle->text());
+        term.angleUnit = S(Word(t->angleUnit));
+        term.angleFrame = S(Word(t->frame));
+      }
+      if (!term.reaction.empty()) e.terms.push_back(term);
+    }
+    p.text = front::ReactionExpressionText(e);
+    return p;
+  }
+
+ private:
+  struct Term {
+    QWidget *host = nullptr;
+    QLineEdit *weight = nullptr, *text = nullptr, *angle = nullptr;
+    PairPicker *picker = nullptr;
+    QCheckBox *useAngle = nullptr;
+    QComboBox *angleUnit = nullptr, *frame = nullptr;
+    front::ReactionTermInfo original;
+    bool asText = false;  ///< the reaction as written (the project has not its pairs)
+    void showAngle() {
+      for (QWidget *w : {(QWidget *)angle, (QWidget *)angleUnit, (QWidget *)frame}) w->setVisible(useAngle->isChecked());
+    }
+  };
+  Term *addTerm() {
+    Term *t = new Term;
+    t->host = new QWidget;
+    t->host->setObjectName("reactionTerm");
+    QHBoxLayout *h = Row(t->host);
+    t->weight = NumberLine(tr("1"));
+    t->weight->setToolTip(tr("The term's weight (left empty: 1)"));
+    t->weight->setMaximumWidth(t->weight->fontMetrics().horizontalAdvance("0.000000"));
+    t->picker = new PairPicker(context_, [this]() { emit changed(); });
+    t->text = new QLineEdit;
+    t->text->setVisible(false);
+    t->text->setToolTip(tr("A reaction of pairs this project has not (written as text)"));
+    t->useAngle = new QCheckBox(tr("at a fixed angle"));
+    t->useAngle->setToolTip(tr("The term at a fixed angle (a ratio of differential cross sections)"));
+    t->angle = NumberLine(tr("angle"));
+    t->angle->setMaximumWidth(t->angle->fontMetrics().horizontalAdvance("000.0000"));
+    t->angleUnit = UnitCombo(Words(front::DimensionUnits("angle")));
+    t->frame = new QComboBox;
+    for (const std::string &f : front::Frames()) t->frame->addItem(Q(f), Q(f));
+    QToolButton *remove = new QToolButton;
+    remove->setText(QString::fromUtf8("−"));
+    remove->setToolTip(tr("Remove this term"));
+    h->addWidget(t->weight);
+    h->addWidget(new QLabel(QString::fromUtf8("×")));
+    h->addWidget(t->picker);
+    h->addWidget(t->text, 1);
+    h->addWidget(t->useAngle);
+    h->addWidget(t->angle);
+    h->addWidget(t->angleUnit);
+    h->addWidget(t->frame);
+    h->addWidget(remove);
+    h->addStretch(1);
+    t->showAngle();
+    termsLayout_->addWidget(t->host);
+    terms_ << t;
+    for (QLineEdit *e : {t->weight, t->text, t->angle}) connect(e, &QLineEdit::textEdited, this, &PieceEditor::changed);
+    for (QComboBox *b : {t->angleUnit, t->frame}) connect(b, QOverload<int>::of(&QComboBox::activated), this, &PieceEditor::changed);
+    connect(t->useAngle, &QCheckBox::toggled, this, [this, t]() {
+      t->showAngle();
+      emit changed();
+    });
+    connect(remove, &QToolButton::clicked, this, [this, t]() {
+      if (terms_.size() <= 2) return;  // a sum or a ratio has two terms at least
+      removeTerm(t);
+      showMode();
+      emit changed();
+    });
+    return t;
+  }
+  void removeTerm(Term *t) {
+    terms_.removeAll(t);
+    t->host->deleteLater();
+    delete t;
+  }
+  void clearTerms() {
+    while (!terms_.isEmpty()) removeTerm(terms_.last());
+  }
+  void showMode() {
+    const QString m = Word(mode_);
+    single_->setVisible(m == "single");
+    termsHost_->setVisible(m != "single");
+    addTerm_->setVisible(m == "sum");
+  }
+  front::ValueInfo info_;
+  EditorContext context_;
+  QComboBox *mode_;
+  PairPicker *single_;
+  QWidget *termsHost_;
+  QVBoxLayout *termsLayout_;
+  QPushButton *addTerm_;
+  QList<Term *> terms_;
+};
+
+// ---------------------------------------------------------------- a spin, with or without its parity
+/// J by a spin box of halves (empty below 0: an optional spin left out), and for a spin_parity a +/- toggle.
+class SpinEditor : public PieceEditor {
+ public:
+  SpinEditor(const front::ValueInfo &info) : info_(info), parity_(Is(info, "spin_parity")) {
+    QHBoxLayout *h = Row(this);
+    j_ = new QDoubleSpinBox;
+    j_->setDecimals(1);
+    j_->setSingleStep(0.5);
+    j_->setRange(-0.5, 40.0);
+    j_->setSpecialValueText(tr("(none)"));  // -0.5: not given
+    j_->setValue(-0.5);
+    j_->setToolTip(tr("J, in halves"));
+    h->addWidget(j_);
+    if (parity_) {
+      sign_ = new QToolButton;
+      sign_->setCheckable(true);
+      sign_->setToolTip(tr("The parity: click to switch between + and -"));
+      showSign(true);
+      connect(sign_, &QToolButton::toggled, this, [this](bool on) {
+        showSign(on);
+        emit changed();
+      });
+      h->addWidget(sign_);
+    }
+    h->addStretch(1);
+    connect(j_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &PieceEditor::changed);
+  }
+  bool set(const front::ValueParts &p) override {
+    QString t = Q(p.text).trimmed();
+    j_->blockSignals(true);
+    if (sign_) sign_->blockSignals(true);
+    bool ok = true;
+    if (t.isEmpty()) {
+      j_->setValue(-0.5);
+    } else {
+      if (sign_ && (t.endsWith('+') || t.endsWith('-'))) {
+        showSign(t.endsWith('+'));
+        t.chop(1);
+      }
+      double j = 0;
+      if (t.endsWith("/2")) j = t.chopped(2).toInt(&ok) / 2.0;
+      else j = t.toInt(&ok);
+      j_->setValue(j);
+    }
+    j_->blockSignals(false);
+    if (sign_) sign_->blockSignals(false);
+    return ok;
+  }
+  front::ValueParts get() const override {
+    front::ValueParts p;
+    p.type = info_.type;
+    if (j_->value() < 0) return p;
+    const int twice = int(std::lround(2.0 * j_->value()));
+    p.text = S(twice % 2 ? QString("%1/2").arg(twice) : QString::number(twice / 2));
+    if (sign_) p.text += sign_->isChecked() ? "+" : "-";
+    return p;
+  }
+  void prefill() override { j_->setValue(parity_ ? 0.5 : 0.0); }
+
+ private:
+  void showSign(bool plus) {
+    sign_->setChecked(plus);
+    sign_->setText(plus ? "+" : QString::fromUtf8("−"));
+  }
+  front::ValueInfo info_;
+  bool parity_;
+  QDoubleSpinBox *j_;
+  QToolButton *sign_ = nullptr;
+};
+
+// ---------------------------------------------------------------- a pair of the project
+/// A pair by its label ("p+15N", "g+16O[6.13]"): a drop-down of the project's pairs (front::Pairs), still editable
+/// (a pair of a nucleus the project has not yet, a spelling of its own: kept as written until one is chosen).
+class PairEditor : public PieceEditor {
+ public:
+  PairEditor(const front::ValueInfo &info, const EditorContext &c) : info_(info), context_(c) {
+    QHBoxLayout *h = Row(this);
+    combo_ = new QComboBox;
+    combo_->setEditable(true);
+    combo_->setInsertPolicy(QComboBox::NoInsert);
+    combo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    combo_->setMinimumContentsLength(14);
+    combo_->setToolTip(tr("A pair of the Particle Pairs tab (or its label typed)"));
+    h->addWidget(combo_);
+    h->addStretch(1);
+    refresh();
+    connect(combo_, QOverload<int>::of(&QComboBox::activated), this, &PieceEditor::changed);
+    connect(combo_->lineEdit(), &QLineEdit::textEdited, this, &PieceEditor::changed);
+  }
+  void refresh() override {
+    const QString keep = combo_->currentText();
+    combo_->blockSignals(true);
+    combo_->clear();
+    if (context_.holder)
+      for (const front::PairChoice &p : front::Pairs(context_.holder->project()))
+        combo_->addItem(Q(p.label), Q(p.label));
+    combo_->setEditText(keep);
+    combo_->blockSignals(false);
+  }
+  bool set(const front::ValueParts &p) override {
+    refresh();
+    combo_->blockSignals(true);
+    const int at = combo_->findData(Q(p.text));
+    if (at >= 0) combo_->setCurrentIndex(at);
+    combo_->setEditText(Q(p.text));
+    combo_->blockSignals(false);
+    return true;
+  }
+  void prefill() override {
+    refresh();
+    if (combo_->count()) {
+      combo_->setCurrentIndex(0);
+      combo_->setEditText(combo_->itemText(0));
+    }
+  }
+  front::ValueParts get() const override {
+    front::ValueParts p;
+    p.type = info_.type;
+    p.text = S(combo_->currentText());
+    return p;
+  }
+
+ private:
+  front::ValueInfo info_;
+  EditorContext context_;
+  QComboBox *combo_;
 };
 
 /// The editors that hold an empty state of their own: an optional field of these types gets a "use" switch.
@@ -1028,8 +1397,12 @@ PieceEditor *MakePieceEditor(const front::ValueInfo &info, const EditorContext &
     e = new ColumnsEditor(info, c);
   } else if (Is(info, "reaction_expr") && c.holder) {
     e = new ReactionEditor(info, c);
+  } else if (Is(info, "spin") || Is(info, "spin_parity")) {
+    e = new SpinEditor(info);
+  } else if (Is(info, "pair") && c.holder) {
+    e = new PairEditor(info, c);
   } else {
-    e = new WordEditor(info);
+    e = new WordEditor(info, optional ? c.defaultText : std::string());
   }
   if (parent) e->setParent(parent);
   return e;
@@ -1087,14 +1460,21 @@ FieldEditor::FieldEditor(const front::FieldInfo &field, const EditorContext &con
     h->addWidget(use_, 0, Qt::AlignTop);
     connect(use_, &QCheckBox::toggled, this, &FieldEditor::useToggled);
   }
-  piece_ = MakePieceEditor(field.value, context, optional);
+  EditorContext pieceContext = context;
+  pieceContext.defaultText = optional ? field.defaultText : std::string();
+  piece_ = MakePieceEditor(field.value, pieceContext, optional);
   textEdit_ = new QLineEdit;
   textEdit_->setPlaceholderText(Q(field.grammar));
   textEdit_->setVisible(false);
   textToggle_ = new QToolButton;
-  textToggle_->setText(tr("T"));
+  textToggle_->setObjectName("editAsText");
+  textToggle_->setIcon(QIcon(":/actions/edit-text.svg"));
+  textToggle_->setText(tr("Text"));
+  textToggle_->setToolButtonStyle(Qt::ToolButtonIconOnly);
   textToggle_->setCheckable(true);
-  textToggle_->setToolTip(tr("Edit as text (the field's grammar: %1)").arg(Q(field.grammar).toHtmlEscaped()));
+  textToggle_->setToolTip(tr("<b>Edit this field as text</b>: the value as the project file writes it (its grammar: "
+                             "<tt>%1</tt>). Click again to return to the widgets.")
+                              .arg(Q(field.grammar).toHtmlEscaped()));
   textToggle_->setAutoRaise(true);
   h->addWidget(piece_, 1);
   h->addWidget(textEdit_, 1);

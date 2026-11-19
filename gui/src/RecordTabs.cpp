@@ -86,9 +86,8 @@ void SectionsTab::applyText() {
 
 QList<SectionsTab::Part> SegmentsParts() {
   return {{"data", QObject::tr("Segments From Data"),
-           QObject::tr("The data sets (<data>): one row per data file; shared normalizations and energy scales.  Check "
-                       "\"Use\" to include a data set, \"Fit?\" to vary its normalization; double-click a cell to "
-                       "change it in place, or edit the record in the form below (Prior... for a Gaussian prior).")},
+           QObject::tr("The data sets (<data>), one per data file: \"Use\" and \"Fit?\" in the table, a cell "
+                       "changed in place by a double click, the whole record in the form below.")},
           {"extrapolations", QObject::tr("Segments Without Data"),
            QObject::tr("The extrapolations (<extrapolations>): a quantity of a reaction on a grid of energies and "
                        "angles, calculated without data (the command extrapolate).")},

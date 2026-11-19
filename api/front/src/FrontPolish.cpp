@@ -328,12 +328,13 @@ bool KernelPreviewOf(const Project &project, const std::string &section, const R
                         " at the energy given");
   }
   const bool listed = !out.users.empty();
-  // what is built: the record, the other records of <targets>, <levels> and the one user; the other data sets,
-  // extrapolations and model data are left out of the copy, so that an error of theirs does not stop the drawing.  A
+  // what is built: the record, the other records of <targets>, <levels>, the shared records of <data> (norms,
+  // scales) and the one user; the other data sets, extrapolations and model data are left out of the copy, so that an error of theirs does not stop the drawing.  A
   // user without its quadrature (required once the record folds it) gets the smallest one: the kernels do not read it.
   for (const char *s : {"data", "extrapolations", "modelData"})
     for (const Record &r : copy.Records(s))
-      if (!(s == chosen->section && r.name == chosen->record.name)) {
+      if ((r.kind == "dataset" || r.kind == "extrapolation" || std::string(s) == "modelData") &&
+          !(s == chosen->section && r.name == chosen->record.name)) {
         std::string ignored;
         copy.RemoveRecord(s, r.name, ignored);
       }

@@ -64,7 +64,7 @@ RecordTableModel::RecordTableModel(ProjectHolder *holder, const QString &section
         c.type = Column::Field;
         c.key = key;
         c.field = f;
-        c.title = Q(f.title);
+        c.title = Q(f.title).replace("J^pi", QString::fromUtf8("Jπ"));  // as the Levels tab writes it
         columns_.push_back(c);
         if (f.value.type == "nuisance") {
           Column fit = c;
