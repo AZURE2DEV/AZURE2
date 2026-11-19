@@ -11,6 +11,7 @@
 #include "LevelsTab.h"
 #include "PairsTab.h"
 #include "RecordTabs.h"
+#include "PlotTab.h"
 #include "RunTab.h"
 
 void AZURESetup::newProject() {
@@ -215,5 +216,6 @@ void AZURESetup::runEnded(const RunOutcome &outcome) {
   running_ = false;
   runTab->setRunning(false);
   runTab->showOutcome(outcome);
+  plotTab->refresh();
   emit runFinished(outcome);
 }

@@ -12,6 +12,7 @@ class LevelsTab;
 class SectionsTab;
 class FittingTab;
 class RunTab;
+class PlotTab;
 class DiagnosticsPanel;
 
 QT_BEGIN_NAMESPACE
@@ -58,6 +59,7 @@ class AZURESetup : public QMainWindow {
   SectionsTab *getEffectsTab() const { return effectsTab; }
   FittingTab *getFittingTab() const { return fittingTab; }
   RunTab *getRunTab() const { return runTab; }
+  PlotTab *getPlotTab() const { return plotTab; }
   DiagnosticsPanel *getDiagnostics() const { return diagnostics; }
   QTabWidget *tabs() const { return tabWidget; }
 
@@ -129,6 +131,7 @@ class AZURESetup : public QMainWindow {
   SectionsTab *thmTab;
   FittingTab *fittingTab;
   RunTab *runTab;
+  PlotTab *plotTab;
   DiagnosticsPanel *diagnostics;
   QDockWidget *diagnosticsDock;
 };

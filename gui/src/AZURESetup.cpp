@@ -25,6 +25,7 @@
 #include "PairsTab.h"
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
+#include "PlotTab.h"
 #include "RunTab.h"
 
 AZURESetup::AZURESetup() {
@@ -90,6 +91,7 @@ AZURESetup::AZURESetup() {
   thmTab = new SectionsTab(holder_, ThmParts());
   fittingTab = new FittingTab(holder_);
   runTab = new RunTab;
+  plotTab = new PlotTab(holder_);
   connect(runTab, &RunTab::runRequested, this, &AZURESetup::SaveAndRun);
   connect(runTab, &RunTab::stopRequested, this, &AZURESetup::stopRun);
 
@@ -101,6 +103,7 @@ AZURESetup::AZURESetup() {
   tabWidget->addTab(thmTab, tr("&THM"));
   tabWidget->addTab(fittingTab, tr("&Fitting Settings"));
   tabWidget->addTab(runTab, tr("&Calculate"));
+  tabWidget->addTab(plotTab, tr("Pl&ot"));
   setCentralWidget(tabWidget);
 
   diagnostics = new DiagnosticsPanel(holder_);

@@ -65,10 +65,23 @@ thread starts and not edited by the run. One run at a time (the OpenMP thread co
 The controls of what the PI removed do not come back: fold windows and `useAdaptiveGrid` (every fold is on the shared
 mesh), `--gsl-coul` and libcoul (one Coulomb library), the GSL fitter and the `numcmc/` sampler (being removed on
 another branch; the fit tab lists the fitters of `Fitters()`, the commands of `RunCommands()`, so a fitter or
-command gone from the engine is gone from the GUI). The Plot tab needs Qwt, which this environment lacks: it is
-behind `USE_QWT` (off), and the GUI builds without it.
+command gone from the engine is gone from the GUI). dev's Plot tab drew with Qwt and read the output
+files itself: it is replaced by a plot drawn with QPainter (section 6), and `USE_QWT` is gone.
 
-## 5. Tests
+## 5. The Plot tab: the run's output files as data
+
+`front::ReadCurves(project)` returns the curves of the last run: for every active data set and extrapolation, the
+file the engine wrote it to and its block there, found by the engine's own build of the project (each record's pair
+keys and observable, `experiment::ReadFormat3Text`) and by the writer's rule (`src/DataOutputFiles.cpp`: one file per
+pair keys, one block per segment in segment order, `.band` siblings with the same blocks); a data set the run left out
+is skipped through chiSquared.out's keys, and a block whose rows differ in number from chiSquared.out's N is refused
+with a note, as is a file with fewer blocks than the project's records (the file is older than the project). Each
+point carries E, E_x, theta, the calculated value and S column, the data and errors, and the band's 1 sigma. `gui/`
+parses nothing: `PlotTab` turns the curves into series and `PlotWidget` draws them with QPainter (linear or log axes,
+error bars, a single point as a marker, the band shaded, a legend, the residuals (data - calc)/error in a lower
+panel, zoom by a dragged rectangle) and writes PNG, SVG (QtSvg) or PDF (QPdfWriter). No plotting library.
+
+## 10. Tests
 
 - `api_front` (`api/front/tests/front_test.cpp`, no Qt, every build): T1, T2, T3 and 13N opened and saved byte for
   byte, also after every record, row and entry is set to what it holds; an edit changes one line and is undone; a

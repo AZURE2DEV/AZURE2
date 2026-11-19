@@ -205,6 +205,7 @@ struct Option {
   bool required = false;
   double low = 0, high = 0, defaultValue = 0;
   std::string help;
+  std::vector<std::string> words;  ///< "word": the words it takes ("rwa", "physical")
 };
 std::vector<Option> Options();
 
@@ -226,11 +227,11 @@ struct RunRequest {
 
 /// One progress record of a run (the console's "Iteration:" lines): the objective after an evaluation.
 struct RunProgress {
-  std::string stage;   ///< "fit", "hesse", "minos", or "evaluation" outside a fit
-  long evaluation = 0; ///< the run's evaluation number or the fitter's iteration
-  long calls = 0;      ///< objective evaluations of the fit so far
-  double objective = 0;
-  double best = 0;     ///< lowest objective of the fit so far (NaN before the first)
+  std::string stage;   ///< "fit", "hesse", "minos", "mcmc" (a step of the sampler), or "evaluation" outside a fit
+  long evaluation = 0; ///< the run's evaluation number, the fitter's iteration, or the sampler's step (from 1)
+  long calls = 0;      ///< objective evaluations of the fit so far; "mcmc": the steps asked
+  double objective = 0;  ///< "mcmc": the walkers' mean log-posterior after the step
+  double best = 0;     ///< lowest objective of the fit so far (NaN before the first); "mcmc": the mean log-likelihood
 };
 
 /// The receiver of a run's messages and progress.  Called from the run's threads (Progress from several at once):
@@ -268,6 +269,107 @@ RunResult Run(const RunRequest &request, RunObserver &observer, const std::atomi
 /// AZURE2 --convert OLD NEW (format 1 or 2 to format 3, with the side files): false with `report` saying why.
 /// `report` holds the converter's notes and questions either way.
 bool ConvertProject(const std::string &from, const std::string &to, std::string &report);
+
+// ---- What the last run wrote, as data (the Plot tab; docs/upgrade/qt_gui.md section 5) ----
+
+/// One point of a curve: one row of an AZUREOut_* file (src/DataOutputFiles.cpp writes them; c.m. frame, or lab
+/// columns when the project's directory holds kinflag.dat with 1).  NaN where the row has no such column.
+struct CurvePoint {
+  double energy = 0;      ///< E (MeV), c.m. of the entrance pair
+  double excitation = 0;  ///< E_x of the compound nucleus (MeV)
+  double angle = 0;       ///< theta (deg), c.m.
+  double model = 0;       ///< the calculated value in the cross-section column (b, b/sr, or the observable's unit)
+  double modelS = 0;      ///< the calculated value in the S-factor column (MeV b)
+  double data = 0, dataError = 0, dataS = 0, dataSError = 0;  ///< data sets only (NaN for an extrapolation)
+  double band = 0, bandS = 0;  ///< 1 sigma of `model`, `modelS` from the .band file of the run (NaN without one)
+};
+/// One data set or extrapolation of the project as the last run wrote it.
+struct Curve {
+  std::string section;   ///< "data" or "extrapolations"
+  std::string record;    ///< the record's name
+  int key = 0;           ///< its segment key (place among the records of its kind, from 1, inactive ones counted)
+  std::string reaction, quantity, unit;  ///< the record's fields as written
+  std::string observable;  ///< the engine's observable: "cross_section", "differential", "analyzing_power",
+                           ///< "phase_shift", "legendre" (rows of coefficients), "total_capture"
+  bool sFactor = false;  ///< the S-factor column means an S factor (an angle-integrated or differential cross section)
+  bool positive = true;  ///< the value is a cross section (a log axis applies); false for A_y, phases, coefficients
+  std::string file;      ///< the output file, a name in the output directory
+  int block = 0;         ///< its block in that file, from 0
+  bool haveBand = false; ///< the file's .band sibling holds this block
+  std::vector<CurvePoint> points;  ///< empty for "legendre"
+  std::vector<std::vector<double>> coefficients;  ///< "legendre": E then the coefficients, one row per point
+};
+struct Curves {
+  std::string outputDirectory;
+  bool labFrame = false;            ///< kinflag.dat asked for lab columns
+  std::vector<Curve> curves;        ///< data sets first, then extrapolations, each in record order
+  std::vector<std::string> notes;   ///< what could not be read or matched, in words (a missing file: not run yet)
+};
+/// The curves of the project's last run (the files of its output directory as they stand), matched to its records
+/// by the engine's own build of the project (each active data set's and extrapolation's pair keys and observable:
+/// the file a segment is written to and its block among the segments of that file).  A data set the run left out
+/// (no points) is matched through chiSquared.out's keys; a block whose rows differ in number from chiSquared.out's N
+/// is refused with a note (the file is older than the project).
+Curves ReadCurves(const Project &project);
+
+// ---- Fit parameters (the Fitting Settings tab) ----
+
+/// One parameter of the fit as the engine sets it up (a session of the project, as pyazr's Session): the vector of
+/// param.sav, in its order.
+struct Parameter {
+  std::string name;       ///< as param.sav names it (energy_1, width_1_2, el_lab090.norm, ...)
+  std::string kind;       ///< the kind's key (ParamKindTable: "energy", "width", "norm", "shift", ...)
+  std::string unit;       ///< the unit of `value` (the fit's: MeV^1/2 for a reduced-width amplitude)
+  double value = 0;       ///< the start value (fit units, as param.sav writes it)
+  bool fixed = false;
+  double lower = 0, upper = 0;  ///< the fit's limits in fit units (-inf / +inf: none), <parameterSettings> applied
+  int levelNumber = -1;   ///< level counted over all J groups (level parameters), else -1
+  int channel = -1;       ///< channel within the J group (widths), else -1
+};
+/// The parameters of a fit of the SAVED project file (the levels' and the data sets' nuisances): the session's set-up (levels, data, external capture), nothing written but what a session
+/// writes (an intEC.dat it computes).  False with `why` when the project cannot be set up.
+bool ReadParameters(const std::string &projectFile, std::vector<Parameter> &out, std::string &why);
+
+/// One line of a parameter file (param.sav, param.par, param.errors' first three columns): name, value, error.
+struct ParameterValue {
+  std::string name;
+  double value = 0, error = 0;
+};
+/// The lines of a parameter file as the engine reads it (AZUREParams: "name value error", "#parametrization" first);
+/// false with `why` when it cannot be read.
+bool ReadParameterFile(const std::string &path, std::vector<ParameterValue> &out, std::string &why);
+
+/// One row of <parameterSettings> as the engine reads it (ParameterLimitsManager::ReadParameterSettings): the one-token
+/// form "name nominal lower upper error fitError nuisance category index" or the GUI's "Level N Energy (MeV) ..." and
+/// "Level N Channel M Width (eV) ..." forms.  lower == upper == 0: no limits.  A width's numbers are partial widths
+/// (eV), converted by the engine.
+struct ParameterSetting {
+  std::string name;
+  double nominal = 0, lower = 0, upper = 0, error = 0, fitError = 0;
+  bool nuisance = false;
+  std::string category = "level";
+  int index = 0;
+  int line = 0;  ///< 1-based line in the file (0 for a row not yet written)
+};
+std::vector<ParameterSetting> ParameterSettings(const Project &project);
+/// Replace (by name) or append one row, written in the one-token form when `name` is one token; `remove` deletes it.
+/// False with `why` for a name with a '#' or an empty one.
+bool SetParameterSetting(Project &project, const ParameterSetting &row, std::string &why, bool remove = false);
+
+/// The sampler's prior rows (<mcmc> <parameters>, src/SamplerRun.cpp): name (as param.sav or "label (name)"), value,
+/// prior mean, prior sigma, use.
+struct SamplerPrior {
+  std::string name;
+  double value = 0, mean = 0, sigma = 0;
+  bool use = false;
+};
+std::vector<SamplerPrior> SamplerPriors(const Project &project);
+/// Write the <parameters> block of <mcmc> with `rows` (the section's other lines kept; the section made when the file
+/// has none and `rows` is not empty).
+void SetSamplerPriors(Project &project, const std::vector<SamplerPrior> &rows);
+
+/// Whether this build's program has `command` (Commands(): a command gone from the engine is gone here).
+bool HasCommand(const std::string &command);
 
 /// The single-particle (Wigner-limit) width Gamma_sp = 2 P_l(E) gamma_W^2 of a particle channel, in MeV: charges
 /// z1, z2, reduced mass mu (u), orbital momentum l, channel radius a (fm), c.m. energy E > 0 (MeV).  The engine's

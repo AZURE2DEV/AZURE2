@@ -1,4 +1,4 @@
-// The Qt setup program without a display (docs/upgrade/qt_gui.md section 5):
+// The Qt setup program without a display (docs/upgrade/qt_gui.md section 10):
 //   gui_window_test <source dir> <AZURE2 binary> <screenshot dir>
 //  (a) T1, T2, T3 and 13N opened in the window and saved byte for byte; every record of every section written back
 //      through its form (Apply) without moving a byte;
@@ -16,6 +16,9 @@
 #include <sstream>
 
 #include <QApplication>
+#include <QCheckBox>
+#include <QFileInfo>
+#include <QImage>
 #include <QComboBox>
 #include <QDir>
 #include <QElapsedTimer>
@@ -30,6 +33,8 @@
 #include "DiagnosticsPanel.h"
 #include "FittingTab.h"
 #include "LevelsTab.h"
+#include "PlotTab.h"
+#include "PlotWidget.h"
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
 #include "RunTab.h"
@@ -203,6 +208,46 @@ int main(int argc, char **argv) {
                                           std::to_string(total) + " identical");
     Check(w.getRunTab()->chiTable()->rowCount() > 1 && w.getRunTab()->log().contains("Total Chi-Squared"),
           "T1: the chi^2 table and the program's lines in the Calculate tab");
+
+    // the Plot tab after the run: every data set, as many data points as the output files have rows
+    PlotTab *plot = w.getPlotTab();
+    const QStringList records = plot->availableRecords();
+    plot->selectRecords(records);
+    int rows = 0;
+    for (const auto &e : fs::directory_iterator(copy.parent_path() / "output")) {
+      if (e.path().filename().string().rfind("AZUREOut_aa=", 0) != 0 || e.path().extension() != ".out") continue;
+      std::ifstream in(e.path());
+      std::string line;
+      while (std::getline(in, line)) rows += line.find_first_not_of(" \t") != std::string::npos;
+    }
+    int points = 0;
+    for (const PlotSeries &s : plot->plot()->series()) points += s.dataX.size();
+    Check(records.size() >= 7 && rows > 0 && points == rows,
+          "T1: the plot holds " + std::to_string(points) + " data points of " + std::to_string(records.size()) +
+              " data sets; the output files " + std::to_string(rows) + " rows");
+    w.tabs()->setCurrentWidget(plot);
+    plot->selectRecords({"cap_g0"});
+    QApplication::processEvents();
+    const QImage image = plot->plot()->grab().toImage();
+    int ink = 0;
+    for (int y = 0; y < image.height(); y += 2)
+      for (int x = 0; x < image.width(); x += 2) ink += image.pixel(x, y) != qRgb(255, 255, 255);
+    Check(ink > 500 && plot->plot()->dataPointsDrawn() > 0,
+          "T1: the plot of cap_g0 is drawn (" + std::to_string(ink) + " coloured pixels of every fourth)");
+    QDir().mkpath(shots);
+    image.save(shots + "/plot_T1_cap_g0.png");
+    // log axes, a zoom and its reset, residuals; the three export formats
+    const QRectF whole = plot->plot()->view();
+    plot->plot()->zoomTo(QRectF(whole.left(), whole.top(), whole.width() / 2, whole.height()));
+    const bool zoomed = plot->plot()->view() != whole;
+    plot->plot()->resetZoom();
+    Check(zoomed && plot->plot()->view() == whole, "T1: the plot zooms and resets");
+    bool exported = true;
+    for (const char *suffix : {"png", "svg", "pdf"}) {
+      const QString file = QString::fromStdString((work / "plot_T1.").string()) + suffix;
+      exported = exported && plot->exportPlot(file, why) && QFileInfo(file).size() > 1000;
+    }
+    Check(exported, "T1: the plot exported to PNG, SVG and PDF (" + why.toStdString() + ")");
   }
   {
     const fs::path copy = CopyProject(source / "tests/upgrade/T1/T1_start.azr", work / "fit_T1");

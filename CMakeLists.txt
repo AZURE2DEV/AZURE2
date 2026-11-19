@@ -416,7 +416,6 @@ add_subdirectory(src)
 # only through the facade azure2::front (api/front/), so it needs USE_API.  Its tests (tests/gui, label gui) exist
 # only in a build with the GUI.
 option(BUILD_GUI "Build the Qt setup program AZURESetup (Qt 6)" OFF)
-option(USE_QWT "Build the GUI's Plot tab with Qwt (not ported to this branch)" OFF)
 if(BUILD_GUI)
     if(NOT USE_API)
         message(FATAL_ERROR "BUILD_GUI needs USE_API=ON: the GUI calls the engine through api/front/")

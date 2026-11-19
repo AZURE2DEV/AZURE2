@@ -121,6 +121,15 @@ RunResult Run(const RunRequest &request, RunObserver &observer, const std::atomi
     std::lock_guard<std::mutex> lock(chiMutex);
     result.dataSets.push_back({segment, chi2, points});
   };
+  programObserver.samplerStep = [&observer](int step, int total, double logPosterior, double logLikelihood, double) {
+    RunProgress p;
+    p.stage = "mcmc";
+    p.evaluation = step;
+    p.calls = total;
+    p.objective = logPosterior;
+    p.best = logLikelihood;
+    observer.Progress(p);
+  };
   programObserver.totalChiSquared = [&result, &chiMutex](double chi2) {
     std::lock_guard<std::mutex> lock(chiMutex);
     result.haveChiSquared = true;
@@ -230,6 +239,13 @@ std::vector<Option> Options() {
     o.high = q.high;
     o.defaultValue = q.defaultValue;
     o.help = q.help;
+    for (std::size_t from = 0; q.words && *q.words;) {  // "rwa|physical"
+      const std::string words = q.words;
+      const std::size_t bar = words.find('|', from);
+      o.words.push_back(words.substr(from, bar == std::string::npos ? std::string::npos : bar - from));
+      if (bar == std::string::npos) break;
+      from = bar + 1;
+    }
     out.push_back(o);
   }
   Option maxCalls;

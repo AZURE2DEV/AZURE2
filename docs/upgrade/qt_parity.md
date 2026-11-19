@@ -466,25 +466,35 @@ because the engine also searches the whole file for them.
 - [ ] Results: Statistics (Mean, Std Dev, 2.5 %, 50 %, 97.5 %), Chain Data, Refresh Results from File, warning
       row when stopped early (`MCMCTab.cpp`)
 
-## 12. Plot tab (Qwt builds)
+## 12. Plot tab (Qwt builds; the Qt program of 2026-11-19 draws it with QPainter in every build)
 
 - [ ] Segment lists From Data and Without Data, each filtered by In and Out pair; multi-select; Draw, Clear
       (`PlotTab.cpp`)
+      *Qt (2026-11-19): verified (`gui_window`): the Plot tab lists the data sets and extrapolations of the last run (`front::ReadCurves`); several selected are overlaid with a legend; no In/Out filter, no Draw/Clear (a selection draws)*
 - [x] Reads `output/AZUREOut_aa=<in>_R=<out>.out` or `_TOTAL_CAPTURE.out` (data), `.extrap` (no data), and the
       `.band` sibling; block within the file by segment order (`PlotTab.cpp`, `AZUREPlot.cpp`)
       *Dropped (the PI, 2026-11-13): no AZUREOut files read: arrays from the API.*
+      *Qt (2026-11-19): verified: the facade reads the files and matches each block to its record by the engine's build of the project and chiSquared.out's keys; T1 after calculate: 442 data points in the plot = 442 rows of the AZUREOut_*.out files; no file is parsed in gui/*
 - [ ] X axis: CoM Energy, Excitation Energy, CoM Angle; log scale (`PlotTab.cpp`)
+      *Qt (2026-11-19): present (CoM Energy, Excitation Energy, CoM Angle, log x); log axes not checked by the test*
 - [ ] Y axis: Cross Section or S-Factor; log scale; title per quantity: Cross Section [b] / [b/sr], S-Factor
       [MeV b] / [MeV b/sr], Phase Shift [degrees], Analyzing Power, Angular Distribution Coefficient
       (`AZUREPlot.cpp`)
+      *Qt (2026-11-19): present: Cross Section or S-Factor (the S factor only for a cross section; another observable keeps its column), log y; the title names the observable in the engine's unit*
 - [ ] Analyzing power in the selection forces a linear axis and cross section (`PlotTab.cpp`)
+      *Qt (2026-11-19): not kept: a value that is not positive is left out on a log axis; the user chooses the axis*
 - [ ] Display: Grid, Legend, Levels (markers at E_x or E_c.m. per entrance pair, not on angle axis), Uncertainty
       (1σ band) (`PlotTab.cpp`, `AZUREPlot.cpp`)
+      *Qt (2026-11-19): Legend and Uncertainty (the band where the run wrote .band files; not checked by the test) present, grid always drawn; no level markers. New: residuals (data - calc)/error in a lower panel (seen in the screenshot `plot_T1_cap_g0.png`)*
 - [ ] Curve list with Customize... / double-click: label, data and calculation colour, marker (11 shapes), marker
       size, line width (`PlotTab.cpp`)
+      *Qt (2026-11-19): not ported: colours and markers from a fixed cycle*
 - [ ] THM segments labelled "(THM)"; label from the data file name (`PlotTab.cpp`)
+      *Qt (2026-11-19): label = the record's name and reaction*
 - [ ] Zoom by rubber band, right-click zoom out, middle-button pan, coordinate tracker (`AZUREPlot.cpp`)
+      *Qt (2026-11-19): zoom by a dragged rectangle, double-click or Reset Zoom to the whole range (`gui_window`: zoomTo/resetZoom); no pan, no tracker*
 - [ ] Export... (PDF, SVG, PS, image formats); Print... (landscape) (`AZUREPlot.cpp`)
+      *Qt (2026-11-19): verified (`gui_window`): PNG, SVG, PDF written by Export; no PS, no Print*
 
 ## 13. THM Workspace (Configure > THM Workspace...)
 
