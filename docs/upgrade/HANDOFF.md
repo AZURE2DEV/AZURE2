@@ -24,10 +24,10 @@ refresh the Overview and the Plot tab, zoom kept; View > Follow Changes on Disk)
 constructor wires both.  `tests/gui/gui_levels_test.cpp`: one line (the Levels tab selected again after opening,
 since an opened project now shows the Overview).
 
-**Run** (`work/b-u8-overview`, `work/build_gui.sh`): build 0 warnings; `api_front` passed (OverviewChecks: 23 checks);
+**Run** (`work/b-u8-overview`, `work/build_gui.sh`): build 0 warnings; `api_front` passed (OverviewChecks: 21 checks);
 `ctest -L gui` 5 of 5 (gui_overview new, 41 checks); `repo_consistency` passed; screenshots
-`work/qt-shots/u8-overview/` (light, dark, narrow, the disk bar, the differences), looked at.  The full
-`ctest -LE slow -j4`: see the report.
+`work/qt-shots/u8-overview/` (light, dark, narrow, the disk bar, the differences), looked at.  `ctest -LE slow -j4`
+(OMP 1): 400 of 401, only `rmfit_enginepin` fails (as on the base); 6 rmfit tests skipped; `docs_build` passed.
 
 **Not run**: `tests/run_tests.sh` (no engine file touched); the GUI on a real display; macOS/Windows.
 
