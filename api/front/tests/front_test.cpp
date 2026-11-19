@@ -349,6 +349,78 @@ int main(int argc, char **argv) {
     Check(result.haveChiSquared, "T1_start: the final evaluation at the best point");
   }
 
+  // (h) the Levels and Pairs tabs' facade (qt_gui.md section 11): columns by name, a channel at its level energy, a
+  //     channel's radius from <channelRadii>, what names a pair
+  {
+    front::Project p;
+    std::string why;
+    Check(front::Project::Open(projects[0].string(), p, why), "T1 opened for the level functions");
+    Check(front::LevelColumnNames().size() == 34 && front::LevelColumnIndex("levelE") == 2 &&
+              front::LevelColumnIndex("gamma") == 11 && front::LevelColumnIndex("e1") == 33 &&
+              front::LevelColumnIndex("nonsense") == -1,
+          "the <levels> columns by name (34, levelE 2, gamma 11, e1 33)");
+    const std::vector<front::LevelRow> rows = p.Levels();
+    auto row = [&rows](const std::string &e, const std::string &key, const std::string &l2) {
+      for (const front::LevelRow &r : rows)
+        if (r.tokens.size() > 11 && r.tokens[2] == e && r.tokens[5] == key && r.tokens[7] == l2) return r;
+      return front::LevelRow();
+    };
+    // 1/2+ at 2.365 MeV, p + 12C, l = 0, Gamma = 33000 eV, a = 3.6 fm: E_c = 2.365 - 1.9434900024034978 MeV.  The
+    // values by mpmath 1.4.1 (coulombf, coulombg, diff; 30 digits; masses 1.00782503223 u and 12 u, 931.49410242
+    // MeV/u, hbar c 197.3269804 MeV fm, alpha 1/137.035999084): P = 0.0112659697575860, S = -0.802139976806155,
+    // gamma_W^2 = 5.20376154799012 MeV, Gamma_sp = 0.117250840450691 MeV, gamma^2 = Gamma/(2P) = 1.46458763471201
+    // MeV, theta^2 = 0.281447875965357.
+    const front::ChannelQuantities open = front::ChannelAtLevel(row("2.365", "1", "0"));
+    auto near = [](double a, double b, double rel) { return std::fabs(a - b) <= rel * std::fabs(b); };
+    Check(open.error.empty() && open.kind == "open" && open.unit == "eV" && near(open.channelEnergy, 0.4215099975965022, 1e-13),
+          "T1 2.365 MeV p+12C l=0: an open channel, Gamma in eV, E_c 0.42151 MeV (" + open.kind + ")");
+    Check(near(open.P, 0.0112659697575860, 1e-8) && near(open.S, -0.802139976806155, 1e-8),
+          "T1 2.365 MeV: P and S of the engine = mpmath's to 1e-8 (P " + std::to_string(open.P) + ")");
+    Check(near(open.wignerLimit, 5.20376154799012, 1e-12) && near(open.singleParticleWidth, 0.117250840450691, 1e-8) &&
+              near(open.reducedWidth, 1.46458763471201, 1e-8) && near(open.wignerRatio, 0.281447875965357, 1e-8),
+          "T1 2.365 MeV: gamma_W^2, Gamma_sp, gamma^2 and theta^2 = mpmath's");
+    Check(near(open.singleParticleWidth, front::SingleParticleWidth(1, 6, 1.00782503223 * 12. / 13.00782503223, 0, 3.6,
+                                                                    open.channelEnergy), 1e-14),
+          "T1 2.365 MeV: Gamma_sp = SingleParticleWidth");
+    const front::ChannelQuantities closed = front::ChannelAtLevel(row("0.0", "1", "2"));
+    Check(closed.kind == "closed" && closed.unit == "fm^-1/2" && closed.channelEnergy < 0 && closed.P > 0 &&
+              std::isfinite(closed.reducedWidth) && std::isnan(closed.singleParticleWidth),
+          "T1 1/2- at 0 MeV p+12C l=1: closed, an ANC in fm^-1/2, gamma^2 = C^2/(2P) (" + closed.kind + ")");
+    // below threshold, l = 1: P = mu a / (hbar^2 W^2), W = W_{-eta_b, 3/2}(2 kappa a); mpmath's whitw (30 digits,
+    // the constants above, B = 1.9434900024034978 MeV): P = 1.03417877501829 MeV^-1 fm^-1, gamma^2 = 1.85^2 / (2P) =
+    // 1.65469456668141 MeV (l = 0 would give P = 3.40154840962196)
+    Check(near(closed.P, 1.03417877501829, 1e-7) && near(closed.reducedWidth, 1.65469456668141, 1e-7),
+          "T1 1/2- at 0 MeV: the bound factor of l = 1 and gamma^2 = mpmath's (P " + std::to_string(closed.P) + ")");
+    const front::ChannelQuantities moment = front::ChannelAtLevel(row("1.0", "3", "2"));
+    const front::ChannelQuantities gamma = front::ChannelAtLevel(row("2.365", "2", "2"));
+    Check(moment.kind == "magnetic_moment" && moment.unit == "μ_N" && gamma.kind == "photon" && gamma.unit == "eV",
+          "T1: the 3/2- level's M1 to its own state is a magnetic moment; the 1/2+ level's E1 a gamma width (" +
+              moment.kind + ", " + gamma.kind + ")");
+    const front::ChannelQuantities own = front::ChannelAtLevel(row("2.365", "1", "0"), 4.5);
+    Check(own.radius == 4.5 && own.P > open.P, "T1 2.365 MeV: a radius of 4.5 fm given: P grows");
+    front::LevelRow broken = row("2.365", "1", "0");
+    broken.tokens[11] = "x";
+    Check(!front::ChannelAtLevel(broken).error.empty(), "a row the engine cannot read: an error");
+    // <channelRadii>: none in T1 (the pair's radius); a record for pair 1, l = 0
+    front::ChannelRadiusInfo r0 = front::ChannelRadius(p, 1, 0, 1, 1, 3.6);
+    Check(!r0.own && r0.radius == 3.6, "T1: no <channelRadii>: the pair's radius");
+    front::Record radius;
+    radius.kind = "channel_radius";
+    radius.name = "p12C_s";
+    radius.fields = {{"pair", "p+12C", ""}, {"l", "0", ""}, {"radius", "4.2 fm", ""}};
+    const bool set = p.SetRecord("channelRadii", radius, why);
+    r0 = front::ChannelRadius(p, 1, 0, 1, 1, 3.6);
+    const front::ChannelRadiusInfo r1 = front::ChannelRadius(p, 1, 1, 1, 1, 3.6);
+    Check(set && r0.own && r0.radius == 4.2 && r0.record == "p12C_s" && !r1.own && r1.radius == 3.6,
+          "T1: a channel_radius record gives pair 1, l = 0 its radius (4.2 fm), l = 1 keeps the pair's (" + why + ")");
+    // what names a pair: T1's data sets name pairs 1 and 2
+    const std::vector<std::string> uses1 = front::PairUses(p, 1), uses9 = front::PairUses(p, 9);
+    std::string list;
+    for (const std::string &u : uses1) list += " " + u;
+    Check(!uses1.empty() && uses9.empty() && uses1[0].rfind("data: ", 0) == 0,
+          "T1: the data sets that name pair 1:" + list);
+  }
+
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;
   return failures ? 1 : 0;
 }
