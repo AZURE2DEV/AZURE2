@@ -17,7 +17,7 @@ QT_END_NAMESPACE
  * A tab of the window made of format-3 sections (docs/upgrade/qt_gui.md section 2): one RecordsPanel per section of
  * records and one SectionTextPanel per section of its own grammar, as sub-tabs when there are several.  The tabs the
  * old program had keep their names: Segments (Segments From Data, Segments Without Data, and the model data),
- * Experimental Effects (targets, beams, detectors), Nuclear Potential (the THM tab is ThmTab).
+ * Experimental Effects (targets, beams and detectors, one list each), Nuclear Potential (the THM tab is ThmTab).
  */
 class SectionsTab : public QWidget {
   Q_OBJECT
@@ -28,10 +28,14 @@ class SectionsTab : public QWidget {
     QString title;
     QString help;
     bool text = false;  ///< a section of its own grammar (SectionTextPanel)
+    bool perKind = false;  ///< one sub-tab per record kind of the section (targets, beams, detectors)
   };
   SectionsTab(ProjectHolder *holder, const QList<Part> &parts, QWidget *parent = nullptr);
-  /// The panel of a section (nullptr when this tab has none).
+  /// The (first) panel of a section (nullptr when this tab has none).
   RecordsPanel *records(const QString &section) const;
+  /// The panel of a section that shows records of `kind`, or that holds the record `name`.
+  RecordsPanel *recordsOfKind(const QString &section, const QString &kind) const;
+  RecordsPanel *panelFor(const QString &section, const QString &name) const;
   SectionTextPanel *text(const QString &section) const;
   /// Show the sub-tab of a section and select a record in it (from a diagnostic).
   bool show(const QString &section, const QString &record);

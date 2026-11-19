@@ -66,9 +66,10 @@ The tabs
        (:doc:`segments`). Spin observables, line windows, priors and nuisance
        parameters are fields of the records.
    * - Experimental Effects
-     - Targets, beams and detectors (``<targets>``, :doc:`experimental_effects`):
-       layers, isotopes and abundances, stopping and straggling, fitted target
-       parameters, resolution kernels.
+     - Targets, beams and detectors (``<targets>``, :doc:`experimental_effects`),
+       one list each: layers, isotopes and abundances, stopping and straggling,
+       Doppler broadening, screening, fitted target parameters; beam spread and
+       beam profile; resolution kernels, attenuation, UDR.
    * - Nuclear Potential
      - Hybrid-potential channels (``<potentials>``).
    * - THM
@@ -106,11 +107,71 @@ The tabs
    * - Plot
      - The data sets and extrapolations of the last run (below).
 
-A record's form is drawn from the engine's table of project format 3: a closed
-choice is a list, a unit one of its dimension's (or of the data set's quantity),
-a file a chooser; the tool tip of each field gives its meaning and grammar.
-Fields set rarely are behind ``Every field`` unless the record sets them.
-``Apply`` writes the record; nothing is written before.
+Records: tables and forms
+-------------------------
+
+The record tabs show each section (or each kind of ``<targets>``) as a table
+with real columns, as the Segments tab of the earlier program did: a ``Use``
+check box (a data set's or an extrapolation's ``active``), the name, then the
+fields the engine's table names as a record's main ones: for a data set its
+reaction, quantity, unit, data file, normalization and a ``Fit?`` box beside
+it, the energy and angle windows, and its target, beam and detector; for a
+target its kind, active nucleus, areal density, stopping and straggling; for a
+beam its spread and profile. The whole record is the row's tool tip. The
+columns sort by a click on their header, the filter line keeps the rows that
+contain its text, and several rows can be selected (Shift, Ctrl).
+A double click edits a cell in place: a list for a word, a unit or the name of
+another record; the number of a normalization or of any value with a ``fit``
+box. ``Add...`` (Ins) opens the kind, the name and the required fields,
+filled with the first choices of the project (the first reaction of its pairs,
+the first quantity and its first unit, the data file's columns for that
+quantity, a normalization of 1, fixed); a field left empty is written as ``?``
+and named by the diagnostics until it is given. ``Duplicate`` (Ctrl+D),
+``Remove`` (Del), ``Up`` and ``Down`` (Ctrl+Up, Ctrl+Down; only the record's
+lines move in the file), ``Use`` and ``Leave out`` act on the selected records,
+also from the context menu.
+
+Below the table is the form of the chosen record. Nothing is typed that can be
+chosen; every list comes from the engine's table of project format 3 and from
+the project itself:
+
+* a word of a closed list, a unit (of its dimension, or of the data set's
+  quantity), the name of a target, beam, detector or shared normalization
+  (with the target's epochs), and the quantity (by its title) are lists;
+* a reaction is two lists, the entrance pair and the exit pair of the same
+  compound nucleus (from the Particle Pairs tab), and the total capture where
+  the project has a photon pair; a sum or a ratio of reactions is written as
+  text;
+* a value that a fit may vary (a normalization, an areal density, a screening
+  potential, a kernel's width) is its number, its unit, a ``Fit`` box and
+  ``Prior...``: a Gaussian prior's centre and width (``%`` of the centre) and
+  the largest value a fold's grid must span;
+* a structured value (stopping, straggling, Doppler broadening, beam spread,
+  beam profile, energy resolution, UDR, quadrature, ...) is a list of its forms
+  (for the stopping: formula, evaluation, table), each explained in a line,
+  and one labelled field per parameter with its unit; a formula is its
+  expression and a field per parameter;
+* a grid of an extrapolation is its kind (range, list, file, adaptive), its
+  span, unit and frame, and a step or a number of points;
+* a data file's columns are one list of roles per column, with the unit of an
+  energy or angle column;
+* a file is a line with ``Browse...``, relative to the project.
+
+A field that belongs with another is in its box (a target's composition, phase
+and compound correction with the stopping; its epochs with the areal density;
+the profile's truncation and detailed balance with the profile); a box is
+closed unless the record sets it. The ``T`` button beside each field shows it
+as text, with its grammar; a value the lists cannot show opens as text. Each
+field is checked by the engine's reader as it is edited, and its message is
+shown under it. ``Apply`` checks the record against the whole project
+(``--validate``), shows each refusal under its field and asks before writing a
+record the engine refuses; choosing another record applies the form when the
+engine accepts it, else the form stays. A record opened and applied without an
+edit is written back byte for byte; an edit rewrites only the lines of the
+fields that changed. ``Revert`` shows the record as the project holds it.
+
+The form of a target, beam or detector says which data sets and
+extrapolations use it (``Used by``); ``Assign to...`` checks them in a list.
 
 The parameter table
 -------------------
