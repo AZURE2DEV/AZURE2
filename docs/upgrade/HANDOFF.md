@@ -3,6 +3,29 @@
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
 
+
+## 2026-11-20 (director) — round 8 joined: the Physics tab, the polish, the Overview page, changes on disk
+
+Merged into `feature/upgrade-6` after `0bab4c51`: `feature/upgrade-8-physqt`, `-polish`, `-overview` (their entries
+are below; `qt_gui.md` sections 15-18). Since `0bab4c51` only `gui/`, `api/front/`, `tests/gui/`, `docs/` and one
+row of `CLAUDE.md` differ: no engine source, so the output comparison of `verify_u6c.out` still holds and was not
+repeated. Fixes after the first run of `gui.yml` (on `0bab4c51`): `AzureTheme.cpp` compiles with Qt 6.4 (Linux
+job), `gui_levels` opens a cell with the platform's edit key (macOS: Return), `override` in `PairsModel.h`; the
+Windows GUI job failed in its MSYS2 set-up step before any build (cause not visible in the annotations).
+
+**Run** (build `work/b-u6c-gui`, GUI on): 0 warnings; `ctest -LE 'slow|browser' -j12`: 399 of 401, the seven GUI
+tests pass; `rmfit_enginepin` fails (this machine); `pyazr_evaluation` failed once in that parallel run and passed
+alone and in three repeats beside the GUI tests and `api_front` (not explained: watch it on CI).
+**Not run**: `tests/run_tests.sh` and the output comparison (no engine source changed), `ctest -L slow`, the
+browser tests, a real display.
+**The PI's decisions of 2026-11-19/20**: SRIM files stay, `numcmc/` stays; no Claude Code panel; no Fisher /
+sensitivity page.
+**Open** (from the agents): kernel previews for UDR and target integration; a complex-plane pole map (design only,
+`physics_tab.md` 5.3); decomposition page; `experiment::AllowedChannels` lacks two rules the engine's set-up
+enforces (identical particles, photon between whole and half-whole spin: the facade filters, pyazr's
+`allowed_channels` does not); T3's 2+ level at 3.03 MeV has a Gamow-Teller channel neither rule offers; the
+Levels tab's per-action edits through the facade; reload keeps the Levels selection not.
+
 ## 2026-11-19 22:00 (director) — the four U7 branches joined and checked: the friendlier Qt program, the physics facade
 
 Merged into `feature/upgrade-6`: `feature/upgrade-7-gui-shell` (look, start page, tool and status bars, Calculate
