@@ -41,7 +41,7 @@ struct KernelNodes {
 struct KernelPoint {
   double energy = 0.0;          ///< E0, the point's c.m. energy (after an energy shift)
   double labEnergy = 0.0;       ///< its lab energy (MeV)
-  double nominalLabEnergy = 0.0;  ///< its lab energy before any shift (MeV): a beam-profile window stays put
+  double nominalLabEnergy = 0.0;  ///< its lab energy before any shift (MeV); the beam profile moves its window by the shift
   double cmFactor = 1.0;        ///< c.m./lab energy factor of the entrance pair
   int z1 = 0, z2 = 0;           ///< beam and target charges of the entrance pair (Bohr straggling)
   double targetThickness = 0.0;  ///< energy loss across the target at the working copy's density (target kernels)

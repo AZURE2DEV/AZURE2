@@ -667,8 +667,8 @@ the last part of this section says what was found and what is left to decide.
 | | `coulombamplitude`, `spinDependentCoulomb`, `coulombdirect`, `coulombexchange` | `CalcCoulombAmplitude` (the same) |
 | | `screen_ue` | `SetScreening`, every evaluation with a screening effect |
 | | `stoppingPower` | `FollowStoppingScales` (a fitted stopping scale, a re-placed slot) |
-| | `targetThickness` | `FillDensitiesFromParams`, `FillThicknessFromParams`, `FollowStoppingScales`, `MoveTargetToShift` |
-| | `targetLabEnergy` | `MoveTargetToShift` |
+| | `targetThickness` | `FillDensitiesFromParams`, `FillThicknessFromParams`, `FollowStoppingScales`, `MoveKernelsToShift` |
+| | `targetLabEnergy` | `MoveKernelsToShift` |
 | | `rowset`, `rowset_at` | `BuildRowSets` (when slots move) |
 | | `ec_shifted` | `GetECAmplitudeWithShift`: the external-capture amplitude at the shifted energy, kept for the next call |
 | The record's place (3) | `slot_`, `num_ang_slots_`, `num_natural_slots_` | `LayoutResults`: at set-up, and from `BeginEvaluation` when a re-placed grid changed the layout |
@@ -679,7 +679,7 @@ grid** (`ReplaceSubPointGrids`) is a new site made by the evaluation, its fixed 
 
 **`Unit`: 17 members of its own.**  Fixed (9): `cm_factor_`, `bohr_z1_`, `bohr_z2_`, `set_up_`,
 `targetEffectNum_`, `own_settings_`, `photo_qgamma_`, `photo_mcn_`, `plan_task_`.  Evaluation (4): `bin_low_cm_`,
-`bin_high_cm_`, `frame_jacobian_` (`SetFrame`), `support_thickness_change_` (`MoveTargetToShift`).  Layout, written
+`bin_high_cm_`, `frame_jacobian_` (`SetFrame`), `support_low_change_`, `support_high_change_` (`MoveKernelsToShift`).  Layout, written
 again when a grid is re-placed (4): `sub_first_`, `sub_count_` (`LayOutUnits`), `model_slot_`, `num_model_ang_`
 (`LayoutResults`).  They were left where they are.
 

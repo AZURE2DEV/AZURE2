@@ -367,7 +367,16 @@ be normalized to the same thing the density counts.**
    edge of a layer, the reach of an infinitely thick target and the straggling
    are those of the true beam energy; the beam spread and the resolution
    kernels are centred on the shifted energy, and the resonance-anchored nodes
-   stay where the levels are.  (Until November 2026 the stopping and the target
+   stay where the levels are.  The same holds for every kernel whose shape
+   depends on the energy (since November 2026): a beam spread given as a
+   formula :math:`\sigma(E)` reaches 5 :math:`\sigma` of the shifted energy, a
+   beam profile's reconstructed-energy window moves with the shift and its
+   detailed-balance weight is normalised at the shifted energy, a UDR
+   kernel is read from its table (and its logarithmic channel formed) at the
+   shifted energy, and a free-gas Doppler window is that of the shifted energy.
+   (Before, the detailed-balance norm and the UDR table were those of the
+   unshifted energy and these supports were translated: up to 0.9 % on a UDR
+   point and 0.4 % on a beam-profile point for a 3 keV shift.)  (Until November 2026 the stopping and the target
    thickness stayed those of the unshifted energy, an error of
    :math:`(\mathrm{d}\ln\epsilon/\mathrm{d}\ln E)\, s/E` on a yield on a
    resonance, 0.9 % for a 10 keV shift at 270 keV.)

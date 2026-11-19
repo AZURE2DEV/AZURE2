@@ -37,11 +37,16 @@ struct Results;
  * translation.  The target kernel is not one: the layer's back edge E_out solves int_{E_out}^{E_0} dE/epsilon = N from
  * the true E_0, so the width of its depth window changes with the shift by (d ln epsilon/d ln E) x shift/E relative (a
  * thin layer); an infinitely thick target reaches from E_0 down to 1 keV; the straggling grows along that window.  Its
- * three inputs that depend on the beam energy are all taken at E_0 (MoveTargetToShift): the stopping at the nodes is
+ * three inputs that depend on the beam energy are all taken at E_0 (MoveKernelsToShift): the stopping at the nodes is
  * each node's own epsilon(E_n), as for any unshifted reader of the node; the point's target thickness
  * (KernelPoint::targetThickness: a thin target's back edge, a thick target's 1 keV floor) is computed at E_0; and the
- * support the kernel integrates over is the one the set-up would lay out at E_0 (question 3).  The five questions of
- * the design, answered:
+ * support the kernel integrates over is the one the set-up would lay out at E_0 (question 3).  Nor are the kernels whose
+ * shape depends on the energy otherwise (TargetEffect::SupportFollowsEnergy; the owner's answer of 2026-11-18): a beam
+ * spread sigma(E) given as a formula (its 5 sigma reach is that of E_0), a beam profile (an absolute profile clipped to
+ * the point's reconstructed-energy window, which moves with the shift; its detailed-balance norm at E_0), a UDR kernel
+ * (the delay table read, and a logarithmic channel formed, at E_0: PointFold.cpp reads it again for a shifted point),
+ * a free-gas Doppler window (its width in energy grows as sqrt(E)).  Their support is the set-up's at E_0
+ * (SupportAtEnergy, SupportChangeAt).  The five questions of the design, answered:
  *
  * 1. What the planner is given (PlannedShiftSupport).  The point's unshifted support [a_i, b_i] (the kernels'
  *    EffectSupport at the nominal point), moved by a centre c_i and widened by a reach R_i on each side, its low edge
@@ -57,7 +62,11 @@ struct Results;
  *    stopping's maximum, where it turns, its excess over the samples is at most (1/8)|T''| R_i^2, which the spread
  *    (|T''| R_i^2 / 2 there) covers.  With R_i = 0 (a fixed shift) G_i = dT(c_i): the planned support is the one the
  *    set-up lays out for the same point without a shift at E + c_i (to rounding).  The upper edge b_i + Delta does not
- *    depend on the stopping (the target kernel's forward reach is the beam spread's).
+ *    depend on the stopping (the target kernel's forward reach is the beam spread's).  For a kernel whose support
+ *    follows the energy (above) the support at Delta is the set-up's at E + Delta, [a_i + Delta - dL(Delta), b_i + Delta
+ *    + dH(Delta)] (SupportChangeAt): dL takes the place of dT in G_i, and the high edge is widened by H_i, bound from
+ *    dH by the same three samples and their spread (0 for every other kernel, bit for bit).  dL and dH are piecewise
+ *    smooth (a profile clipped at the window is monotone in Delta on each side), so the samples bound them as dT.
  *    R_i = 3 sum_k |Delta_i(nu_0 + sigma_k e_k) - Delta_i(nu_0)| over the shift parameters k that a fit varies (the
  *    leader's for a shift-group follower, the owner's for a shift-function group), sigma_k the parameter's prior
  *    width; a varied parameter without a prior adds the support's own width b_i - a_i (ShiftReach).  R_i = 0 when no
@@ -77,12 +86,12 @@ struct Results;
  *
  * 3. Which sites a point reads at nu (ShiftedFoldNodes).  The point's slots are its planned range (fixed for the
  *    stage); per evaluation the fold reads the tightest range of them enclosing the moved support [a_i + Delta_i -
- *    dT_i, b_i + Delta_i] (at least two nodes; dT_i = Unit::SupportThicknessChange, the support's growth at the true
- *    energy, question 1) and the kernel integrates over the moved support alone (KernelNodes::supportLow, supportHigh,
+ *    dT_i, b_i + Delta_i + dH_i] (at least two nodes; dT_i = Unit::SupportLowChange, the support's growth at the true
+ *    energy, dH_i = Unit::SupportHighChange, question 1) and the kernel integrates over the moved support alone (KernelNodes::supportLow, supportHigh,
  *    the clip of section 2.4).  The block is not rewritten.  What still depends on nu, and where it lives:
- *    - the target at the true energy (MoveTargetToShift, called by the shift step Segment::UpdatePointEnergyWithShift
+ *    - the kernels at the true energy (MoveKernelsToShift, called by the shift step Segment::UpdatePointEnergyWithShift
  *      for every point it moves): the point's target lab energy and thickness at E_0 (a fitted density or stopping
- *      scale recomputes the thickness at that energy) and dT_i.  The stopping at a node is the site's own,
+ *      scale recomputes the thickness at that energy), dT_i and dH_i.  The stopping at a node is the site's own,
  *      epsilon(E_n), the same for every reader of the node, shifted or not.  A support clipped at the integration
  *      floor at the set-up stays clipped (a thick target, where Delta - dT = 0 to rounding); a thin target reaching the
  *      floor would lose up to Delta - dT of its window there.
@@ -96,7 +105,8 @@ struct Results;
  *      shifted c.m. energy; a beam-spread formula sigma(E) at the shifted depth energies) is in the kernel's input,
  *      as before.  The kernels know nothing of shifts: they get nodes, values, stopping, a support, a centre and a
  *      target thickness, all at the true energy; a kernel that read KernelPoint::nominalLabEnergy would break the
- *      rule (only the beam profile does, for its reconstructed-energy window and its detailed-balance norm).
+ *      rule (only the beam profile reads it, to move its stored, unshifted window by the point's shift; its
+ *      detailed-balance norm is at the true energy since 2026-11-18, tests/shift_true_energy check 4).
  *
  * 4. Who writes a slot.  A shifted point's slot range is its planned range, fixed for the stage, so the block (the
  *    union of the planned ranges), the writer of each slot (WorkingCopy::WritesSlot: first reader in data order), the
@@ -111,7 +121,7 @@ struct Results;
  *    the caller's path that plans for each side): a reach below the step, or a shift near the edge of its window, made
  *    ShiftedFoldNodes throw inside the parallel refold before.  Kinds of shift enter through
  *    Delta_i(nu) only.  The difference carries the kernel's own dependence on E_0 (its window's edges and 1/epsilon
- *    move with it), since the move recomputes the target at the true energy (MoveTargetToShift).  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
+ *    move with it), since the move recomputes the target at the true energy (MoveKernelsToShift).  An analytic dK/dE0 is not within reach of this branch: it would need every kernel's energy
  *    arithmetic (its centre in sigma(E0), the clip limits, the Gaussian, the depth window) on a dual type, the kernels'
  *    folds beyond their centre; open for every kernel.  A segment given at a lab angle is no exception: its node
  *    values and its row sets do not depend on the shift, only its points' own Jacobians.
@@ -165,10 +175,29 @@ double ShiftCentre(double delta, double startDelta, double reach);
 /// delta 0 and for a kernel without a target.
 double SupportThicknessChange(const Unit &point, const Unit::SubGridSpec &spec, const TargetEffect &effect,
                               const Config &configure, double delta);
+/// How far (c.m. MeV) the support of a point at the c.m. shift `delta` lies beyond its nominal support [a, b] moved by
+/// delta (question 1): its low edge `low` below a + delta, its high edge `high` above b + delta.
+struct SupportChange {
+  double low = 0.0, high = 0.0;
+};
+/// The support change of a point of grid record `spec` at the c.m. shift `delta` (question 1): for a kernel whose
+/// support is a translation apart from the target (not TargetEffect::SupportFollowsEnergy) the low edge drops by
+/// SupportThicknessChange and the high edge stays (bit for bit as before 2026-11-18); otherwise the support is the one
+/// the set-up lays out for the same point without a shift at E + delta (SupportAtEnergy): its window, the beam
+/// spread's sigma, the UDR table and the Doppler window all at the true energy.  {0, 0} at delta 0.  `udrMass` is the
+/// point's DataSet::PointSetUp::udrMass (0 without a UDR kernel).
+SupportChange SupportChangeAt(const Unit &point, const Unit::SubGridSpec &spec, double udrMass, const TargetEffect &effect,
+                              const Config &configure, double delta);
+/// The support [low, high] (c.m. MeV) the set-up lays out for a point of grid record `spec` at the lab energy
+/// `labEnergy` and c.m. energy `cmEnergy`, its reconstructed-energy window moved by the c.m. shift `delta`: the
+/// effect's kernels' EffectSupport with the target thickness (TargetEffect::SupportThickness) and a UDR kernel
+/// (TargetEffect::BuildUdrKernel) at that energy.  Throws when the UDR kernel is refused at that energy.
+void SupportAtEnergy(const Unit &point, const Unit::SubGridSpec &spec, double udrMass, const TargetEffect &effect,
+                     const Config &configure, double labEnergy, double cmEnergy, double delta, double &low, double &high);
 /// The support handed to the planner (E_x) for a shifted point of grid record `spec` at centre `centre` (question 1),
-/// from the nominal support `nominal` (E_x); `thicknessChange(delta)` is the point's SupportThicknessChange.
+/// from the nominal support `nominal` (E_x); `change(delta)` is the point's SupportChangeAt.
 MeshSupport PlannedShiftSupport(const MeshSupport &nominal, const Unit::SubGridSpec &spec, double centre,
-                                const std::function<double(double)> &thicknessChange);
+                                const std::function<SupportChange(double)> &change);
 
 /// The nodes a shifted point's fold reads (question 3): slots [first, first + count) of its range (0-based), the
 /// moved support [low, high] (c.m. MeV) and its c.m. shift.
@@ -191,10 +220,11 @@ bool ShiftedSupportsInside(const WorkingCopy &data, const std::vector<const Segm
 double InsideShiftStep(const WorkingCopy &data, const std::vector<int> &segmentNumbers, double x0, double h,
                        const std::function<void(double)> &move);
 
-/// The target of a point with a target integration at the true energy its shift has moved it to (question 3, the
-/// rule): its target lab energy and thickness at E_0 (the copy's density and stopping scale) and its
-/// SupportThicknessChange.  Called by the shift step after the point's energies are set; nothing for another kernel.
-void MoveTargetToShift(Unit &point, const WorkingCopy &data, const Config &configure);
+/// The kernels of a folded point at the true energy its shift has moved it to (question 3, the rule): for a target
+/// integration its target lab energy and thickness at E_0 (the copy's density and stopping scale); for every kernel
+/// its support change (Unit::SupportLowChange, SupportHighChange; SupportChangeAt).  Called by the shift step after
+/// the point's energies are set.
+void MoveKernelsToShift(Unit &point, const WorkingCopy &data, const Config &configure);
 
 /// Whether the node values of `segment`'s folded points do not depend on its shift (question 5): every point of every
 /// term folded on the shared mesh.

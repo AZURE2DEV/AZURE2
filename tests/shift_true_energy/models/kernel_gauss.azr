@@ -1,0 +1,232 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1 -1 13.027400 1 1 1 2 0 1 1 1 60 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1274 12.1274 0 0 0.0 0 4.85 0 0 0
+1 -1 13.027400 1 1 2 0 2 1 1 1 40 0 1 0 1 0.0 4.002603 12.0 2 6 12.1274 7.16192 0 0 0.0 0 5.43 0 0 0
+
+0.5 1 30.000000 1 1 3 1 0 2 1 1 0 0.5 1 0 1 0.0 1.008665 12.0 0 6 4.94636 4.94636 0 0 0.0 0 0.1 0 0 0
+</levels>
+<data>
+# make_kernel_models.py: every data set with a shift, then its twin without a shift at the shifted energies
+energy_scale fn_gauss_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_gausslayer_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+energy_scale fn_doppler_function
+    function       "a0+a1*x" MeV
+    param          a0 0.001 fixed
+    param          a1 0.002 fixed
+
+dataset gauss_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gauss_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    beam           bx8
+    quadrature     points 40
+dataset gauss_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gauss_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    beam           bx8
+    quadrature     points 40
+dataset gauss_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gauss_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    beam           bx8
+    quadrature     points 40
+dataset gauss_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gauss_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    beam           bx8
+    quadrature     points 40
+dataset gauss_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gauss_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_gauss_function
+    beam           bx8
+    quadrature     points 40
+dataset gauss_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gauss_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    beam           bx8
+    quadrature     points 40
+dataset gausslayer_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gausslayer_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         lay15n
+    beam           bx8
+    quadrature     points 40
+dataset gausslayer_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gausslayer_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay15n
+    beam           bx8
+    quadrature     points 40
+dataset gausslayer_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gausslayer_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         lay15n
+    beam           bx8
+    quadrature     points 40
+dataset gausslayer_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gausslayer_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay15n
+    beam           bx8
+    quadrature     points 40
+dataset gausslayer_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gausslayer_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_gausslayer_function
+    target         lay15n
+    beam           bx8
+    quadrature     points 40
+dataset gausslayer_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/gausslayer_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         lay15n
+    beam           bx8
+    quadrature     points 40
+dataset doppler_offset
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/doppler_offset.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          offset 0.0030000000000000001 MeV fit prior 0.0030000000000000001 0.001
+    target         doppler1e6
+    quadrature     points 40
+dataset doppler_offset_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/doppler_offset_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         doppler1e6
+    quadrature     points 40
+dataset doppler_sqrt
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/doppler_sqrt.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          sqrt 0.0030000000000000001 MeV^1/2 fixed
+    target         doppler1e6
+    quadrature     points 40
+dataset doppler_sqrt_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/doppler_sqrt_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         doppler1e6
+    quadrature     points 40
+dataset doppler_function
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/doppler_function.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    shift          fn_doppler_function
+    target         doppler1e6
+    quadrature     points 40
+dataset doppler_function_twin
+    reaction       15N(p,a)12C
+    quantity       sigma
+    unit           b
+    file           data/doppler_function_twin.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         doppler1e6
+    quadrature     points 40
+</data>
+<targets>
+target lay15n
+    kind           layer
+    active         15N
+    areal_density  1e18 atoms/cm2 fixed
+    composition    Ti 1 N 1
+    stopping       formula "a0*x^a1" a0=2.4e-20 a1=-1.5 MeV*cm2/atom
+    straggling     none
+
+target doppler1e6
+    kind           none
+    doppler        free_gas 1e6 K fixed
+
+beam bx8
+    spread         formula "a0*x^a1" a0=0.0027609023225180053 a1=8 MeV lab
+
+</targets>

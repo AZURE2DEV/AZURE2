@@ -369,11 +369,15 @@ estimate from the 65 commits read, not a measurement).
 - **The acceptance rule of a quadrature change** (section 3, row 8): 1.2 times the largest and 1.03 times the r.m.s.
   distance of the old engine to a refined reference.
 - **What an energy shift means for three kernels**: the beam-profile window and its detailed-balance norm, a user's
-  resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.
+  resolution table and the 5 σ support of an energy-dependent Gaussian still use the unshifted energy.  *Answered
+  2026-11-18 (all three follow the shifted energy) and done: the support of every kernel whose shape depends on the
+  energy is the set-up's at E + s (a free-gas Doppler window too), the beam profile's norm and a UDR table are taken
+  at E + s; `tests/shift_true_energy` check 4; no unshifted number moved.*
 - **Fitted target parameters in the band**: today an areal density or a stopping scale does not widen it.
 - **Minuit2's call counter**: two atomic increments in `external/` (not applied; AZURE2 counts its own calls).
 - **Two constants kept so that no result moves**: the electron mass of the Fermi function (CODATA 2002) and the
-  proton mass of the M1 capture integral (`include/Constants.h`).
+  proton mass of the M1 capture integral (`include/Constants.h`).  *Answered 2026-11-18 and done: both CODATA 2018
+  (physics/ `kElectronMass_MeV`, `kProtonMass_MeV`); β-delayed spectra moved by up to 4.5e-7, M1 capture by 1.7e-7.*
 - **Publishing and CI**: the Coulomb table's address and hash (`pyazr/coulomb_table.py`, `TABLE_URL`, empty); one
   run of `.github/workflows/wheels.yml` (section 10 item 7); a Windows wheel (MinGW or MSVC); SRIM's two data files
   under their authors' terms (`stopping/data/srim/README.md`); `.github/workflows/build.yml` still passes `USE_READLINE`.

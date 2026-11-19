@@ -56,6 +56,9 @@ class Unit : public Site {
     /// The c.m. energy loss below the point the support spans at the set-up (TargetEffect::SupportThickness at the
     /// nominal energy; 0 without a target integration), from which an energy shift moves its low edge (ShiftedFold.h).
     double supportThickness = 0.0;
+    /// A THM (HOES) point, whose Gaussian folds reach further (SupportPoint::thm): what the support of a shifted point
+    /// is laid out with again at its true energy (ShiftedFold.h, SupportChangeAt).
+    bool thm = false;
     /// A time-of-flight window (a UDR kernel): its width scales with the point's energy, down to neV at a thermal
     /// point, so the mesh measures "too narrow for a ladder" against the node spacing there (MeshPlanner.h,
     /// MeshTimeOfFlightZeroWidth), not against MeshZeroWidth().
@@ -173,11 +176,16 @@ class Unit : public Site {
   void SetPhotoKinematics(double qGamma, double compoundMassMeV) { photo_qgamma_ = qGamma; photo_mcn_ = compoundMassMeV; };
   double GetPhotoQ() const { return photo_qgamma_; }
   double GetPhotoCompoundMass() const { return photo_mcn_; }
-  /// The change (c.m. MeV) of the support's target thickness (TargetEffect::SupportThickness) at the point's shifted
-  /// energy from the set-up's at its nominal one: the low edge of its moved support (ShiftedFold.h, question 3).  Set by
-  /// azure2::MoveTargetToShift; 0 without a shift.
-  double SupportThicknessChange() const { return support_thickness_change_; }
-  void SetSupportThicknessChange(double change) { support_thickness_change_ = change; }
+  /// How far (c.m. MeV) the edges of the point's support at its shifted energy lie beyond the nominal support moved by
+  /// the shift (ShiftedFold.h, question 3): the low edge that much lower (for a target, the change of the support's
+  /// target thickness, TargetEffect::SupportThickness), the high edge that much higher (a kernel whose support is not a
+  /// translation: TargetEffect::SupportFollowsEnergy).  Set by azure2::MoveKernelsToShift; 0 without a shift.
+  double SupportLowChange() const { return support_low_change_; }
+  double SupportHighChange() const { return support_high_change_; }
+  void SetSupportChange(double low, double high) {
+    support_low_change_ = low;
+    support_high_change_ = high;
+  }
   /// Slot i (1-based) of the point in `data`, the working copy that holds it (WorkingCopy::SlotAt); null beyond the
   /// last.
   Site *GetSubPoint(WorkingCopy &data, int i);
@@ -196,7 +204,8 @@ class Unit : public Site {
   double bin_high_cm_ = std::numeric_limits<double>::quiet_NaN();
   double photo_qgamma_ = 0.0;
   double photo_mcn_ = 0.0;
-  double support_thickness_change_ = 0.0;  ///< see SupportThicknessChange
+  double support_low_change_ = 0.0;   ///< see SupportLowChange
+  double support_high_change_ = 0.0;  ///< see SupportHighChange
   double frame_jacobian_ = 1.0;  ///< dOmega_lab/dOmega_cm of the point's frame row (SetFrame; LabFoldFactor)
   int plan_task_ = -1;  // see PlanTask
   int sub_first_ = 0, sub_count_ = 0;  ///< the slots: [first, first + count) of WorkingCopy::SlotAt

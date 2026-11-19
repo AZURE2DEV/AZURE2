@@ -259,6 +259,45 @@ int main() {
     Check("no kernel: the point itself", hi == 1.0 && lo == 1.0);
   }
 
+  // The rule of include/ShiftedFold.h (the owner's answer of 2026-11-18): a point measured at E_n with the shift s
+  // folds as the same point without a shift at E_n + s, its reconstructed-energy window moved by s.  With the
+  // detailed-balance weight the norm is the weight at the point's own energy, the true one; at the nominal energy (the
+  // kernel before) the shifted point came out 7.7e-4 off its twin here (D ~ E / E_gamma^2, s / E = 0.25 %).
+  std::printf("beam profile: a shifted point is its twin at the shifted energy\n");
+  {
+    const Kernel &k = *KernelNamed("beam_profile");
+    const std::vector<BeamProfileComponent> profile = {{1.21, 0.02, -1.5, 1.0}};  // lab MeV
+    KernelParameters q;
+    q.profile = &profile;
+    q.tpcSigma = 0.003;
+    q.detailedBalance = true;
+    const double f = 1.0 / 1.2, s = 0.003;  // the c.m./lab factor, the shift (lab MeV)
+    KernelPoint shifted;
+    shifted.cmFactor = f;
+    shifted.nominalLabEnergy = 1.2;
+    shifted.labEnergy = 1.2 + s;
+    shifted.energy = f * (1.2 + s);
+    shifted.binLow = f * 1.196;  // the window as stored: unshifted, c.m.
+    shifted.binHigh = f * 1.204;
+    shifted.photoQ = 1.9;          // Q_gamma (MeV)
+    shifted.photoMass = 13.0 * 931.494;
+    KernelPoint twin = shifted;
+    twin.nominalLabEnergy = twin.labEnergy;
+    twin.binLow = f * (1.196 + s);
+    twin.binHigh = f * (1.204 + s);
+    Grid g(f * 1.32, f * 1.08, 480, 1.0);
+    for (const bool constant : {true, false}) {
+      std::vector<double> sigma;
+      for (double e : g.energy) sigma.push_back(constant ? 3.0 : 1.0 + 40.0 * (e - 1.0) * (e - 1.0));
+      double vs, ws, vt, wt;
+      FoldBoth(k, q, shifted, g, sigma, vs, ws);
+      FoldBoth(k, q, twin, g, sigma, vt, wt);
+      const std::string what = constant ? "a constant" : "a parabola";
+      Close(what + ": the shifted point = its twin (relative)", vs / vt, 1.0, 1e-12);
+      Close(what + ": the weights give the same value", ws, vs, 1e-13);
+    }
+  }
+
   std::printf("%s\n", failures ? "FAILED" : "all passed");
   return failures ? 1 : 0;
 }
