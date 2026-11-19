@@ -26,8 +26,13 @@
 #include "ChannelsModel.h"
 #include "ChannelDetails.h"
 #include "AddLevelDialog.h"
+#include "LevelsUndo.h"
+#include "LevelsViews.h"
 
 class InfoDialog;
+class ProjectHolder;
+class QUndoStack;
+class QComboBox;
 
 /*!
  * The Levels tab: the level scheme, and the channels each J^pi group carries. Channels are derived from the levels and the pair list rather than entered directly.
@@ -83,8 +88,47 @@ class LevelsTab : public QWidget {
   int maxL() const { return maxLSpin->value(); }
   void setMaxL(int l) { maxLSpin->setValue(l); }
   /*! The J^pi the pairs allow up to the maximum orbital momentum that no active level carries. */
-  QStringList missingSpinParities();
+  QStringList missingSpinParities(QStringList *links = nullptr);
   ChannelsModel *getChannelsModel() { return channelsModel; }
+  /*! The <levels> row the tab writes for channel `ch` of `level` (LevelsFile.cpp), with level ID `id`. */
+  azure2::front::LevelRow channelRow(const ChannelsData &ch, const LevelsData &level, const PairsData &pair,
+                                     const PairsData &entrance, int id) const;
+
+  // ---- on the go (docs/upgrade/qt_gui.md section 11; LevelsTabEdits.cpp, LevelsTabNavigation.cpp) ----
+  /*! The undo stack of this tab and the Particle Pairs tab. */
+  QUndoStack *undoStack() const { return undo_; }
+  QTableView *getLevelsView() const { return levelsView; }
+  QTableView *getChannelsView() const { return channelsView; }
+  LevelsFilterProxy *getLevelsProxy() const { return levelsModelProxy; }
+  /*! The selected levels (model rows, in the order shown) and the current one (-1: none). */
+  QList<int> selectedLevelRows() const;
+  int currentLevelRow() const;
+  /*! Select these levels (model rows; the first becomes current), show the first. */
+  void selectLevelRows(const QList<int> &rows);
+  /*! The add bar's fields and its button (the tests drive them). */
+  HalfSpinBox *addJSpin() const { return addJ_; }
+  ParityToggle *addParityToggle() const { return addPi_; }
+  QLineEdit *addEnergyEdit() const { return addE_; }
+  QPushButton *addBarButton() const { return addBarButton_; }
+  QLineEdit *searchEdit() const { return search_; }
+  QComboBox *jpiFilterCombo() const { return jpiFilter_; }
+  QCheckBox *onlyIncludedCheck() const { return onlyIncluded_; }
+  QLabel *statusLabel() const { return status_; }
+  QLabel *missingLabel() const { return missingJPiLabel; }
+  /*! Edits the tab checks (in place, the add bar): false with the reason, the models unchanged. */
+  bool addLevelFromBar(QString &why);
+  bool setLevelEnergy(int row, const QString &text, QString &why);
+  bool setLevelJpi(int row, double j, int parity, QString &why);
+  bool setChannelValue(int row, const QString &text, QString &why);
+  /*! Remove these levels (model rows) with their channels; `ask`: after one confirmation naming them. */
+  bool removeLevels(QList<int> rows, bool ask);
+  /*! Fix or free the energies (or the widths of every channel) of these levels. */
+  void setFixed(const QList<int> &rows, bool energies, bool fixed);
+  /*! Record the state as an undo entry now if it changed (the event loop does it after every change). */
+  void recordUndo();
+  /*! The quantities of a channel (model row) at its level's energy, from the facade (azure2::front::ChannelAtLevel). */
+  azure2::front::ChannelQuantities channelQuantities(int channelRow) const;
+  bool eventFilter(QObject *object, QEvent *event) override;
 
  public slots:
   void addLevel();
@@ -108,6 +152,22 @@ class LevelsTab : public QWidget {
   void updateNucleusColumn();
   /*! Show the levels of one nucleus (0 = all). */
   void filterByNucleus(int index);
+  void removeSelectedLevels();
+  void duplicateSelectedLevels();
+  void addLevelFromBarClicked();
+  /*! Put the cursor in the add bar's energy (Insert). */
+  void focusAddBar();
+  /*! The add bar set to a J^pi (a link of the missing-J^pi text: "jpi:<2J>:<pi>"). */
+  void fillAddBar(const QString &link);
+  void addBackgroundPole();
+  void showLevelsMenu(const QPoint &pos);
+  void showChannelsMenu(const QPoint &pos);
+  void undoLater();
+  void currentLevelChanged();
+  void refreshChannelInfo();
+  void updateJpiFilter();
+  void jpiFilterChosen(int index);
+  void updateCount();
 
  signals:
   void readNewPair(PairsData, int, bool);
@@ -115,6 +175,35 @@ class LevelsTab : public QWidget {
 
  private:
   QTabWidget *extras = nullptr;
+  /// The state of the tabs as it was after the last recorded action, and the stack (LevelsUndo.h).
+  LevelsState currentState() const;
+  void applyState(const LevelsState &state);
+  void finishLoading();
+  QLayout *buildFilterBar();
+  QLayout *buildAddBar();
+  void setUpShortcuts();
+  /// The window's project (the facade's functions that read the project: channel radii, the relativistic option).
+  ProjectHolder *holder() const;
+  void showRefusal(const QModelIndex &index, const QString &why);
+  void setStatus(const QString &text, bool error = false);
+  QString levelName(const LevelsData &level) const;
+  /// Copy the widths, fix flags and file tokens of `from`'s channels onto the channels of level `to` (same pair, s, l).
+  void copyChannelValues(int from, int to);
+  QUndoStack *undo_ = nullptr;
+  LevelsState lastState_;
+  bool loading_ = false, restoring_ = false, undoPending_ = false;
+  QString undoText_;
+  HalfSpinBox *addJ_ = nullptr;
+  ParityToggle *addPi_ = nullptr;
+  QLineEdit *addE_ = nullptr;
+  QComboBox *addNucleus_ = nullptr;
+  QPushButton *addBarButton_ = nullptr;
+  QPushButton *duplicateButton_ = nullptr;
+  QLineEdit *search_ = nullptr;
+  QComboBox *jpiFilter_ = nullptr;
+  QCheckBox *onlyIncluded_ = nullptr;
+  QLabel *count_ = nullptr;
+  QLabel *status_ = nullptr;
   QSpinBox *maxLSpin;
   QSpinBox *maxMultSpin;
   QSpinBox *maxNumMultSpin;
@@ -132,7 +221,7 @@ class LevelsTab : public QWidget {
   ChannelsModel *channelsModel;
   QTableView *levelsView;
   QTableView *channelsView;
-  QSortFilterProxyModel *levelsModelProxy;
+  LevelsFilterProxy *levelsModelProxy;
   QSortFilterProxyModel *proxyModel;
   ChannelDetails *channelDetails;
   // Inputs for the physical Wigner-limit calculation of the selected channel.

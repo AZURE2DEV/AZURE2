@@ -59,10 +59,15 @@ class PairsModel : public QAbstractTableModel {
   bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole);
   bool insertRows(int position, int rows, const QModelIndex &index = QModelIndex());
   bool removeRows(int position, int rows, const QModelIndex &index = QModelIndex());
+  /// The numbers edited in place (docs/upgrade/qt_gui.md section 11.6): excitation energies, separation energy, radius.
+  Qt::ItemFlags flags(const QModelIndex &index) const override;
+  static bool editableInPlace(int column) { return column == 10 || column == 11 || column == 12 || column == LightExcitationColumn; }
 
   int isPair(const PairsData &pair) const;
   int numPairs() const { return pairsList.size(); };
   QList<PairsData> getPairs() const { return pairsList; };
+  /// Replace every pair (the undo stack): rows removed and inserted, so that the window sees an edit.
+  void setPairs(const QList<PairsData> &pairs);
   QString getParticleLabel(const PairsData &pair, int which = -1) const;
   QString getReactionLabel(const PairsData &firstPair, const PairsData &secondPair);
   QString getReactionLabelTotalCapture(const PairsData &firstPair);

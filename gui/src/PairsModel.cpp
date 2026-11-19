@@ -189,7 +189,7 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
       case 0:
         return tr("Light\n Particle");
       case 1:
-        return tr("Light\nM");
+        return tr("Light\nM [u]");
       case 4:
         return tr("Light\ng-Factor");
       case 7:
@@ -199,21 +199,21 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
       case 5:
         return tr("Heavy\nParticle");
       case 6:
-        return tr("Heavy\nM");
+        return tr("Heavy\nM [u]");
       case 9:
         return tr("Heavy\ng-Factor");
       case 10:
-        return tr("Heavy\nExcitation");
+        return tr("Heavy\nExcitation [MeV]");
       case 11:
-        return tr("Separation\nEnergy");
+        return tr("Separation\nEnergy [MeV]");
       case 12:
-        return tr("Channel\nRadius");
+        return tr("Channel\nRadius [fm]");
       case 13:
         return tr("Pair\nType");
       case 14:
         return tr("EC\nMultipolarities");
       case LightExcitationColumn:
-        return tr("Light\nExcitation");
+        return tr("Light\nExcitation [MeV]");
       case NucleusColumn:
         return tr("Compound\nNucleus");
       default:
@@ -589,4 +589,22 @@ QString PairsModel::plainText(const QString &html) {
   out.replace("&alpha;", QString(QChar(0x03B1))).replace("&beta;", QString(QChar(0x03B2))).replace("&gamma;", QString(QChar(0x03B3)));
   out.replace("&nbsp;", " ").replace("&amp;", "&");
   return out.simplified();
+}
+
+void PairsModel::setPairs(const QList<PairsData> &pairs) {
+  if (!pairsList.isEmpty()) {
+    beginRemoveRows(QModelIndex(), 0, pairsList.size() - 1);
+    pairsList.clear();
+    endRemoveRows();
+  }
+  if (!pairs.isEmpty()) {
+    beginInsertRows(QModelIndex(), 0, pairs.size() - 1);
+    pairsList = pairs;
+    endInsertRows();
+  }
+}
+
+Qt::ItemFlags PairsModel::flags(const QModelIndex &index) const {
+  if (index.isValid() && editableInPlace(index.column())) return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
+  return QAbstractTableModel::flags(index);
 }

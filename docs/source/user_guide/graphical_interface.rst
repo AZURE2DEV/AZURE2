@@ -151,6 +151,79 @@ a file a chooser; the tool tip of each field gives its meaning and grammar.
 Fields set rarely are behind ``Every field`` unless the record sets them.
 ``Apply`` writes the record; nothing is written before.
 
+The Levels and Channels tab
+---------------------------
+
+The levels on the left, the channels of the selected level in the middle, the
+channel limits and the details of the selected channel on the right; the gamma
+decays and isospin records below. Opening a project selects its first level, so
+its channels are on screen at once; the selection stays with the level through
+every edit, filter, sort and undo.
+
+* **Editing in place.** A double click, F2 or typing on a cell edits it: the
+  energy E_x (MeV), the J^pi (J in a spin box of halves, the parity a +/-
+  button), and in the channel table the value. The value column says what the
+  number is and its unit: Γ [eV] for an open particle channel or a gamma width,
+  C [fm^-1/2] (an ANC) for a closed channel, γ [MeV^1/2] for a row written as a
+  reduced-width amplitude, μ [μ_N] and Q [b] for a static moment, B for a beta
+  channel. A value that cannot be taken (not a number; a J^pi that has no
+  channel with the pairs and limits; a level of the same J^pi within 1 keV of
+  another, which the engine would join) is refused with the reason, at the cell
+  and under the levels; the model is not changed. Enter commits and moves down.
+  A changed J^pi gives the level the channels of its new J^pi; the channels it
+  keeps keep their values.
+* **Adding.** The bar under the levels: J, parity, E and ``Add`` (or Enter in
+  the energy). The Insert key puts the cursor in the energy with the selected
+  level's J^pi. ``+`` opens the dialog as before. ``Duplicate`` (Ctrl+D) copies
+  the selected levels 10 keV above, with their widths and fix flags.
+* **Removing.** Del (or ``-``, or the context menu) removes the selected levels
+  with their channels after one confirmation that names them.
+* **Undo.** Ctrl+Z undoes, Ctrl+Shift+Z (or Ctrl+Y) redoes, every change of
+  this tab and of the Particle Pairs tab since the project was opened. Undone
+  back to the opened state, the project is saved as it was opened, byte for
+  byte, unless it was saved in between (a row the save rewrote keeps its content
+  but may differ in its blanks).
+* **Finding a level.** The search line (``3/2-`` or the digits of an energy),
+  the J^pi list with the number of levels of each, ``Only included`` and the
+  count of levels shown. A click on a header sorts; J^pi sorts by J, parity and
+  energy, so the levels of one J^pi stand together, and the J^pi of the
+  selected level is in bold. Ctrl+Right goes to the channels, Ctrl+Left back.
+* **The context menu** (right click): add a level of this J^pi, duplicate,
+  edit in the dialog, remove, include or leave out, fix or free the energies or
+  the widths of the selected levels, show only this J^pi, add a background pole
+  of this J^pi (a level 10 MeV above the J^pi's highest, energy fixed, widths 0:
+  a starting point to edit). ``Fix All Widths`` and ``Fix All Energies`` act on
+  the selected levels when several are selected, else on all.
+* **J^pi without a level.** Under the limits, the J^pi the pairs allow up to the
+  maximum l that no active level carries are listed, with what to do: with
+  ``Hard-sphere scattering in every J^pi`` on they scatter as hard spheres;
+  with it off they are left out of the calculation, and the text says to switch
+  the option on or to add a level (a background pole is the usual choice). A
+  click on a J^pi fills the add bar.
+* **Channel details.** For the selected channel: the pair's particles, the
+  separation energy, the channel radius (the channel's own from
+  ``<channelRadii>`` when a record names it, the pair's beside it), and at the
+  level's energy E_c = E_x - S - e, the penetrability P (below threshold the
+  factor μa/(ħ²W²) that turns an ANC into a reduced width), the shift function S
+  and dS/dE, the Wigner limit γ_W² = 3ħ²/(2μa²), the single-particle width
+  Γ_sp = 2Pγ_W², the observed reduced width γ² = Γ/(2P) (C²/(2P) for an ANC)
+  and θ² = γ²/γ_W², which the channel table also shows. These are the
+  engine's channel functions (the same as at a data point); γ² is the
+  thin-level value, not Brune's γ̃², which also needs the level's other widths
+  (``parameters.out`` of a run gives that).
+
+The Particle Pairs tab
+----------------------
+
+The headers carry their units. The excitation energies, the separation energy
+and the channel radius are edited in place (a double click or F2; a value that
+cannot be taken is refused with the reason); a double click elsewhere opens the
+pair's dialog. Removing a pair asks first, naming the channels that go with it
+and the data sets and extrapolations whose reaction names it (the engine
+refuses them once the pair is gone; records that name a later pair by its key
+then point one pair off). The isotope fields of the pair's dialog complete
+from the mass table. Ctrl+Z undoes a pair's edit as in the Levels tab.
+
 The parameter table
 -------------------
 

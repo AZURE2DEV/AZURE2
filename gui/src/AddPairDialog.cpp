@@ -1,3 +1,4 @@
+#include <QCompleter>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 #include <QComboBox>
@@ -86,6 +87,14 @@ AddPairDialog::AddPairDialog(QWidget *parent) :
   heavyIsotopeText->setObjectName("heavyIsotopeText");
   heavyIsotopeText->setPlaceholderText(tr("12C, 16O ..."));
   heavyIsotopeText->setToolTip(lightIsotopeText->toolTip());
+  // the isotopes are chosen, not only typed: a completer over the mass table (docs/upgrade/qt_gui.md section 11.6)
+  for (QLineEdit *field : {lightIsotopeText, heavyIsotopeText}) {
+    auto *completer = new QCompleter(QStringList{"p", "d", "t", "a"} + MassTable::instance().labels(), field);
+    completer->setCaseSensitivity(Qt::CaseInsensitive);
+    completer->setFilterMode(Qt::MatchStartsWith);
+    completer->setMaxVisibleItems(12);
+    field->setCompleter(completer);
+  }
   connect(lightIsotopeText, SIGNAL(editingFinished()), this, SLOT(lightIsotopeEdited()));
   connect(heavyIsotopeText, SIGNAL(editingFinished()), this, SLOT(heavyIsotopeEdited()));
 

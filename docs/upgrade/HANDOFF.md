@@ -42,6 +42,42 @@ the GUI on a real display (high-DPI only by reasoning: no pixel font sizes, SVG 
 **Open**: a corner plot of two parameters; print; level markers in the plot; the theme's look on macOS/Windows native
 font metrics unseen.
 
+## 2026-11-19 (agent levels) — `feature/upgrade-7-gui-levels`: the Levels and Channels tab on the go, the Pairs tab's cells in place
+
+**Design** `docs/upgrade/qt_gui.md` section 11 (with the parity table against dev's tabs, 11.8). Cut from
+`feature/upgrade-6` at `35cfcffe`.
+
+**Facade** (`api/front/src/FrontLevels.cpp`): `LevelColumnNames`/`LevelColumnIndex`, `ChannelAtLevel` (what a
+`<levels>` row's value is and its unit; E_c, P, S, dS/dE from the engine's `ParticleChannelValues` on
+`PPair(LevelRow)`; gamma_W^2, Gamma_sp, gamma^2 = Gamma/(2P) or C^2/(2P), theta^2), `ChannelRadius`
+(`<channelRadii>` through `ChannelRadiusFor`), `PairUses` (data sets and extrapolations naming a pair key).
+
+**GUI**: first level selected on opening; J^pi, energy and channel values edited in place with refusals and
+reasons; add bar (J spin box of halves, parity toggle, E, Enter), Insert, Ctrl+D, Del with one confirmation,
+Ctrl+Z/Ctrl+Shift+Z over the Levels and Pairs tabs (`LevelsUndo`: model states, coalesced per event-loop turn);
+search, J^pi filter with counts, only included, J^pi sort and bold group, context menus, bulk fix/free; the
+missing-J^pi text says what to do (links fill the add bar), background pole action; details pane from the facade
+(scrolls); value/meaning/theta^2 columns. Pairs: excitation, separation energy, radius in place; removal names
+its channels and records; pair type shown; isotope completer. `LevelsFile.cpp` names columns via the facade.
+Files: `gui/src/LevelsTabEdits.cpp`, `LevelsTabNavigation.cpp`, `LevelsUndo.cpp`, `LevelsViews.cpp` (new), edits in
+`LevelsTab.cpp`, `LevelsFile.cpp`, the three models, `PairsTab.cpp`, `ChannelDetails.cpp`, `MassTable.cpp`,
+`AddPairDialog.cpp`. No edit of another agent's file (`AZURESetup.cpp` untouched: the tab finds the
+`ProjectHolder` with `window()->findChild`).
+
+**Run**: build with the GUI, 0 warnings; `ctest -L gui` 2/2 (`gui_window`, new `gui_levels` with 40 checks; it
+needs Qt6 Test, skipped with a CMake message without it); `api_front` (new case (h), against mpmath) and
+`repo_consistency`; `ctest -LE slow -j4` (see the agent's report for the count). Screenshots before/after in
+`work/qt-shots/u7-levels/`.
+
+**Not run**: `tests/run_tests.sh` (no engine file changed), a real display, Windows/macOS.
+
+**Open**: the pair dialog's J as a spin box and the isotope as element + A choosers (a completer is there
+instead); duplicate a pair; reordering pairs (not offered: records name pairs by key); undo across a save brings
+back the content but a rewritten row's blanks may differ; `LevelsTab::calculateChannels` is still the GUI's copy of
+the rule the engine states as `experiment::AllowedChannels` (moving it to the facade needs the GUI's unsaved pairs
+as an argument); the tab still holds its models and writes `<levels>` on save (`SetLevels`) rather than calling
+`experiment::LevelEdits` per action.
+
 ## 2026-11-19 (director) — `feature/upgrade-6` joined and checked: the owner's answers, the Qt program, the page's navigation
 
 **What it is**: `98a4cf60` (GitHub's `feature/upgrade` `a405a9e9` + the owner's `feature/upgrade-5-fixes` and

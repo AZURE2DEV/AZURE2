@@ -3,6 +3,7 @@
 #include <QInputDialog>
 #include <QFile>
 #include <QRegularExpression>
+#include <QTimer>
 #include <algorithm>
 
 #include "LevelsTab.h"
@@ -13,6 +14,7 @@
 #include "InfoDialog.h"
 #include "ElementMap.h"
 #include "azure2/front/Engine.h"
+#include "PairsTab.h"
 #include <cmath>
 #include <iostream>
 #include <algorithm>
@@ -22,9 +24,8 @@ LevelsTab::LevelsTab(QWidget *parent) :
   QWidget(parent) {
   pairsModel = nullptr;
   levelsModel = new LevelsModel(this);
-  levelsModelProxy = new QSortFilterProxyModel(this);
+  levelsModelProxy = new LevelsFilterProxy(this);
   levelsModelProxy->setSourceModel(levelsModel);
-  levelsModelProxy->setDynamicSortFilter(true);
   levelsView = new QTableView;
   levelsView->setHorizontalHeader(new LevelsHeaderView(Qt::Horizontal, levelsView));
   levelsView->setModel(levelsModelProxy);
@@ -43,12 +44,42 @@ LevelsTab::LevelsTab(QWidget *parent) :
   levelsView->setColumnHidden(LevelsModel::NucleusColumn, true);
   levelsView->setItemDelegateForColumn(LevelsModel::NucleusColumn, new RichTextDelegate());
   levelsView->setSelectionBehavior(QAbstractItemView::SelectRows);
-  levelsView->setSelectionMode(QAbstractItemView::SingleSelection);
-  levelsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  // several levels at once (Del, bulk fix); J^pi and E edited in place (docs/upgrade/qt_gui.md section 11.2)
+  levelsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  levelsView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed |
+                              QAbstractItemView::AnyKeyPressed);
   levelsView->setShowGrid(false);
+  levelsView->setObjectName("levelsView");
+  levelsView->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(levelsView, &QWidget::customContextMenuRequested, this, &LevelsTab::showLevelsMenu);
   connect(levelsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this, SLOT(updateButtons(QItemSelection)));
-  connect(levelsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this, SLOT(updateFilter(QItemSelection)));
-  connect(levelsView, SIGNAL(doubleClicked(QModelIndex)), this, SLOT(editLevel()));
+  connect(levelsView->selectionModel(), &QItemSelectionModel::currentRowChanged, this, &LevelsTab::currentLevelChanged);
+  connect(levelsView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &LevelsTab::currentLevelChanged);
+  {
+    auto *jpiDelegate = new CheckedEditDelegate(
+        CheckedEditDelegate::Kind::Jpi,
+        [this](const QModelIndex &index, const QVariant &value, QString &why) {
+          const QVariantList v = value.toList();
+          return setLevelJpi(levelsModelProxy->mapToSource(index).row(), v.value(0).toDouble(), v.value(1).toInt(), why);
+        },
+        this);
+    auto *energyDelegate = new CheckedEditDelegate(
+        CheckedEditDelegate::Kind::Number,
+        [this](const QModelIndex &index, const QVariant &value, QString &why) {
+          return setLevelEnergy(levelsModelProxy->mapToSource(index).row(), value.toString(), why);
+        },
+        this);
+    for (CheckedEditDelegate *d : {jpiDelegate, energyDelegate}) {
+      connect(d, &CheckedEditDelegate::refused, this, &LevelsTab::showRefusal);
+      connect(d, &CheckedEditDelegate::moveDown, this, [this](const QModelIndex &) {
+        const QModelIndex c = levelsView->currentIndex();
+        const QModelIndex next = c.sibling(c.row() + 1, c.column());
+        if (next.isValid()) levelsView->setCurrentIndex(next);
+      });
+    }
+    levelsView->setItemDelegateForColumn(2, jpiDelegate);
+    levelsView->setItemDelegateForColumn(4, energyDelegate);
+  }
 
   maxLSpin = new QSpinBox;
   maxLSpin->setMinimum(0);
@@ -78,6 +109,8 @@ LevelsTab::LevelsTab(QWidget *parent) :
   missingJPiLabel = new QLabel;
   missingJPiLabel->setWordWrap(true);
   missingJPiLabel->setTextFormat(Qt::RichText);
+  missingJPiLabel->setObjectName("missingJPiLabel");
+  connect(missingJPiLabel, &QLabel::linkActivated, this, &LevelsTab::fillAddBar);
   connect(includeAllJPiCheck, SIGNAL(toggled(bool)), this, SLOT(updateMissingSpinParities()));
   connect(maxLSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
   connect(maxMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
@@ -95,20 +128,47 @@ LevelsTab::LevelsTab(QWidget *parent) :
   channelsView->verticalHeader()->hide();
   channelsView->horizontalHeader()->setHighlightSections(false);
   channelsView->setColumnWidth(0, 40);
-  channelsView->setColumnWidth(2, 160);
+  channelsView->setColumnWidth(2, 150);
   channelsView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
   channelsView->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-  channelsView->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-  channelsView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+  // s and l: wide enough for "3/2" and "E2" in one line
+  channelsView->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+  channelsView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+  channelsView->setColumnWidth(3, 38);
+  channelsView->setColumnWidth(4, 34);
   channelsView->setColumnHidden(1, true);
   channelsView->setColumnHidden(5, true);
-  channelsView->setColumnHidden(6, true);
+  // the value in place, what it is and its unit, theta^2 (docs/upgrade/qt_gui.md section 11.4)
+  channelsView->setObjectName("channelsView");
+  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::ValueColumn, QHeaderView::Stretch);
+  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::MeaningColumn, QHeaderView::Fixed);
+  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::RatioColumn, QHeaderView::Fixed);
+  channelsView->setColumnWidth(ChannelsModel::MeaningColumn, 78);
+  channelsView->setColumnWidth(ChannelsModel::RatioColumn, 50);
+  channelsView->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(channelsView, &QWidget::customContextMenuRequested, this, &LevelsTab::showChannelsMenu);
+  {
+    auto *valueDelegate = new CheckedEditDelegate(
+        CheckedEditDelegate::Kind::Number,
+        [this](const QModelIndex &index, const QVariant &value, QString &why) {
+          return setChannelValue(proxyModel->mapToSource(index).row(), value.toString(), why);
+        },
+        this);
+    connect(valueDelegate, &CheckedEditDelegate::refused, this, &LevelsTab::showRefusal);
+    connect(valueDelegate, &CheckedEditDelegate::moveDown, this, [this](const QModelIndex &) {
+      const QModelIndex c = channelsView->currentIndex();
+      const QModelIndex next = c.sibling(c.row() + 1, c.column());
+      if (next.isValid()) channelsView->setCurrentIndex(next);
+    });
+    channelsView->setItemDelegateForColumn(ChannelsModel::ValueColumn, valueDelegate);
+  }
   channelsView->setItemDelegateForColumn(2, new RichTextDelegate());
   channelsView->setItemDelegateForColumn(3, new RichTextDelegate());
   channelsView->setItemDelegateForColumn(4, new RichTextDelegate());
   channelsView->setSelectionBehavior(QAbstractItemView::SelectRows);
   channelsView->setSelectionMode(QAbstractItemView::SingleSelection);
-  channelsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  channelsView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed |
+                                QAbstractItemView::AnyKeyPressed);
   channelsView->setShowGrid(false);
   connect(channelsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this, SLOT(updateDetails(QItemSelection)));
 
@@ -198,9 +258,12 @@ LevelsTab::LevelsTab(QWidget *parent) :
   QGridLayout *levelsLayout = new QGridLayout;
   levelsLayout->setContentsMargins(6, 6, 6, 6);
   levelsLayout->addWidget(nucleusFilterCombo, 0, 0);
-  levelsLayout->addWidget(levelsView, 1, 0);
-  levelsLayout->addLayout(buttonBox, 2, 0);
-  levelsLayout->addLayout(fixButtonBox, 3, 0);
+  levelsLayout->addLayout(buildFilterBar(), 1, 0);
+  levelsLayout->addWidget(levelsView, 2, 0);
+  levelsLayout->addLayout(buildAddBar(), 3, 0);
+  levelsLayout->addLayout(buttonBox, 4, 0);
+  levelsLayout->addLayout(fixButtonBox, 5, 0);
+  levelsLayout->addWidget(status_, 6, 0);
 #ifdef MACX_SPACING
   levelsLayout->setVerticalSpacing(0);
 #endif
@@ -254,10 +317,11 @@ LevelsTab::LevelsTab(QWidget *parent) :
   extras->setVisible(false);
   mainLayout->addWidget(extras, 2, 0, 1, 3);
   mainLayout->setRowStretch(0, 3);
-  mainLayout->setRowStretch(1, 3);
+  mainLayout->setRowStretch(1, 4);
   mainLayout->setRowStretch(2, 2);
 
   setLayout(mainLayout);
+  setUpShortcuts();
 }
 
 void LevelsTab::setPairsModel(PairsModel *model) {
@@ -268,6 +332,11 @@ void LevelsTab::setPairsModel(PairsModel *model) {
     connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateNucleusColumn()));
     connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(updateNucleusColumn()));
     connect(model, SIGNAL(modelReset()), this, SLOT(updateNucleusColumn()));
+    // a pair's edit is an undo entry of this tab's stack (the Particle Pairs tab shares it)
+    connect(model, &QAbstractItemModel::dataChanged, this, &LevelsTab::undoLater);
+    connect(model, &QAbstractItemModel::rowsInserted, this, &LevelsTab::undoLater);
+    connect(model, &QAbstractItemModel::rowsRemoved, this, &LevelsTab::undoLater);
+    if (PairsTab *pairs = qobject_cast<PairsTab *>(model->parent())) pairs->setUndoStack(undo_);
   }
   updateNucleusColumn();
 }
@@ -290,7 +359,15 @@ void LevelsTab::updateNucleusColumn() {
   nucleusFilterCombo->blockSignals(false);
   nucleusFilterCombo->setVisible(several);
   filterByNucleus(nucleusFilterCombo->currentIndex());
-  if (!several) return;
+  // the add bar's nucleus: shown with several
+  if (addNucleus_) {
+    const int keepAdd = addNucleus_->currentIndex();
+    addNucleus_->clear();
+    for (const Nucleus &nucleus : nuclei) addNucleus_->addItem(PairsModel::nucleusLabel(nucleus, false));
+    addNucleus_->setCurrentIndex(keepAdd >= 0 && keepAdd < addNucleus_->count() ? keepAdd : 0);
+    addNucleus_->setVisible(several);
+  }
+  if (!several || restoring_) return;
   // A level added before a second nucleus appeared has no nucleus: it would take channels from every pair, which
   // the engine refuses (a level of two compound nuclei), so it is given the first nucleus.
   bool assigned = false;
@@ -304,13 +381,9 @@ void LevelsTab::updateNucleusColumn() {
 }
 
 void LevelsTab::filterByNucleus(int index) {
-  if (index <= 0 || index >= nucleusFilterCombo->count()) {
-    levelsModelProxy->setFilterRegularExpression(QRegularExpression());
-    return;
-  }
-  levelsModelProxy->setFilterKeyColumn(LevelsModel::NucleusColumn);
-  levelsModelProxy->setFilterRegularExpression(
-      QRegularExpression("^" + QRegularExpression::escape(nucleusFilterCombo->itemData(index, Qt::UserRole).toString()) + "$"));
+  if (index <= 0 || index >= nucleusFilterCombo->count()) levelsModelProxy->setNucleus(QString());
+  else levelsModelProxy->setNucleus(nucleusFilterCombo->itemData(index, Qt::UserRole).toString());
+  updateCount();
 }
 
 void LevelsTab::addLevel() {
@@ -376,20 +449,17 @@ void LevelsTab::removeLevelAt(int row) {
 }
 
 void LevelsTab::removeLevel() {
-  QItemSelectionModel *selectionModel = levelsView->selectionModel();
-  QModelIndexList indexes = selectionModel->selectedRows();
-  QModelIndex index = levelsModelProxy->mapToSource(indexes[0]);
-
-  levelsModel->removeRows(index.row(), 1, QModelIndex());
-  updateChannelsLevelDeleted(index.row());
-  updateMissingSpinParities();
-  selectionModel->clearSelection();
+  // the button "-" and removeLevelAt: the selected levels, without a question for one (as dev)
+  const QList<int> rows = selectedLevelRows();
+  if (!rows.isEmpty()) removeLevels(rows, rows.size() > 1);
 }
 
 void LevelsTab::editLevel() {
   QItemSelectionModel *selectionModel = levelsView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();
-  QModelIndex index = levelsModelProxy->mapToSource(indexes[0]);
+  if (indexes.isEmpty()) return;
+  QModelIndex index = levelsModelProxy->mapToSource(levelsView->currentIndex().isValid() ? levelsView->currentIndex() : indexes[0]);
+  undoText_ = tr("edit level");
 
   QModelIndex i = levelsModel->index(index.row(), 2, QModelIndex());
   QVariant var = levelsModel->data(i, Qt::EditRole);
@@ -518,6 +588,7 @@ void LevelsTab::updateChannelsLevelEdited(int levelIndex) {
           channels.at(ii).radType == newChannels.at(i).radType) {
         newChannels[i].isFixed = channels.at(ii).isFixed;
         newChannels[i].reducedWidth = channels.at(ii).reducedWidth;
+        channelsModel->setFileTokens(i, channels.at(ii).fileTokens);  // a value kept keeps its token
         break;
       }
     }
@@ -632,18 +703,15 @@ QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int le
 }
 
 void LevelsTab::updateFilter(const QItemSelection &selection) {
-  QModelIndexList indexes = selection.indexes();
-  if (indexes.isEmpty())
-    proxyModel->setFilterRegularExpression("-1");
-  else {
-    QModelIndex index = levelsModelProxy->mapToSource(indexes.at(0));
-    int row = index.row();
-    proxyModel->setFilterRegularExpression(QString("\\b%1\\b").arg(row));
-  }
+  Q_UNUSED(selection);
+  // the channels of the current level (of a multi-selection: the one the cursor is on)
+  const int row = currentLevelRow();
+  proxyModel->setFilterRegularExpression(row < 0 ? QString("^-1$") : QString("^%1$").arg(row));
   channelsView->resizeRowsToContents();
+  refreshChannelInfo();
 }
 
-QStringList LevelsTab::missingSpinParities() {
+QStringList LevelsTab::missingSpinParities(QStringList *links) {
   QStringList missing;
   QList<LevelsData> levels = levelsModel->getLevels();
   // One pass per compound nucleus (the J^pi of one nucleus's pairs against its own levels); a single nucleus is
@@ -663,24 +731,37 @@ QStringList LevelsTab::missingSpinParities() {
       for (const LevelsData &l : levels)
         carried |= (l.isActive == 1 && l.jValue == option.jValue && l.piValue == option.piValue &&
                     (!several || !l.hasNucleus() || l.nucleus() == nucleus));
-      if (!carried) missing << prefix + AddLevelDialog::spinParityLabel(option.jValue, option.piValue);
+      if (!carried) {
+        missing << prefix + AddLevelDialog::spinParityLabel(option.jValue, option.piValue);
+        if (links)
+          *links << QString("jpi:%1:%2:%3:%4").arg((int)std::lround(2 * option.jValue)).arg(option.piValue).arg(nucleus.Z).arg(nucleus.A);
+      }
     }
   }
   return missing;
 }
 
 void LevelsTab::updateMissingSpinParities() {
-  QStringList missing = missingSpinParities();
+  // What is missing and what to do about it (docs/upgrade/qt_gui.md section 11.3): each J^pi a link that fills the
+  // add bar.
+  QStringList links;
+  const QStringList missing = missingSpinParities(&links);
+  QStringList linked;
+  for (int i = 0; i < missing.size(); i++) linked << QString("<a href='%1'>%2</a>").arg(links.value(i), missing.at(i));
   QString jpi = QString("J<sup>%1</sup>").arg(QChar(0x03C0));
   if (pairsModel == nullptr || pairsModel->getPairs().isEmpty())
-    missingJPiLabel->setText("");
+    missingJPiLabel->setText(tr("Add a particle pair first (tab Particle Pairs): the levels' channels come from the pairs."));
   else if (missing.isEmpty())
     missingJPiLabel->setText(tr("Every %1 up to l = %2 has an active level.").arg(jpi).arg(maxLSpin->value()));
   else if (includeAllJPiCheck->isChecked())
-    missingJPiLabel->setText(tr("Hard-sphere scattering only (no active level): %1").arg(missing.join(", ")));
+    missingJPiLabel->setText(tr("No active level of %1: these scatter as hard spheres only (the option above). "
+                                "Click one to add a level of it.").arg(linked.join(", ")));
   else
-    missingJPiLabel->setText(tr("<font color='#b00020'>Not in the calculation (no active level, and the option above is off): %1</font>")
-                               .arg(missing.join(", ")));
+    missingJPiLabel->setText(tr("<font color='#b00020'>Left out of the calculation: %1. No active level carries them and "
+                                "the option above is off, so they have no hard-sphere phase either.</font> To include "
+                                "them, switch the option on, or click a %2 to add a level of it (a background pole, "
+                                "far from the data with its energy fixed, is the usual choice).")
+                                .arg(linked.join(", "), jpi));
 }
 
 void LevelsTab::updateChannelsPairAddedEdited() {
@@ -709,6 +790,7 @@ void LevelsTab::updateChannelsPairAddedEdited() {
             channels.at(ii).radType == newChannels.at(i).radType) {
           newChannels[i].reducedWidth = channels.at(ii).reducedWidth;
           newChannels[i].isFixed = channels.at(ii).isFixed;
+          channelsModel->setFileTokens(i, channels.at(ii).fileTokens);  // a value kept keeps its token
           break;
         }
       }
@@ -812,51 +894,53 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     if (pair.lightExcitation != 0.)
       stm << qSetFieldWidth(21) << Qt::right << "Light Excitation: "
           << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightExcitation) << Qt::endl;
-    // the channel's own radius when a <channelRadii> row gives it one, else the pair's
-    // the pair's radius; a channel's own radius is a record of <channelRadii> (the Particle Pairs tab)
-    const double channelRadius = pair.channelRadius;
+    // the channel at its level's energy, from the facade (azure2::front::ChannelAtLevel: the engine's channel
+    // functions; the channel's own radius from <channelRadii>): docs/upgrade/qt_gui.md section 11.4
+    const azure2::front::ChannelQuantities q = channelQuantities(index.row());
+    const double channelRadius = q.radius;
+    auto line = [&stm](const QString &label, const QString &value) {
+      stm << qSetFieldWidth(21) << Qt::right << label << qSetFieldWidth(0) << Qt::left << value << Qt::endl;
+    };
+    auto num = [](double v) { return std::isfinite(v) ? QString::number(v, 'g', 6) : QString("-"); };
     if (channel.radType != 'M' && channel.radType != 'E') {
-      stm << qSetFieldWidth(21) << Qt::right << "Separation Energy: "
-          << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.seperationEnergy) << Qt::endl;
-      stm << qSetFieldWidth(21) << Qt::right << "Channel Radius: "
-          << qSetFieldWidth(0) << Qt::left << QString("%1").arg(channelRadius)
-          << (channelRadius != pair.channelRadius ? QString(" (own; pair %1)").arg(pair.channelRadius) : QString())
-          << Qt::endl;
+      line("Separation Energy: ", QString("%1").arg(pair.seperationEnergy));
+      line("Channel Radius: ", QString("%1 fm").arg(channelRadius) +
+                                   (channelRadius != pair.channelRadius ? QString(" (own; pair %1)").arg(pair.channelRadius)
+                                                                        : QString()));
+    }
+    if (q.error.empty()) {
+      stm << Qt::endl;
+      line("Value is: ", QString::fromStdString(q.symbol + " [" + q.unit + "], " + q.meaning));
+      if (q.particle) {
+        line("E_c = E_x - S - e: ", num(q.channelEnergy) + " MeV");
+        line(q.channelEnergy > 0 ? "Penetrability P: " : "Bound factor P: ",
+             num(q.P) + (q.channelEnergy > 0 ? QString() : QString(" MeV^-1 fm^-1")));
+        line("Shift S: ", num(q.S));
+        line("dS/dE: ", num(q.dSdE) + " MeV^-1");
+        line("Wigner limit gW^2: ", num(q.wignerLimit) + " MeV");
+        if (std::isfinite(q.singleParticleWidth)) line("Single-particle G: ", num(q.singleParticleWidth * 1e6) + " eV");
+        line("Reduced width g^2: ", num(q.reducedWidth) + " MeV");
+        line("theta^2 = g^2/gW^2: ", num(q.wignerRatio));
+      }
+    } else {
+      line("Not read: ", QString::fromStdString(q.error));
     }
     stm.flush();
     channelDetails->details->setText(details);
-    if (level.energy < (pair.seperationEnergy + pair.excitationEnergy + pair.lightExcitation) && pair.pairType == 0)
-      channelDetails->setNormParam(1);
-    else if (pair.pairType == 10 && level.energy == pair.excitationEnergy && level.jValue == pair.heavyJ &&
-             level.piValue == pair.heavyPi && channel.radType == 'M' && channel.lValue == 1)
-      channelDetails->setNormParam(2);
-    else if (pair.pairType == 10 && level.energy == pair.excitationEnergy && level.jValue == pair.heavyJ &&
-             level.piValue == pair.heavyPi && channel.radType == 'E' && channel.lValue == 2)
-      channelDetails->setNormParam(3);
-    else if (pair.pairType == 20)
-      channelDetails->setNormParam(4);
-    else
-      channelDetails->setNormParam(0);
+    const QString kind = QString::fromStdString(q.kind);
+    if (kind == "closed") channelDetails->setNormParam(1);
+    else if (kind == "magnetic_moment") channelDetails->setNormParam(2);
+    else if (kind == "quadrupole_moment") channelDetails->setNormParam(3);
+    else if (kind == "beta") channelDetails->setNormParam(4);
+    else channelDetails->setNormParam(0);
     channelDetails->reducedWidthText->setText(QString("%1").arg(channel.reducedWidth));
-
-    // Store the inputs for the physical Wigner-limit calculation.  It applies to
-    // unbound particle channels only (not radiative capture / beta decay, and not
-    // bound states, whose physical quantity is an ANC rather than a width).
-    double reducedMass = (pair.lightM + pair.heavyM != 0.)
-        ? pair.lightM * pair.heavyM / (pair.lightM + pair.heavyM)
-        : 0.;
-    double eCm = level.energy - pair.seperationEnergy - pair.excitationEnergy - pair.lightExcitation;
-    wignerApplicable_ = (channel.radType == 'P') && (eCm > 0.) && (channelRadius > 0.) && (reducedMass > 0.);
-    wignerZ1_ = pair.lightZ;
-    wignerZ2_ = pair.heavyZ;
-    wignerRedMass_ = reducedMass;
-    wignerRadius_ = channelRadius;
-    wignerEcm_ = eCm;
-    wignerL_ = channel.lValue;
+    // the Wigner limit button: the single-particle width of an open particle channel (eV)
+    wignerApplicable_ = q.particle && std::isfinite(q.singleParticleWidth);
+    wignerEcm_ = q.singleParticleWidth;  // MeV, shown by calculateWignerLimit
     channelDetails->wignerButton->setEnabled(wignerApplicable_);
     channelDetails->wignerLimitText->clear();
-    channelDetails->wignerLimitText->setPlaceholderText(
-        wignerApplicable_ ? QString() : tr("N/A"));
+    channelDetails->wignerLimitText->setPlaceholderText(wignerApplicable_ ? QString() : tr("N/A"));
+    if (wignerApplicable_) calculateWignerLimit();
     channelDetails->show();
   }
 }
@@ -882,19 +966,14 @@ void LevelsTab::calculateWignerLimit() {
     channelDetails->wignerLimitText->setText(tr("N/A"));
     return;
   }
-
-  // the engine's single-particle width (azure2::front::SingleParticleWidth: physics::single_particle_width)
-  const double gammaW_eV =
-      azure2::front::SingleParticleWidth((int)wignerZ1_, (int)wignerZ2_, wignerRedMass_, wignerL_, wignerRadius_, wignerEcm_) *
-      1.0e6;
+  // the facade's single-particle width of the channel at its level (azure2::front::ChannelAtLevel), in eV
+  const double gammaW_eV = wignerEcm_ * 1.0e6;
   if (!std::isfinite(gammaW_eV)) {
     channelDetails->wignerLimitText->setText(tr("error"));
     return;
   }
   double av = std::fabs(gammaW_eV);
-  QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4))
-      ? QString::number(gammaW_eV, 'e', 4)
-      : QString::number(gammaW_eV, 'f', 4);
+  QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4)) ? QString::number(gammaW_eV, 'e', 4) : QString::number(gammaW_eV, 'f', 4);
   channelDetails->wignerLimitText->setText(text);
 }
 
@@ -1014,6 +1093,11 @@ LevelsTab::EngineNumbering LevelsTab::engineNumbering(const QList<int> &order) {
 }
 
 void LevelsTab::reset() {
+  // a project is being read: no undo entries until the event loop turns (finishLoading)
+  if (!loading_) {
+    loading_ = true;
+    QTimer::singleShot(0, this, &LevelsTab::finishLoading);
+  }
   pairsModel->removeRows(0, pairsModel->getPairs().size(), QModelIndex());
   levelsModel->removeRows(0, levelsModel->getLevels().size(), QModelIndex());
   channelsModel->removeRows(0, channelsModel->getChannels().size(), QModelIndex());
@@ -1042,6 +1126,12 @@ void LevelsTab::showInfo(int which, QString title) {
 }
 
 void LevelsTab::fixAllWidths() {
+  // several levels selected: theirs; else every level (as dev)
+  if (selectedLevelRows().size() > 1) {
+    setFixed(selectedLevelRows(), false, true);
+    return;
+  }
+  undoText_ = tr("fix all widths");
   QList<ChannelsData> channels = channelsModel->getChannels();
   for (int i = 0; i < channels.size(); i++) {
     QModelIndex index = channelsModel->index(i, 0, QModelIndex());
@@ -1050,6 +1140,11 @@ void LevelsTab::fixAllWidths() {
 }
 
 void LevelsTab::fixAllEnergies() {
+  if (selectedLevelRows().size() > 1) {
+    setFixed(selectedLevelRows(), true, true);
+    return;
+  }
+  undoText_ = tr("fix all energies");
   QList<LevelsData> levels = levelsModel->getLevels();
   for (int i = 0; i < levels.size(); i++) {
     QModelIndex index = levelsModel->index(i, 1, QModelIndex());

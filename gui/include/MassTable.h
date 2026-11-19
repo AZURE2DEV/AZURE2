@@ -3,6 +3,7 @@
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 struct PairsData;
 
@@ -62,6 +63,8 @@ class MassTable {
 
   bool isLoaded() const { return !entries_.isEmpty(); }
   int size() const { return entries_.size(); }
+  /// Every nuclide as "12C" (the neutron "n"), by Z then A: the choices of the pair dialog's isotope fields.
+  QStringList labels() const;
   /*! The row of (Z, A), or nullptr. */
   const MassEntry *lookup(int Z, int A) const;
   /*! The row a pair column describes: Z and the mass rounded to a mass number; nullptr for A <= 0 or Z < 0. */

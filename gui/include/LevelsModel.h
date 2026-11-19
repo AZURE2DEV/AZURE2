@@ -52,6 +52,8 @@ class LevelsModel : public QAbstractTableModel {
   void setNucleus(int row, const Nucleus &nucleus);
   /*! The level ID the level's lines carried in the file (LevelsData::fileId). */
   void setFileId(int row, int fileId);
+  /// Replace every level (the undo stack): rows removed and inserted, so that the window sees an edit.
+  void setLevels(const QList<LevelsData> &levels);
 
  private:
   QList<LevelsData> levelsList;

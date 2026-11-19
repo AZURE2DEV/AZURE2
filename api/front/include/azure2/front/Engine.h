@@ -418,6 +418,53 @@ bool HasCommand(const std::string &command);
 /// function (physics::single_particle_width), not a copy; NaN where it is not defined (E <= 0).
 double SingleParticleWidth(int z1, int z2, double mu_u, int l, double a_fm, double E_MeV);
 
+// ---- The Levels and Pairs tabs (docs/upgrade/qt_gui.md section 11) ----
+
+/// The columns of a <levels> row, in the order of LevelRow::tokens (io::LevelColumnNames: "levelJ", "levelPi",
+/// "levelE", ..., "e1"), and the index of one by name (-1 for none), so that a front end names a column, never a place.
+const std::vector<std::string> &LevelColumnNames();
+int LevelColumnIndex(const std::string &name);
+
+/// What the width column of a <levels> row is and the channel's quantities at the row's level energy E_x (MeV).
+/// NaN where a quantity is not defined for the channel (a photon channel has no penetrability of its own here).
+struct ChannelQuantities {
+  /// "open" (particle channel, E_c > 0: Gamma in eV), "closed" (E_c < 0: an ANC in fm^-1/2), "threshold" (E_c = 0:
+  /// no width defined), "amplitude" (gammaIsRWA: a reduced-width amplitude in MeV^1/2), "photon" (Gamma in eV),
+  /// "magnetic_moment" (a static M1: mu in mu_N), "quadrupole_moment" (a static E2: Q in b), "beta" (B).
+  std::string kind;
+  std::string symbol;   ///< UTF-8: "Γ", "C", "γ", "μ", "Q", "B"
+  std::string unit;     ///< "eV", "fm^-1/2", "MeV^1/2", "μ_N", "b", ""
+  std::string meaning;  ///< in words: "partial width of the open channel", ...
+  bool particle = false;      ///< a particle pair's channel (pType 0)
+  double value = 0;           ///< the width column as read
+  double channelEnergy = 0;   ///< E_c = E_x - S - e (MeV, c.m.), as the engine forms it at a level
+  double radius = 0;          ///< the radius used (fm)
+  double P = 0, S = 0, dSdE = 0;  ///< penetrability (or mu a / (hbar^2 W^2) below threshold, MeV^-1 fm^-1), shift, dS/dE
+  double wignerLimit = 0;         ///< gamma_W^2 = 3 hbar^2 / (2 mu a^2) (MeV), physics::wigner_limit
+  double singleParticleWidth = 0; ///< Gamma_sp = 2 P gamma_W^2 (MeV), open channels only
+  double reducedWidth = 0;        ///< the observed reduced width gamma^2 = Gamma / (2 P) or C^2 / (2 P) (MeV)
+  double wignerRatio = 0;         ///< theta^2 = gamma^2 / gamma_W^2
+  std::string error;              ///< why the row could not be read ("" when it was)
+};
+/// The row's channel at its level energy: P, S, dS/dE from the engine's ParticleChannelValues on the pair the engine
+/// builds from the row (PPair(LevelRow)), as the binding's level doors.  radius_fm > 0 replaces the row's radius (a
+/// channel's own radius, ChannelRadius); relativistic: the project's <config> relativistic.
+ChannelQuantities ChannelAtLevel(const LevelRow &row, double radius_fm = 0, bool relativistic = false);
+
+/// The radius of channel (l, 2s) of a J group 2J of pair `pairKey` as the set-up gives it: the most specific record of
+/// <channelRadii> that names it (experiment::ChannelRadiusFor on the engine's build of the records), else the pair's.
+struct ChannelRadiusInfo {
+  double radius = 0;   ///< fm
+  bool own = false;    ///< a record gives it
+  std::string record;  ///< that record's name
+  bool ambiguous = false;  ///< two records name it and neither is the more specific (the set-up refuses)
+};
+ChannelRadiusInfo ChannelRadius(const Project &project, int pairKey, int l, int twoS, int twoJ, double pairRadius);
+
+/// What names a pair besides its <levels> rows: the data sets and extrapolations whose reaction resolves to it (the
+/// engine's build of the project: entrance and exit keys), as "data: <record>" / "extrapolations: <record>".
+std::vector<std::string> PairUses(const Project &project, int pairKey);
+
 /// The engine's version string ("2.1.0").
 std::string Version();
 

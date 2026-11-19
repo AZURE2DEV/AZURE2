@@ -144,3 +144,11 @@ PairMassCheck MassTable::check(const PairsData &pair) const {
   if (r.heavy) r.massOffset = std::max(r.massOffset, std::fabs(pair.heavyM - r.heavy->atomicMass));
   return r;
 }
+
+QStringList MassTable::labels() const {
+  QList<int> keys = entries_.keys();
+  std::sort(keys.begin(), keys.end());
+  QStringList out;
+  for (int k : keys) out << entries_.value(k).label();
+  return out;
+}

@@ -12,7 +12,7 @@ int ChannelsModel::rowCount(const QModelIndex &parent) const {
 
 int ChannelsModel::columnCount(const QModelIndex &parent) const {
   Q_UNUSED(parent);
-  return ChannelsData::SIZE;
+  return ColumnCount;
 }
 
 QVariant ChannelsModel::data(const QModelIndex &index, int role) const {
@@ -60,7 +60,17 @@ QVariant ChannelsModel::data(const QModelIndex &index, int role) const {
     } else if (index.column() == 5)
       return channel.radType;
     else if (index.column() == 6)
-      return channel.reducedWidth;
+      return QString::number(channel.reducedWidth, 'g', 8);
+    else if (index.column() == MeaningColumn)
+      return info_.value(index.row()).meaning;
+    else if (index.column() == RatioColumn) {
+      const double r = info_.contains(index.row()) ? info_.value(index.row()).ratio : -1;
+      return r < 0 ? QString() : QString::number(r, 'g', 3);
+    }
+  } else if (role == Qt::ToolTipRole) {
+    if (index.column() == 6 || index.column() == MeaningColumn) return info_.value(index.row()).tip;
+    if (index.column() == RatioColumn)
+      return tr("theta^2 = gamma^2 / gamma_W^2: the observed reduced width over the Wigner limit 3 hbar^2 / (2 mu a^2)");
   } else if (role == Qt::EditRole) {
     ChannelsData channel = channelsList.at(index.row());
     if (index.column() == 1)
@@ -104,7 +114,11 @@ QVariant ChannelsModel::headerData(int section, Qt::Orientation orientation, int
       case 5:
         return tr("radiation type");
       case 6:
-        return tr("reduced width");
+        return tr("Value");
+      case MeaningColumn:
+        return tr("Is");
+      case RatioColumn:
+        return tr("\u03b8\u00b2");
       default:
         return QVariant();
     }
@@ -161,6 +175,7 @@ bool ChannelsModel::setData(const QModelIndex &index, const QVariant &value, int
 
 bool ChannelsModel::insertRows(int position, int rows, const QModelIndex &index) {
   Q_UNUSED(index);
+  info_.clear();
   if (rows > 0) {
     beginInsertRows(QModelIndex(), position, position + rows - 1);
     for (int row = 0; row < rows; row++) {
@@ -174,6 +189,7 @@ bool ChannelsModel::insertRows(int position, int rows, const QModelIndex &index)
 
 bool ChannelsModel::removeRows(int position, int rows, const QModelIndex &index) {
   Q_UNUSED(index);
+  info_.clear();
   if (rows > 0) {
     beginRemoveRows(QModelIndex(), position, position + rows - 1);
     for (int row = 0; row < rows; ++row) {
@@ -187,6 +203,7 @@ bool ChannelsModel::removeRows(int position, int rows, const QModelIndex &index)
 Qt::ItemFlags ChannelsModel::flags(const QModelIndex &index) const {
   if (!index.isValid()) return Qt::ItemIsEnabled;
   if (index.column() == 0) return QAbstractTableModel::flags(index) | Qt::ItemIsUserCheckable;
+  if (index.column() == 6) return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
   return QAbstractTableModel::flags(index);
 }
 
@@ -219,4 +236,20 @@ void ChannelsModel::setPairsModel(PairsModel *model) {
 
 void ChannelsModel::setFileTokens(int row, const QStringList &tokens) {
   if (row >= 0 && row < channelsList.size()) channelsList[row].fileTokens = tokens;
+}
+
+void ChannelsModel::setInfo(int row, const Info &info) { info_[row] = info; }
+
+void ChannelsModel::setChannels(const QList<ChannelsData> &channels) {
+  info_.clear();
+  if (!channelsList.isEmpty()) {
+    beginRemoveRows(QModelIndex(), 0, channelsList.size() - 1);
+    channelsList.clear();
+    endRemoveRows();
+  }
+  if (!channels.isEmpty()) {
+    beginInsertRows(QModelIndex(), 0, channels.size() - 1);
+    channelsList = channels;
+    endInsertRows();
+  }
 }
