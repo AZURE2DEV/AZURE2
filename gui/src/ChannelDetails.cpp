@@ -1,4 +1,5 @@
 #include <QLabel>
+#include <QScrollArea>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QGridLayout>
@@ -39,8 +40,17 @@ ChannelDetails::ChannelDetails(QWidget *parent) :
   wignerButtonRow->addWidget(wignerLimitText);
   wignerButtonRow->addStretch();
 
+  // the details scroll: they run longer than the pane (the channel's quantities, docs/upgrade/qt_gui.md 11.4)
+  details->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  details->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+  QScrollArea *scroll = new QScrollArea;
+  scroll->setWidget(details);
+  scroll->setWidgetResizable(true);
+  scroll->setFrameShape(QFrame::NoFrame);
+  scroll->setMinimumHeight(170);
   QVBoxLayout *mainLayout = new QVBoxLayout;
-  mainLayout->addWidget(details);
+  mainLayout->setContentsMargins(0, 0, 0, 0);
+  mainLayout->addWidget(scroll, 1);
   mainLayout->addLayout(wignerButtonRow);
   mainLayout->addLayout(reducedWidthLayout);
   setLayout(mainLayout);

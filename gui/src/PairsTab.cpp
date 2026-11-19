@@ -41,7 +41,7 @@ PairsTab::PairsTab(QWidget *parent) :
   pairsView->setColumnHidden(6, true);
   pairsView->setColumnHidden(8, true);
   pairsView->setColumnHidden(9, true);
-  pairsView->setColumnHidden(13, true);
+  // the pair type in words (particle, gamma, beta) is shown
   pairsView->setColumnHidden(14, true);
   RichTextDelegate *rt = new RichTextDelegate();
   pairsView->setItemDelegateForColumn(0, rt);

@@ -118,7 +118,7 @@ QVariant ChannelsModel::headerData(int section, Qt::Orientation orientation, int
       case MeaningColumn:
         return tr("Is");
       case RatioColumn:
-        return tr("\u03b8\u00b2 (Wigner)");
+        return tr("\u03b8\u00b2");
       default:
         return QVariant();
     }

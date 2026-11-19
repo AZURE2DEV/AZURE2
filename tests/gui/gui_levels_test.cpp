@@ -1,5 +1,5 @@
 // The Levels and Channels and the Particle Pairs tabs on the go (docs/upgrade/qt_gui.md section 11), headless:
-//   gui_levels_test <source dir>
+//   gui_levels_test <source dir> [<screenshot dir>]
 // Each action is driven through the widgets (keys typed into the add bar and the cells' editors, Del, Ctrl+D,
 // Ctrl+Z), then the project is saved and its text read back:
 //  (a) T1, T3 and 13N opened and saved without an edit: byte for byte; the first level selected, its channels shown;
@@ -23,6 +23,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
 #include <QLabel>
@@ -426,6 +427,31 @@ int main(int argc, char **argv) {
     QTest::keyClick(pairs->getPairsView(), Qt::Key_Z, Qt::ControlModifier);
     Spin(30);
     Check(pm->getPairs()[0].channelRadius == radius, "pairs: Ctrl+Z gives the radius back");
+  }
+
+  // (i) screenshots (a second argument: the directory) of T1 as opened, a channel of the 1/2+ level selected
+  if (argc >= 3) {
+    const QString dir = QString::fromLocal8Bit(argv[2]);
+    QDir().mkpath(dir);
+    const fs::path shot = CopyProject(t1, work / "shot_T1");
+    w.readProjectFile(QString::fromStdString(shot.string()), why);
+    Spin(100);
+    w.tabs()->setCurrentWidget(levels);
+    levels->selectLevelRows({LevelRow(levels, 0.5, 1, 2.365)});
+    Spin(50);
+    channelsView->selectRow(0);
+    levels->setIncludeAllJPi(false);
+    Spin(100);
+    w.grab().save(dir + "/tab1_levels_and_channels.png");
+    levels->jpiFilterCombo()->setCurrentIndex(1);
+    levels->searchEdit()->setText("");
+    Spin(50);
+    w.grab().save(dir + "/tab1_levels_filtered.png");
+    levels->jpiFilterCombo()->setCurrentIndex(0);
+    w.tabs()->setCurrentWidget(w.getPairsTab());
+    Spin(100);
+    w.grab().save(dir + "/tab0_particle_pairs.png");
+    std::cout << "screenshots in " << dir.toStdString() << std::endl;
   }
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;

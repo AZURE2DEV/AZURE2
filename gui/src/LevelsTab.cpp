@@ -128,18 +128,23 @@ LevelsTab::LevelsTab(QWidget *parent) :
   channelsView->verticalHeader()->hide();
   channelsView->horizontalHeader()->setHighlightSections(false);
   channelsView->setColumnWidth(0, 40);
-  channelsView->setColumnWidth(2, 160);
+  channelsView->setColumnWidth(2, 150);
   channelsView->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
   channelsView->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-  channelsView->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-  channelsView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+  // s and l: wide enough for "3/2" and "E2" in one line
+  channelsView->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+  channelsView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+  channelsView->setColumnWidth(3, 38);
+  channelsView->setColumnWidth(4, 34);
   channelsView->setColumnHidden(1, true);
   channelsView->setColumnHidden(5, true);
   // the value in place, what it is and its unit, theta^2 (docs/upgrade/qt_gui.md section 11.4)
   channelsView->setObjectName("channelsView");
   channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::ValueColumn, QHeaderView::Stretch);
-  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::MeaningColumn, QHeaderView::ResizeToContents);
-  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::RatioColumn, QHeaderView::ResizeToContents);
+  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::MeaningColumn, QHeaderView::Fixed);
+  channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::RatioColumn, QHeaderView::Fixed);
+  channelsView->setColumnWidth(ChannelsModel::MeaningColumn, 78);
+  channelsView->setColumnWidth(ChannelsModel::RatioColumn, 50);
   channelsView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(channelsView, &QWidget::customContextMenuRequested, this, &LevelsTab::showChannelsMenu);
   {
@@ -312,7 +317,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   extras->setVisible(false);
   mainLayout->addWidget(extras, 2, 0, 1, 3);
   mainLayout->setRowStretch(0, 3);
-  mainLayout->setRowStretch(1, 3);
+  mainLayout->setRowStretch(1, 4);
   mainLayout->setRowStretch(2, 2);
 
   setLayout(mainLayout);
