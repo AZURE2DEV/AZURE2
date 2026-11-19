@@ -209,6 +209,10 @@ acceptance fraction (moves that changed the position), and a trace, histogram or
 **Facade additions** (`api/front/`, each with its case in `front_test.cpp`): `Option::unit`, `when`, `needs`,
 `instead`, `lowOpen`; `SamplerChain` and `ReadSamplerChain`.
 
+**Section 9's list, now**: the sampler's Results page, a per-curve colour and marker (the plot lists' context menu),
+pan and the cursor's read-out are done.  Still not: print, level markers in the plot, a corner plot of two parameters,
+the THM diagnostics plots, dev's EXFOR search and Coulomb-table dialogs; the macOS and Windows GUI jobs have not run.
+
 **Tests** `tests/gui/gui_shell_test.cpp` (label `gui`): the theme's palettes and the View menu choice; the tool bar's
 actions and their state; the status bar's file, modified mark and validity, the dock hidden on a valid project and
 opened by an error, its double click; the start page and its recent and example entries; the options' editors made
