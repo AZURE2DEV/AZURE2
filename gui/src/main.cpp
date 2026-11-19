@@ -16,7 +16,7 @@ inline void initResource() { Q_INIT_RESOURCE(AZURESetup); }
 // The setup program AZURESetup: `AZURESetup [project.azr]`.  AZURE2_SCREENSHOT_DIR=<dir> grabs every tab of the
 // opened project into <dir> and quits (QT_QPA_PLATFORM=offscreen needs no display).
 int main(int argc, char *argv[]) {
-#ifdef Q_OS_MACX
+#ifdef Q_OS_MACOS
   if (QOperatingSystemVersion::current() > QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 10, 8)) {
     // fix Mac OS X 10.9 (mavericks) font issue
     // https://bugreports.qt-project.org/browse/QTBUG-32789

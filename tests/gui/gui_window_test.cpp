@@ -65,6 +65,17 @@ namespace fs = std::filesystem;
 
 namespace {
 
+/// std::system for a command line that may start with a quoted program and name /dev/null: cmd.exe drops the first
+/// and the last quote of a line that starts with one (an outer pair keeps the inner ones) and calls the sink NUL.
+int Shell(std::string command) {
+#ifdef _WIN32
+  for (std::size_t at = command.find("/dev/null"); at != std::string::npos; at = command.find("/dev/null"))
+    command.replace(at, 9, "NUL");
+  if (!command.empty() && command[0] == '"') command = "\"" + command + "\"";
+#endif
+  return std::system(command.c_str());
+}
+
 int failures = 0;
 
 void Check(bool ok, const std::string &what) {
@@ -519,7 +530,7 @@ int main(int argc, char **argv) {
     Check(o.exitCode == 0 && o.haveChiSquared, "T1: calculate from the window ends with exit 0 and a chi^2");
     Check(turns > 3, "T1: the window's event loop turned " + std::to_string(turns) + " times during the run");
     const std::string command = "\"" + binary + "\" calculate --threads=2 \"" + cli.string() + "\" > /dev/null 2>&1";
-    Check(std::system(command.c_str()) == 0, "T1: the program's calculate");
+    Check(Shell(command) == 0, "T1: the program's calculate");
     int same = 0, total = 0;
     for (const auto &e : fs::directory_iterator(cli.parent_path() / "output")) {
       total++;
@@ -631,7 +642,7 @@ int main(int argc, char **argv) {
     const RunOutcome c = RunAndWait(w, turns);
     const std::string command = "cd \"" + cliStart.string() + "\" && \"" + binary +
                                 "\" calculate --threads=2 --parameter-file=T1_start.start.sav T1_start.azr > run.log 2>&1";
-    const int cliStatus = std::system(command.c_str());
+    const int cliStatus = Shell(command);
     std::string report;
     const bool same = SameOutputs(copy.parent_path(), cliStart, report);
     Check(c.exitCode == 0 && cliStatus == 0 && same,
@@ -676,7 +687,7 @@ int main(int argc, char **argv) {
       const RunOutcome o = RunAndWait(w, turns);
       const std::string command = "cd \"" + theirs.parent_path().string() + "\" && \"" + binary + "\" " + c.command +
                                   " " + c.cli + " --threads=2 " + theirs.filename().string() + " > run.log 2>&1";
-      const int status = std::system(command.c_str());
+      const int status = Shell(command);
       std::string report;
       const bool same = SameOutputs(mine.parent_path(), theirs.parent_path(), report);
       Check(set && o.exitCode == 0 && status == 0 && same,
@@ -722,7 +733,7 @@ int main(int argc, char **argv) {
       const std::string command = "cd \"" + theirs.parent_path().string() + "\" && \"" + binary +
                                   "\" mcmc --walkers=4 --steps=100 --parameter-spread=0.5 --energy-spread=1 "
                                   "--sampler-threads=1 --basis=rwa --overwrite-samples --threads=2 13N_fast.azr > run.log 2>&1";
-      const int status = std::system(command.c_str());
+      const int status = Shell(command);
       std::string report;
       const bool same = SameOutputs(mine.parent_path(), theirs.parent_path(), report);
       Check(o.exitCode == 0 && status == 0 && same, "mcmc: the MCMC tab's run = AZURE2 mcmc: " + report);
