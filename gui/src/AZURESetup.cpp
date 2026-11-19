@@ -42,6 +42,7 @@
 #include "RecordsPanel.h"
 #include "MCMCTab.h"
 #include "PlotTab.h"
+#include "PhysicsTab.h"
 #include "PythonTools.h"
 #include "RunTab.h"
 #include "ThmTab.h"
@@ -166,6 +167,7 @@ AZURESetup::AZURESetup() {
     connect(mcmcTab, &MCMCTab::stopRequested, this, &AZURESetup::stopRun);
   }
   tabWidget->addTab(plotTab, tr("Pl&ot"));
+  tabWidget->addTab(new PhysicsTab(holder_), tr("P&hysics"));
   tabWidget->setDocumentMode(false);
   startPage_ = new StartPage;
   connect(startPage_, &StartPage::newRequested, this, &AZURESetup::newProject);
@@ -608,7 +610,10 @@ void AZURESetup::showProject(bool open) {
       QWidget *tab = tabWidget->widget(i);
       const QString text = what.contains(tab) ? what[tab]
                            : tab == mcmcTab   ? tr("Sample the posterior of the parameters (the ensemble sampler).")
-                                              : QString();
+                           : tab->objectName() == "physicsTab"
+                               ? tr("Physics functions and stopping without a project; the project's channels, R-matrix, "
+                                    "pole map and THM parts.")
+                               : QString();
       if (!text.isEmpty()) notes << qMakePair(tabWidget->tabText(i).remove('&'), text);
     }
     startPage_->setTabNotes(notes);
