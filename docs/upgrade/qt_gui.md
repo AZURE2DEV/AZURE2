@@ -470,3 +470,92 @@ channel functions, one J^pi group's U, T, phase shifts, |A| and det A^-1 on an E
 and distortion), each answer a `PhysicsCurves` of series over one axis.  The design, the engine function behind
 every curve, the shapes and units, and which calls are slow: `docs/upgrade/physics_tab.md` (section 7 is the
 interface).  Test: `api_front`, section (f).
+
+## 15. The Overview page: the evaluation and its fit at a glance (U8, agent overview, 2026-11-20)
+
+The PI (2026-11-20): "a first 'welcome' page with a brief overview of the current fit/status of the evaluation could
+be nice to have."  The start page (section 11) is shown while no project is open; this page is the first tab of an
+open project, selected when a project opens.  It answers, without typing, "what is this evaluation and where does
+the fit stand?".  It reads; it never edits the project and never runs the engine on the GUI thread.
+
+**What it shows** (cards in a scroll area; three columns from about 1300 px of width, two from 850, else one):
+
+1. *What to look at next* (the first card, the whole width): plain sentences made from the other cards' numbers
+   only, no physics judgement: the project does not validate (errors, warnings), there is no run yet, the outputs
+   are older than the project file, the fit ended with a status other than `converged` (the engine's word), N data
+   sets have chi^2/N above 3, N normalizations are more than 2 sigma from their prior, N parameters ended at a limit,
+   N free parameters have no error after a fit, N active data sets were left out by the run (no point in their
+   window).  Each is a link to the tab and record concerned (Diagnostics, Calculate, Segments and the record,
+   Fitting Settings).  Quick actions: Validate, Calculate, Fit, Open Plot (the window's own actions).
+2. *The project*: the file; the compound nuclei; the pairs in nuclear notation with their thresholds (E_x of the
+   compound nucleus, MeV); the levels per J^pi (a row of bars); data sets active / all and extrapolations active /
+   all; the records of the experimental effects (`<targets>`: targets, beams, detectors) and how many of them the
+   active data sets name; the free parameters by kind (energy, width, norm, shift, apparatus, ...); the basis
+   (Brune, formal (Lane-Thomas), Park) and A- or R-matrix; external capture on (which pairs) or off; every option of
+   the calculation (`io::ConfigKeys()`' option rows) the project sets away from its default; the fitter chosen in
+   Fitting Settings; the validity (a click opens the Diagnostics).
+3. *The last run*: the command (fit or calculate, inferred from the files, below), when, a stale mark when the project
+   file is newer than the run's outputs ("the project changed since this run"), the fit's status in the engine's
+   words (`fitStatus.out`: status, minimizer, calls), and four numbers: total chi^2 of the data (`chiSquared.out`'s
+   `Total-Chi-Squared`), the number of points, the free parameters, chi^2 per degree of freedom chi^2/(N - p); the
+   objective's other totals of the file (norms, priors, ...) in one line.  A sortable table per data set: name,
+   reaction, N, chi^2, chi^2/N with a horizontal bar (the bar's length chi^2/N over the largest), the norm the run used
+   and its pull when the norm has a prior; the three worst rows and every row above 3 highlighted.  A click on a row
+   opens the data set in the Plot tab (`PlotTab::selectRecords`).  Parameters at a limit or with no error, by name.
+   Without a run: "No run yet" and the two buttons Calculate and Fit.
+4. *Charts*: chi^2/N per data set as bars (a line at 1), and, after a fit run from this window, the best chi^2
+   against the evaluation (the run's progress records, `RunProgress`, drawn by the Calculate tab's `ChiSquaredTrace`):
+   the engine writes no file of a fit's progress, so a fit of an earlier session has no curve (the card says so).
+
+**The facade** (`api/front/src/FrontOverview.cpp`, declared in `Engine.h` under "The Overview page"; plain C++):
+
+- `ProjectSummary SummarizeProject(const Project &)`: from the text as it stands and the engine's build of it
+  (`experiment::ReadFormat3Text`, the reader `--validate` and `ReadCurves` use; no set-up of the levels): the pairs
+  (`Pairs`), the compound nuclei and the levels per J^pi group (`experiment::LevelTablesOfRows`: the engine's own
+  grouping), the data sets and extrapolations (active from the build's specs), the effect records by kind and how many
+  of them an active data set names (a field whose value is the record's name), the basis and the matrix from `<config>`
+  (`use_brune`, `use_park`, the positional `amatrix`), the pairs with external capture on an active row
+  (`LevelTables::externalCapturePairs`), and the option rows (`io::ConfigKeys()`) with the value the project gives or
+  the default.  Milliseconds: called on the GUI thread.
+- `RunSummary ReadLastRun(const Project &)`: the files of the project's output directory as they stand.
+  `chiSquared.out` (the engine's writer, `WorkingCopy::WriteChiSquaredFile`: one line per data set the run used with
+  key, chi^2, N, the norm used and the norm's prior chi^2, then the total line of `label: value` fields, every field
+  kept in its order), matched to the records by key through the build (as `ReadCurves`); `fitStatus.out` (key / value
+  lines, `WriteFitStatus`); the modification times of the output files and of the project file, in seconds since 1970.
+  The pull of a norm with a prior is sign(norm - centre) sqrt(norm chi^2), the centre being the build's `normCentre`
+  (or the start value): the number the file gives, signed.  Milliseconds.
+- `bool ReadRunParameters(projectFile, outputDirectory, RunParameters &, why)`: the parameters of the saved project
+  as the engine sets them up (`ReadParameters`: kinds, fixed flags, limits), the free ones counted by kind, and,
+  read against the run's parameter file (`param.sav` after a fit, else `param.par`, `ReadParameterFile`), those that
+  ended at a limit (|value - limit| <= 1e-6 max(1, |limit|), in the fit's units) or, after a fit, with error 0.
+  It sets up a session: up to seconds for a project with external capture.  The page runs it in a worker thread
+  (`QThread::create`), not while a run is in progress, the newest request only.
+- `double ChiSquaredPerDegreeOfFreedom(const RunSummary &, const RunParameters &)`: chi^2/(N - p), NaN when N <= p.
+
+**Which command made the files.**  The program does not write its command into the output directory, and the
+facade's run must keep writing the program's files byte for byte (`api_front` (d)).  The rule, from the order in
+which a run writes: a fit removes `fitStatus.out` at its start and writes it after the fitter ends, before the final
+evaluation writes `chiSquared.out`; every run without `--parameter-file` writes `param.par` at its set-up, first.
+So the files are a fit's when `fitStatus.out` is there, not newer than `chiSquared.out`, and not older than
+`param.par` (or there is no `param.par`); else a calculation's; with only `AZUREOut_*.extrap` files, an
+extrapolation's.  A calculation with `--parameter-file` after a fit writes no `param.par` and is taken for the fit
+(stated on the page as "inferred from the files").
+
+**Stale.**  The outputs are stale when the project file's modification time is later than `chiSquared.out`'s (or,
+for an extrapolation, the newest `.extrap`'s).  An edit that is not saved does not make them stale: the run reads the
+saved file, and the page says "modified, not saved" beside it.
+
+**When it refreshes** (the one block of `AZURESetup.cpp` that adds the tab): a project opened (and the tab selected),
+the end of a run, a save (the Save and Save As actions), an edit of a section (`ProjectHolder::sectionEdited`, after
+0.2 s of quiet), a validation (`DiagnosticsPanel::validated`), and the page shown (after `commitTabs`, so that an edit
+of the Levels tab is counted).  A refresh reads files only; the parameters' worker starts when the page is shown.
+
+**Not done**: the points of an inactive data set (the data file would have to be read through the set-up); a
+fit's convergence curve from an earlier session (no file); a per-data-set chi^2 of an extrapolation-only run (none
+exists).
+
+**Tests** `tests/gui/gui_overview_test.cpp` (label `gui`): T1 and T2 opened: the cards' numbers equal the facade's
+(pairs, levels per J^pi, data sets, options); a calculation run through the window: the page shows its total chi^2 and
+one row per data set with the chi^2 of the run's `RunResult`; an edit and a save: the stale mark appears; a project
+with no outputs: "No run yet" and the two buttons.  `api_front`: `OverviewChecks` (a calculation and a fit run in the
+test, and the program's own files of a run of `AZURE2`).
