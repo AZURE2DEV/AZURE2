@@ -529,7 +529,12 @@ the fit stand?".  It reads; it never edits the project and never runs the engine
   read against the run's parameter file (`param.sav` after a fit, else `param.par`, `ReadParameterFile`), those that
   ended at a limit (|value - limit| <= 1e-6 max(1, |limit|), in the fit's units) or, after a fit, with error 0.
   It sets up a session: up to seconds for a project with external capture.  The page runs it in a worker thread
-  (`QThread::create`), not while a run is in progress, the newest request only.
+  (`QThread::create`), not while a run is in progress, the newest request only.  The set-up writes its
+  external-capture integrals into its output directory: `ReadParameters` has an overload with a scratch directory
+  (`FrontParameters.cpp`, five lines), a temporary directory that `ReadRunParameters` fills with the output
+  directory's `intEC.dat` (reused when its signature fits) and removes after: the project's outputs are read, never
+  written (a first version wrote `intEC.dat` there and `gui_window`'s byte-for-byte comparison of a run from the
+  window with the program's caught it).
 - `double ChiSquaredPerDegreeOfFreedom(const RunSummary &, const RunParameters &)`: chi^2/(N - p), NaN when N <= p.
 - `std::vector<InputFile> InputFiles(const Project &)`: the files the active records read (a data set's data and
   covariance files, an extrapolation's grid file), resolved as the engine opens them; `ReadLastRun` names the

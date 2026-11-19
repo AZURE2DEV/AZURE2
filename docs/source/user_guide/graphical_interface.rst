@@ -53,6 +53,73 @@ the desktop is; with a Qt older than 6.5 as the desktop's window colour is),
 projects are kept between sessions. ``AZURE2_THEME=native`` in the environment
 leaves the platform's own style and colours.
 
+The Overview page
+-----------------
+
+The first tab of an open project, shown when a project opens, says at a glance
+what the evaluation is and where its fit stands. It only reads: the project as
+it stands and the files of its output directory, through the engine's facade;
+nothing is calculated again.
+
+- **What to look at next**: plain sentences made from the numbers below, each a
+  link to the tab or record concerned: the project does not validate, there is
+  no run yet, the outputs are older than the project file or than a data file,
+  the fit ended with a status other than ``converged``, data sets with
+  chi-squared/N above 3 (the link opens the largest in the Plot tab),
+  normalizations more than 2 sigma from their prior, parameters at a limit or
+  without an error, active data sets the run left out. The buttons Validate,
+  Calculate, Fit and Open Plot do what the tool bar's do.
+- **The project**: the file, the compound nucleus, the pairs with their
+  thresholds (E_x of the compound nucleus, MeV), the levels per J^pi as bars,
+  the data sets and extrapolations active, the targets, beams and detectors and
+  how many of them the active data sets use, the free parameters by kind, the
+  basis (Brune, formal (Lane-Thomas) or Park) and A- or R-matrix, external
+  capture, the minimizer chosen in Fitting Settings, the options set away from
+  their default, and the validity (a click opens the Diagnostics).
+- **The last run**: fit or calculation (inferred from the order in which a run
+  writes its files: a fit writes ``fitStatus.out`` after the fitter and
+  ``param.par`` at its start), when, a red mark when the project file or a data
+  file is newer than the outputs, the fit's status as ``fitStatus.out`` gives it,
+  the total chi-squared of the data (``chiSquared.out``'s
+  ``Total-Chi-Squared``), the number of points N, the free parameters p and
+  chi-squared/(N - p); then a table per data set (name, reaction, N,
+  chi-squared, chi-squared/N with a bar, the norm the run used and its pull
+  when the norm has a prior), sortable by a click on a header, the worst rows
+  in bold and those above 3 in red. A click on a row opens that data set in the
+  Plot tab. Without a run: ``No run yet`` and the buttons Calculate and Fit.
+- **Charts**: chi-squared/N per data set (a dashed line at 1) and, during and
+  after a fit run in this window, the best chi-squared against the evaluation
+  (the engine writes no file of a fit's progress, so an earlier session's fit
+  has no curve).
+
+The page reads its files again after a run, a save, an edit and when it is
+shown; the free parameters are counted by the engine's set-up of the saved
+project in the background (seconds for a project with external capture).
+
+Changes on disk
+---------------
+
+The window follows its files when another program changes them (a text
+editor, pyazr, a script, a run on the command line):
+
+- the project file changed and the window has no unsaved edit: it is read again
+  at once, the tab and the selected records stay, and the status bar says
+  ``Project reloaded: changed on disk``;
+- the project file changed and the window has unsaved edits: nothing is
+  overwritten; a bar under the tool bar offers ``Reload (discard mine)``,
+  ``Keep mine`` (the window's version is written at the next Save) and ``Show
+  differences`` (a line-by-line comparison of the two texts);
+- new output files of a run (``chiSquared.out``, ``fitStatus.out``,
+  ``AZUREOut_*``, ``param.sav``, ``samples.mcmc``): the Overview and the Plot
+  tab read them (the plot keeps its check boxes and its zoom);
+- a data file changed: the Overview's red mark names the data set.
+
+The window's own Save is recognised by its content and causes no reload. A
+change is read once the files have been quiet for a moment, so a file being
+written is never read half-way; while a run of the window itself is going,
+its outputs are read when it ends. ``View > Follow Changes on Disk`` turns
+this off (kept between sessions).
+
 Opening and saving a project
 ----------------------------
 
@@ -83,6 +150,8 @@ The tabs
 
    * - Tab
      - What it edits
+   * - Overview
+     - Nothing: the project and its last run at a glance (above).
    * - Particle Pairs
      - The pairs of the ``<levels>`` rows (:doc:`particle_pairs`); below them
        the per-channel radii (records ``channel_radius`` of ``<channelRadii>``).
