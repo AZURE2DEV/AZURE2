@@ -62,6 +62,7 @@ PhysicsArgument ArgumentOf(const table::ArgSpec &s) {
   a.choices = s.choices;
   a.hasDefault = s.has_default, a.defaultValue = s.default_value;
   a.hasExample = s.has_example, a.example = s.example_value;
+  a.exampleText = s.example_text;
   a.hasSweep = s.has_sweep, a.sweepLower = s.sweep_lo, a.sweepUpper = s.sweep_hi;
   a.sweepLog = s.sweep_spacing == table::Spacing::log;
   return a;
@@ -492,16 +493,16 @@ bool PhysicsSession::Block(int jgroup, const std::vector<double> &excitation, Ph
       const std::string label = channelLabel(c) + " -> " + channelLabel(cp);
       PhysicsSeries Ure = Series("U_re", "", label, keys, ne), Uim = Series("U_im", "", label, keys, ne),
                     Uabs = Series("U_abs", "", label, keys, ne), Tre = Series("T_re", "", label, keys, ne),
-                    Tim = Series("T_im", "", label, keys, ne), delta = Series("delta", "deg", label, keys, ne),
-                    eta = Series("eta", "", label, keys, ne);
+                    Tim = Series("T_im", "", label, keys, ne), Tabs = Series("T_abs", "", label, keys, ne),
+                    delta = Series("delta", "deg", label, keys, ne), eta = Series("eta", "", label, keys, ne);
       for (std::size_t e = 0; e < ne; e++) {
         const std::complex<double> U = r.U[e * nc * nc + c * nc + cp], T = r.T[e * nc * nc + c * nc + cp];
         if (std::isnan(U.real())) continue;
         Ure.values[e] = U.real(), Uim.values[e] = U.imag(), Uabs.values[e] = std::abs(U);
-        Tre.values[e] = T.real(), Tim.values[e] = T.imag();
+        Tre.values[e] = T.real(), Tim.values[e] = T.imag(), Tabs.values[e] = std::abs(T);
         if (c == cp) delta.values[e] = r.delta[e * nc + c], eta.values[e] = r.eta[e * nc + c];
       }
-      for (PhysicsSeries *s : {&Ure, &Uim, &Uabs, &Tre, &Tim}) out.series.push_back(*s);
+      for (PhysicsSeries *s : {&Ure, &Uim, &Uabs, &Tre, &Tim, &Tabs}) out.series.push_back(*s);
       if (c == cp) {
         out.series.push_back(delta);
         out.series.push_back(eta);
