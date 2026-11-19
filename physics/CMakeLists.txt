@@ -29,6 +29,7 @@ add_library(azure2_physics STATIC
   src/ExternalCapture.cpp
   src/HybridPotential.cpp
   src/JpiBlock.cpp
+  src/LevelMatrixDeterminant.cpp
   src/LevelMatrixSolver.cpp
   src/LevelParameters.cpp
   src/ObservableCoupling.cpp
@@ -114,14 +115,15 @@ add_test(NAME physics_system_unit COMMAND physics_system_unit_test)
 # mpmath (data_kinds.md section 4.1).  The width scales (Wigner limit, single-particle width, photon penetrability)
 # against closed forms (Widths.h).  The adjoints of the collision matrix against central differences of their
 # forward functions (docs/upgrade/physics_functions.md, stage 6).  The spin observables' operator token, its
-# matrices against the Madison closed forms and the trace formula with its gradient (SpinObservable.h).
+# matrices against the Madison closed forms and the trace formula with its gradient (SpinObservable.h).  The
+# determinant of the inverse level matrix against the 2 x 2 and 3 x 3 closed forms and the one-level denominator.
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters_unit_test.cpp
              external_capture_unit_test.cpp observable_coupling_test.cpp pathways_unit_test.cpp
              resonance_quantities_test.cpp astrophysical_factor_test.cpp widths_test.cpp
              collision_matrix_test.cpp channel_solve_test.cpp observables_test.cpp
              collision_matrix_adjoint_test.cpp channel_solve_adjoint_test.cpp
-             observables_adjoint_test.cpp spin_observable_test.cpp)
+             observables_adjoint_test.cpp spin_observable_test.cpp level_matrix_determinant_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)
