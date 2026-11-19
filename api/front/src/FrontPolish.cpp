@@ -502,6 +502,16 @@ bool KernelPreviewOf(const Project &project, const std::string &section, const R
   return true;
 }
 
+std::vector<std::pair<std::string, std::string>> ColumnsForFile(const std::string &quantity, int columns) {
+  std::vector<std::pair<std::string, std::string>> out = DefaultColumns(quantity);
+  if (columns < 0) return out;
+  // the column the engine reads past: the last of the plain roles ("_", experiment/ColumnsGrid.cpp)
+  const std::string skip = ex::PlainRoles().back();
+  while ((int)out.size() < columns) out.push_back({skip, ""});
+  if ((int)out.size() > columns) out.resize(columns);
+  return out;
+}
+
 bool ParseReactionExpression(const Project &project, const std::string &text, ReactionExpression &out, std::string &why) {
   out = ReactionExpression();
   std::string comment;

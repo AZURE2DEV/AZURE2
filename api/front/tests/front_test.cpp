@@ -421,6 +421,12 @@ void PolishChecks(const fs::path &source) {
   Check(!front::KernelPreviewOf(p, "targets", plain, "", 1.2, 101, k, why) && !why.empty(),
         "polish: a target without a kernel: nothing drawn (" + why + ")");
 
+  // the columns of a data file: the quantity's first ones, then columns the engine skips, or fewer
+  const auto four = front::ColumnsForFile("sigma", 4), two = front::ColumnsForFile("sigma", 2);
+  Check(four.size() == 4 && four[0] == front::DefaultColumns("sigma")[0] && four[3].first == "_" && four[3].second.empty() &&
+            two.size() == 2,
+        "polish: the columns of a 4-column file of sigma: " + four[0].first + " ... " + four[3].first);
+
   // (c) a reaction expression's terms
   front::Project t2;
   Check(front::Project::Open((source / "tests/upgrade/T2/T2.azr").string(), t2, why), "polish: T2 opens");

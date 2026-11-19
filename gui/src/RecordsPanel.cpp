@@ -26,6 +26,7 @@
 #include <cmath>
 #include <functional>
 
+#include "RecordDialog.h"
 #include "RecordTableModel.h"
 #include "ValueEditor.h"
 
@@ -268,7 +269,12 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   table_->sortByColumn(-1, Qt::AscendingOrder);
   table_->setSelectionBehavior(QAbstractItemView::SelectRows);
   table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-  table_->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked);
+  // a double click opens the record's pop-up (dev's segment dialogs); a cell is edited in place by F2 or a click on
+  // the selected cell
+  table_->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked);
+  connect(table_, &QTableView::doubleClicked, this, [this](const QModelIndex &at) {
+    if (at.isValid()) QTimer::singleShot(0, this, &RecordsPanel::editRecord);
+  });
   table_->verticalHeader()->setVisible(false);
   table_->verticalHeader()->setDefaultSectionSize(fontMetrics().height() + 8);
   table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
@@ -303,6 +309,9 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
     return b;
   };
   addButton_ = button(tr("Add..."), tr("Add a record (Ins)"));
+  editButton_ = button(tr("Edit..."), tr("The selected record in its pop-up (a double click on its row)"));
+  editButton_->setObjectName("editRecord");
+  connect(editButton_, &QPushButton::clicked, this, &RecordsPanel::editRecord);
   duplicateButton_ = button(tr("Duplicate"), tr("A copy of the selected record under a new name (Ctrl+D)"));
   removeButton_ = button(tr("Remove"), tr("Remove the selected records (Del)"));
   upButton_ = button(tr("Up"), tr("Move the record one place up (Ctrl+Up)"));
@@ -343,7 +352,7 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   downAction_ = action(tr("Move down"), QKeySequence(Qt::CTRL | Qt::Key_Down), downButton_);
 
   QHBoxLayout *buttons = new QHBoxLayout;
-  for (QPushButton *b : {addButton_, duplicateButton_, removeButton_, upButton_, downButton_}) buttons->addWidget(b);
+  for (QPushButton *b : {addButton_, editButton_, duplicateButton_, removeButton_, upButton_, downButton_}) buttons->addWidget(b);
   buttons->addSpacing(12);
   buttons->addWidget(includeButton_);
   buttons->addWidget(excludeButton_);
@@ -509,6 +518,7 @@ void RecordsPanel::updateButtons() {
   const bool one = haveShown_;
   removeButton_->setEnabled(n > 0);
   duplicateButton_->setEnabled(one);
+  editButton_->setEnabled(one);
   upButton_->setEnabled(one && model_->rowOf(shownName()) > 0);
   downButton_->setEnabled(one && model_->rowOf(shownName()) + 1 < model_->rowCount());
   applyButton_->setEnabled(one);
@@ -1101,128 +1111,41 @@ QString RecordsPanel::uniqueName(const QString &stem) const {
 
 void RecordsPanel::addRecord() {
   if (kinds_.isEmpty()) return;
-  QDialog dialog(this);
+  // the complete pop-up of dev's segment dialogs: every usual field; OK and "Add another" write after the engine's check
+  RecordDialog dialog(holder_, section_, kinds_, [this](const front::Record &r, QString &why) {
+    if (!holder_->setRecord(section_, r, why)) return false;
+    selectRecord(Q(r.name));
+    emit edited();
+    return true;
+  }, this);
   dialog.setWindowTitle(tr("Add a record"));
-  dialog.setObjectName("addRecordDialog");
-  QVBoxLayout *v = new QVBoxLayout(&dialog);
-  QFormLayout *top = new QFormLayout;
-  QComboBox *kind = new QComboBox;
-  for (const QString &k : kinds_) {
-    const front::KindInfo *info = holder_->kind(k.toStdString());
-    kind->addItem(info ? Q(info->title) : k, k);
-  }
-  QLineEdit *name = new QLineEdit;
-  top->addRow(tr("Kind"), kind);
-  top->addRow(tr("Name"), name);
-  kind->setVisible(kinds_.size() > 1);
-  top->labelForField(kind)->setVisible(kinds_.size() > 1);
-  v->addLayout(top);
-  QLabel *doc = new QLabel;
-  doc->setWordWrap(true);
-  v->addWidget(doc);
-  QWidget *fieldsHost = new QWidget;
-  QFormLayout *fields = new QFormLayout(fieldsHost);
-  fields->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-  v->addWidget(fieldsHost, 1);
-  QList<FieldEditor *> editors;
-  QString quantityKey;
-  auto quantity = [&editors, &quantityKey]() {
-    for (FieldEditor *e : editors)
-      if (Q(e->field().key) == quantityKey) return e->text();
-    return QString();
-  };
-  // the rows: the kind's required fields, and those the quantity requires (front::QuantityFieldRules); made again when
-  // the quantity changes, the values of the fields kept, the unit and the columns chosen anew for the new quantity
-  std::function<void(const QString &, const QMap<QString, QString> &)> build;
-  build = [&](const QString &chosenQuantity, const QMap<QString, QString> &keep) {
-    for (FieldEditor *e : editors) delete e;
-    editors.clear();
-    while (fields->rowCount()) fields->removeRow(0);
-    const std::string k = kind->currentData().toString().toStdString();
-    const front::KindInfo *info = holder_->kind(k);
-    if (keep.isEmpty()) name->setText(uniqueName(kind->currentData().toString()));
-    doc->setText(info ? Q(info->doc) : QString());
-    if (!info) return;
-    quantityKey.clear();
-    for (const front::FieldInfo &f : info->fields)
-      if (IsQuantityField(f, k)) quantityKey = Q(f.key);
-    EditorContext context;
-    context.holder = holder_;
-    context.kind = k;
-    context.quantity = quantity;
-    std::vector<front::QuantityFieldRule> rules;
-    front::QuantityFieldRules(chosenQuantity.toStdString(), rules);
-    QList<QPair<FieldEditor *, bool>> fresh;  // editor, its value kept
-    for (const front::FieldInfo &f : info->fields) {
-      bool byQuantity = false;
-      for (const front::QuantityFieldRule &r : rules)
-        byQuantity = byQuantity || (f.byQuantity && r.field == f.key && r.required && !r.conditional);
-      if (!byQuantity && (!f.required || !f.appliesWhen.empty())) continue;  // required wherever it applies
-      FieldEditor *e = new FieldEditor(f, context);
-      e->setToolTip(ToolTip(f));
-      editors << e;
-      fields->addRow(DisplayTitle(f.title) + " *", e);
-      const QString key = Q(f.key);
-      const bool quantityRow = key == quantityKey && !chosenQuantity.isEmpty();
-      // the unit and the columns follow the quantity: never kept across a change of it
-      const bool kept = keep.contains(key) && !keep.value(key).isEmpty() && !f.unitOfQuantity && !f.value.unitOfQuantity &&
-                        f.value.type != "columns";
-      e->setText(quantityRow ? chosenQuantity : kept ? keep.value(key) : QString());
-      fresh << qMakePair(e, quantityRow || kept);
-    }
-    for (const auto &x : fresh) {
-      if (!x.second) x.first->prefill();
-      if (Q(x.first->field().key) == quantityKey)
-        connect(x.first, &FieldEditor::changed, &dialog, [&, e = x.first]() {
-          QMap<QString, QString> texts;
-          for (FieldEditor *other : editors) texts[Q(other->field().key)] = other->text();
-          const QString q = e->text();
-          // not from inside the editor's own signal: the editor is deleted by the rebuild
-          QTimer::singleShot(0, &dialog, [&, q, texts]() { build(q, texts); });
-        });
-    }
-    if (chosenQuantity.isEmpty() && !quantityKey.isEmpty()) {
-      // the first quantity was prefilled: the rows it requires too
-      const QString q = quantity();
-      std::vector<front::QuantityFieldRule> first;
-      bool more = false;
-      if (front::QuantityFieldRules(q.toStdString(), first))
-        for (const front::QuantityFieldRule &r : first)
-          for (const front::FieldInfo &f : info->fields)
-            more = more || (f.byQuantity && r.field == f.key && r.required && !r.conditional);
-      if (more) {
-        QMap<QString, QString> texts;
-        for (FieldEditor *other : editors) texts[Q(other->field().key)] = other->text();
-        build(q, texts);
-      }
-    }
-  };
-  build(QString(), {});
-  connect(kind, QOverload<int>::of(&QComboBox::activated), &dialog, [&]() { build(QString(), {}); });
-  QLabel *note = new QLabel(tr("Fields left empty are written as '?': the diagnostics name them until they are given."));
-  note->setWordWrap(true);
-  note->setStyleSheet("color: palette(mid);");
-  v->addWidget(note);
-  QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  connect(box, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-  connect(box, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-  v->addWidget(box);
-  dialog.resize(700, 420);
-  if (dialog.exec() != QDialog::Accepted || name->text().trimmed().isEmpty()) return;
-  front::Record r;
-  r.kind = kind->currentData().toString().toStdString();
-  r.name = name->text().trimmed().toStdString();
-  for (FieldEditor *e : editors) {
-    const QString t = e->text().trimmed();
-    r.fields.push_back({e->field().key, t.isEmpty() ? "?" : t.toStdString(), ""});
-  }
+  dialog.exec();
+}
+
+void RecordsPanel::editRecord() {
+  if (!haveShown_) return;
+  // the form's own edits first (else the pop-up would show the record without them)
   QString why;
-  if (!holder_->setRecord(section_, r, why)) {
-    QMessageBox::warning(this, tr("Record not added"), why);
+  if (formEdited() && !applyForm(why, true)) {
+    status_->setText(why);
     return;
   }
-  selectRecord(Q(r.name));
-  emit edited();
+  const front::Record shown = shown_;
+  RecordDialog dialog(holder_, section_, kinds_, [this, shown](const front::Record &r, QString &why) {
+    front::Record same = r;
+    same.name = shown.name;
+    reloading_ = true;
+    bool ok = holder_->setRecord(section_, same, why);
+    if (ok && r.name != shown.name) ok = holder_->renameRecord(section_, Q(shown.name), Q(r.name), why);
+    reloading_ = false;
+    haveShown_ = false;
+    reload();
+    selectRecord(Q(ok ? r.name : shown.name));
+    if (ok) emit edited();
+    return ok;
+  }, this);
+  dialog.setRecord(shown);
+  dialog.exec();
 }
 
 bool RecordsPanel::addNamedRecord(const QString &kind, const QString &name, QString &why) {

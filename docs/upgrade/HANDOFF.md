@@ -22,7 +22,11 @@ default greyed; the "T" toggle an icon with a tool tip; a spin by a spin box of 
 a drop-down of the project's pairs; a sum or ratio of reactions by terms (weight, pairs, fixed angle); an empty
 section shows its hint and no empty form; "J^pi" titles shown as Jπ; the Segments help one line; the pair dialog by
 element + A (Z, mass from AME2020, J^pi for n, p, d, t, 3He, alpha and even-even 0+), J spin box, parity toggle,
-type hiding what it does not use; Duplicate pair (Ctrl+D); the Levels tab's channels from the facade.
+type hiding what it does not use; Duplicate pair (Ctrl+D); the Levels tab's channels from the facade.  Added by the
+director's message (the PI, 2026-11-20: "a pop-up for adding the segments and extrapolations could be nice"):
+`RecordDialog`, the record pop-up of dev's segment dialogs (every usual field, the data file's first lines and its
+columns counted, `front::ColumnsForFile`, OK checked by the engine with the refusal under its field, Add another,
+Edit by a double click on a row; in-place cell editing moved to F2 / a click on the selected cell).
 
 **Run**: see the agent's report (build 0 warnings; `ctest -L gui`, `api_front`, `repo_consistency`, `-LE slow`).
 Screenshots before/after: `work/qt-shots/u8-polish/` (before_* are the merged program's).

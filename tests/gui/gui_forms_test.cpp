@@ -399,6 +399,7 @@ int main(int argc, char **argv) {
       if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget())) {
         d->grab().save(shots + "/add_dataset_dialog.png");
         d->accept();
+        if (d->isVisible()) d->accept();  // round 8: the first OK shows the engine's refusals (the data file '?')
       }
     });
     QMetaObject::invokeMethod(data, "addRecord");

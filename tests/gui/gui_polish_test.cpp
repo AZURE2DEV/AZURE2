@@ -40,6 +40,8 @@
 #include "LevelsTab.h"
 #include "PairsModel.h"
 #include "PairsTab.h"
+#include "RecordDialog.h"
+#include <QPlainTextEdit>
 #include "RecordTableModel.h"
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
@@ -389,6 +391,102 @@ int main(int argc, char **argv) {
     Check(missing == 0 && found > 0, std::string(project) + ": all " + std::to_string(found) +
                                          " channels of the file's levels are the facade's for their J^pi" +
                                          (first.empty() ? "" : "; not: " + first));
+  }
+
+  // (i) the record pop-up of dev's segment dialogs (added by the director's message of 2026-11-20: "a pop-up for
+  // adding the segments and extrapolations could be nice"): Add with a data file previewed and its columns counted,
+  // the engine's refusal beside its field, "Add another", the extrapolation's grids, Edit by a double click
+  const fs::path t1b = CopyProject(source / "tests/upgrade/T1/T1.azr", work / "dialog_T1");
+  w.readProjectFile(QString::fromStdString(t1b.string()), why);
+  {
+    RecordsPanel *data = w.getSegmentsTab()->records("data");
+    Show(w, data);
+    const int before = data->recordCount();
+    bool previewed = false, counted = false, refusedBeside = false, stayed = false, nextNamed = false;
+    std::string columnsText;
+    QStringList written;
+    QTimer::singleShot(200, [&]() {
+      RecordDialog *d = qobject_cast<RecordDialog *>(QApplication::activeModalWidget());
+      if (!d) return;
+      FieldEditor *file = d->fieldEditor("file");
+      if (file) file->typeText("data/el_lab090.dat");
+      QApplication::processEvents();
+      previewed = d->filePreview()->toPlainText().contains("0.300000 90.0000");
+      FieldEditor *columns = d->fieldEditor("columns");
+      columnsText = columns ? S(columns->text()) : std::string();
+      counted = columns && columns->text().split(' ', Qt::SkipEmptyParts).size() == 4;
+      d->grab().save(shots + "/record_dialog_add.png");
+      // sigma of an elastic charged-particle reaction (the first choices): the engine refuses it, beside the reaction
+      FieldEditor *reaction = d->fieldEditor("reaction");
+      d->addAnotherButton()->click();
+      QApplication::processEvents();
+      refusedBeside = reaction && !reaction->message().isEmpty() && d->written().isEmpty();
+      stayed = d->isVisible();
+      d->grab().save(shots + "/record_dialog_refused.png");
+      FieldEditor *q = d->fieldEditor("quantity");
+      QComboBox *qc = q ? q->piece()->findChild<QComboBox *>() : nullptr;
+      if (qc) ChooseData(qc, "dsigma_domega");
+      QApplication::processEvents();
+      QApplication::processEvents();
+      d->addAnotherButton()->click();
+      QApplication::processEvents();
+      nextNamed = d->written().size() == 1 && d->isVisible() && d->nameEdit()->text() != d->written().first();
+      d->accept();
+      written = d->written();
+    });
+    QMetaObject::invokeMethod(data, "addRecord");
+    Check(previewed, "T1: the pop-up shows the data file's first lines");
+    Check(counted, "T1: and makes the columns as many as the file has (4): " + columnsText);
+    Check(refusedBeside && stayed, "T1: sigma of p+12C elastic refused by the engine, its words under the reaction; the pop-up stays");
+    Check(nextNamed, "T1: Add another writes it and keeps the pop-up open under a new name");
+    Check(written.size() == 2 && data->recordCount() == before + 2 &&
+              ValueOf(w, "data", written.value(1), "quantity") == "dsigma_domega" &&
+              ValueOf(w, "data", written.value(1), "file") == "data/el_lab090.dat" &&
+              ValueOf(w, "data", written.value(1), "columns") == ValueOf(w, "data", written.value(0), "columns"),
+          "T1: two data sets added with the same choices: " + S(written.join(", ")) + ", columns " +
+              ValueOf(w, "data", written.value(1), "columns"));
+
+    // the extrapolation's pop-up: its energy and angle grids
+    RecordsPanel *x = w.getSegmentsTab()->records("extrapolations");
+    Show(w, x);
+    bool grids = false;
+    QTimer::singleShot(200, [&]() {
+      RecordDialog *d = qobject_cast<RecordDialog *>(QApplication::activeModalWidget());
+      if (!d) return;
+      grids = d->fieldEditor("energies") && d->fieldEditor("reaction") && d->fieldEditor("quantity");
+      d->grab().save(shots + "/record_dialog_extrapolation.png");
+      d->reject();
+    });
+    QMetaObject::invokeMethod(x, "addRecord");
+    Check(grids, "T1: the extrapolation's pop-up: reaction, quantity and the energy grid");
+
+    // Edit by a double click: the record in its pop-up; unedited OK moves no byte, an edit writes it
+    Show(w, data);
+    const std::string original = w.holder()->project().Text();
+    data->selectRecord("el_lab090");
+    const QModelIndex row = data->table()->model()->index(0, 1);
+    bool opened = false;
+    QTimer::singleShot(200, [&]() {
+      RecordDialog *d = qobject_cast<RecordDialog *>(QApplication::activeModalWidget());
+      if (!d) return;
+      opened = d->nameEdit()->text() == "el_lab090" && d->fieldEditor("norm") && !d->addAnotherButton()->isVisible();
+      d->grab().save(shots + "/record_dialog_edit.png");
+      d->accept();
+    });
+    emit data->table()->doubleClicked(row);
+    QApplication::processEvents();
+    QApplication::processEvents();
+    Check(opened && w.holder()->project().Text() == original,
+          "T1: a double click opens el_lab090 in its pop-up; OK unedited: not a byte moved");
+    QTimer::singleShot(200, [&]() {
+      RecordDialog *d = qobject_cast<RecordDialog *>(QApplication::activeModalWidget());
+      if (!d) return;
+      if (FieldEditor *norm = d->fieldEditor("norm")) norm->typeText("1.1 fixed");
+      d->accept();
+    });
+    data->selectRecord("el_lab090");
+    QMetaObject::invokeMethod(data, "editRecord");
+    Check(ValueOf(w, "data", "el_lab090", "norm") == "1.1 fixed", "T1: the norm edited in the pop-up: " + ValueOf(w, "data", "el_lab090", "norm"));
   }
 
   // (h) the sections not looked at before, one by one

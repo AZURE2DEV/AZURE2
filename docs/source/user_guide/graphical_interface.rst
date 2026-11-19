@@ -159,13 +159,23 @@ target its kind, active nucleus, areal density, stopping and straggling; for a
 beam its spread and profile. The whole record is the row's tool tip. The
 columns sort by a click on their header, the filter line keeps the rows that
 contain its text, and several rows can be selected (Shift, Ctrl).
-A double click edits a cell in place: a list for a word, a unit or the name of
-another record; the number of a normalization or of any value with a ``fit``
-box. ``Add...`` (Ins) opens the kind, the name and the required fields,
-filled with the first choices of the project (the first reaction of its pairs,
-the first quantity and its first unit, the data file's columns for that
-quantity, a normalization of 1, fixed); a field left empty is written as ``?``
-and named by the diagnostics until it is given. ``Duplicate`` (Ctrl+D),
+F2, or a click on a selected cell, edits it in place: a list for a word, a unit
+or the name of another record; the number of a normalization or of any value
+with a ``fit`` box. ``Add...`` (Ins) opens the record's pop-up, as the earlier
+program's segment dialogs: the kind, the name and every field a record of the
+kind is usually given (for a data set the reaction, quantity, unit, data file,
+columns, energy and angle windows, normalization, target, beam and detector;
+for an extrapolation the reaction, quantity, unit, energy and angle grids and
+the target, beam and detector), filled with the first choices of the project.
+Under the data file its first lines are shown, with the number of rows and
+columns of numbers, and the columns are made as many as the file has (check
+their roles). ``OK`` checks the record with the engine: a refusal is shown
+under its field and the pop-up stays; ``OK`` again writes it as it is (a field
+left empty is written as ``?``, named by the diagnostics until it is given).
+``Add another`` writes it and keeps the pop-up open with the same choices and
+the next name, for a series of data files. A double click on a row (or
+``Edit...``) opens the record in the same pop-up; the form below the table
+stays. ``Duplicate`` (Ctrl+D),
 ``Remove`` (Del), ``Up`` and ``Down`` (Ctrl+Up, Ctrl+Down; only the record's
 lines move in the file), ``Use`` and ``Leave out`` act on the selected records,
 also from the context menu.

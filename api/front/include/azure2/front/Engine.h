@@ -903,6 +903,10 @@ struct KernelPreview {
 bool KernelPreviewOf(const Project &project, const std::string &section, const Record &record, const std::string &user,
                      double labEnergy, int points, KernelPreview &out, std::string &why);
 
+/// The columns of a data file of `quantity` with `columns` columns: DefaultColumns(quantity), then columns the engine
+/// skips (the role "_") up to that number, or the first `columns` of them.
+std::vector<std::pair<std::string, std::string>> ColumnsForFile(const std::string &quantity, int columns);
+
 /// One term of a reaction expression (section 3.5 of the format): [scale*]reaction [@ angle unit frame].
 struct ReactionTermInfo {
   std::string scale;     ///< the weight as written ("" for none: 1)

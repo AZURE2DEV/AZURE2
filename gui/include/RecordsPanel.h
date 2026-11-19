@@ -97,6 +97,9 @@ class RecordsPanel : public QWidget {
  private slots:
   void selectionChanged();
   void addRecord();
+  /// The pop-up of the selected record (a double click on its row, or Edit...): its fields by their widgets, OK
+  /// checks it with the engine and writes it.
+  void editRecord();
   void duplicateRecord();
   void removeRecord();
   void apply();
@@ -137,6 +140,7 @@ class RecordsPanel : public QWidget {
   QLineEdit *filter_;
   QPushButton *addButton_, *removeButton_, *duplicateButton_, *upButton_, *downButton_, *applyButton_, *revertButton_;
   QPushButton *includeButton_, *excludeButton_;
+  QPushButton *editButton_ = nullptr;
   QAction *addAction_, *removeAction_, *duplicateAction_, *upAction_, *downAction_;
   QCheckBox *everyField_;
   QWidget *formHost_;

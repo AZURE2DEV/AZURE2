@@ -586,6 +586,22 @@ with a +/- toggle for a spin with parity; a pair (a channel radius's, a potentia
 drop-down of the project's pairs, still editable.  The sections not looked at in round 7 (`<modelData>`,
 `<potentials>`, `<channelRadii>`, `<gammaDecays>`, `<isospin>`) are grabbed and read one by one.
 
+### 15.10 The record pop-up (added by the director's message of 2026-11-20)
+
+The PI (2026-11-20): "James's just told me that a pop-up for adding the segments and extrapolations could be nice."
+dev's `AddSegDataDialog` and `AddSegTestDialog` held a whole segment.  `RecordDialog` (`gui/src/RecordDialog.cpp`) is
+that pop-up for any record kind, from the schema: the kind's required fields, its summary fields (for a data set:
+reaction, quantity, unit, data file, columns, energy and angle windows, normalization with Fit and the shared
+records, target, beam, detector; for an extrapolation: reaction, quantity, unit, the energy and angle grids, target,
+beam, detector), the fields its quantity requires (remade when the quantity changes, as the Add dialog of 15.2), and
+in edit mode every field the record gives.  The data file's first lines are shown under it, with the number of rows
+and columns of numbers; the columns are made as many as the file has (`front::ColumnsForFile`: the quantity's
+`DefaultColumns`, then the role the engine skips).  OK checks the record with the engine (a copy of the project,
+`Validate`): each refusal under its field, the dialog stays; OK again writes it as it is.  "Add another" writes it
+and keeps the dialog with the same choices and the next name.  A double click on a row (or Edit...) opens the record
+in it (a cell is then edited in place by F2 or a click on the selected cell); unedited, OK moves no byte.  The form
+below the table stays.
+
 ### 15.9 Tests
 
 `tests/gui/gui_polish_test.cpp` (label gui): each behaviour through the widgets, the project text read back; the
