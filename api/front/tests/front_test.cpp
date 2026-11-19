@@ -10,6 +10,7 @@
 // Each check prints PASS or FAIL; exit 1 on a failure.
 #include "azure2/front/Engine.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
@@ -115,6 +116,190 @@ void RoundTrip(const fs::path &file) {
   const fs::path out = fs::path("front_test_work") / ("roundtrip_" + name);
   fs::create_directories(out.parent_path());
   Check(p.Save(out.string(), why) && Bytes(out) == original, name + ": saved byte for byte");
+}
+
+
+/// The value text with one blank between tokens outside quotes (what a writer of format 3 writes).
+std::string OneBlank(const std::string &text) {
+  std::string out;
+  bool quote = false, blank = false;
+  for (char c : text) {
+    if (c == '"') quote = !quote;
+    if (!quote && (c == ' ' || c == '\t')) {
+      blank = true;
+      continue;
+    }
+    if (blank && !out.empty()) out += ' ';
+    blank = false;
+    out += c;
+  }
+  return out;
+}
+
+/// (f) the forms of values (docs/upgrade/qt_gui.md section 11): every field of every record of the test projects
+/// split into its pieces by the engine's parser and written back from them gives the same text; the summary
+/// columns, the include switch and the groups come from the schema; pairs, reactions and the move of a record.
+void FormsChecks(const fs::path &source) {
+  const std::vector<fs::path> files = {source / "tests/upgrade/T1/T1.azr", source / "tests/upgrade/T2/T2.azr",
+                                       source / "tests/upgrade/T3/T3.azr", source / "tests/13N/13N.azr",
+                                       source / "experiment/tests/data/section_examples.azr"};
+  for (const fs::path &file : files) {
+    front::Project p;
+    std::string why;
+    if (!front::Project::Open(file.string(), p, why)) {
+      Check(false, file.filename().string() + ": opens");
+      continue;
+    }
+    int fields = 0, same = 0;
+    std::vector<std::string> differ;
+    for (const auto &section : front::RecordSections())
+      for (const front::Record &r : p.Records(section.first))
+        for (const front::Field &f : r.fields) {
+          front::ValueParts parts;
+          fields++;
+          if (!front::ParseFieldValue(r.kind, f.key, f.value, r.Value("quantity"), parts, why)) {
+            differ.push_back(r.name + "." + f.key + " not read: " + why);
+            continue;
+          }
+          const std::string written = front::FieldValueText(r.kind, f.key, parts);
+          if (written == OneBlank(f.value))
+            same++;
+          else
+            differ.push_back(r.name + "." + f.key + ": '" + f.value + "' -> '" + written + "'");
+        }
+    for (std::size_t i = 0; i < differ.size() && i < 8; i++) std::cout << "    " << differ[i] << std::endl;
+    Check(fields > 0 && same == fields, file.filename().string() + ": " + std::to_string(same) + " of " +
+                                            std::to_string(fields) + " field values split and written back unchanged");
+  }
+  // a piece changed: only it moves
+  {
+    front::ValueParts n;
+    std::string why;
+    const bool read = front::ParseFieldValue("target", "areal_density", "2e+17 atoms/cm2 fit prior 2e+17 10% grid_max 3e+17", "", n, why);
+    Check(read && n.fit && n.hasPrior && n.priorPercent && n.priorWidth == "10" && n.gridMax == "3e+17" && n.unit == "atoms/cm2",
+          "a fitted areal density with a prior and grid_max split into its pieces");
+    n.fit = false;
+    n.hasPrior = false;
+    Check(front::FieldValueText("target", "areal_density", n) == "2e+17 atoms/cm2 fixed grid_max 3e+17",
+          "the prior dropped and the mode fixed: '" + front::FieldValueText("target", "areal_density", n) + "'");
+    front::ValueParts s;
+    front::ParseFieldValue("target", "stopping", "formula \"a0*x^a1\" a0=6.0e-20 a1=-0.30 MeV*cm2/atom", "", s, why);
+    Check(s.alternative == "formula" && s.Part("expression") && s.Part("expression")->expression == "a0*x^a1" &&
+              s.Part("expression")->params.size() == 2 && s.Part("unit") && s.Part("unit")->text == "MeV*cm2/atom",
+          "a stopping formula split into the alternative, the expression, its parameters and the unit");
+    front::ValueParts b;
+    front::ParseFieldValue("beam", "profile", "skewed_gaussian xi 0.34 MeV omega 0.035 MeV alpha 1.5 weight 1.0", "", b, why);
+    Check(b.alternative == "skewed_gaussian" && b.Part("omega") && b.Part("omega")->number == "0.035" &&
+              b.Part("alpha") && b.Part("alpha")->text == "1.5",
+          "a beam profile split into its named parameters");
+    const bool unitRefused = !front::ParseFieldValue("dataset", "unit", "barn_per_furlong", "sigma", b, why);
+    Check(unitRefused && !why.empty() && why.find("field '") == std::string::npos, "a wrong unit refused in plain words: " + why);
+    const bool modeRefused = !front::ParseFieldValue("target", "areal_density", "2e17 atoms/cm2", "", b, why);
+    Check(modeRefused, "a nuisance without its mode refused: " + why);
+    Check(front::ShortValueText("dataset", "norm", "1 fit prior 1 5%") == "1 (fit)", "the short text of a fitted norm");
+    // the beam profile's preview: the kernel's weight; a skewed Gaussian of alpha > 0 peaks above xi, and its
+    // integral is the component's weight (the curve spans xi +- 5 omega)
+    front::Record beam;
+    beam.kind = "beam";
+    beam.name = "b";
+    beam.fields = {{"profile", "skewed_gaussian xi 340 keV omega 0.035 MeV alpha 1.5 weight 2", ""}, {"truncation", "0", ""}};
+    front::ShapeCurve shape;
+    const bool drawn = front::PreviewShape(beam, 401, shape, why);
+    double area = 0, peak = 0, at = 0;
+    for (std::size_t i = 1; i < shape.x.size(); i++) area += 0.5 * (shape.y[i] + shape.y[i - 1]) * (shape.x[i] - shape.x[i - 1]);
+    for (std::size_t i = 0; i < shape.x.size(); i++)
+      if (shape.y[i] > peak) {
+        peak = shape.y[i];
+        at = shape.x[i];
+      }
+    Check(drawn && std::fabs(area - 2.0) < 2e-3 && at > 0.34 && at < 0.34 + 0.035 && std::fabs(shape.x.front() - (0.34 - 0.175)) < 1e-12,
+          "the beam profile's preview: area " + std::to_string(area) + " (weight 2), peak at " + std::to_string(at) + " MeV");
+    front::Record target;
+    target.kind = "target";
+    Check(!front::PreviewShape(target, 10, shape, why), "no preview for a record without a shape (" + why + ")");
+  }
+  // the shapes from the schema
+  {
+    const front::KindInfo *dataset = nullptr, *target = nullptr, *beam = nullptr;
+    const std::vector<front::KindInfo> kinds = front::RecordKinds();
+    for (const front::KindInfo &k : kinds) {
+      if (k.kind == "dataset") dataset = &k;
+      if (k.kind == "target") target = &k;
+      if (k.kind == "beam") beam = &k;
+    }
+    auto has = [](const front::KindInfo *k, const std::string &key) {
+      return k && std::find(k->summaryFields.begin(), k->summaryFields.end(), key) != k->summaryFields.end();
+    };
+    std::string listed;
+    if (dataset) for (const std::string &x : dataset->summaryFields) listed += x + " ";
+    Check(dataset && dataset->summaryFields.size() >= 5 && dataset->summaryFields[0] == "reaction" && has(dataset, "norm") &&
+              has(dataset, "target") && has(dataset, "energy_window") && !has(dataset, "columns") && !has(dataset, "source") && !has(dataset, "quadrature"),
+          "a data set's summary columns: " + listed);
+    Check(dataset && dataset->includeField == "active" && dataset->includeOn == "yes", "a data set's include switch is 'active'");
+    Check(has(target, "stopping") && has(target, "areal_density") && has(beam, "profile"), "a target's and a beam's summary columns");
+    std::string phase, truncation;
+    if (target) for (const front::FieldInfo &f : target->fields) if (f.key == "phase") phase = f.group;
+    if (beam) for (const front::FieldInfo &f : beam->fields) if (f.key == "truncation") truncation = f.group;
+    Check(phase == "stopping" && truncation == "profile", "a stopping's phase grouped with the stopping, a profile's truncation with the profile");
+    bool profileShape = false;
+    if (beam)
+      for (const front::FieldInfo &f : beam->fields)
+        if (f.key == "profile")
+          profileShape = f.value.alternatives.size() == 1 && f.value.alternatives[0].parts.size() == 4 &&
+                         !f.value.alternatives[0].parts[0].value.units.empty();
+    Check(profileShape, "the beam profile's shape: one alternative, four named parts with their units");
+    const auto columns = front::DefaultColumns("dsigma_domega");
+    Check(columns.size() == 4 && !columns[0].second.empty() && !columns[1].second.empty() && columns[3].second.empty(),
+          "the columns of a new differential cross section: energy, angle, value, error");
+    Check(!front::Quantities("dataset").empty() && !front::Quantities("dataset")[0].title.empty(), "the quantities with their titles");
+  }
+  // every grid kind the facade offers is one the engine reads
+  {
+    std::string why;
+    int read = 0;
+    const std::vector<front::GridKind> kinds = front::GridKinds(true);
+    for (const front::GridKind &k : kinds) {
+      front::ValueParts g;
+      g.type = "grid";
+      g.gridKind = k.word;
+      g.lo = "0.1";
+      g.hi = "1";
+      g.unit = "MeV";
+      g.frame = front::Frames()[1];
+      g.step = "0.01";
+      g.numbers = {"0.1", "0.2"};
+      g.text = "grid.txt";
+      g.tolerance = "1e-3";
+      g.maxPoints = "100";
+      g.startStep = "0.01";
+      g.unit = k.unit ? "deg" : "";
+      front::ValueParts back;
+      const std::string angles = front::FieldValueText("extrapolation", "angles", g);
+      read += front::ParseFieldValue("extrapolation", "angles", angles, "", back, why) && back.gridKind == k.word;
+    }
+    Check(read == (int)kinds.size(), std::to_string(read) + " of " + std::to_string(kinds.size()) + " grid kinds written and read back");
+  }
+  // pairs, reactions, the move of a record
+  {
+    front::Project p;
+    std::string why;
+    front::Project::Open((source / "tests/upgrade/T1/T1.azr").string(), p, why);
+    const std::vector<front::PairChoice> pairs = front::Pairs(p);
+    Check(!pairs.empty() && pairs[0].key == 1 && !pairs[0].label.empty(), "T1: the pairs of <levels> (" + (pairs.empty() ? std::string() : pairs[0].label) + ")");
+    const std::string reaction = p.Records("data")[0].Value("reaction");
+    int in = 0, out = 0;
+    const bool resolved = front::ReactionPairs(p, reaction, in, out);
+    Check(resolved && in > 0 && out > 0 && front::ReactionLabel(p, in, out) == reaction,
+          "T1: the reaction " + reaction + " is the pairs " + std::to_string(in) + " -> " + std::to_string(out) + " and back");
+    const std::string original = p.Text();
+    const std::vector<front::Record> before = p.Records("data");
+    Check(p.MoveRecord("data", before[1].name, -1, why) && p.Records("data")[0].name == before[1].name &&
+              p.Records("data")[1].name == before[0].name,
+          "T1: a data set moved up");
+    Check(p.MoveRecord("data", before[1].name, +1, why) && p.Text() == original, "T1: and down again: the same bytes");
+    const bool refused = !p.MoveRecord("data", before[0].name, -1, why);
+    Check(refused, "T1: the first record cannot move up (" + why + ")");
+  }
 }
 
 }  // namespace
@@ -348,6 +533,8 @@ int main(int argc, char **argv) {
                                                                    " progress records, the fit ended soon after the request");
     Check(result.haveChiSquared, "T1_start: the final evaluation at the best point");
   }
+
+  FormsChecks(source);
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;
   return failures ? 1 : 0;

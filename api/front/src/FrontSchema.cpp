@@ -3,6 +3,8 @@
 // (Schema::Kinds, Quantities, DiagnosticCodes), the one AZURE2 --schema writes; nothing is spelled here.
 #include "azure2/front/Engine.h"
 
+#include <algorithm>
+#include <climits>
 #include <set>
 
 #include "azure2/experiment/Conditions.h"
@@ -17,6 +19,88 @@ namespace azure2 {
 namespace front {
 
 namespace ex = azure2::experiment;
+
+static ValueInfo InfoOfSpec(const ex::ValueSpec &spec) {
+  ValueInfo v;
+  v.type = ex::ValueTypeName(spec.type);
+  v.grammar = ex::Grammar(spec);
+  v.dimension = spec.dimension;
+  if (spec.dimension == "@quantity")
+    v.unitOfQuantity = true;
+  else if (!spec.dimension.empty())
+    v.units = ex::UnitsOfDimension(spec.dimension);
+  if (spec.type == ex::ValueType::Enum || spec.type == ex::ValueType::Reference) v.values = spec.values;
+  v.positive = spec.positive;
+  v.hasMin = spec.type == ex::ValueType::Integer && spec.min != LONG_MIN;
+  v.min = v.hasMin ? spec.min : 0;
+  v.epoch = spec.epoch;
+  v.profiled = spec.profiled;
+  v.none = spec.none;
+  v.refKinds = spec.refKinds;
+  if (spec.form)
+    for (const ex::Alternative &a : spec.form->alternatives) {
+      AlternativeInfo alt;
+      alt.keyword = a.keyword;
+      alt.doc = a.doc;
+      for (const ex::PartSpec &p : a.parts) {
+        PartInfo part;
+        part.name = p.name;
+        part.keyword = p.keyword;
+        part.optional = p.optional;
+        part.defaultText = p.defaultText;
+        part.doc = p.doc;
+        part.value = InfoOfSpec(p.spec);
+        alt.parts.push_back(part);
+      }
+      v.alternatives.push_back(alt);
+    }
+  return v;
+}
+
+namespace {
+
+/// The field a field belongs with on a form: the one its requirement names, or the one whose presence it needs, or
+/// the structured field whose alternative it depends on (FieldInfo::group).
+std::string GroupOf(const ex::FieldDef &f, const ex::RecordKind &k) {
+  for (const ex::Condition *c : {&f.required, &f.applies}) {
+    if (c->negate || c->field.empty() || c->field == f.key) continue;
+    if (c->kind == ex::Condition::FieldPresent) return c->field;
+    if (c->kind == ex::Condition::FieldIs) {
+      const ex::FieldDef *named = k.Find(c->field);
+      if (named && named->spec.type == ex::ValueType::Form) return c->field;
+    }
+  }
+  return std::string();
+}
+
+/// The columns of a table of records (KindInfo::summaryFields): every field a user sets often, but free text and the
+/// column roles; of a kind with many such fields, only the required ones, the references to other records, the
+/// windows and the grids (a field required only under a condition is a column of a small kind only).  Required first.
+void SetSummary(KindInfo &info, const ex::RecordKind &k) {
+  std::vector<const ex::FieldDef *> candidates;
+  for (const ex::FieldDef &f : k.fields) {
+    if (f.rare || f.key == info.includeField) continue;
+    if (f.spec.type == ex::ValueType::Text || f.spec.type == ex::ValueType::Columns) continue;
+    if (f.byQuantity && f.spec.type != ex::ValueType::Reference) continue;
+    candidates.push_back(&f);
+  }
+  const bool few = candidates.size() <= 8;
+  std::vector<std::string> required, others;
+  for (const ex::FieldDef *f : candidates) {
+    const bool always = f->required.kind == ex::Condition::Always && !f->required.negate && !f->byQuantity &&
+                        f->applies.kind == ex::Condition::Always && !f->applies.negate;
+    const bool kept = few || always || f->spec.type == ex::ValueType::Reference ||
+                      f->spec.type == ex::ValueType::Range || f->spec.type == ex::ValueType::Grid;
+    if (!kept) continue;
+    (always ? required : others).push_back(f->key);
+  }
+  info.summaryFields = required;
+  info.summaryFields.insert(info.summaryFields.end(), others.begin(), others.end());
+  for (FieldInfo &x : info.fields)
+    x.summary = std::find(info.summaryFields.begin(), info.summaryFields.end(), x.key) != info.summaryFields.end();
+}
+
+}  // namespace
 
 std::vector<KindInfo> RecordKinds() {
   std::vector<KindInfo> out;
@@ -49,8 +133,20 @@ std::vector<KindInfo> RecordKinds() {
         x.unitOfQuantity = true;
       else if (!f.spec.dimension.empty())
         x.units = ex::UnitsOfDimension(f.spec.dimension);
+      x.value = InfoOfSpec(f.spec);
+      x.group = GroupOf(f, k);
+      // the on/off switch of a record: an optional yes/no word whose default is its first word
+      if (info.includeField.empty() && f.spec.type == ex::ValueType::Enum && f.spec.values.size() == 2 &&
+          f.required.kind == ex::Condition::Always && f.required.negate && f.applies.kind == ex::Condition::Always &&
+          f.defaultText == f.spec.values[0]) {
+        info.includeField = f.key;
+        info.includeOn = f.spec.values[0];
+        info.includeOff = f.spec.values[1];
+      }
       info.fields.push_back(x);
     }
+    info.oneOf = k.oneOf;
+    SetSummary(info, k);
     out.push_back(info);
   }
   return out;
@@ -59,6 +155,16 @@ std::vector<KindInfo> RecordKinds() {
 std::vector<std::pair<std::string, std::vector<std::string>>> RecordSections() { return ex::Schema::Sections(); }
 
 std::vector<std::string> QuantityNames(const std::string &kind) { return ex::QuantityNames(kind); }
+
+std::vector<QuantityInfo> Quantities(const std::string &kind) {
+  std::vector<QuantityInfo> out;
+  for (const std::string &name : ex::QuantityNames(kind)) {
+    const ex::Quantity *q = ex::FindQuantity(name);
+    if (!q) continue;
+    out.push_back({q->name, q->title, q->doc, QuantityUnits(name)});
+  }
+  return out;
+}
 
 std::vector<std::string> QuantityUnits(const std::string &quantity) {
   std::vector<std::string> out;
