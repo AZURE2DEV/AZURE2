@@ -23,6 +23,9 @@ set(AZURESETUP_SOURCES
     PhysicsTab.cpp PhysicsSessionPages.cpp PhysicsForms.cpp PhysicsWorker.cpp HeatmapWidget.cpp
     AZURESetup.qrc ShellIcons.qrc)
 
+# The Overview page and the watch of the project's files (docs/upgrade/qt_gui.md sections 15 and 16).
+list(APPEND AZURESETUP_SOURCES OverviewPage.cpp OverviewCharts.cpp ProjectWatcher.cpp)
+
 # The Plot tab is drawn with QPainter (PlotWidget.cpp) and exported with QtSvg and QPdfWriter: no plotting library.
 # dev's Qwt plot (USE_QWT) is not kept: it read the output files itself (docs/upgrade/qt_gui.md section 5).
 

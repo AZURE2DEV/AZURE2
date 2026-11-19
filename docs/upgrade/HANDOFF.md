@@ -94,6 +94,40 @@ no preview; T3's 2+ level at 3.03 MeV carries a Gamow-Teller channel of s = 1 to
 experiment::AllowedChannels nor the GUI's former copy offers (both give s = 0 for J = J_parent): the rule or the file
 needs the owner's look.
 
+## 2026-11-20 (agent overview) — `feature/upgrade-8-overview`: the Overview page; the window follows its files
+
+**Design** `docs/upgrade/qt_gui.md` sections 15 (the Overview page) and 16 (changes on disk; added by the director's
+message of 2026-11-20, passing on the PI's "I just want the GUI to auto update if something in the files changes").
+Cut from `feature/upgrade-6` at `8e74e8db`.
+
+**Facade** (`api/front/src/FrontOverview.cpp`, new; declared in `Engine.h` after `ReadCurves`): `SummarizeProject`
+(pairs, levels per J^pi, data sets active, effect records used, basis, matrix, external capture, option rows),
+`ReadLastRun` (chiSquared.out's rows and totals matched to the records, fitStatus.out, the command inferred from the
+order a run writes its files, stale from file times, norm pulls, data sets left out, changed input files),
+`InputFiles`, `ReadRunParameters` (free parameters by kind, at a limit, without an error), `ChiSquaredPerDegreeOfFreedom`.
+`FrontParameters.cpp`: an overload of `ReadParameters` with a scratch directory (the set-up's intEC.dat goes there).
+No engine file edited; no number moves.
+
+**GUI**: `OverviewPage` (first tab, selected on opening; cards that reflow in 3/2/1 columns: what to look at next with
+links, the project, the last run with a sortable table and bars, charts), `OverviewCharts` (bar charts),
+`ProjectWatcher` (QFileSystemWatcher with re-adding after a rename, a quiet time, content hashes: the project re-read
+when the window has no unsaved edit, else a bar Reload / Keep mine / Show differences; outside outputs and data files
+refresh the Overview and the Plot tab, zoom kept; View > Follow Changes on Disk).  One block in `AZURESetup.cpp`'s
+constructor wires both.  `tests/gui/gui_levels_test.cpp`: one line (the Levels tab selected again after opening,
+since an opened project now shows the Overview).
+
+**Run** (`work/b-u8-overview`, `work/build_gui.sh`): build 0 warnings; `api_front` passed (OverviewChecks: 21 checks);
+`ctest -L gui` 5 of 5 (gui_overview new, 41 checks); `repo_consistency` passed; screenshots
+`work/qt-shots/u8-overview/` (light, dark, narrow, the disk bar, the differences), looked at.  `ctest -LE slow -j4`
+(OMP 1): 400 of 401, only `rmfit_enginepin` fails (as on the base); 6 rmfit tests skipped; `docs_build` passed.
+
+**Not run**: `tests/run_tests.sh` (no engine file touched); the GUI on a real display; macOS/Windows.
+
+**Open**: the Levels tab's selection and table scroll positions are not restored after a reload (records panels'
+selections are); the Calculate tab's summary is the window's last run only; files a record names that the build does
+not list (stopping tables, beam profile files) are not watched; the command of a run is inferred (a calculation with
+--parameter-file after a fit is taken for the fit); points of inactive data sets are not counted.
+
 ## 2026-11-19 (agent shell) — `feature/upgrade-7-gui-shell`: CI for the Qt program, a modern shell
 
 **Design** `docs/upgrade/qt_gui.md` section 11.  Cut from `feature/upgrade-6` at `35cfcffe`.

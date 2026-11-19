@@ -195,6 +195,7 @@ int main(int argc, char **argv) {
   const fs::path copy = CopyProject(t1, work / "edit_T1");
   QString why;
   w.readProjectFile(QString::fromStdString(copy.string()), why);
+  w.tabs()->setCurrentWidget(levels);  // an opened project shows the Overview first (qt_gui.md section 15)
   Spin(100);
   const std::string original = w.holder()->project().Text();
   const int numLevels = lm->getLevels().size();
