@@ -120,6 +120,8 @@ jobs:
           python-version: ${{ matrix.python }}
 
       # The same packages as build.yml's Windows job, less Python (python.org's is used) and readline (gone).
+      # libgomp is a package of its own in MSYS2 (gcc alone links no -fopenmp program: "cannot find -lgomp", the
+      # first runs of this job); build.yml's job had it only as a dependency of scipy.
       - name: Set up MSYS2 (MinGW)
         id: msys2
         uses: msys2/setup-msys2@v2
@@ -128,6 +130,7 @@ jobs:
           update: true
           install: >-
             mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-libgomp
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-pkg-config
