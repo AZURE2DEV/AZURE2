@@ -128,6 +128,7 @@ void RunTab::commandChanged() {
   // keep what was typed, by option
   for (auto it = editors_.constBegin(); it != editors_.constEnd(); ++it) {
     if (QCheckBox *b = qobject_cast<QCheckBox *>(it.value())) kept_[it.key()] = b->isChecked() ? "1" : "0";
+    else if (QComboBox *c = qobject_cast<QComboBox *>(it.value())) kept_[it.key()] = c->currentData().toString();
     else if (QLineEdit *e = it.value()->findChild<QLineEdit *>(); e) kept_[it.key()] = e->text();
     else if (QLineEdit *e2 = qobject_cast<QLineEdit *>(it.value())) kept_[it.key()] = e2->text();
   }
@@ -146,7 +147,16 @@ void RunTab::commandChanged() {
     QString label = name.mid(2).replace('-', ' ');
     label[0] = label[0].toUpper();
     QWidget *editor = nullptr;
-    if (o.kind == "flag") {
+    if (option == "--rate-entrance=" || option == "--rate-exit=") {
+      // the pairs of the project in place of a typed key (the exit: -1, the total radiative capture, too)
+      QComboBox *pairs = new QComboBox;
+      pairs->addItem(tr("(choose a pair)"), QString());
+      for (const QPair<int, QString> &p : pairs_) pairs->addItem(QString("%1: %2").arg(p.first).arg(p.second), QString::number(p.first));
+      if (option == "--rate-exit=") pairs->addItem(tr("-1: total radiative capture of the entrance pair"), "-1");
+      const int at = pairs->findData(kept_.value(option));
+      pairs->setCurrentIndex(at < 0 ? 0 : at);
+      editor = pairs;
+    } else if (o.kind == "flag") {
       QCheckBox *box = new QCheckBox;
       box->setChecked(kept_.value(option) == "1");
       editor = box;
@@ -189,6 +199,10 @@ QStringList RunTab::options() const {
       if (b->isChecked()) out << it.key();
       continue;
     }
+    if (QComboBox *c = qobject_cast<QComboBox *>(it.value())) {
+      if (!c->currentData().toString().isEmpty()) out << it.key() + c->currentData().toString();
+      continue;
+    }
     QLineEdit *e = qobject_cast<QLineEdit *>(it.value());
     if (!e) e = it.value()->findChild<QLineEdit *>();
     if (e && !e->text().trimmed().isEmpty()) out << it.key() + e->text().trimmed();
@@ -203,11 +217,28 @@ bool RunTab::setOption(const QString &option, const QString &value) {
     b->setChecked(value == "1");
     return true;
   }
+  if (QComboBox *c = qobject_cast<QComboBox *>(w)) {
+    const int at = c->findData(value);
+    if (at < 0) return false;
+    c->setCurrentIndex(at);
+    return true;
+  }
   QLineEdit *e = qobject_cast<QLineEdit *>(w);
   if (!e) e = w->findChild<QLineEdit *>();
   if (!e) return false;
   e->setText(value);
   return true;
+}
+
+void RunTab::setPairs(const QList<QPair<int, QString>> &pairs) {
+  if (pairs == pairs_) return;
+  pairs_ = pairs;
+  commandChanged();  // the drop-downs again, the choices kept by key
+}
+
+void RunTab::presetOption(const QString &option, const QString &value) {
+  kept_[option] = value;
+  setOption(option, value);
 }
 
 void RunTab::setRunning(bool running) {
@@ -235,7 +266,11 @@ void RunTab::appendLine(const QString &line, bool transient) {
   log_->appendPlainText(line);
 }
 
-void RunTab::showProgress(const QString &stage, qlonglong evaluation, double objective, double best) {
+void RunTab::showProgress(const QString &stage, qlonglong evaluation, qlonglong calls, double objective, double best) {
+  if (stage == "mcmc") {
+    progress_->setText(tr("mcmc: step %1 of %2, log posterior %3").arg(evaluation).arg(calls).arg(objective, 0, 'g', 10));
+    return;
+  }
   QString text = tr("%1: evaluation %2, chi-squared %3").arg(stage).arg(evaluation).arg(objective, 0, 'g', 10);
   if (!std::isnan(best)) text += tr(" (best %1)").arg(best, 0, 'g', 10);
   progress_->setText(text);

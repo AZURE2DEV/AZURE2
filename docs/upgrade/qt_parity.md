@@ -353,6 +353,7 @@ because the engine also searches the whole file for them.
       (`AddSegTestDialog.cpp`)
 
 ### 6.3 EXFOR import
+      *Qt (2026-11-19): Tools > Import an EXFOR Data Set... runs `python -m pyazr import exfor ID` (output in the log pane); not tested (network)*
 
 - [ ] Retrieve Experimental Data from EXFOR: entrance/exit pair, Target, Reaction (filled from the pairs, `EL` for
       elastic), Quantity (`SIG`, `DA`, editable), Search EXFOR (network, `nds.iaea.org/exfor/x4list`)
@@ -406,18 +407,23 @@ because the engine also searches the whole file for them.
 
 - [ ] Sub-tabs: Level Parameters, Abundances, Normalization, Energy Shifts, Screening, Target Densities, Doppler
       Temperatures, Sample Thicknesses, THM Coherent Background (THM on) (`FittingTab.cpp`, `FittingTabThm.cpp`)
+      *Qt (2026-11-19): one table, Parameters, of every parameter of a session of the project (`front::ReadParameters`, all kinds in the vector's order), beside the text view of `<parameterSettings>`; verified (`gui_window`): T1_start 48 rows*
 - [ ] Columns: Parameter, Value, Lower Limit, Upper Limit, Error, Fit Error (read-only), Use as Nuisance; Prior
       Centre on Normalization and Energy Shifts (`FittingTab.cpp`)
+      *Qt (2026-11-19): columns Name, Kind, Start (fit units), Fixed, Lower and Upper Limit, Prior (nuisance), Prior Centre, Prior Sigma, Fitted, Fit Error; verified: limits of energy_1 written as its `<parameterSettings>` row (`front::SetParameterSetting`), the project valid; emptied, the row is removed; the fit's values of param.sav beside the start*
 - [ ] Only free parameters are listed; names `Level N Energy (MeV)`, `Level N Channel M Width (eV|MeV^(1/2))`,
       `segment_N_norm`, `segment_N_energy_shift`, abundance, `screening_n`, `density_n`, `doppler_n`,
       `segment_<key>_thickness` (`FittingTab.cpp`)
+      *Qt (2026-11-19): every parameter, fixed ones marked, under the names of param.sav*
 - [ ] Level numbering follows the engine (active levels, J-group order) (`FittingTab.cpp`, `LevelsTab.cpp`)
 - [ ] Group members shown greyed, not editable, "tied to segment k (<keyword> <label>)" (`FittingTab.cpp`)
 - [ ] Edits go back to the source tab: value, error and vary flag of norms, shifts, abundances, screening,
       density (whole group), Doppler T, thickness, coherent background; non-numbers refused (`FittingTab.cpp`)
+      *Qt (2026-11-19): not ported: fixed/free and values are edited where they are written (Levels tab, the records' forms); the table edits limits and priors only*
 - [ ] Refresh from Current; Clear Limits (all limits to 0, count reported) (`FittingTab.cpp`)
 - [ ] Load from .sav file: backs up the `.azr` as `.azr.bk`, converts amplitudes to physical values against the
       current GUI state, NaN set to 0 with a warning, verification report (`FittingTab.cpp`, `AZURESetup.cpp`)
+      *Qt (2026-11-19): replaced by "Take the Fitted Values as the New Start": param.sav copied to `<project>.start.sav` and passed to the next run as `--parameter-file=` (the engine's mechanism; the project is not rewritten); verified: a calculate from it = `AZURE2 calculate --parameter-file=` byte for byte (11 of 11 files)*
 
 ## 10. Calculate tab
 
@@ -428,13 +434,17 @@ because the engine also searches the whole file for them.
       COBYLA, BOBYQA, NEWUOA, PRAXIS, Nelder-Mead (NLopt builds); MINOS forces Minuit2 (`RunTab.cpp`)
       *Qt (2026-11-18): the engine's fitters (front::Fitters) in the Fitting Settings tab; a call limit verified*
 - [ ] Chi-Sq Variance (MINOS only, default 1.0) (`RunTab.cpp`)
+      *Qt (2026-11-19): verified: minos --delta-chi2=1 from the window = AZURE2 minos, 10 of 10 files (identical_pp_res)*
 - [ ] Uncertainty (band) for fit, extrapolation and MINOS; Scale covariance (fit/MINOS with band); Set Wigner
       limits (`RunTab.cpp`)
+      *Qt (2026-11-19): verified: fit --covariance-band --scale-covariance (identical_pp_res, 10 of 10 files) and extrapolate --covariance-band (T1, 8 of 8) = the program's; the Plot tab shows the band of every data set (5 of 5)*
 - [ ] Parameters File: Create New / Use: <file> with Choose... (`RunTab.cpp`)
+      *Qt (2026-11-19): `--parameter-file` in the options (a file chooser); set by Fitting Settings' "Take the Fitted Values as the New Start"; verified*
 - [x] External Capture Integrals File: Create New / Use: <file> (hidden for rates) (`RunTab.cpp`)
       *Dropped (the PI, 2026-11-13): the session caches intEC.dat by its signature.*
 - [ ] Reaction Rate Parameters: Entrance Pair, Exit Pair (drop-downs), Minimum / Maximum Temperature (GK),
       Temperature Step (GK), or Use Temperature File (`RunTab.cpp`)
+      *Qt (2026-11-19): verified: entrance and exit pair as drop-downs of the project's pairs (exit also -1, total capture); rate from the window = AZURE2 rate, 4 of 4 files (reaction_rate p12C, temperature range); temperature file not tested*
 - [ ] Save and Run (Alt+R) saves first, then validates: no active segments; total capture without capture pair;
       undefined pair key; elastic rate; missing output/checks directory; missing parameter, integrals or temperature
       file; angular-distribution coefficients with convolution or target integration (`AZURESetup.cpp`)
@@ -452,19 +462,25 @@ because the engine also searches the whole file for them.
 ## 11. MCMC tab (MCMC builds)
 
 - [ ] Sub-tabs Parameters, Sampling Settings, Results; four "?" help buttons (`MCMCTab.cpp`)
+      *Qt (2026-11-19): the MCMC tab, shown only when the engine's commands include mcmc (`front::HasCommand`): Parameters and Sampling Settings; no Results page*
 - [ ] Parameters table: Parameter, Current Value, Prior Mean, Prior Std, Use Gaussian Prior, Category
       (`MCMCTab.cpp`)
+      *Qt (2026-11-19): present: the free parameters of a session merged with `<mcmc>` `<parameters>` rows (`front::SamplerPriors`/`SetSamplerPriors`, the sampler reader's grammar; rows written and read back in `api_front`); no Category column*
 - [ ] Load Physical Parameters; Load RWA Parameters (reads `output/param.par` by name) (`MCMCTab.cpp`)
 - [ ] Automatic priors for norms, energy shifts, sqrt(E) shifts, abundances, with prior centres honoured
       (`MCMCTab.cpp`)
 - [ ] Number of Walkers 2-1000 (50), Number of Steps 100-10⁶ (10000), Initial Chain Spread 0.001-50 % (5 %),
       Level Energy Spread 0.001-1 keV, Number of Threads 1-N (min(4, N)) (`MCMCTab.cpp`)
+      *Qt (2026-11-19): present from the engine's option table, with Sampled Parameters (rwa/physical) and Fresh start (--overwrite-samples)*
 - [ ] Run MCMC Sampling (saves, validates as Calculate), Stop Sampling, Fresh Start (deletes
       `output/samples.mcmc`), Use Reduced Widths (`MCMCTab.cpp`, `AZURESetup.cpp`, `AZUREMCMCThread.cpp`)
+      *Qt (2026-11-19): verified: Run from the tab (13N_fast, 4 walkers, 100 steps, rwa) = AZURE2 mcmc, 7 of 7 files; Stop sets the run's stop request (not tested for mcmc)*
 - [ ] Progress bar, status, current iteration, log probability, log likelihood, log prior; Sampling Log
       (`MCMCTab.cpp`)
+      *Qt (2026-11-19): verified: the sampler's steps through the facade's observer (stage mcmc, `ProgramObserver::samplerStep`): the bar reached step 100 of 100; the acceptance fraction shown as the program prints it*
 - [ ] Results: Statistics (Mean, Std Dev, 2.5 %, 50 %, 97.5 %), Chain Data, Refresh Results from File, warning
       row when stopped early (`MCMCTab.cpp`)
+      *Qt (2026-11-19): not ported (samples.mcmc is read by pyazr; burn-in is the reader's)*
 
 ## 12. Plot tab (Qwt builds; the Qt program of 2026-11-19 draws it with QPainter in every build)
 
@@ -501,6 +517,7 @@ because the engine also searches the whole file for them.
 - [ ] Dialog with pages Model, Experiments, Channels, Diagnostics (engine-API builds); Help opens the local or online
       user guide; Accept validates every page and applies; pages disabled when no THM segment exists
       (`ThmWorkspace.cpp`)
+      *Qt (2026-11-19): the THM tab: a form of the global options and of each experiment[<name>] line, built from the engine's tables of the keys (`front::ThmKinds`), written by the engine's edits of the lines (`front::SetThmOption`, `SetThmExperimentKey`), and a Text view of the whole section; verified (`gui_window`, T2): vertexModel=ff set and its field ffWell enabled only then, a wrong value refused with the reader's reason, an experiment added and removed, a global option set and removed, the file back byte for byte*
 - [ ] Model: Entrance partial waves (incoherent / coherent), Vertex boundary (constant / perlevel / onshell),
       Kinematic factors (lacognata / triple / kf3body / lambda32), External Coulomb term, Spectator energy (MeV)
       (`ThmModelPage.cpp`)
@@ -526,8 +543,17 @@ because the engine also searches the whole file for them.
 - [ ] Diagnostics: Segment, Compute (temporary copy, off the GUI thread, busy bar), J^π group; plots of entrance
       vertex |M_l|² with nodes, HOES vs on-shell, line shape |N_C|² and ζ(E), weight w(E), spectator window,
       distortion R(E), angular distribution at E (`ThmDiagnosticsPage.cpp`, `ThmDiagnostics.cpp`)
+      *Qt (2026-11-19): not ported (pyazr's THM reports; the web page)*
 
 ## 14. Cross-cutting
+
+- *Qt (2026-11-19), new:* the Tools menu starts pyazr's commands as child processes (`PythonTools.cpp`: ENDF-6 export,
+  import and summary, EXFOR and ENSDF import, the Coulomb table's build and check, the web page of the project via
+  `python -m pyazr ui FILE --json` on 127.0.0.1); the interpreter is set in Configure > Directories; with an
+  interpreter that cannot import pyazr every item is disabled with the reason.  Verified (`gui_window`): the items
+  disabled with "/no/such/python does not start", enabled with the build's Python, and Export ENDF-6 of T1 through the
+  item's code: exit 0, 166374 bytes, its output in the log pane.  The NUTS/emcee samplers and band jobs are no
+  commands of pyazr's command line: a disabled item says to use the web page or Python.
 
 - [ ] Runs on a worker thread with its own copy of the Config (every field the GUI sets, including hard-sphere,
       abundance prior, relativistic, prior covariance); output streamed to the log (`AZUREMainThread.h`)

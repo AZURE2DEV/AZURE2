@@ -368,6 +368,26 @@ std::vector<SamplerPrior> SamplerPriors(const Project &project);
 /// has none and `rows` is not empty).
 void SetSamplerPriors(Project &project, const std::vector<SamplerPrior> &rows);
 
+// ---- <thm>: the engine's tables of its keys and its edits of the section's lines (the THM tab) ----
+
+/// The keys of <thm> as two record kinds in the schema's shape (ThmOptionKeys, ThmExperimentKeys, the tables the
+/// engine's parser reads): kind "<thm>" (the global options) and kind "experiment" (the keys of an experiment[<name>]
+/// line).  FieldInfo::appliesWhen names the key that must be given for one to apply ("vertexModel=ff" ...).
+std::vector<KindInfo> ThmKinds();
+/// One key=value of <thm> as the reader takes it (ThmBlockEntries): a global option (experiment "") or a key of an
+/// experiment; `line` 1-based in the file.
+struct ThmEntry {
+  std::string experiment, key, value;
+  int line = 0;
+};
+std::vector<ThmEntry> ThmEntries(const Project &project);
+/// Set (or remove) a global option of <thm> (ThmOptionEdits; the section is made when the file has none).
+bool SetThmOption(Project &project, const std::string &key, const std::string &value, std::string &why,
+                  bool remove = false);
+/// Set (or remove) a key of experiment[name] (ThmExperimentEdits); with `remove` and key "" the experiment's lines.
+bool SetThmExperimentKey(Project &project, const std::string &name, const std::string &key, const std::string &value,
+                         std::string &why, bool remove = false);
+
 /// Whether this build's program has `command` (Commands(): a command gone from the engine is gone here).
 bool HasCommand(const std::string &command);
 

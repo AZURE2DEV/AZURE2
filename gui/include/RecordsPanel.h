@@ -36,6 +36,12 @@ class RecordsPanel : public QWidget {
   bool applyForm(QString &why);
   /// The form's widget of a field, for the tests (nullptr when the form has none).
   QWidget *fieldWidget(const QString &key) const { return widgets_.value(key, nullptr); }
+  /// What Add, Duplicate, Remove and the form's name do, without their dialogs (the tests; false with the reason).
+  bool addNamedRecord(const QString &kind, const QString &name, QString &why);
+  bool duplicateShown(QString &newName, QString &why);
+  bool removeShown(QString &why);
+  bool renameShown(const QString &newName, QString &why);
+  QStringList recordNames() const;
 
  signals:
   void edited();

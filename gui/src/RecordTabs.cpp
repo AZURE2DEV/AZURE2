@@ -79,11 +79,3 @@ QList<SectionsTab::Part> PotentialParts() {
                        "computed with it instead of hard-sphere functions.")}};
 }
 
-QList<SectionsTab::Part> ThmParts() {
-  return {{"thm", QObject::tr("THM"),
-           QObject::tr("The Trojan horse experiments (<thm>): one block per experiment with its keys (spectator, "
-                       "kinematics, vertex model: vertexModel=ff for the full transfer form factor, optical sets, "
-                       "resolution, normalization).  The engine's diagnostics name a wrong line (Validate, F7).  See "
-                       "the user guide, THM implementation."),
-           true}};
-}

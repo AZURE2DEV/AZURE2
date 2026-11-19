@@ -45,7 +45,7 @@ class RunWorker : public QObject {
 
  signals:
   void message(const QString &line, bool transient);
-  void progress(const QString &stage, qlonglong evaluation, double objective, double best);
+  void progress(const QString &stage, qlonglong evaluation, qlonglong calls, double objective, double best);
   void finished(const RunOutcome &outcome);
 
  private:

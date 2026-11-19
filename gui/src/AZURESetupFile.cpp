@@ -11,8 +11,10 @@
 #include "LevelsTab.h"
 #include "PairsTab.h"
 #include "RecordTabs.h"
+#include "MCMCTab.h"
 #include "PlotTab.h"
 #include "RunTab.h"
+#include "ThmTab.h"
 
 void AZURESetup::newProject() {
   if (running_ || !maybeSave()) return;
@@ -127,6 +129,7 @@ bool AZURESetup::commitTabs(QString &why) {
   }
   thmTab->applyText();
   if (!fittingTab->apply(why)) return false;
+  if (mcmcTab) mcmcTab->apply();
   updateTitle();
   return true;
 }
@@ -201,6 +204,7 @@ bool AZURESetup::startRun(QString &why) {
   const QStringList options = runTab->options() + fittingTab->programOptions(command);
   running_ = true;
   runTab->setRunning(true);
+  if (mcmcTab) mcmcTab->setRunning(true);
   runTab->clearLog();
   runTab->appendLine(QString("AZURE2 %1 %2 %3").arg(command, options.join(' '), holder_->path()), false);
   worker_->clearStop();
@@ -212,9 +216,24 @@ void AZURESetup::stopRun() {
   if (running_) worker_->requestStop();
 }
 
+bool AZURESetup::startMCMC(QString &why) {
+  if (!mcmcTab || !runTab->setCommand("mcmc")) {
+    why = tr("this build's engine has no mcmc command");
+    return false;
+  }
+  for (const QString &o : mcmcTab->options()) {
+    const int eq = o.indexOf('=');
+    if (eq < 0) runTab->setOption(o, "1");
+    else runTab->setOption(o.left(eq + 1), o.mid(eq + 1));
+  }
+  if (!mcmcTab->options().contains("--overwrite-samples")) runTab->setOption("--overwrite-samples", "0");
+  return startRun(why);
+}
+
 void AZURESetup::runEnded(const RunOutcome &outcome) {
   running_ = false;
   runTab->setRunning(false);
+  if (mcmcTab) mcmcTab->setRunning(false);
   runTab->showOutcome(outcome);
   plotTab->refresh();
   emit runFinished(outcome);

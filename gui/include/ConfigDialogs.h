@@ -26,6 +26,9 @@ class ConfigDialog : public QDialog {
   bool write(QString &why);
   /// The editor of an entry, for the tests.
   QWidget *editor(const QString &name) const { return editors_.value(name, nullptr); }
+  /// A row that is no <config> entry (a setting of this computer, as the Python interpreter of the Tools menu),
+  /// below the entries; the caller reads it after exec().
+  void addMachineRow(const QString &label, QWidget *editor);
 
  public slots:
   void accept() override;
@@ -35,6 +38,7 @@ class ConfigDialog : public QDialog {
   QMap<QString, QWidget *> editors_;
   QMap<QString, QString> initial_;
   QMap<QString, QJsonObject> rows_;
+  class QFormLayout *machine_ = nullptr;
 };
 
 #endif

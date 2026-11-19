@@ -17,7 +17,7 @@ QT_END_NAMESPACE
  * A tab of the window made of format-3 sections (docs/upgrade/qt_gui.md section 2): one RecordsPanel per section of
  * records and one SectionTextPanel per section of its own grammar, as sub-tabs when there are several.  The tabs the
  * old program had keep their names: Segments (Segments From Data, Segments Without Data, and the model data),
- * Experimental Effects (targets, beams, detectors), Nuclear Potential; the THM tab holds <thm>.
+ * Experimental Effects (targets, beams, detectors), Nuclear Potential (the THM tab is ThmTab).
  */
 class SectionsTab : public QWidget {
   Q_OBJECT
@@ -48,6 +48,5 @@ class SectionsTab : public QWidget {
 QList<SectionsTab::Part> SegmentsParts();
 QList<SectionsTab::Part> EffectsParts();
 QList<SectionsTab::Part> PotentialParts();
-QList<SectionsTab::Part> ThmParts();
 
 #endif

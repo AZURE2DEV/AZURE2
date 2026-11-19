@@ -13,6 +13,9 @@ class SectionsTab;
 class FittingTab;
 class RunTab;
 class PlotTab;
+class ThmTab;
+class PythonTools;
+class MCMCTab;
 class DiagnosticsPanel;
 
 QT_BEGIN_NAMESPACE
@@ -50,6 +53,8 @@ class AZURESetup : public QMainWindow {
   void saveTabScreenshots(const QString &dir);
   /// Start a run of the Calculate tab's command (after saving); false with the reason when it cannot start.
   bool startRun(QString &why);
+  /// The MCMC tab's run: the command mcmc with the tab's options (and its priors written into the project).
+  bool startMCMC(QString &why);
   bool running() const { return running_; }
 
   ProjectHolder *holder() const { return holder_; }
@@ -57,9 +62,13 @@ class AZURESetup : public QMainWindow {
   LevelsTab *getLevelsTab() const { return levelsTab; }
   SectionsTab *getSegmentsTab() const { return segmentsTab; }
   SectionsTab *getEffectsTab() const { return effectsTab; }
+  ThmTab *getThmTab() const { return thmTab; }
   FittingTab *getFittingTab() const { return fittingTab; }
   RunTab *getRunTab() const { return runTab; }
   PlotTab *getPlotTab() const { return plotTab; }
+  /// The MCMC tab, null when the engine has no mcmc command.
+  MCMCTab *getMCMCTab() const { return mcmcTab; }
+  PythonTools *tools() const { return tools_; }
   DiagnosticsPanel *getDiagnostics() const { return diagnostics; }
   QTabWidget *tabs() const { return tabWidget; }
 
@@ -128,10 +137,12 @@ class AZURESetup : public QMainWindow {
   SectionsTab *segmentsTab;
   SectionsTab *effectsTab;
   SectionsTab *potentialTab;
-  SectionsTab *thmTab;
+  ThmTab *thmTab;
   FittingTab *fittingTab;
   RunTab *runTab;
   PlotTab *plotTab;
+  MCMCTab *mcmcTab = nullptr;
+  PythonTools *tools_ = nullptr;
   DiagnosticsPanel *diagnostics;
   QDockWidget *diagnosticsDock;
 };

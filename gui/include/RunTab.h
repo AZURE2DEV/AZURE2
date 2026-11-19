@@ -35,6 +35,10 @@ class RunTab : public QWidget {
   QStringList options() const;
   /// Set an option's editor (a flag: "1" or "0"), for the tests.
   bool setOption(const QString &option, const QString &value);
+  /// Set an option for every command that takes it (kept across command changes), e.g. --parameter-file=.
+  void presetOption(const QString &option, const QString &value);
+  /// The project's pairs (key, label) for the rate's drop-downs of entrance and exit pair.
+  void setPairs(const QList<QPair<int, QString>> &pairs);
   int threads() const;
   void setRunning(bool running);
   QString log() const;
@@ -44,7 +48,7 @@ class RunTab : public QWidget {
 
  public slots:
   void appendLine(const QString &line, bool transient);
-  void showProgress(const QString &stage, qlonglong evaluation, double objective, double best);
+  void showProgress(const QString &stage, qlonglong evaluation, qlonglong calls, double objective, double best);
   void showOutcome(const RunOutcome &outcome);
   void clearLog();
 
@@ -68,6 +72,7 @@ class RunTab : public QWidget {
   QTableWidget *chi_;
   QListWidget *files_;
   QString outputDirectory_;
+  QList<QPair<int, QString>> pairs_;
 };
 
 #endif
