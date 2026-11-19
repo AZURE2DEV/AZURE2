@@ -161,10 +161,12 @@ class WhitFunc {
   }
 
  private:
-  /// A hybrid pair: W~_l(r) of the radial equation with the potential (physics/ DecayingSolution; non-relativistic,
-  /// the hybrid model refuses relativistic=1), equal to W beyond the matching radius.
+  /// A hybrid pair: W~_l(r) of the radial equation with the partial wave's potential (physics/ DecayingSolution;
+  /// non-relativistic, the hybrid model refuses relativistic=1), equal to W beyond the matching radius.  Without the
+  /// interior background: the ANC factor at a_c applies it (ParticleChannelValues), external capture refuses a final
+  /// state in a background wave (ECFinalStateFactors).
   azure2::physics::DecayingValue Distorted(int l, int two_j, double radius, double energy) const {
-    return azure2::physics::DecayingSolution(azure2::physics::BelowThresholdPotential(*potential_, l, two_j), z1_, z2_,
+    return azure2::physics::DecayingSolution(azure2::physics::ForPartialWave(*potential_, l, two_j), z1_, z2_,
                                              redmass_ * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius, energy);
   }
   double DistortedScaled(int l, int two_j, double radius, double energy, double &log10Scale) const {

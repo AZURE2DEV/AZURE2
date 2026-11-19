@@ -23,7 +23,7 @@ def extrap(path):
 def reference(path):
     out = {}
     for ln in open(path).read().split("\n")[1:]:
-        if ln.strip():
+        if ln.strip() and not ln.startswith("bound"):
             l, tj, e, d = ln.split(",")
             out[((int(l), int(tj)), round(float(e), 6))] = float(d)
     return out

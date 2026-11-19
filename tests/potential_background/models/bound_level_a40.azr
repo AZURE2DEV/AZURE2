@@ -13,19 +13,19 @@ none #Angular Distributions Check
 format=3
 </config>
 <levels>
-1.5 -1         0 1 1 1 1 2 2 1 1             1 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+1.5 -1 0.13171326106300008 1 1 1 1 2 2 1 1 4.09315411993 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
-0.5 1        40 1 1 1 1 0 3 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+0.5 1        40 1 1 1 1 0 3 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
-0.5 -1        40 1 1 1 1 2 4 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+0.5 -1        40 1 1 1 1 2 4 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
-1.5 1        40 1 1 1 1 4 5 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+1.5 1        40 1 1 1 1 4 5 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
-2.5 1        40 1 1 1 1 4 6 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+2.5 1        40 1 1 1 1 4 6 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
-2.5 -1        40 1 1 1 1 6 7 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+2.5 -1        40 1 1 1 1 6 7 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
-3.5 -1        40 1 1 1 1 6 8 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 3.5 0 0 0
+3.5 -1        40 1 1 1 1 6 8 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   4 0 0 0
 
 </levels>
 <data>
@@ -101,13 +101,13 @@ potential he3he4
     pair            h+4He
     coulomb_radius  3.095 fm
     central         gaussian depth 67.5 MeV width 2.5200031651 fm
-    wave            l 0 J 1/2 depth 67.5 MeV background interior boundary 0.0
-    wave            l 1 J 1/2 depth 81.815179 MeV background interior boundary 0.0
-    wave            l 1 J 3/2 depth 83.589554 MeV background interior boundary 0.0
-    wave            l 2 J 3/2 depth 66.0 MeV background interior boundary 0.0
-    wave            l 2 J 5/2 depth 69.0 MeV background interior boundary 0.0
-    wave            l 3 J 5/2 depth 75.9 MeV background interior boundary 0.0
-    wave            l 3 J 7/2 depth 84.8 MeV background interior boundary 0.0
+    wave            l 0 J 1/2 depth 67.5 MeV width 2.5200031651 fm background interior boundary 0.0
+    wave            l 1 J 1/2 depth 81.815179 MeV width 2.5200031651 fm background interior boundary 0.0
+    wave            l 1 J 3/2 depth 83.589554 MeV width 2.5200031651 fm background interior boundary 0.0 subtract 1
+    wave            l 2 J 3/2 depth 66.0 MeV width 2.5200031651 fm background interior boundary 0.0
+    wave            l 2 J 5/2 depth 69.0 MeV width 2.5200031651 fm background interior boundary 0.0
+    wave            l 3 J 5/2 depth 75.9 MeV width 2.5200031651 fm background interior boundary 0.0
+    wave            l 3 J 7/2 depth 84.8 MeV width 2.5200031651 fm background interior boundary 0.0
     matching_radius 15 fm
     step            0.0275 fm
 </potentials>

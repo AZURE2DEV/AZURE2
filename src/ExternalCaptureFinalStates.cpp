@@ -82,6 +82,10 @@ namespace {
 void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, double levelEnergy, const Config &configure,
                          double &nfIntegral, double &conversion) {
   const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
+  // The final state's wave beyond a_c is the pair's W~ (or outgoing wave); in a partial wave with an interior
+  // background its normalisation at a_c would need the background too, which is not built (potential_background.md
+  // section 5): refused at set-up.
+  if (pair->GetHybridPotential()) azure2::physics::BelowThresholdPotential(*pair->GetHybridPotential(), l, twoJ);
   const double toAmplitude = sqrt(2.0 * pair->GetRedMass() * radius * uconv / pow(hbarc, 2.0));
   if (finalEnergy > 0.0) {
     CoulFunc coul(pair);

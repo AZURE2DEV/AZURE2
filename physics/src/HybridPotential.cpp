@@ -425,6 +425,14 @@ double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV
   return DressShift(S, BackgroundR(q, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, -B_MeV, *bg), bg->boundary);
 }
 
+double BackgroundWFactor(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
+                         double a_fm, double E_MeV, double S_dressed) {
+  const InteriorBackground *bg = BackgroundOf(p, l, two_j);
+  if (!bg) return 1.0;
+  const double R0 = BackgroundR(ForPartialWave(p, l, two_j), z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, *bg);
+  return 1.0 / (1.0 + R0 * (S_dressed - bg->boundary));
+}
+
 WavesAtRadius DressWaves(const WavesAtRadius &w, double rho, double R0, double B) {
   WavesAtRadius d;
   const double jF = rho * w.Fp - B * w.F, jG = rho * w.Gp - B * w.G;  // rho u' - B u

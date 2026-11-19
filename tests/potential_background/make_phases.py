@@ -4,7 +4,11 @@
 p1/2 81.815179, p3/2 83.589554, d3/2 66.0, d5/2 69.0, f5/2 75.9, f7/2 84.8; Coulomb of a uniform sphere R_C = 3.095
 fm), independent of the engine: scipy's solve_ivp (DOP853, rtol 1e-12) outward from r = 1e-4 fm with u = r^(l+1),
 matched at 15 fm to mpmath's F_l, G_l (30 digits).  Masses: the atomic masses of the models (3.0160293 u, 4.0026032
-u), e^2 = alpha hbar c.  Writes data/phases.csv: l, 2J, E_cm (MeV), delta (deg, reduced to (-90, 90]).
+u), e^2 = alpha hbar c.  Writes data/phases.csv: l, 2J, E_cm (MeV), delta (deg, reduced to (-90, 90]); and two rows
+"bound": the p3/2 bound state with one node (the 7Be ground state of the model) -- E_cm (MeV) and its ANC C (fm^-1/2):
+the energy where the outward solution and the decaying Whittaker solution W_{-eta,3/2}(2 kappa r) (mpmath whitw) have
+the same logarithmic derivative at 10 fm (the nuclear term 1e-9 MeV there) (bisection to 1e-12 MeV), C = u(r)/W(r) at 12 fm with int u^2 = 1 (DOP853 on
+[1e-4, 12] fm and the Whittaker tail beyond).
 
     python3 make_phases.py > data/phases.csv      (a few seconds; needs numpy, scipy, mpmath)
 """
@@ -47,7 +51,48 @@ def phase(l, v0, E):
     return d
 
 
+def bound_p32():
+    v0, l = DEPTH[(1, 3)], 1
+    k2 = 2.0 * MU / HBARC ** 2
+    r0, rmid, rfar = 1e-4, 10.0, 12.0
+
+    def outward(E, r1):
+        return solve_ivp(lambda r, y: [y[1], k2 * (V(r, l, v0) - E) * y[0]], (r0, r1), [r0 ** 2, 2 * r0],
+                         method="DOP853", rtol=1e-12, atol=1e-20, dense_output=True)
+
+    def whit(E, r):
+        kappa = math.sqrt(-2.0 * MU * E) / HBARC
+        eta = 4 * ALPHA * MU / (HBARC * kappa)
+        return float(mp.whitw(-eta, l + 0.5, 2 * kappa * r))
+
+    def mismatch(E):
+        so = outward(E, rmid)
+        lo = so.y[1, -1] / so.y[0, -1]
+        h = 1e-5
+        lw = (whit(E, rmid + h) - whit(E, rmid - h)) / (2 * h) / whit(E, rmid)
+        return lo - lw
+
+    a, b = -1.5, -1.45  # a sign change of the mismatch (a pole of it lies between -1.45 and -1.4)
+    fa = mismatch(a)
+    while b - a > 1e-12:
+        m = 0.5 * (a + b)
+        fm = mismatch(m)
+        if (fm < 0) == (fa < 0):
+            a, fa = m, fm
+        else:
+            b = m
+    E = 0.5 * (a + b)
+    so = outward(E, rfar)
+    scale = whit(E, rfar) / so.y[0, -1]  # u = W beyond: unit ANC before normalising
+    inner = mp.quad(lambda r: (scale * so.sol(float(r))[0]) ** 2, [r0, 2, 4, 8, rfar])
+    outer = mp.quad(lambda r: whit(E, float(r)) ** 2, [rfar, 20, 40, mp.inf])
+    return E, 1.0 / math.sqrt(float(inner + outer))
+
+
 print("l,two_j,E_cm,delta_deg")
 for (l, tj), v0 in DEPTH.items():
     for E in (0.5, 1.0, 2.0, 4.0):
         print(f"{l},{tj},{E},{phase(l, v0, E):.12e}")
+Eb, C = bound_p32()
+print(f"bound,3,E_cm,{Eb:.12e}")
+print(f"bound,3,ANC,{C:.12e}")

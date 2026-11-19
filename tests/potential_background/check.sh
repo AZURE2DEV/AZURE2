@@ -6,7 +6,9 @@
 #      shifts in seven partial waves (data/phases.csv, make_phases.py: scipy and mpmath, not the engine) to 1e-4 deg,
 #      and each other's to 1e-4 deg;
 #   2. the background acts: exterior_only.azr (the same potential, no background) misses the s-wave phase by >= 1 deg at some energy;
-#   3. a level below threshold in a partial wave with a background is refused with the reason (below_threshold.azr);
+#   3. the potential's own p3/2 bound state as a level on top, its box pole subtracted, at its energy and ANC
+#      (make_phases.py): the potential's phase shifts at a_c = 4.0 and 5.5 fm, with different formal gamma; without
+#      the subtraction the level's gamma is 0;
 #   4. the analytic gradient of fit_level.azr (a free 1/2+ level on top of the s-wave background) equals finite
 #      differences (AZURE_GRAD_CHECK);
 #   5. identity_a35.azr at 1 and 3 threads: every output file identical;
@@ -75,13 +77,26 @@ else
   bad "without the background the s wave should miss the potential's phase: $res"
 fi
 
-# ---- 3. refused below threshold
-if run below "$HERE/models/below_threshold.azr" extrapolate 1; then
-  bad "a bound 3/2- level with a background in l = 1, J = 3/2 ran"
-elif grep -q "has an interior background and is evaluated at or below threshold" "$WORK/below/run.log"; then
-  ok "a level below threshold in a background partial wave is refused with the reason"
+# ---- 3. a level on top: the potential's own bound state (p3/2, one node) as a level of the project, its pole
+#         subtracted from the background (subtract 1), at the state's energy and ANC from make_phases.py: the potential
+#         is restored, at a_c = 4.0 fm (B 0) and 5.5 fm (B -1), though the level's formal gamma differs; without the
+#         subtraction the level gets gamma = 0 (the dressed W~ vanishes at the potential's own bound state)
+for n in bound_level_a40 bound_level_a55 bound_level_nosub; do
+  run "$n" "$HERE/models/$n.azr" extrapolate 1
+  if res="$(python3 -I "$HERE/phase_check.py" "$(extrap "$n")" "$HERE/data/phases.csv" 1e-3 2>&1)"; then
+    ok "$n: phase shifts = the potential's: $res"
+  else
+    bad "$n: phase shifts against make_phases.py: $res"; tail -3 "$WORK/$n/run.log"
+  fi
+done
+g40="$(awk '/^J = 1.5-/ { f = 1; next } f && /g_int/ { for (i = 1; i <= NF; i++) if ($i == "g_int") print $(i + 2); exit }' "$WORK/bound_level_a40/output/parameters.out")"
+g55="$(awk '/^J = 1.5-/ { f = 1; next } f && /g_int/ { for (i = 1; i <= NF; i++) if ($i == "g_int") print $(i + 2); exit }' "$WORK/bound_level_a55/output/parameters.out")"
+g0="$(awk '/^J = 1.5-/ { f = 1; next } f && /g_int/ { for (i = 1; i <= NF; i++) if ($i == "g_int") print $(i + 2); exit }' "$WORK/bound_level_nosub/output/parameters.out")"
+if awk -v a="$g40" -v b="$g55" -v z="$g0" 'BEGIN { exit !(a ~ /^[0-9.]+$/ && b ~ /^[0-9.]+$/ && z ~ /^[0-9.]+$/ &&
+                                                     a - b > 0.1 && z + 0 == 0) }'; then
+  ok "formal gamma of the level: $g40 (4.0 fm), $g55 (5.5 fm) MeV^1/2; without the subtraction $g0"
 else
-  bad "below threshold: refused without the reason"; tail -3 "$WORK/below/run.log"
+  bad "formal gamma of the level: '$g40' '$g55', without the subtraction '$g0' (expected different, and 0)"
 fi
 
 # ---- 4. gradient

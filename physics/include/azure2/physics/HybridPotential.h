@@ -264,6 +264,12 @@ double DressShift(double S, double R0, double boundary);
 double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
                          double a_fm, double B_MeV);
 
+/// The factor that takes the decaying solution W~(a) of the partial wave (l, 2J) at E < 0 to the dressed one, from the
+/// dressed S~ (ChannelBoundShift): W~_d / W~ = 1 - R0 (S - B) = 1 / (1 + R0 (S~ - B)), Eq. (9) on a real wave; 1 for a
+/// wave without background.  The ANC <-> gamma factor of a level below threshold reads it.
+double BackgroundWFactor(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
+                         double a_fm, double E_MeV, double S_dressed);
+
 /// Waves at the channel radius: F, G and their rho-derivatives.
 struct WavesAtRadius {
   double F = 0.0, Fp = 0.0, G = 0.0, Gp = 0.0;

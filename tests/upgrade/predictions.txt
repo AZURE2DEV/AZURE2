@@ -645,7 +645,23 @@ exit 1
 == tests/norm_groups/norm_groups.azr
 data xs_40_s08: dsdo_cm(1->1)
 data xs_90_s09: dsdo_cm(1->1)
-== tests/potential_background/models/below_threshold.azr
+== tests/potential_background/models/bound_level_a40.azr
+extrapolation ph_l0_j1: phase(1->1; J=0.5; l=0; s=0.5)
+extrapolation ph_l1_j1: phase(1->1; J=0.5; l=1; s=0.5)
+extrapolation ph_l1_j3: phase(1->1; J=1.5; l=1; s=0.5)
+extrapolation ph_l2_j3: phase(1->1; J=1.5; l=2; s=0.5)
+extrapolation ph_l2_j5: phase(1->1; J=2.5; l=2; s=0.5)
+extrapolation ph_l3_j5: phase(1->1; J=2.5; l=3; s=0.5)
+extrapolation ph_l3_j7: phase(1->1; J=3.5; l=3; s=0.5)
+== tests/potential_background/models/bound_level_a55.azr
+extrapolation ph_l0_j1: phase(1->1; J=0.5; l=0; s=0.5)
+extrapolation ph_l1_j1: phase(1->1; J=0.5; l=1; s=0.5)
+extrapolation ph_l1_j3: phase(1->1; J=1.5; l=1; s=0.5)
+extrapolation ph_l2_j3: phase(1->1; J=1.5; l=2; s=0.5)
+extrapolation ph_l2_j5: phase(1->1; J=2.5; l=2; s=0.5)
+extrapolation ph_l3_j5: phase(1->1; J=2.5; l=3; s=0.5)
+extrapolation ph_l3_j7: phase(1->1; J=3.5; l=3; s=0.5)
+== tests/potential_background/models/bound_level_nosub.azr
 extrapolation ph_l0_j1: phase(1->1; J=0.5; l=0; s=0.5)
 extrapolation ph_l1_j1: phase(1->1; J=0.5; l=1; s=0.5)
 extrapolation ph_l1_j3: phase(1->1; J=1.5; l=1; s=0.5)
