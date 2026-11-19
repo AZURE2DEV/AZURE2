@@ -121,6 +121,8 @@ ctest --test-dir build -LE slow --output-on-failure   # unit, reference, pyazr, 
 ctest --test-dir build -R <name> --output-on-failure  # a single test
 ctest --test-dir build -L slow                        # long pyazr tests: run when you change pyazr fitting/bands
 # CI: Linux runs every label but slow and browser; Windows and macOS also leave out the label long (7 tests)
+# CI, the Qt program: .github/workflows/gui.yml builds -DBUILD_GUI=ON on ubuntu-24.04 (Qt 6.4) and runs api_front and
+#     ctest -L gui offscreen; its macOS and Windows jobs are untested and do not fail the run (continue-on-error)
 sphinx-build -W --keep-going -b html docs/source docs/_build/html   # docs, warnings are errors (as CI)
 ctest --test-dir build -R docs_build                  # the same build as a test (skipped without Sphinx)
 ```
