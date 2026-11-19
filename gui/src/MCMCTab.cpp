@@ -20,6 +20,11 @@
 #include <QTableWidget>
 #include <QThread>
 #include <QVBoxLayout>
+#include <QSplitter>
+#include <algorithm>
+#include <vector>
+
+#include "PlotWidget.h"
 
 namespace {
 
@@ -152,10 +157,71 @@ MCMCTab::MCMCTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
   rl->addWidget(acceptance_);
   rl->addWidget(log_, 1);
 
+  // Results: the chain of the last run
+  accepted_ = NAN;
+  QPushButton *readButton = new QPushButton(tr("Read &Results"));
+  readButton->setObjectName("mcmcReadResults");
+  readButton->setProperty("primary", true);
+  readButton->setToolTip(tr("Read samples.mcmc of the output directory (every step of the chain)."));
+  connect(readButton, &QPushButton::clicked, this, [this]() {
+    QString why;
+    if (!readResults(why)) resultsNote_->setText(why);
+  });
+  burnIn_ = new QSpinBox;
+  burnIn_->setObjectName("mcmcBurnIn");
+  burnIn_->setRange(0, 10000000);
+  burnIn_->setToolTip(tr("The first steps of the chain left out of the statistics and the histogram."));
+  connect(burnIn_, &QSpinBox::valueChanged, this, [this]() { fillResults(); });
+  plotChoice_ = new QComboBox;
+  plotChoice_->setObjectName("mcmcPlotChoice");
+  connect(plotChoice_, &QComboBox::currentIndexChanged, this,
+          [this]() { showResultPlot(plotChoice_->currentData().toString()); });
+  resultsNote_ = new QLabel(tr("Run the sampler, then read its results."));
+  resultsNote_->setObjectName("mcmcResultsNote");
+  resultsNote_->setWordWrap(true);
+  results_ = new QTableWidget(0, 6);
+  results_->setObjectName("mcmcResults");
+  results_->setHorizontalHeaderLabels({tr("Parameter"), tr("Mean"), tr("Std. dev."), tr("16 %"), tr("50 %"), tr("84 %")});
+  results_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+  results_->horizontalHeader()->setStretchLastSection(true);
+  results_->verticalHeader()->setVisible(false);
+  results_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  results_->setSelectionBehavior(QAbstractItemView::SelectRows);
+  connect(results_, &QTableWidget::currentCellChanged, this, [this](int row) {
+    if (row >= 0) {
+      const int at = plotChoice_->findData(QString("trace:%1").arg(row));
+      if (at >= 0) plotChoice_->setCurrentIndex(at);
+    }
+  });
+  resultsPlot_ = new PlotWidget;
+  resultsPlot_->setObjectName("mcmcResultsPlot");
+  resultsPlot_->setShowLegend(false);
+  resultsPlot_->setShowResiduals(false);
+  QHBoxLayout *resultsTop = new QHBoxLayout;
+  resultsTop->addWidget(readButton);
+  resultsTop->addSpacing(12);
+  resultsTop->addWidget(new QLabel(tr("Burn-in (steps):")));
+  resultsTop->addWidget(burnIn_);
+  resultsTop->addSpacing(12);
+  resultsTop->addWidget(new QLabel(tr("Plot:")));
+  resultsTop->addWidget(plotChoice_, 1);
+  QSplitter *resultsSplit = new QSplitter(Qt::Horizontal);
+  resultsSplit->addWidget(results_);
+  resultsSplit->addWidget(resultsPlot_);
+  resultsSplit->setStretchFactor(0, 2);
+  resultsSplit->setStretchFactor(1, 3);
+  resultsSplit->setSizes({520, 780});
+  QWidget *resultsPage = new QWidget;
+  QVBoxLayout *resl = new QVBoxLayout(resultsPage);
+  resl->addLayout(resultsTop);
+  resl->addWidget(resultsNote_);
+  resl->addWidget(resultsSplit, 1);
+
   QTabWidget *pages = new QTabWidget;
   pages->setObjectName("mcmcPages");
   pages->addTab(paramsPage, tr("Parameters"));
   pages->addTab(runPage, tr("Sampling Settings"));
+  pages->addTab(resultsPage, tr("Results"));
   (new QVBoxLayout(this))->addWidget(pages);
   connect(holder_, &ProjectHolder::opened, this, &MCMCTab::reload);
   reload();
@@ -292,4 +358,159 @@ void MCMCTab::appendLine(const QString &line, bool transient) {
   // (it follows the last progress line, which begins with '\r' and so shares its line)
   const int at = line.indexOf("Acceptance fraction:");
   if (at >= 0) acceptance_->setText(line.mid(at).trimmed());
+}
+
+// ------------------------------------------------------------------------------------------------- the Results page
+
+bool MCMCTab::readResults(QString &why) {
+  std::string reason;
+  azure2::front::SamplerChain chain;
+  if (!azure2::front::ReadSamplerChain(holder_->project(), chain, reason)) {
+    why = QString::fromStdString(reason);
+    return false;
+  }
+  chain_ = std::move(chain);
+  // the parameters' names: the priors table's rows when they are the run's free parameters, else by place
+  chainNames_.clear();
+  for (int k = 0; k < chain_.parameters; k++)
+    chainNames_ << (table_->rowCount() == chain_.parameters && table_->item(k, 0) ? table_->item(k, 0)->text()
+                                                                                    : tr("parameter %1").arg(k));
+  plotChoice_->blockSignals(true);
+  plotChoice_->clear();
+  plotChoice_->addItem(tr("Log posterior (mean of the walkers) against the step"), "logprob");
+  for (int k = 0; k < chain_.parameters; k++) plotChoice_->addItem(tr("Trace: %1").arg(chainNames_[k]), QString("trace:%1").arg(k));
+  for (int k = 0; k < chain_.parameters; k++)
+    plotChoice_->addItem(tr("Histogram: %1").arg(chainNames_[k]), QString("histogram:%1").arg(k));
+  plotChoice_->blockSignals(false);
+  burnIn_->blockSignals(true);
+  burnIn_->setMaximum(std::max(0, chain_.steps - 1));
+  if (burnIn_->value() >= chain_.steps) burnIn_->setValue(chain_.steps / 5);
+  burnIn_->blockSignals(false);
+  fillResults();
+  return true;
+}
+
+void MCMCTab::setBurnIn(int steps) { burnIn_->setValue(steps); }
+
+void MCMCTab::fillResults() {
+  const int S = chain_.steps, W = chain_.walkers, P = chain_.parameters;
+  results_->setRowCount(0);
+  if (S == 0 || W == 0) return;
+  const int burn = std::min(burnIn_->value(), S - 1);
+  auto at = [&](int step, int walker, int k) { return chain_.chain[((size_t)step * W + walker) * P + k]; };
+  // the acceptance fraction: moves after the burn-in that changed the position
+  long moves = 0, changed = 0;
+  for (int t = std::max(1, burn); t < S; t++)
+    for (int w = 0; w < W; w++) {
+      bool same = true;
+      for (int k = 0; k < P && same; k++) same = at(t, w, k) == at(t - 1, w, k);
+      moves++;
+      changed += !same;
+    }
+  accepted_ = moves ? (double)changed / moves : NAN;
+  for (int k = 0; k < P; k++) {
+    std::vector<double> v;
+    v.reserve((size_t)(S - burn) * W);
+    for (int t = burn; t < S; t++)
+      for (int w = 0; w < W; w++) v.push_back(at(t, w, k));
+    double mean = 0;
+    for (double x : v) mean += x;
+    mean /= v.size();
+    double var = 0;
+    for (double x : v) var += (x - mean) * (x - mean);
+    const double sd = v.size() > 1 ? std::sqrt(var / (v.size() - 1)) : 0;
+    std::sort(v.begin(), v.end());
+    auto quantile = [&v](double q) {  // linear between order statistics
+      const double pos = q * (v.size() - 1);
+      const size_t lo = (size_t)std::floor(pos), hi = std::min(lo + 1, v.size() - 1);
+      return v[lo] + (pos - lo) * (v[hi] - v[lo]);
+    };
+    const int row = results_->rowCount();
+    results_->insertRow(row);
+    results_->setItem(row, 0, new QTableWidgetItem(chainNames_.value(k)));
+    const double values[] = {mean, sd, quantile(0.16), quantile(0.5), quantile(0.84)};
+    for (int c = 0; c < 5; c++) {
+      QTableWidgetItem *item = new QTableWidgetItem(QString::number(values[c], 'g', 7));
+      item->setData(Qt::UserRole, values[c]);
+      item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+      results_->setItem(row, c + 1, item);
+    }
+  }
+  resultsNote_->setText(tr("%1 steps of %2 walkers, %3 parameters (%4); the first %5 steps left out.  Acceptance "
+                           "fraction %6.")
+                            .arg(S)
+                            .arg(W)
+                            .arg(P)
+                            .arg(QString::fromStdString(chain_.file))
+                            .arg(burn)
+                            .arg(accepted_, 0, 'f', 3));
+  showResultPlot(plotChoice_->currentData().toString());
+}
+
+bool MCMCTab::showResultPlot(const QString &what) {
+  const int S = chain_.steps, W = chain_.walkers, P = chain_.parameters;
+  QList<PlotSeries> series;
+  const int burn = std::min(burnIn_->value(), std::max(0, S - 1));
+  const int k = what.section(':', 1).toInt();
+  const QColor colours[] = {QColor(0x1f, 0x77, 0xb4), QColor(0xd6, 0x27, 0x28), QColor(0x2c, 0xa0, 0x2c),
+                            QColor(0xff, 0x7f, 0x0e), QColor(0x94, 0x67, 0xbd), QColor(0x8c, 0x56, 0x4b)};
+  if (S == 0) {
+    resultsPlot_->setSeries(series);
+    return false;
+  }
+  if (what == "logprob") {
+    PlotSeries s;
+    s.label = tr("mean log posterior");
+    s.color = colours[0];
+    for (int t = 0; t < S; t++) {
+      double m = 0;
+      for (int w = 0; w < W; w++) m += chain_.logProbability[(size_t)t * W + w];
+      s.modelX << t;
+      s.modelY << m / W;
+    }
+    series << s;
+    resultsPlot_->setAxisTitles(tr("step"), tr("log posterior"));
+  } else if (what.startsWith("trace:") && k >= 0 && k < P) {
+    for (int w = 0; w < W; w++) {
+      PlotSeries s;
+      s.label = tr("walker %1").arg(w);
+      QColor c = colours[w % 6];
+      c.setAlpha(150);
+      s.color = c;
+      for (int t = 0; t < S; t++) {
+        s.modelX << t;
+        s.modelY << chain_.chain[((size_t)t * W + w) * P + k];
+      }
+      series << s;
+    }
+    resultsPlot_->setAxisTitles(tr("step"), chainNames_.value(k));
+  } else if (what.startsWith("histogram:") && k >= 0 && k < P) {
+    std::vector<double> v;
+    for (int t = burn; t < S; t++)
+      for (int w = 0; w < W; w++) v.push_back(chain_.chain[((size_t)t * W + w) * P + k]);
+    const auto [lo, hi] = std::minmax_element(v.begin(), v.end());
+    const int bins = std::max(5, std::min(60, (int)std::sqrt((double)v.size())));
+    const double a = *lo, width = *hi > *lo ? (*hi - *lo) / bins : 1.0;
+    std::vector<int> count(bins, 0);
+    for (double x : v) count[std::min(bins - 1, (int)((x - a) / width))]++;
+    PlotSeries s;
+    s.label = chainNames_.value(k);
+    s.color = colours[0];
+    for (int b = 0; b < bins; b++) {  // a step outline
+      s.modelX << a + b * width << a + (b + 1) * width;
+      s.modelY << count[b] << count[b];
+    }
+    series << s;
+    resultsPlot_->setAxisTitles(chainNames_.value(k), tr("samples per bin (after the burn-in)"));
+  } else {
+    return false;
+  }
+  resultsPlot_->setSeries(series);
+  const int choice = plotChoice_->findData(what);
+  if (choice >= 0 && choice != plotChoice_->currentIndex()) {
+    plotChoice_->blockSignals(true);
+    plotChoice_->setCurrentIndex(choice);
+    plotChoice_->blockSignals(false);
+  }
+  return true;
 }

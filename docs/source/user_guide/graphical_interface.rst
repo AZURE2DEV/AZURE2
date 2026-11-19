@@ -135,8 +135,13 @@ The tabs
        physical) and a fresh start (overwrite ``samples.mcmc``). Run starts
        ``AZURE2 mcmc`` with them; the progress bar follows the steps and the
        acceptance fraction is shown as the program prints it. The samples are
-       in ``output/samples.mcmc``; the burn-in is dropped when they are read
-       (pyazr), not by the sampler.
+       in ``output/samples.mcmc``; the burn-in is dropped when they are read,
+       not by the sampler. ``Results`` reads the chain back (``Read Results``):
+       the burn-in to leave out (steps), per parameter the mean, standard
+       deviation and the 16, 50 and 84 % quantiles over the kept steps and
+       walkers, the acceptance fraction (the share of walker moves that changed
+       the position), and a plot of a parameter's trace (a curve per walker),
+       its histogram, or the walkers' mean log posterior against the step.
    * - Plot
      - The data sets and extrapolations of the last run (below).
 

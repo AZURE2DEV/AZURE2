@@ -46,6 +46,7 @@
 #include "AzureTheme.h"
 #include "DiagnosticsPanel.h"
 #include "FittingTab.h"
+#include "MCMCTab.h"
 #include "PlotTab.h"
 #include "PlotWidget.h"
 #include "RecordTabs.h"
@@ -368,6 +369,35 @@ int main(int argc, char **argv) {
     w.tabs()->setCurrentWidget(run);
     Settle();
     w.grab().save(shots + "/shell_fit_light.png");
+  }
+
+  // the sampler's results: a chain written here (3 steps, 2 walkers, 2 parameters; two of the four moves stay put)
+  if (MCMCTab *mcmc = w.getMCMCTab()) {
+    {
+      std::ofstream f(fs::path(w.holder()->directory().toStdString()) / "output" / "samples.mcmc");
+      f << "step,walker,logprob,loglikelihood,logprior,param0,param1\n"
+        << "0,0,-5,-5,0,1,10\n0,1,-6,-6,0,3,12\n1,0,-5,-5,0,1,10\n1,1,-4,-4,0,5,14\n2,0,-3,-3,0,2,11\n2,1,-4,-4,0,5,14\n";
+    }
+    mcmc->setBurnIn(0);
+    const bool read = mcmc->readResults(why);
+    QTableWidget *res = mcmc->resultsTable();
+    const double mean0 = res->rowCount() == 2 ? res->item(0, 1)->data(Qt::UserRole).toDouble() : NAN;
+    const double median1 = res->rowCount() == 2 ? res->item(1, 4)->data(Qt::UserRole).toDouble() : NAN;
+    Check(read && res->rowCount() == 2 && std::fabs(mean0 - 17.0 / 6) < 1e-12 && median1 == 11.5 &&
+              std::fabs(mcmc->acceptanceFraction() - 0.5) < 1e-12,
+          "sampler results: mean 17/6, median 11.5, acceptance 0.5 from a written chain (" + why.toStdString() + ")");
+    Check(mcmc->showResultPlot("trace:1") && mcmc->resultsPlot()->series().size() == 2 &&
+              mcmc->showResultPlot("histogram:0") && mcmc->showResultPlot("logprob") &&
+              mcmc->resultsPlot()->series().at(0).modelY.at(2) == -3.5,
+          "sampler results: trace (a curve per walker), histogram, the walkers' mean log posterior");
+    mcmc->setBurnIn(1);
+    Check(std::fabs(mcmc->resultsTable()->item(0, 1)->data(Qt::UserRole).toDouble() - 13.0 / 4) < 1e-12,
+          "sampler results: a burn-in of one step leaves the first out (mean 13/4)");
+    w.tabs()->setCurrentWidget(mcmc);
+    if (QTabWidget *pages = mcmc->findChild<QTabWidget *>("mcmcPages")) pages->setCurrentIndex(2);
+    mcmc->showResultPlot("trace:0");
+    Settle();
+    w.grab().save(shots + "/shell_mcmc_results_light.png");
   }
 
   // (e) the dark look

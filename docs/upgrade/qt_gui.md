@@ -199,7 +199,15 @@ the cursor's coordinates in the corner, log/linear per axis, legend on/off, the 
 extrapolations as check-box lists with All and None; export PNG, SVG, PDF and CSV (the points drawn, one block per
 series).  The plot is drawn in the window's palette on screen and on white in a file.
 
-**Facade additions** (`api/front/`, each with its case in `front_test.cpp`): `Option::unit` and `Option::when`.
+**Sampler results** (`MCMCTab`, a Results page): the chain of the last run read by the engine's one reader of
+`samples.mcmc` (`ReadSampleFile`, moved out of an anonymous namespace of `api/src/AZUREAPISampler.cpp` and declared in
+`AZUREAPISampler.h`, so that pyazr and the GUI read the file with the same code), through the facade's
+`ReadSamplerChain`; the statistics (mean, standard deviation, 16/50/84 % quantiles) after a burn-in chosen there, the
+acceptance fraction (moves that changed the position), and a trace, histogram or mean-log-posterior plot drawn by
+`PlotWidget`.
+
+**Facade additions** (`api/front/`, each with its case in `front_test.cpp`): `Option::unit`, `when`, `needs`,
+`instead`, `lowOpen`; `SamplerChain` and `ReadSamplerChain`.
 
 **Tests** `tests/gui/gui_shell_test.cpp` (label `gui`): the theme's palettes and the View menu choice; the tool bar's
 actions and their state; the status bar's file, modified mark and validity, the dock hidden on a valid project and

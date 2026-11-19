@@ -379,6 +379,19 @@ void SetSamplerPriors(Project &project, const std::vector<SamplerPrior> &rows);
 
 // ---- <thm>: the engine's tables of its keys and its edits of the section's lines (the THM tab) ----
 
+/// The sampler's chain as the last mcmc run wrote it (samples.mcmc in the project's output directory), read by the
+/// engine's one reader of that file (ReadSampleFile, api/include/AZUREAPISampler.h).  Every array is row-major:
+/// chain [step][walker][parameter] in the order of the run's free parameters and in its basis (rwa: the fit vector;
+/// physical: the project's parameters); the log densities [step][walker].
+struct SamplerChain {
+  std::string file;  ///< the file read
+  int steps = 0, walkers = 0, parameters = 0;
+  std::vector<double> chain;
+  std::vector<double> logProbability, logLikelihood, logPrior;
+};
+/// False with `why` when the project's output directory has no samples.mcmc or the file cannot be read.
+bool ReadSamplerChain(const Project &project, SamplerChain &out, std::string &why);
+
 /// The keys of <thm> as two record kinds in the schema's shape (ThmOptionKeys, ThmExperimentKeys, the tables the
 /// engine's parser reads): kind "<thm>" (the global options) and kind "experiment" (the keys of an experiment[<name>]
 /// line).  FieldInfo::appliesWhen names the key that must be given for one to apply ("vertexModel=ff" ...).
