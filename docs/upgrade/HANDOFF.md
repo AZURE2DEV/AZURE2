@@ -24,7 +24,7 @@ no longer loops in the tick code (found by a |U| = 1 map: an endless loop to bad
 `PhysicsArgument::exampleText`; `Block`'s series `T_abs`.  No engine number moves.
 
 **Run** (`work/b-u8-physqt`, `work/build_gui.sh`): build 0 warnings; `api_front` passed (physqt cases included);
-`ctest -L gui` 5 of 5 (`gui_physqt` new, 40 checks; shown to bite: l + 1 passed to `ChannelFunctions` fails the
+`ctest -L gui` 5 of 5 (`gui_physqt` new, 33 checks; shown to bite: l + 1 passed to `ChannelFunctions` fails the
 channels check); `repo_consistency` passed; `sphinx-build -W` clean; `ctest -LE slow -j4` 399 of 401: `rmfit_enginepin`
 (as on the base) and `pyazr_ui_smoke` (headless Chrome of this machine, as in the shell agent's entry) fail, six
 rmfit tests skipped.  Screenshots light and dark: `work/qt-shots/u8-physqt/`.
