@@ -581,7 +581,9 @@ tab's old `calculateChannels` (then the copy is deleted).  The tab's edits per a
 
 The "T" toggle becomes a tool button with a text-cursor icon and the tool tip "Edit this field as text (its
 grammar: ...)"; the Segments help is one short line; an empty section shows its hint and no empty form frame; a
-schema title "J^pi" is shown as J with a superscript pi.  The sections not looked at in round 7 (`<modelData>`,
+schema title "J^pi" is shown as J with a superscript pi.  A spin (`J`, `s`, a datum's J^pi) is a spin box of halves,
+with a +/- toggle for a spin with parity; a pair (a channel radius's, a potential's, a gamma decay's final state) a
+drop-down of the project's pairs, still editable.  The sections not looked at in round 7 (`<modelData>`,
 `<potentials>`, `<channelRadii>`, `<gammaDecays>`, `<isospin>`) are grabbed and read one by one.
 
 ### 15.9 Tests
