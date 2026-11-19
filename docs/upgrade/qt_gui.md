@@ -222,7 +222,7 @@ export (rows = points of the files).
 
 Code: `api/front/` (facade and test), `src/ProgramMain.cpp`, `include/ProgramObserver.h`, `gui/`.
 
-## 11. The Levels and Channels tab and the Particle Pairs tab as easy as dev's, and quicker (U7, agent levels)
+## 12. The Levels and Channels tab and the Particle Pairs tab as easy as dev's, and quicker (U7, agent levels)
 
 The PI (2026-11-19): "the level and channels tab should be easy as in the old version, with some QoL improvements
 for easier navigations, removal, or addition on the go", and "too many things must be inserted by hand and are not

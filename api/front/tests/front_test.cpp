@@ -396,6 +396,7 @@ int main(int argc, char **argv) {
     }
     const bool twice = !front::ReadSamplerChain(p, chain, why) && why.find("twice") != std::string::npos;
     Check(twice, "chain: a row written twice refused (" + why + ")");
+  }
 
   // (h) the Levels and Pairs tabs' facade (qt_gui.md section 11): columns by name, a channel at its level energy, a
   //     channel's radius from <channelRadii>, what names a pair
