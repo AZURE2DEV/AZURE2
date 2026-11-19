@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pyazr.physics: every row of the binding's physics table (api/src/pybind_physics.cpp) against a reference.
+"""pyazr.physics: every row of the binding's physics table (api/physics_table/src/PhysicsTable.cpp) against a reference.
 
 Each row is tested by a ``row_test("<name>", ...)`` (tests/consistency check 41 requires one per row):
 

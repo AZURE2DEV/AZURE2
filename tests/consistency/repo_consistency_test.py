@@ -1178,9 +1178,10 @@ for _n, _k, _o, _lo, _hi in _options:
                         f"'{_doc_options.get(_n, '')}', the table's is '{_o}' (check 43)")
 
 # 41. Every physics function has a test (docs/upgrade/pyazr3.md section 2.7): each row of the binding's physics table
-#     (api/src/pybind_physics.cpp, `t.push_back({"<name>", ...`) is named by a test as `row_test("<name>"` in a file
-#     under tests/; a row without one, or a row_test of a name the table does not have, fails.
-_rows = re.findall(r'^\s*t\.push_back\(\{"(\w+)"', read("api/src/pybind_physics.cpp"), re.M)
+#     (api/physics_table/src/PhysicsTable.cpp, `t.push_back({"<name>", ...`; plain C++, read by the binding and the
+#     facade) is named by a test as `row_test("<name>"` in a file under tests/; a row without one, or a row_test of a
+#     name the table does not have, fails.
+_rows = re.findall(r'^\s*t\.push_back\(\{"(\w+)"', read("api/physics_table/src/PhysicsTable.cpp"), re.M)
 _row_tests = set()
 for _dir, _, _files in os.walk(os.path.join(ROOT, "tests")):
     for _name in _files:
@@ -1188,13 +1189,13 @@ for _dir, _, _files in os.walk(os.path.join(ROOT, "tests")):
             with open(os.path.join(_dir, _name), errors="replace") as _fh:
                 _row_tests |= set(re.findall(r'\brow_test\("(\w+)"', _fh.read()))
 if not _rows:
-    problems.append("api/src/pybind_physics.cpp: no row of the physics table found (check 41: the pattern changed?)")
+    problems.append("api/physics_table/src/PhysicsTable.cpp: no row of the physics table found (check 41: the pattern changed?)")
 for _r in _rows:
     if _r not in _row_tests:
-        problems.append(f"api/src/pybind_physics.cpp: the physics function {_r} has no test (check 41): add "
+        problems.append(f"api/physics_table/src/PhysicsTable.cpp: the physics function {_r} has no test (check 41): add "
                         f"row_test(\"{_r}\", ...) to tests/pyazr/physics_table_test.py")
 for _r in sorted(_row_tests - set(_rows)):
-    problems.append(f"tests: row_test(\"{_r}\") names no row of api/src/pybind_physics.cpp (check 41)")
+    problems.append(f"tests: row_test(\"{_r}\") names no row of api/physics_table/src/PhysicsTable.cpp (check 41)")
 
 # 42. The pyazr command line is one table (pyazr/cli.py, COMMANDS; docs/upgrade/pyazr3.md section 2.8): every row has
 #     its case in tests/pyazr/cli_test.py (JSON_CASES, keyed by the command's name) and no case is left without a row;

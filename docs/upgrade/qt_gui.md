@@ -374,3 +374,12 @@ are marked **open**.
 | Undo | none | Ctrl+Z / Ctrl+Shift+Z over both tabs |
 | Pairs: the pair type as a column | hidden | shown in words |
 | Levels: the Insert/Del/Ctrl+D keys, the context menus | none | as 11.2, 11.3 |
+## 13. The Physics tab's facade (2026-11-19)
+
+The calls a Physics tab needs are in `Engine.h`, section "Physics": the rows of the physics table and one evaluated
+(`PhysicsFunctions`, `EvaluatePhysics`: the rows `pyazr.physics` reads, now plain C++ in `api/physics_table/`), and a
+`PhysicsSession` of a saved project (pairs, J^pi groups, the levels' physical energies and widths, the session's
+channel functions, one J^pi group's U, T, phase shifts, |A| and det A^-1 on an E_x grid, the THM vertex, line shape
+and distortion), each answer a `PhysicsCurves` of series over one axis.  The design, the engine function behind
+every curve, the shapes and units, and which calls are slow: `docs/upgrade/physics_tab.md` (section 7 is the
+interface).  Test: `api_front`, section (f).

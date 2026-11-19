@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The session's diagnostic calls described as rows (pyazr.session_functions, Session.describe()["functions"]).
 
-  (a) Session.describe()["functions"] has a row for channel_functions and the five THM calls, each with the shape of
-      a physics row (arguments with kind and unit, returns with unit, path and shape, the axis an argument);
-  (b) the rows describe the answers as they are: on T1 (channel_functions), on two copies of tests/18O_p_a_thm whose
+  (a) Session.describe()["functions"] has a row for channel_functions, jpi_block and the five THM calls, each with the
+      shape of a physics row (arguments with kind and unit, returns with unit, path and shape, the axis an argument);
+  (b) the rows describe the answers as they are: on T1 (channel_functions, jpi_block of two J groups), on two copies of tests/18O_p_a_thm whose
       THM data sets form an experiment with a Coulomb distortion factor and the line shape, or with a coherent
       background and a window of spectator directions, and on
       examples/o18_lacognata2010 (the DW vertex, with a window of spectator directions), every key of every answer is a
@@ -87,9 +87,11 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     with pyazr.Session(T1) as s:
         described = s.describe()["functions"]
-        answers = {"channel_functions": [s.channel_functions(1, ENERGIES, l=1)]}
-check("six rows", sorted(described) == sorted(["channel_functions", "thm_experiments", "thm_background",
-                                                 "thm_lineshape", "thm_vertex", "thm_distortion"]), str(sorted(described)))
+        answers = {"channel_functions": [s.channel_functions(1, ENERGIES, l=1)],
+                   "jpi_block": [s.jpi_block(1, ENERGIES + 1.944), s.jpi_block(3, ENERGIES + 1.944)]}
+check("seven rows", sorted(described) == sorted(["channel_functions", "jpi_block", "thm_experiments", "thm_background",
+                                                   "thm_lineshape", "thm_vertex", "thm_distortion"]),
+      str(sorted(described)))
 for name, row in described.items():
     args = [a["name"] for a in row["arguments"]]
     ok = (row["axis"] in args or row["axis"] is None) and all("unit" in a and "kind" in a for a in row["arguments"]) \

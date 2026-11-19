@@ -71,6 +71,39 @@ class SessionPhysics:
         out["e_cm"] = energies.copy()
         return out
 
+    @engine_call
+    def jpi_block(self, jgroup, e_x, params=None):
+        """One J^pi group of this session on excitation energies: channel functions, U, T, phase shifts, |A|, det A^-1.
+
+        Parameters
+        ----------
+        jgroup : the J group, 1-based as ``parameters.out`` numbers them (``describe()["levels"]`` gives each level's).
+        e_x : excitation energies E_x of the compound nucleus (MeV), a number or a 1-d array.
+        params : the fit vector x (default ``parameters.x0``); the fixed values are the session's.
+
+        Returns
+        -------
+        dict: ``jgroup``, ``J``, ``pi``, ``parametrization`` (standard, brune or park), ``E_x`` (MeV); ``levels`` (per
+        level in the R-matrix: ``level``, ``E_level`` MeV, the energy of ``params`` in the session's parametrization);
+        ``channels`` (per channel: ``channel``, ``pair``, ``radiation`` P, E or M, ``l``, ``s``, ``radius`` fm,
+        ``threshold`` MeV of E_x, ``boundary`` B_c, and over E_x: ``E_c`` MeV the pair's c.m. energy, ``P``, ``S``,
+        ``L_re`` = S - B_c and ``L_im`` = P as the level matrix reads them; a photon channel's are 0);
+        ``elements`` (per pair c <= c' of particle channels: ``U_re``, ``U_im``, ``U_abs``, ``T_re``, ``T_im`` over
+        E_x, NaN where either channel is closed); ``phase_shifts`` (per particle channel: ``delta`` in deg, the nuclear
+        phase shift as the engine's ``phase_shift`` data kind forms it, and ``eta`` = |U_cc|); ``level_pairs`` (per
+        pair of levels l <= m: ``A_abs`` = |A_lm| in MeV^-1); ``det_re``, ``det_im`` (det A^-1, MeV^n) and
+        ``log10_abs_det``, least near each resonance; ``singular`` (bool over E_x).
+
+        The arithmetic is the engine's (``physics/CollisionMatrix.h`` on the level route, the session's channel
+        functions); a Coulomb table, when the session uses one, interpolates P and S to about 1e-7.  Raises
+        ``ValueError`` for a J group that is not there, :class:`pyazr.ParameterVectorError` for a vector of another
+        length.
+        """
+        x = session_checks.fit_vector(self.parameters.x0 if params is None else params, len(self.parameters.x0),
+                                      "jpi_block")
+        energies = np.atleast_1d(np.asarray(e_x, float)).ravel()
+        return self._engine.jpi_block(self._all_rwa(x), int(jgroup), energies)
+
     # -- dimensionless widths -------------------------------------------------
 
     @property

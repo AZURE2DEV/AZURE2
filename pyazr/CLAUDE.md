@@ -45,7 +45,9 @@ public names are a contract.
   A session writes into the project's own output directory (the second line of `<config>`), which the project names.
 - `pyazr.physics.<name>`: the engine's physics functions on arrays (`help()` gives arguments, units, domains);
   `pyazr.kinds()["physics"]` the same rows as data; `errors="mask"` gives NaN and a status per element instead of
-  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`.
+  `DomainError`.  The per-session ones (the session's Coulomb table or potential) are `Session(...).channel_functions`;
+  one J^pi group's U, T, phase shifts, |A| and det A^-1 on an E_x grid is `Session(...).jpi_block`
+  (`docs/upgrade/physics_tab.md`).
 - `pyazr.physics.collision_matrix(level_energies, reduced_widths, energy, penetrability=, shift=, boundary=,
   hard_sphere_phase=, coulomb_phase=, parametrization=, shift_at_levels=, shift_derivative_at_levels_per_MeV=,
   park_norms=, photon_channels=, use_rmc=)`: the level matrix A and the collision and T-matrices of one J^pi block
@@ -61,7 +63,8 @@ public names are a contract.
 
 1. The library computes it (`physics/`, `experiment/`, `stopping/`); if it does not, a thin free function there with
    its unit test (as `physics/include/azure2/physics/Widths.h`).  New physics is a design note first, not a row.
-2. One row in `BuildTable()` of `api/src/pybind_physics.cpp`: name, summary, doc, library function, axis, arguments
+2. One row in `BuildTable()` of `api/physics_table/src/PhysicsTable.cpp` (plain C++; the binding `api/src/pybind_physics.cpp`
+   and the Qt GUI's facade `api/front` read it): name, summary, doc, library function, axis, arguments
    (`Real`/`Integer`/`Flag`/`Choice` with unit and domain: `.gt`, `.ge`, `.lt`, `.le`, `.otherwise` for a default),
    returns (name, unit, doc), and an adapter that converts the arguments and calls the library (no formula there);
    the adapter returns 0, `kJointly` (-2) for arguments outside the domain together, `kFailed` (-1), or the 1-based

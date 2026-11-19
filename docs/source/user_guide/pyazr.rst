@@ -1041,6 +1041,28 @@ There is still memory. A session holds its compound nucleus and data — several
 one — so in a loop over model variants use the context manager (or ``close()``) rather than leaving it to the garbage
 collector, which may otherwise hold two models at once.
 
+One J^π group on an energy grid
+-------------------------------
+
+``azr.jpi_block(jgroup, e_x, params=None)`` (pyazr 3.0.0.dev8) gives what lies between a group's level parameters and
+its observables at the excitation energies :math:`E_x` (MeV) of the compound nucleus: per channel its c.m. energy
+:math:`E_c = E_x - E_\text{threshold}`, :math:`P_c`, :math:`S_c` and :math:`L_c - B_c` as the level matrix reads
+them; per pair :math:`c \le c'` of open particle channels the collision matrix :math:`U_{cc'}` and
+:math:`T_{cc'}`; per particle channel the nuclear phase shift :math:`\delta_c` (degrees, formed as the engine's
+``phase_shift`` data kind forms it, so it equals that data kind's model value) and the inelasticity
+:math:`\eta_c = |U_{cc}|`; :math:`|A_{\lambda\mu}|` per pair of levels; and :math:`\det A^{-1}` (MeV\ :sup:`n`),
+whose modulus is least near each resonance.  ``jgroup`` counts from 1 as ``parameters.out`` numbers the groups.
+The arithmetic is the engine's (``physics/CollisionMatrix.h`` on the level route; the session's channel functions);
+a photon channel enters :math:`A` only with R-matrix capture and has no :math:`U` element here.  The keys of the
+answer are described in ``Session.describe()["functions"]["jpi_block"]``, which the web page draws.
+
+.. code-block:: python
+
+   b = azr.jpi_block(3, np.linspace(2.0, 3.0, 400))       # T1: the 1/2+ group
+   d = b["phase_shifts"][0]["delta"]                       # deg, p + 12C, l = 0
+   u = b["elements"][0]; argand = (u["U_re"], u["U_im"])   # an Argand plot of U_11
+   E_min = b["E_x"][np.argmin(b["log10_abs_det"])]          # near the 2.365 MeV level
+
 Dimensionless widths
 --------------------
 

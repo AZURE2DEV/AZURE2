@@ -174,7 +174,7 @@ three adjoint headers. The channel functions reach the engine through
 ``physics/src/transfer``.
 
 The binding exposes the functions to Python with array arguments through one
-table, ``BuildTable()`` in ``api/src/pybind_physics.cpp`` (``pyazr.physics``;
+table, ``BuildTable()`` in ``api/physics_table/src/PhysicsTable.cpp`` (``pyazr.physics``;
 :doc:`extending`, "A physics function of the binding").
 
 The ``System`` is built once at set-up and held by the ``CompoundSystem``, which is constant after it.

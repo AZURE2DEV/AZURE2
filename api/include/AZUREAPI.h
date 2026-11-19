@@ -17,6 +17,7 @@
 #include <vector>
 #include "ThmExperiment.h"
 #include "ThmReports.h"
+#include "JpiBlockReport.h"
 
 class Config;
 class WorkingCopy;
@@ -295,6 +296,13 @@ class AZUREAPI {
    * (docs/upgrade/data_model.md section 10).
    */
   vector_r ObservedLevelRowsAllRWA(const vector_r &p);
+  /*!
+   * One J^pi block (1-based `jgroup`) at every parameter value of `p` (the params_all_rwa() layout) on the excitation
+   * energies `excitation` (E_x, MeV): its channel functions, A, U, T and det A^-1 (JpiBlockReport.h; the levels filled
+   * as ObservedLevelRowsAllRWA fills them, the arithmetic physics/CollisionMatrix.h's).  std::invalid_argument for a
+   * vector of another length or a group that is not there.  AZUREAPIBlockMatrices.cpp.
+   */
+  JpiBlockReport JpiBlockAllRWA(const vector_r &p, int jgroup, const vector_r &excitation);
 
   /*!
    * Data covariances ("covariance <file>" segments): forget the model frozen for their

@@ -2,11 +2,12 @@
 # setup program, gui/) includes.  It links the program's run (AZURE2Program: RunProgram, --validate's and --convert's
 # functions), so that a run from a front end is the program's run.
 add_library(azure2_front STATIC src/FrontProject.cpp src/FrontRun.cpp src/FrontSchema.cpp src/FrontOutputs.cpp
-            src/FrontParameters.cpp src/FrontThm.cpp src/FrontLevels.cpp)
+            src/FrontParameters.cpp src/FrontThm.cpp src/FrontLevels.cpp src/FrontPhysics.cpp)
 target_include_directories(azure2_front PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # PRIVATE: the engine's include directories do not reach a front end; only Engine.h does.
 # AZUREAPI: the parameter vector of a session (ReadParameters, as pyazr's Session sets it up).
-target_link_libraries(azure2_front PRIVATE AZURE2Program AZUREAPI)
+# azure2_physics_table: the rows of the physics table (PhysicsFunctions, EvaluatePhysics), the binding's too.
+target_link_libraries(azure2_front PRIVATE AZURE2Program AZUREAPI azure2_physics_table)
 target_include_directories(azure2_front PRIVATE ${CMAKE_SOURCE_DIR}/api/include)
 set_target_properties(azure2_front PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

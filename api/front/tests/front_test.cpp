@@ -6,13 +6,18 @@
 //  (c) an old project refused on opening and converted by the converter of --convert;
 //  (d) a run of `calculate` through the facade writes the same output files, byte for byte, as the program on the same
 //      project, and returns the chi^2 the program prints; T1 and 13N;
-//  (e) a fit stopped through the facade ends at its best point with exit 0 and fitStatus.out saying "stopped".
+//  (e) a fit stopped through the facade ends at its best point with exit 0 and fitStatus.out saying "stopped";
+//  (f) physics: the rows of the physics table and one evaluated; a session of T1: poles, channel functions against
+//      the row, the 1/2+ block's phase shift against the program's extrapolation, |U| = 1, |det A^-1| least at the
+//      level; T2's THM vertex.
 // Each check prints PASS or FAIL; exit 1 on a failure.
 #include "azure2/front/Engine.h"
 
 #include <map>
+#include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -32,6 +37,12 @@ int failures = 0;
 void Check(bool ok, const std::string &what) {
   std::cout << (ok ? "PASS " : "FAIL ") << what << std::endl;
   if (!ok) failures++;
+}
+
+std::string Sci(double x) {
+  char b[32];
+  std::snprintf(b, sizeof(b), "%.2e", x);
+  return b;
 }
 
 std::string Bytes(const fs::path &p) {
@@ -468,6 +479,181 @@ int main(int argc, char **argv) {
     for (const std::string &u : uses1) list += " " + u;
     Check(!uses1.empty() && uses9.empty() && uses1[0].rfind("data: ", 0) == 0,
           "T1: the data sets that name pair 1:" + list);
+  }
+
+  // (f) physics (docs/upgrade/physics_tab.md section 7)
+  {
+    // The rows: the physics table pyazr.physics reads (26 on 2026-11-19), every row with its axis among its arguments.
+    const std::vector<front::PhysicsFunction> rows = front::PhysicsFunctions();
+    bool axes = !rows.empty(), penetrability = false;
+    for (const front::PhysicsFunction &f : rows) {
+      bool found = false;
+      for (const front::PhysicsArgument &a : f.arguments) found = found || (a.name == f.axis && a.hasSweep);
+      axes = axes && found;
+      penetrability = penetrability || f.name == "penetrability";
+    }
+    Check(rows.size() >= 26 && axes && penetrability,
+          std::to_string(rows.size()) + " physics rows, each with its axis an argument with a sweep");
+    std::string why;
+    front::PhysicsValues v;
+    // A broadcast column, a value outside its domain (e_cm = -1: argument 7) and its words.
+    const bool evaluated = front::EvaluatePhysics(
+        "penetrability", {{0}, {1}, {6}, {1.00782503}, {12.0}, {5.0}, {0.5, 1.0, -1.0}, {0}}, v, why);
+    Check(evaluated && v.status.size() == 3 && v.status[0] == 0 && v.status[2] == 7 && std::isnan(v.values[0][2]) &&
+              v.values[0][1] > v.values[0][0],
+          "penetrability on three energies: computed, rising, and e_cm = -1 refused as argument 7 (" + why + ")");
+    Check(front::PhysicsStatusText("penetrability", 7).find("e_cm") != std::string::npos,
+          "the status words name e_cm: " + front::PhysicsStatusText("penetrability", 7));
+    why.clear();
+    const bool unknownRow = !front::EvaluatePhysics("no_such_row", {}, v, why);
+    Check(unknownRow && !why.empty(), "an unknown row is refused: " + why);
+
+    // The stopping table (SRIM-2013): protons in Ta2O5.  total = electronic + nuclear, and two rows invert each
+    // other: the areal density between E_in and energy_after(E_in, N) is N again.
+    const std::vector<front::PhysicsFunction> stopping = front::StoppingFunctions();
+    Check(stopping.size() >= 5 && stopping[0].arguments[0].kind == "text" && !front::StoppingCitation().empty(),
+          std::to_string(stopping.size()) + " stopping rows, the formula first, SRIM's citation");
+    why.clear();
+    const bool sp = front::EvaluateStopping("stopping_power", "Ta2O5", {{0}, {1}, {1}, {1.00782503}, {0.3, 1.0}}, v,
+                                            why);
+    Check(sp && v.status == std::vector<int>({0, 0}) &&
+              std::fabs(v.values[2][1] - v.values[0][1] - v.values[1][1]) <= 1e-12 * v.values[2][1] &&
+              v.values[2][0] > v.values[2][1],
+          "stopping_power of p in Ta2O5: total = electronic + nuclear, falling from 0.3 to 1 MeV (" + why + ")");
+    front::PhysicsValues after, between;
+    front::EvaluateStopping("energy_after", "Ta2O5", {{0}, {1}, {1}, {1.00782503}, {1.0}, {1e18}}, after, why);
+    front::EvaluateStopping("areal_density_between", "Ta2O5", {{0}, {1}, {1}, {1.00782503}, {1.0}, after.values[0]},
+                            between, why);
+    Check(after.status[0] == 0 && between.status[0] == 0 && std::fabs(between.values[0][0] / 1e18 - 1.0) < 1e-6,
+          "energy_after and areal_density_between invert each other to " +
+              Sci(between.values.empty() ? 1.0 : std::fabs(between.values[0][0] / 1e18 - 1.0)));
+    why.clear();
+    const bool badFormula = !front::EvaluateStopping("range", "Xq7", {{0}, {1}, {1}, {1.0}, {1.0}}, v, why);
+    Check(badFormula && !why.empty(), "a formula stopping/ refuses is refused: " + why);
+
+    // A session of T1 (Brune's basis): pairs, groups, poles.
+    const fs::path t1 = CopyProject(source / "tests/upgrade/T1/T1.azr", fs::path("front_test_work") / "physics");
+    front::PhysicsSession s;
+    why.clear();
+    const bool opened = front::PhysicsSession::Open(t1.string(), "", false, s, why);
+    Check(opened && s.IsOpen(), "T1: a physics session (" + why + ")");
+    Check(s.Parametrization() == "brune", "T1: parametrization " + s.Parametrization());
+    const std::vector<front::PhysicsPair> pairs = s.Pairs();
+    Check(pairs.size() >= 2 && pairs[0].kind == "particle" && pairs[0].z1 * pairs[0].z2 == 6,
+          "T1: pair 1 is p + 12C");
+    int group = 0;
+    for (const front::PhysicsGroup &g : s.Groups())
+      if (g.J == 0.5 && g.parity == 1) group = g.jgroup;
+    Check(group > 0, "T1: the J group 1/2+ is " + std::to_string(group));
+    // The poles: the 1/2+ level at 2.365 MeV with Gamma_p = 33000 eV (T1.azr's <levels>), back from the engine's
+    // transformation (Brune's basis: the numbers given are the observed ones).
+    bool pole = false;
+    for (const front::PhysicsPole &p : s.Poles())
+      if (p.jgroup == group && std::fabs(p.energy - 2.365) < 1e-9 && !p.widths.empty())
+        pole = std::fabs(p.widths[0].value - 33000.0) < 1e-6 && p.widths[0].kind == "width" &&
+               std::fabs(p.widths[0].width - 0.033) < 1e-12 && p.totalWidth >= 0.033;
+    Check(pole, "T1: the pole 1/2+ at E_x = 2.365 MeV with Gamma_p = 33000 eV");
+
+    // The session's channel functions against the session-free row of the same pair (the row computes F and G
+    // exactly; a session with a Coulomb table interpolates them to about 1e-7).
+    front::PhysicsCurves cf;
+    const std::vector<double> energies = {0.3, 0.6, 1.2};
+    why.clear();
+    const bool functions = s.ChannelFunctions(1, 0, 0.0, -1, energies, cf, why);
+    Check(functions && cf.Find("P") && cf.Find("open"), "T1: channel functions of pair 1, l = 0 (" + why + ")");
+    double radius = 0;
+    for (const front::PhysicsGroup &g : s.Groups())
+      for (const front::PhysicsChannel &c : g.channels)
+        if (c.pair == 1 && c.l == 0) radius = c.radius;
+    front::EvaluatePhysics("penetrability",
+                           {{0}, {(double)pairs[0].z1}, {(double)pairs[0].z2}, {pairs[0].m1}, {pairs[0].m2}, {radius},
+                            energies, {0}},
+                           v, why);
+    double worst = 0;
+    for (std::size_t i = 0; i < energies.size() && cf.Find("P"); i++)
+      worst = std::max(worst, std::fabs(cf.Find("P")->values[i] / v.values[0][i] - 1.0));
+    Check(cf.Find("P") && worst < 1e-6, "T1: session P = the row's P to " + Sci(worst));
+
+    // The 1/2+ block on the E_x of T1's extrapolation x3 (12C(p,p) phase shift, J = 1/2, l = 0): the facade's delta
+    // against the program's output of `extrapolate` (AZUREOut, read by ReadCurves), and |U_pp| = 1 (one open particle
+    // channel: the collision matrix is unitary there).
+    Collect observer;
+    front::RunRequest request;
+    request.command = "extrapolate";
+    request.project = t1.string();
+    request.threads = 2;
+    const front::RunResult run = front::Run(request, observer, nullptr);
+    front::Project project;
+    front::Project::Open(t1.string(), project, why);
+    const front::Curves curves = front::ReadCurves(project);
+    const front::Curve *x3 = nullptr;
+    for (const front::Curve &c : curves.curves)
+      if (c.record == "x3") x3 = &c;
+    Check(run.exitCode == 0 && x3 && x3->points.size() > 10, "T1: extrapolate wrote the phase shifts of x3");
+    if (x3) {
+      // E_x of each point from the record's lab energies (the file prints 7 digits; dDelta/dE reaches 5000 deg/MeV at
+      // the level): the row lab_to_cm_energy, the engine's conversion of a lab point, plus the pair's threshold.
+      std::vector<double> lab;
+      for (const front::Record &r : project.Records("extrapolations"))
+        if (r.name == "x3") {
+          std::istringstream words(r.Value("energies"));
+          std::string w;
+          while (words >> w)
+            if (w != "list" && w.find_first_not_of("0123456789.eE+-") == std::string::npos) lab.push_back(std::stod(w));
+        }
+      front::EvaluatePhysics("lab_to_cm_energy", {{pairs[0].m1}, {pairs[0].m2}, lab, {0}}, v, why);
+      std::vector<double> ex;
+      for (std::size_t i = 0; i < lab.size() && v.values.size() == 1; i++)
+        ex.push_back(v.values[0][i] + pairs[0].separation + pairs[0].excitation);
+      Check(ex.size() == x3->points.size(), "T1: " + std::to_string(ex.size()) + " energies of x3");
+      front::PhysicsCurves block;
+      why.clear();
+      const bool blocked = s.Block(group, ex, block, why);
+      Check(blocked, "T1: the 1/2+ block on " + std::to_string(ex.size()) + " energies (" + why + ")");
+      const front::PhysicsSeries *delta = block.Find("delta", {{"channel", 1}, {"channel_out", 1}});
+      const front::PhysicsSeries *eta = block.Find("eta", {{"channel", 1}, {"channel_out", 1}});
+      double dmax = 0, umax = 0;
+      for (std::size_t i = 0; delta && eta && i < ex.size() && i < x3->points.size(); i++) {
+        // the file's 7 significant digits
+        dmax = std::max(dmax, std::fabs(delta->values[i] - x3->points[i].model) / std::max(1.0, std::fabs(x3->points[i].model)));
+        umax = std::max(umax, std::fabs(eta->values[i] - 1.0));
+      }
+      Check(delta && dmax < 1e-6, "T1: delta of the block = the program's phase shift of x3 to " +
+                                      Sci(dmax) + " relative");
+      Check(eta && umax < 1e-12, "T1: |U_pp| = 1 to " + Sci(umax));
+      // log10 |det A^-1| on a grid across the 2.365 MeV level (Gamma = 33 keV): its minimum lies within Gamma.
+      std::vector<double> grid;
+      for (int i = 0; i <= 400; i++) grid.push_back(2.2 + 0.3 * i / 400.0);
+      s.Block(group, grid, block, why);
+      const front::PhysicsSeries *det = block.Find("log10_abs_det");
+      std::size_t at = 0;
+      for (std::size_t i = 0; det && i < grid.size(); i++)
+        if (det->values[i] < det->values[at]) at = i;
+      Check(det && std::fabs(grid[at] - 2.365) < 0.033,
+            "T1: |det A^-1| is least at E_x = " + std::to_string(grid[at]) + " MeV, within Gamma of 2.365");
+    }
+    why.clear();
+    const bool noGroup = !s.Block(99, {2.0}, cf, why);
+    Check(noGroup && !why.empty(), "T1: a J group that is not there is refused: " + why);
+
+    // THM: T2's experiment LC09, its vertex at three energies (pyazr's Session.thm_vertex reads the same table).
+    const fs::path t2 = CopyProject(source / "tests/upgrade/T2/T2.azr", fs::path("front_test_work") / "physics_t2");
+    front::PhysicsSession s2;
+    why.clear();
+    const bool opened2 = front::PhysicsSession::Open(t2.string(), "", false, s2, why);
+    Check(opened2, "T2: a physics session (" + why + ")");
+    const std::vector<std::string> experiments = s2.ThmExperiments();
+    Check(experiments.size() == 1 && experiments[0] == "LC09", "T2: the THM experiment LC09");
+    front::PhysicsCurves vertex;
+    why.clear();
+    bool positive = s2.ThmVertex("LC09", {0.3, 0.5, 0.8}, vertex, why) && vertex.Find("M2");
+    for (const front::PhysicsSeries &series : vertex.series)
+      if (series.name == "M2")
+        for (double x : series.values) positive = positive && x > 0 && std::isfinite(x);
+    Check(positive, "T2: <|M_l|^2> of LC09 finite and positive (" + why + ")");
+    why.clear();
+    const bool noExperiment = !s2.ThmVertex("none", {0.5}, vertex, why);
+    Check(noExperiment && !why.empty(), "T2: an unknown experiment refused: " + why);
   }
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;

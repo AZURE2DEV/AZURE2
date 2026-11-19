@@ -468,6 +468,218 @@ std::vector<std::string> PairUses(const Project &project, int pairKey);
 /// The engine's version string ("2.1.0").
 std::string Version();
 
+// ---- Physics (the Physics tab; docs/upgrade/physics_tab.md section 7 is this interface) ----
+//
+// Two kinds of call.  Session-free: the rows of the physics table (api/physics_table, the rows pyazr.physics and the
+// web page's Physics tab read) and one row evaluated element-wise.  Per project: a PhysicsSession, the engine's
+// session of a saved project at the start values or a parameter file (as pyazr's Session(file, parameter_file=)),
+// whose calls give the session's channel functions, a J^pi block's matrices on an energy grid, the levels' physical
+// energies and widths, and the THM diagnostics.  Units: energies MeV, radii fm, angles deg, phases rad unless a field
+// says deg.  Not reentrant on one PhysicsSession (a caller runs its calls in one thread at a time); two sessions are
+// independent.
+
+/// One argument of a physics function (its row: api/physics_table/include/azure2/physics_table/PhysicsTable.h).
+struct PhysicsArgument {
+  std::string name, unit, doc;
+  std::string kind;    ///< "real", "integer", "flag" (0 or 1), "choice" (the index of one of `choices`)
+  std::string domain;  ///< in words: "finite > 0", "integer in [0, 10000]", ...
+  double lower = 0, upper = 0;        ///< the domain's ends (-inf / +inf: unbounded)
+  bool lowerOpen = false, upperOpen = false;
+  std::vector<std::string> choices;   ///< "choice": the names, in index order
+  bool hasDefault = false;
+  double defaultValue = 0;            ///< a choice: the index; a flag: 0 or 1
+  bool hasExample = false;
+  double example = 0;                 ///< a typical value: a form's start value where there is no default
+  bool hasSweep = false;              ///< the argument may be a plot's axis; the range of a first plot over it:
+  double sweepLower = 0, sweepUpper = 0;
+  bool sweepLog = false;              ///< log spacing (else linear)
+};
+struct PhysicsReturn {
+  std::string name, unit, doc;
+};
+/// One function of the physics table (pyazr.kinds()["physics"] gives the same rows).
+struct PhysicsFunction {
+  std::string name, summary, doc;
+  std::string library;  ///< the library function it calls (header: function)
+  std::string axis;     ///< the argument a plot puts on its horizontal axis
+  std::string group;    ///< the table's section ("kinematics", "Coulomb functions", ...)
+  std::vector<PhysicsArgument> arguments;
+  std::vector<PhysicsReturn> returns;
+};
+/// The rows, in the table's order.  Fast (no calculation).
+std::vector<PhysicsFunction> PhysicsFunctions();
+/// What one row gives on n elements: values[k][i] is return k at element i (NaN where status[i] != 0).  status[i]:
+/// 0 computed; k > 0 argument k (1-based) outside its domain; -2 the arguments together outside the domain; -1 not
+/// converged or failed; a row's own positive code where its doc says so.
+struct PhysicsValues {
+  std::vector<std::vector<double>> values;
+  std::vector<int> status;
+};
+/// Row `name` on the arguments: one column per argument in the row's order (a choice as its index, a flag as 0 or 1),
+/// each of length n or 1 (a length-1 column is repeated: broadcasting).  False with `why` for an unknown name or
+/// columns of other lengths; a value outside a domain is a status, not a refusal.  The row's arithmetic is the one
+/// pyazr.physics.<name> runs, bit for bit.  About 1-50 microseconds per element (coulomb_waves, the THM form factor
+/// about 1 ms).
+bool EvaluatePhysics(const std::string &name, const std::vector<std::vector<double>> &arguments, PhysicsValues &out,
+                     std::string &why);
+/// The words of a status of row `name` ("e_cm outside its domain (finite > 0)", "not converged or failed", ...).
+std::string PhysicsStatusText(const std::string &name, int status);
+
+/// The stopping table (stopping/: SRIM-2013 stopping, energy loss, range and straggling; the rows of
+/// pyazr.kinds()["stopping"] and the web page's stopping functions): rows of the physics table's shape whose first
+/// argument is the material's formula (kind "text", one per call), then the numeric ones (phase, compound_correction,
+/// z1, mass_u, then the row's own).  Energies lab MeV of the projectile; stopping in eV/(1e15 atoms/cm^2) per atom of
+/// the material; areal densities atoms/cm^2; straggling MeV.  Every use cites SRIM (StoppingCitation()).
+std::vector<PhysicsFunction> StoppingFunctions();
+std::string StoppingCitation();
+/// Row `name` for the material `formula`: one column per NUMERIC argument (the arguments after the formula), each of
+/// length n or 1; as EvaluatePhysics (status -2 where a layer is at least the range).  False with `why` for an unknown
+/// row, columns of unequal lengths or a formula stopping/ refuses.  Bit for bit pyazr.stopping.evaluate.
+bool EvaluateStopping(const std::string &name, const std::string &formula,
+                      const std::vector<std::vector<double>> &arguments, PhysicsValues &out, std::string &why);
+
+/// One series of a per-session answer: a field over the answer's axis, for one line (a channel, a pair of channels,
+/// a level).  `keys` label the line with numbers ("jgroup", "channel", "channel_out", "level", "l", "s", "J", "pi",
+/// "pair"); `label` is the same in words.
+struct PhysicsSeries {
+  std::string name;   ///< the field: "P", "S", "delta", "U_abs", ...
+  std::string unit;
+  std::string label;
+  std::vector<std::pair<std::string, double>> keys;
+  std::vector<double> values;  ///< one per axis value; NaN where not defined there
+  double Key(const std::string &key, double absent = -1) const;
+};
+/// A per-session answer drawn against one axis: the axis values, the series, scalar facts ("E_aA" ...), notes.
+struct PhysicsCurves {
+  std::string axis, axisUnit;
+  std::vector<double> axisValues;
+  std::vector<PhysicsSeries> series;
+  std::vector<std::pair<std::string, std::string>> facts;  ///< name, value in words (with its unit)
+  std::vector<std::string> notes;                           ///< what was left out, and why
+  /// The first series named `name` whose keys include every (key, value) of `match`, or nullptr.
+  const PhysicsSeries *Find(const std::string &name,
+                            const std::vector<std::pair<std::string, double>> &match = {}) const;
+};
+
+/// One particle or photon pair of the session (<levels>' pair columns, as the engine set them up).
+struct PhysicsPair {
+  int key = 0;            ///< the pair key of <levels>
+  std::string kind;       ///< "particle", "photon", "beta"
+  int z1 = 0, z2 = 0;
+  double m1 = 0, m2 = 0;  ///< atomic masses (u)
+  double j1 = 0, j2 = 0;
+  double separation = 0, excitation = 0;  ///< MeV: the threshold is E_x = separation + excitation
+  double radius = 0;      ///< the pair's channel radius (fm)
+  bool identical = false;
+};
+/// One channel of a J^pi group.
+struct PhysicsChannel {
+  int channel = 0;  ///< 1-based in the group
+  int pair = 0;     ///< pair key
+  std::string radiation;  ///< "P" particle, "E" or "M" photon (multipolarity l)
+  int l = 0;
+  double s = 0;
+  double radius = 0;  ///< a_c (fm), 0 for a photon channel
+};
+/// One J^pi group (the J groups of parameters.out, 1-based).
+struct PhysicsGroup {
+  int jgroup = 0;
+  double J = 0;
+  int parity = 1;
+  int levels = 0;     ///< levels in the R-matrix
+  std::vector<PhysicsChannel> channels;
+};
+/// One level's physical (observed) energy and widths: the engine's transformation (CompoundSystem::TransformOut, the
+/// numbers parameters.out writes), at the session's vector.
+struct PhysicsPole {
+  int jgroup = 0, level = 0;  ///< 1-based, as parameters.out
+  double J = 0;
+  int parity = 1;
+  double energy = 0;          ///< E_x of the level (MeV), the physical energy in every parametrization
+  double formalEnergy = 0;    ///< E_lambda of the vector (MeV): the formal pole energy in the standard basis
+  double totalWidth = 0;      ///< the sum of the observed widths of the open particle channels and the photon channels (MeV)
+  struct Width {
+    int channel = 0, pair = 0;
+    std::string radiation;
+    int l = 0;
+    double s = 0;
+    std::string kind;   ///< "width" (an open channel, W in MeV) or "anc" (a closed one: `value` in fm^-1/2)
+    double width = 0;   ///< observed width W (MeV); 0 for a closed channel
+    double value = 0;   ///< the reported value (the width in eV, the ANC in fm^-1/2, as parameters.out)
+    double penetrability = 0;  ///< the P the width was formed with (0 closed)
+  };
+  std::vector<Width> widths;
+};
+
+/// The engine's session of a saved project (docs/upgrade/physics_tab.md section 7.2).  Opening one sets up the
+/// levels and the data (or the extrapolations) as AZURE2 calculate would: seconds for a project with external capture
+/// (its integrals are read from intEC.dat when current).  Every call after that takes milliseconds per energy.
+class PhysicsSession {
+ public:
+  PhysicsSession();
+  ~PhysicsSession();
+  PhysicsSession(PhysicsSession &&) noexcept;
+  PhysicsSession &operator=(PhysicsSession &&) noexcept;
+  PhysicsSession(const PhysicsSession &) = delete;
+  PhysicsSession &operator=(const PhysicsSession &) = delete;
+
+  /// The session of the saved project file at its start values, or at the values of `parameterFile` ("" for none),
+  /// read as AZURE2 --parameter-file reads it (AZUREParams::ReadUserParameters, every name it gives, fixed ones
+  /// included; a file of another parametrization converted or refused as the program does).  `extrapolations`: set
+  /// up the extrapolations instead of the data (a project with no data set needs it).  False with `why` (the
+  /// engine's words) when the project cannot be set up.
+  static bool Open(const std::string &projectFile, const std::string &parameterFile, bool extrapolations,
+                   PhysicsSession &out, std::string &why);
+  bool IsOpen() const;
+  /// "standard", "brune" or "park": the parametrization the levels' numbers are in.
+  std::string Parametrization() const;
+
+  std::vector<PhysicsPair> Pairs() const;
+  std::vector<PhysicsGroup> Groups() const;
+
+  /// The levels' physical energies and widths (the poles the engine knows on the real axis).
+  std::vector<PhysicsPole> Poles();
+
+  /// The session's channel functions of pair `pair` (key), orbital `l`, at c.m. energies `eCm` of the pair (MeV):
+  /// series F, Fp, G, Gp, P, S, delta_hs (rad, the hard-sphere phase shift) and open (1 or 0), axis "e_cm".  `radius`
+  /// fm, 0 for the channel radius; `twoJ` the channel's 2J for a pair with a spin-orbit term (else -1).  As pyazr's
+  /// Session.channel_functions (the Coulomb table when one is in use; the hybrid model's solution for a pair with a
+  /// nuclear potential).  False with `why` for an unknown or photon pair or a J the pair cannot take.
+  bool ChannelFunctions(int pair, int l, double radius, int twoJ, const std::vector<double> &eCm, PhysicsCurves &out,
+                        std::string &why);
+
+  /// One J^pi group on excitation energies `excitation` (E_x, MeV; axis "E_x"), as pyazr's Session.jpi_block.  Series
+  /// (keys: jgroup; channel; channel_out; level; level_out):
+  ///  per channel   E_c (MeV), P, S, L_re and L_im (S - B_c and P: the level matrix's L_c - B_c);
+  ///  per pair of open particle channels c, c' (c <= c'):  U_re, U_im, U_abs (|U_cc'|), T_re, T_im, and on the diagonal
+  ///                delta (deg, the nuclear phase shift arg(U_cc)/2 as the engine's phase_shift data kind: in
+  ///                (-90, 90], [0, 180) for identical particles), eta (the inelasticity |U_cc|);
+  ///  per pair of levels l <= m:  A_abs (|A_lm|, MeV^-1);
+  ///  once:          det_re, det_im (MeV^n), log10_abs_det (log10 |det A^-1|: minima at the resonances).
+  /// NaN where an element is not defined (a closed channel).  `parameterValues` empty: the session's vector.
+  /// About 0.1 ms per energy for a few levels; the 2-D maps of section 5 are these series as rows.
+  bool Block(int jgroup, const std::vector<double> &excitation, PhysicsCurves &out, std::string &why);
+
+  /// The THM experiments of the project (<thm> experiment[<name>]), by name.
+  std::vector<std::string> ThmExperiments() const;
+  /// THM diagnostics at the session's vector on c.m. energies of x + A (MeV, axis "E"), as pyazr's
+  /// Session.thm_vertex, thm_lineshape and thm_distortion (session_thm.py; the same engine tables):
+  ///  vertex:     M2, M2_qf (and M2_pw for vertexModel=dw) per channel and level, reached (1 or 0);
+  ///  lineshape:  NC2 per exit pair and level, zeta and eta_sb per exit pair, E_sF, eta_0;
+  ///  distortion: R, R_model, M2, M2_PW, E_sF, k_sF, eta_sF, theta_cm, x, q, lmax.
+  /// False with `why` (the engine's words) for an experiment that is not there or has no such part.
+  bool ThmVertex(const std::string &experiment, const std::vector<double> &energies, PhysicsCurves &out,
+                 std::string &why);
+  bool ThmLineshape(const std::string &experiment, const std::vector<double> &energies, PhysicsCurves &out,
+                    std::string &why);
+  bool ThmDistortion(const std::string &experiment, const std::vector<double> &energies, PhysicsCurves &out,
+                     std::string &why);
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
 }  // namespace front
 }  // namespace azure2
 

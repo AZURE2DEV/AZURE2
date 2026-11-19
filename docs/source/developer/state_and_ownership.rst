@@ -154,7 +154,7 @@ the schema and its quantities, units and kernels (``Schema``,
 (``ParamKindTable()``), the options of the calculation (``io::ConfigKeys()``),
 the objective's term list (``Objective::Engine()``), the environment switches
 (``azure2::support::ProcessEnvironment``), the physics table of the binding
-(``BuildTable()`` in ``api/src/pybind_physics.cpp``).
+(``BuildTable()`` in ``api/physics_table/src/PhysicsTable.cpp``).
 
 Threads
 -------

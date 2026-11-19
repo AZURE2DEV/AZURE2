@@ -87,15 +87,19 @@ The pybind11 module (``api/src/CMakeLists.txt``, target ``_azure2``) links
        (``AZUREAPI::ObjectiveRowsRWA``) and the sampler's log-probability
        (``AZUREAPI::LogProbabilityRWA``).
    * - ``pybind_physics.cpp``
-     - The table of physics functions (``BuildTable()``), each a row with its
-       arguments, units, domain and an adapter to ``physics/``.
+     - The table of physics functions as Python data and its element-wise
+       template; the rows themselves (``BuildTable()``, each with its
+       arguments, units, domain and an adapter to ``physics/``) are plain C++
+       in ``api/physics_table/``, which the facade ``api/front`` reads too.
    * - ``pybind_stopping.cpp``
      - The submodule ``_azure2.stopping`` (``pyazr.stopping``), with the
-       table of stopping functions (``BuildStoppingTable()``), each row
+       table of stopping functions as Python data; the rows
+       (``BuildStoppingTable()``, plain C++ in ``api/physics_table/``), each row
        with SRIM's citation.
    * - ``pybind_rows.h``
-     - The row types the two tables share (``ArgSpec``, ``OutSpec``,
-       ``ArgKind``).
+     - The rows' description as Python data; the row types the two tables
+       share (``ArgSpec``, ``OutSpec``, ``ArgKind``) are
+       ``api/physics_table/include/azure2/physics_table/PhysicsTable.h``.
    * - ``pybind_potentials.cpp``, ``pybind_model_data.cpp``, ``pybind_thm.cpp``
      - The view of a session's hybrid potentials, the model data, the THM
        tables and grammars.

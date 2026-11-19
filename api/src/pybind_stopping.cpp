@@ -1,7 +1,8 @@
 // The stopping/ library in the _azure2 module (submodule _azure2.stopping; pyazr.stopping wraps it): SRIM-2013's
 // stopping powers ported from LunaSRIM, energy loss, range and straggling of a layer, provenance
 // (docs/upgrade/stopping.md).  A thin binding: arrays in, arrays out, the C++ functions element-wise; no second
-// implementation.  The same functions are also rows of a table of the physics table's shape (pybind_rows.h: arguments
+// implementation.  The same functions are also rows of a table of the physics table's shape (api/physics_table,
+// StoppingTable.h, read by the front ends' facade too: arguments
 // with unit, domain, example and sweep; returned fields with units; and SRIM's citation), evaluated element-wise
 // with a status per element (functions(), evaluate(): pyazr.kinds()["stopping"], the web UI's Physics tab).
 // Units as stopping/'s Material.h: energies MeV (lab, of the projectile), stopping cross sections
@@ -15,6 +16,7 @@
 #include <string>
 #include <vector>
 
+#include "azure2/physics_table/StoppingTable.h"
 #include "pybind_rows.h"
 
 #include "azure2/stopping/Electronic.h"
@@ -30,19 +32,11 @@ namespace {
 
 using Array = py::array_t<double, py::array::forcecast>;
 
-/// The material of a formula, its phase ("" = DefaultPhase, "solid", "gas") and SRIM's compound correction.
+/// The material and the projectile as the table's rows make them (StoppingTable.h).
 st::Material MakeMaterial(const std::string &formula, const std::string &phase, double compoundCorrection) {
-  st::Material m = st::MaterialFromFormula(formula);
-  if (!phase.empty()) m.phase = st::PhaseFromName(phase);
-  m.compound_correction = compoundCorrection;
-  return m;
+  return azure2::physics_table::StoppingMaterial(formula, phase, compoundCorrection);
 }
-
-/// The projectile of charge z1 and atomic mass mass_u (u).
-st::Projectile MakeProjectile(int z1, double massU) {
-  if (!(massU > 0.0)) throw std::invalid_argument("stopping: the projectile's mass must be > 0 u");
-  return st::Ion(z1, massU, "Z1=" + std::to_string(z1));
-}
+st::Projectile MakeProjectile(int z1, double massU) { return azure2::physics_table::StoppingProjectile(z1, massU); }
 
 std::vector<double> Values(const Array &a) {
   const auto v = a.unchecked<1>();
@@ -160,141 +154,27 @@ std::string Provenance(const std::string &formula, int z1, double massU, const s
 
 // ---------------------------------------------------------------- the table of stopping functions
 
+// The rows are plain C++ (api/physics_table: StoppingTable.h, BuildStoppingTable in src/StoppingTable.cpp), which the
+// front ends' facade reads too; here their description as Python data and the element-wise call on arrays.
 namespace rows = azure2_rows;
+namespace table = azure2::physics_table;
 using rows::ArgSpec;
 using rows::OutSpec;
-using rows::Spacing;
-
-/// What a row's adapter is given besides the element's numbers: the material and the projectile of the element.
-struct StoppingCall {
-  const st::Material &material;
-  const st::Projectile &projectile;
-};
-
-/// The adapter of a stopping row: the element's numeric arguments after the material and projectile ones
-/// (a[0 .. n)), its fields o[0 .. n_outs); returns a status (pybind_rows.h).
-using StoppingAdapter = int (*)(const StoppingCall &c, const double *a, double *o);
-
-/// A row: the material (formula as text, phase, compound correction) and projectile (z1, mass_u) arguments come
-/// first in every row (kCommon), then the row's own; returns; the adapter.
-struct StoppingRow {
-  std::string name, summary, doc, library, axis;
-  std::vector<ArgSpec> args;  ///< the row's own numeric arguments, after the common ones
-  std::vector<OutSpec> outs;
-  StoppingAdapter call;
-};
-
-const std::vector<std::string> kPhases = {"default", "solid", "gas"};  // "default": SRIM's phase of the material
-constexpr std::size_t kCommon = 4;                                     // phase, compound_correction, z1, mass_u
-const char *const kStoppingUnit = "eV/(1e15 atoms/cm^2)";
-const char *const kArealUnit = "atoms/cm^2";
-
-ArgSpec Formula() {
-  return rows::Text("formula", "chemical formula of the target material (counts may be decimal: Ta2O5, TiN, CH4)",
-                    "Ta2O5");
-}
-std::vector<ArgSpec> Common() {
-  return {rows::Choice("phase", "phase of the material (default: SRIM's: gas for a gaseous element, solid otherwise)",
-                       kPhases, 0),
-          rows::Real("compound_correction", "", "SRIM's factor of Bragg's rule (1: Bragg's rule)").gt(0).otherwise(1),
-          rows::Integer("z1", "charge number of the projectile").ge(1).le(92).example(1),
-          rows::Real("mass_u", "u", "atomic mass of the projectile").gt(0).example(st::Proton().mass_u)};
-}
-ArgSpec Energy(const std::string &name, const std::string &doc) {
-  return rows::Real(name, "MeV", doc).gt(0).example(1).sweep(0.001, 10, Spacing::log);
-}
-ArgSpec Areal() {
-  return rows::Real("areal_density", kArealUnit, "areal density of the layer (atoms of the material)").ge(0)
-      .example(1e18).sweep(0, 1e19, Spacing::linear);
-}
-
-std::vector<StoppingRow> BuildStoppingTable() {
-  std::vector<StoppingRow> t;
-  t.push_back({"stopping_power", "Stopping cross section of a material for an ion (eV/(1e15 atoms/cm^2)).",
-               "Per atom of the material (all atoms counted), electronic (SRIM-2013) and nuclear (the universal "
-               "ZBL potential), and SRIM's published accuracy for the ion class as a relative 1-sigma uncertainty "
-               "(docs/upgrade/stopping.md).", "stopping/Stopping.h: Stopping", "energy",
-               {Energy("energy", "lab kinetic energy of the projectile")},
-               {{"electronic", kStoppingUnit, "electronic stopping"}, {"nuclear", kStoppingUnit, "nuclear stopping"},
-                {"total", kStoppingUnit, "electronic + nuclear"},
-                {"rel_uncertainty", "", "relative 1-sigma uncertainty"}},
-               [](const StoppingCall &c, const double *a, double *o) {
-                 const st::StoppingValue v = st::Stopping(c.material, c.projectile, a[0]);
-                 o[0] = v.electronic, o[1] = v.nuclear, o[2] = v.total, o[3] = v.rel_uncertainty;
-                 return rows::kOk;
-               }});
-  t.push_back({"range", "Range R(E) = N(E, 0) of an ion in a material (atoms/cm^2).",
-               "The areal density over which the ion stops: the integral of dE / epsilon from 0 to E.",
-               "stopping/EnergyLoss.h: Range", "energy", {Energy("energy", "lab kinetic energy of the projectile")},
-               {{"range", kArealUnit, "range"}},
-               [](const StoppingCall &c, const double *a, double *o) {
-                 o[0] = st::Range(c.material, c.projectile, a[0]);
-                 return rows::kOk;
-               }});
-  t.push_back({"energy_after", "Energy of an ion after a layer of given areal density (MeV).",
-               "E_out with N = int_{E_out}^{E_in} dE / epsilon.  Status -2 where the layer is at least the range.",
-               "stopping/EnergyLoss.h: EnergyAfter", "areal_density",
-               {Energy("energy_in", "lab kinetic energy before the layer"), Areal()},
-               {{"energy_out", "MeV", "energy after the layer"}},
-               [](const StoppingCall &c, const double *a, double *o) {
-                 o[0] = st::EnergyAfter(c.material, c.projectile, a[0], a[1]);
-                 return rows::kOk;
-               }});
-  t.push_back({"areal_density_between", "Areal density between two energies of an ion (atoms/cm^2).",
-               "N(E_in, E_out) = int_{E_out}^{E_in} dE / epsilon.  Status -2 for E_out > E_in.",
-               "stopping/EnergyLoss.h: ArealDensityBetween", "energy_out",
-               {Energy("energy_in", "lab kinetic energy before the layer"),
-                rows::Real("energy_out", "MeV", "lab kinetic energy after the layer").ge(0).example(0.5)
-                    .sweep(0, 1, Spacing::linear)},
-               {{"areal_density", kArealUnit, "areal density"}},
-               [](const StoppingCall &c, const double *a, double *o) {
-                 o[0] = st::ArealDensityBetween(c.material, c.projectile, a[0], a[1]);
-                 return rows::kOk;
-               }});
-  t.push_back({"energy_straggling", "Energy after a layer and its spread: the layer's straggling and the beam's (MeV).",
-               "TRIM's or Bohr's straggling with Tschalaer's propagation; the beam's entrance spread beam_sigma "
-               "carried through the layer; total = both in quadrature (1 sigma).  Status -2 where the layer is at "
-               "least the range.",
-               "stopping/Straggling.h: PropagateStraggling", "areal_density",
-               {Energy("energy_in", "lab kinetic energy before the layer"), Areal(),
-                rows::Real("beam_sigma", "MeV", "the beam's energy spread at the entrance (1 sigma)").ge(0)
-                    .otherwise(0),
-                rows::Choice("model", "straggling model", {"trim", "bohr"}, 0)},
-               {{"energy_out", "MeV", "energy after the layer"}, {"straggling", "MeV", "the layer's straggling"},
-                {"beam", "MeV", "the entrance spread at the exit"}, {"total", "MeV", "both in quadrature"}},
-               [](const StoppingCall &c, const double *a, double *o) {
-                 const st::StragglingModel m = st::StragglingModelFromName(a[3] == 0 ? "trim" : "bohr");
-                 const st::StragglingWidths w = st::PropagateStraggling(m, c.material, c.projectile, a[0], a[1], a[2]);
-                 o[0] = w.energy_out_MeV, o[1] = w.straggling, o[2] = w.beam, o[3] = w.total;
-                 return rows::kOk;
-               }});
-  return t;
-}
-
-const std::vector<StoppingRow> &StoppingTable() {
-  static const std::vector<StoppingRow> table = BuildStoppingTable();  // immutable after the first call
-  return table;
-}
+using table::StoppingRow;
 
 const StoppingRow &FindStoppingRow(const std::string &name) {
-  for (const StoppingRow &r : StoppingTable())
-    if (r.name == name) return r;
-  throw std::invalid_argument("stopping: no function named '" + name + "' (pyazr.kinds()['stopping'] lists them)");
-}
-
-/// Every numeric argument of a row in order: the common ones, then the row's own.
-std::vector<ArgSpec> NumericArgs(const StoppingRow &r) {
-  std::vector<ArgSpec> all = Common();
-  all.insert(all.end(), r.args.begin(), r.args.end());
-  return all;
+  const StoppingRow *row = table::FindStoppingRow(name);
+  if (!row)
+    throw std::invalid_argument("stopping: no function named '" + name + "' (pyazr.kinds()['stopping'] lists them)");
+  return *row;
 }
 
 py::list DescribeStopping() {
   py::list out;
-  for (const StoppingRow &r : StoppingTable()) {
+  for (const StoppingRow &r : table::StoppingTable()) {
     py::list args, outs;
-    args.append(rows::DescribeArgument(Formula()));
-    for (const ArgSpec &a : NumericArgs(r)) args.append(rows::DescribeArgument(a));
+    args.append(rows::DescribeArgument(table::StoppingFormula()));
+    for (const ArgSpec &a : table::StoppingNumericArgs(r)) args.append(rows::DescribeArgument(a));
     for (const OutSpec &o : r.outs) outs.append(rows::DescribeReturn(o));
     py::dict d;
     d["name"] = r.name;
@@ -319,8 +199,7 @@ using Column = py::array_t<double, py::array::c_style | py::array::forcecast>;
 /// material and projectile are made once per distinct (phase, compound correction, z1, mass) in a row of elements.
 py::tuple EvaluateStopping(const std::string &name, const std::string &formula, const std::vector<Column> &columns) {
   const StoppingRow &row = FindStoppingRow(name);
-  const std::vector<ArgSpec> spec = NumericArgs(row);
-  const std::size_t na = spec.size(), no = row.outs.size();
+  const std::size_t na = table::StoppingNumericArgs(row).size(), no = row.outs.size();
   if (columns.size() != na)
     throw std::invalid_argument("stopping " + name + ": " + std::to_string(na) + " argument arrays expected, " +
                                 std::to_string(columns.size()) + " given");
@@ -334,37 +213,10 @@ py::tuple EvaluateStopping(const std::string &name, const std::string &formula, 
   st::MaterialFromFormula(formula);  // a formula the library refuses is refused here, before any element
   py::array_t<double> values({static_cast<py::ssize_t>(no), n});
   py::array_t<int> status(n);
-  double *v = values.mutable_data();
-  int *stp = status.mutable_data();
   {
     EngineCallScope engine;
-    std::vector<double> a(na), o(no);
-    std::vector<double> made(kCommon, rows::kNaN);  // the common arguments of the material and projectile made
-    st::Material material;
-    st::Projectile projectile;
-    for (py::ssize_t i = 0; i < n; i++) {
-      for (std::size_t k = 0; k < na; k++) a[k] = in[k][i];
-      int s = rows::CheckDomain(spec, a.data());
-      if (s == rows::kOk) {
-        try {
-          if (!std::equal(made.begin(), made.end(), a.begin())) {
-            const int phase = static_cast<int>(a[0]);
-            material = MakeMaterial(formula, phase == 0 ? "" : kPhases[static_cast<std::size_t>(phase)], a[1]);
-            projectile = MakeProjectile(static_cast<int>(a[2]), a[3]);
-            std::copy(a.begin(), a.begin() + kCommon, made.begin());
-          }
-          s = row.call(StoppingCall{material, projectile}, a.data() + kCommon, o.data());
-        } catch (const std::domain_error &) {
-          s = rows::kJointly;  // the layer at least the range, an energy order the integral refuses
-        } catch (const std::invalid_argument &) {
-          s = rows::kJointly;
-        } catch (const std::exception &) {
-          s = rows::kFailed;
-        }
-      }
-      for (std::size_t j = 0; j < no; j++) v[j * n + i] = s == rows::kOk ? o[j] : rows::kNaN;
-      stp[i] = s;
-    }
+    table::EvaluateStoppingRow(row, formula, in, static_cast<std::size_t>(n), values.mutable_data(),
+                               status.mutable_data());
   }
   return py::make_tuple(values, status);
 }
