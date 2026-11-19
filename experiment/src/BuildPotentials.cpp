@@ -64,6 +64,13 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
     if (const Value *l = w->Get("l")) pw.l = (int)l->integer;
     if (const Value *j = w->Get("J")) pw.two_j = j->spin.twice;
     if (const Value *d = w->Get("depth")) pw.depth_MeV = InBase(*d);
+    if (const Value *wd = w->Get("width")) {
+      if (s.shape != physics::FormShape::Gaussian) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": width belongs to a gaussian central term");
+        return false;
+      }
+      pw.width_fm = InBase(*wd);
+    }
     const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract");
     if (bg) {
       if (!b) {

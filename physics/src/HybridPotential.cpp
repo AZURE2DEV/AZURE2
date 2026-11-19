@@ -51,7 +51,8 @@ bool operator==(const InteriorBackground &a, const InteriorBackground &b) {
 }
 
 bool operator==(const PartialWave &a, const PartialWave &b) {
-  return a.l == b.l && a.two_j == b.two_j && a.depth_MeV == b.depth_MeV && a.background == b.background;
+  return a.l == b.l && a.two_j == b.two_j && a.depth_MeV == b.depth_MeV && a.width_fm == b.width_fm &&
+         a.background == b.background;
 }
 
 double TwoLDotI(int l, int two_j, int two_i) {
@@ -141,7 +142,7 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
   // the partial waves (none: the key of a potential without them, as before they existed)
   for (const PartialWave &w : p->waves) {
     key.insert(key.end(), {-1.0, (double)w.l, (double)w.two_j, w.depth_MeV ? 1.0 : 0.0, w.depth_MeV.value_or(0.0),
-                           w.background ? 1.0 : 0.0});
+                           w.width_fm ? 1.0 : 0.0, w.width_fm.value_or(0.0), w.background ? 1.0 : 0.0});
     if (w.background) {
       key.insert(key.end(), {w.background->boundary, (double)w.background->subtract_nodes.size()});
       for (int n : w.background->subtract_nodes) key.push_back((double)n);
@@ -264,6 +265,7 @@ HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j) {
   HybridPotential q = p;
   const PartialWave *w = FindWave(p, l, two_j);
   if (w && w->depth_MeV) q.central_depth_MeV = *w->depth_MeV;
+  if (w && w->width_fm) q.central.width_fm = *w->width_fm;
   return q;
 }
 

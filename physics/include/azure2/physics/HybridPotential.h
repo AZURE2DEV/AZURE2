@@ -90,6 +90,7 @@ struct PartialWave {
   int l = 0;
   int two_j = -1;                          ///< 2J, or -1 (kNoSpinOrbit): every J of this l
   std::optional<double> depth_MeV;         ///< V0 of this partial wave (MeV, > 0 attractive); none: the central depth
+  std::optional<double> width_fm;          ///< the Gaussian r0 of this partial wave (fm); none: the central one
   std::optional<InteriorBackground> background;  ///< none: no background (the channel functions of the exterior alone)
 };
 bool operator==(const PartialWave &a, const PartialWave &b);
@@ -190,8 +191,8 @@ double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV,
 const PartialWave *FindWave(const HybridPotential &p, int l, int two_j);
 /// Does a channel function of the pair depend on J (a spin-orbit term, or an entry of waves with a J)?
 bool DependsOnJ(const HybridPotential &p);
-/// The potential the radial equation of the channel (l, 2J) uses: p with the entry's depth in place of the central one
-/// (p itself, field for field, when the entry has none).
+/// The potential the radial equation of the channel (l, 2J) uses: p with the entry's depth and Gaussian width in place
+/// of the central ones (p itself, field for field, when the entry has neither).
 HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j);
 /// ForPartialWave for the decaying solution W~ at or below threshold (the ANC <-> gamma factor, the bound final state of
 /// external capture): throws std::runtime_error when the partial wave has an interior background, whose W~ is not

@@ -2025,7 +2025,7 @@
     "wave": {
      "title": "Partial wave",
      "type": "structured",
-     "grammar": "l <integer >= 0> [J <J>] [depth <number> <energy unit>] [background interior] [boundary <number>] [subtract <integer >= 0>]",
+     "grammar": "l <integer >= 0> [J <J>] [depth <number> <energy unit>] [width <number> <length unit>] [background interior] [boundary <number>] [subtract <integer >= 0>]",
      "required": false,
      "repeatable": true,
      "rare": true,
@@ -2060,6 +2060,17 @@
          "units": ["MeV", "keV", "eV", "meV", "ueV"],
          "positive": true,
          "doc": "V0 of the central term in this partial wave, in both halves (left out: the central depth)"
+        },
+        {
+         "name": "width",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": true,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "r0 of a Gaussian central term in this partial wave, in both halves (left out: the central width; refused with a Woods-Saxon term)"
         },
         {
          "name": "background",
@@ -4623,7 +4634,7 @@
   },
   "E_POTENTIAL_WAVE": {
    "severity": "error",
-   "meaning": "a wave field of a potential record: background without boundary, boundary or subtract without background, or one (l, J) twice"
+   "meaning": "a wave field of a potential record: background without boundary, boundary or subtract without background, a width with a Woods-Saxon term, or one (l, J) twice"
   },
   "E_CHANNEL_RADIUS_TWICE": {
    "severity": "error",

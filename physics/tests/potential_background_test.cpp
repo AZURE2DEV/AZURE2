@@ -307,6 +307,17 @@ double Threshold() {
   const double S = 1.3, Rr = 0.4, B = -0.5;
   const WavesAtRadius r = DressWaves({1.0, S / 2.0, 0.0, 0.0}, 2.0, Rr, B);
   Check(std::fabs(2.0 * r.Fp / r.F - DressShift(S, Rr, B)) < 1e-14, "DressShift = DressWaves on a real wave");
+  // a wave's own depth and Gaussian width reach the radial equation of that wave only
+  HybridPotential g = Cluster(0);
+  PartialWave pw;
+  pw.l = 2;
+  pw.depth_MeV = 50.0;
+  pw.width_fm = 3.0;
+  g.waves.push_back(pw);
+  const HybridPotential g2 = ForPartialWave(g, 2, -1), g0 = ForPartialWave(g, 0, -1);
+  Check(g2.central_depth_MeV == 50.0 && g2.central.width_fm == 3.0 && g0.central_depth_MeV == 67.5 &&
+            g0.central.width_fm == Cluster(0).central.width_fm && PotentialKey(g) != PotentialKey(Cluster(0)),
+        "ForPartialWave: depth and width of the wave's entry, the central ones elsewhere; the key sees them");
   return dd;
 }
 

@@ -773,6 +773,11 @@ int main() {
       }
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 background interior\n")));
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 boundary 0\n")));
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 width 2 fm\n")));
+      const BuiltProject gw = BuildText(potentials(gauss + "    wave l 0 depth 50 MeV width 3.03 fm\n"));
+      check("a Gaussian width per wave", gw.Ok() && gw.potentials.pairs.count(1) && gw.potentials.pairs.at(1).waves.size() == 1 &&
+                                             gw.potentials.pairs.at(1).waves[0].width_fm &&
+                                             *gw.potentials.pairs.at(1).waves[0].width_fm == 3.03);
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 depth 1 MeV\n    wave l 0 depth 2 MeV\n")));
     }
     // ---- the `channel_radius` records of <channelRadii>: entries in record order, s and J where given

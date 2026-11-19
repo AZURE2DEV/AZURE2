@@ -279,6 +279,7 @@ Forms MakeForms() {
   f.wave = {{Unkeyed({Kw("l", IntAtLeast(0), "the orbital angular momentum of the partial wave"),
                       OptionalKw("J", Spec(ValueType::Spin), "only the channels of this total J (left out: every J of this l)"),
                       OptionalKw("depth", PositiveWithUnit("energy"), "V0 of the central term in this partial wave, in both halves (left out: the central depth)"),
+                      OptionalKw("width", PositiveWithUnit("length"), "r0 of a Gaussian central term in this partial wave, in both halves (left out: the central width; refused with a Woods-Saxon term)"),
                       OptionalKw("background", Words({"interior"}), "the R-function of the potential inside the channel radius as the background of the "
                                                                    "channel's diagonal R-matrix element (potential_background.md); left out: none"),
                       OptionalKw("boundary", Num(), "B_bg of the background (dimensionless); required with background"),
