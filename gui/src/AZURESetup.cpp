@@ -8,7 +8,15 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QDockWidget>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileInfo>
+#include <QLabel>
+#include <QMimeData>
+#include <QProgressBar>
+#include <QStackedWidget>
+#include <QStatusBar>
+#include <QToolBar>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -18,8 +26,13 @@
 #include <QTabWidget>
 #include <QToolButton>
 #include <QUrl>
+#include <QHBoxLayout>
+#include <QStyle>
+#include <cmath>
 
 #include "AboutAZURE2Dialog.h"
+#include "AzureTheme.h"
+#include "StartPage.h"
 #include "ConfigDialogs.h"
 #include "DiagnosticsPanel.h"
 #include "FittingTab.h"
@@ -33,7 +46,14 @@
 #include "RunTab.h"
 #include "ThmTab.h"
 
+// the resources of the library (a static library's resources are linked only when named)
+static void InitShellResources() {
+  Q_INIT_RESOURCE(AZURESetup);
+  Q_INIT_RESOURCE(ShellIcons);
+}
+
 AZURESetup::AZURESetup() {
+  InitShellResources();
   qRegisterMetaType<RunOutcome>("RunOutcome");
   holder_ = new ProjectHolder(this);
   setMinimumSize(1000, 640);
@@ -49,8 +69,8 @@ AZURESetup::AZURESetup() {
   logoButton_->setAutoRaise(true);
   logoButton_->setCursor(Qt::PointingHandCursor);
   logoButton_->setToolTip(tr("AZURE2 -- about this program"));
-  logoButton_->setStyleSheet("QToolButton { border: none; padding: 0 8px; color: #1f4f8f; font-weight: bold; }"
-                             "QToolButton:hover { background: #e3edf8; border-radius: 4px; }");
+  logoButton_->setStyleSheet("QToolButton { border: none; padding: 0 0.6em; color: palette(link); font-weight: bold; }"
+                             "QToolButton:hover { background: palette(midlight); border-radius: 4px; }");
   connect(logoButton_, &QToolButton::clicked, this, [this]() {
     AboutAZURE2Dialog about(this, polarizedLogo_);
     about.exec();
@@ -146,16 +166,29 @@ AZURESetup::AZURESetup() {
     connect(mcmcTab, &MCMCTab::stopRequested, this, &AZURESetup::stopRun);
   }
   tabWidget->addTab(plotTab, tr("Pl&ot"));
-  setCentralWidget(tabWidget);
+  tabWidget->setDocumentMode(false);
+  startPage_ = new StartPage;
+  connect(startPage_, &StartPage::newRequested, this, &AZURESetup::newProject);
+  connect(startPage_, &StartPage::openRequested, this, qOverload<>(&AZURESetup::open));
+  connect(startPage_, &StartPage::openFile, this, [this](const QString &file) { open(file); });
+  central_ = new QStackedWidget;
+  central_->addWidget(startPage_);
+  central_->addWidget(tabWidget);
+  setCentralWidget(central_);
+  setAcceptDrops(true);
 
   diagnostics = new DiagnosticsPanel(holder_);
   connect(diagnostics, &DiagnosticsPanel::showRecord, this, &AZURESetup::showRecord);
   diagnosticsDock = new QDockWidget(tr("Diagnostics"), this);
   diagnosticsDock->setObjectName("diagnosticsDock");
   diagnosticsDock->setWidget(diagnostics);
-  diagnosticsDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+  diagnosticsDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable |
+                               QDockWidget::DockWidgetClosable);
   addDockWidget(Qt::BottomDockWidgetArea, diagnosticsDock);
   resizeDocks({diagnosticsDock}, {140}, Qt::Vertical);
+  // hidden while there is nothing to show; a validation that finds a problem opens it (diagnosticsDone)
+  diagnosticsDock->hide();
+  connect(diagnostics, &DiagnosticsPanel::validated, this, &AZURESetup::diagnosticsDone);
 
   // The run's worker in its own thread; queued connections only (RunWorker.h).
   worker_ = new RunWorker;
@@ -164,6 +197,7 @@ AZURESetup::AZURESetup() {
   connect(this, &AZURESetup::startWorker, worker_, &RunWorker::run, Qt::QueuedConnection);
   connect(worker_, &RunWorker::message, runTab, &RunTab::appendLine, Qt::QueuedConnection);
   connect(worker_, &RunWorker::progress, runTab, &RunTab::showProgress, Qt::QueuedConnection);
+  connect(worker_, &RunWorker::progress, this, &AZURESetup::showJobProgress, Qt::QueuedConnection);
   if (mcmcTab) {
     connect(worker_, &RunWorker::progress, mcmcTab, &MCMCTab::showProgress, Qt::QueuedConnection);
     connect(worker_, &RunWorker::message, mcmcTab, &MCMCTab::appendLine, Qt::QueuedConnection);
@@ -181,8 +215,13 @@ AZURESetup::AZURESetup() {
   connect(tools_, &PythonTools::line, runTab, &RunTab::appendLine);
   connect(tools_, &PythonTools::webPageReady, this, [](const QString &url) { QDesktopServices::openUrl(QUrl(url)); });
   createActions();
+  createToolBar();
   createMenus();
+  createStatusBar();
+  connect(runTab, &RunTab::plotRequested, this, [this]() { tabWidget->setCurrentWidget(plotTab); });
   projectOpened();
+  showProject(false);
+  restoreWindowState();
 }
 
 AZURESetup::~AZURESetup() {
@@ -192,6 +231,43 @@ AZURESetup::~AZURESetup() {
 }
 
 void AZURESetup::createActions() {
+  // the main actions: the tool bar's and the menus' (one QAction each, so a shortcut has one owner)
+  auto make = [this](const QString &name, const QString &icon, const QString &text, const QKeySequence &key,
+                     const QString &tip) {
+    QAction *a = new QAction(QIcon(":/actions/" + icon + ".svg"), text, this);
+    a->setObjectName("action_" + name);
+    a->setShortcut(key);
+    a->setToolTip(QString("%1 (%2)").arg(tip, key.toString(QKeySequence::NativeText)));
+    a->setStatusTip(tip);
+    actions_.insert(name, a);
+    return a;
+  };
+  connect(make("new", "new", tr("&New Project"), QKeySequence::New, tr("Start an empty project")), &QAction::triggered,
+          this, &AZURESetup::newProject);
+  connect(make("open", "open", tr("&Open..."), QKeySequence::Open, tr("Open a project (.azr)")), &QAction::triggered,
+          this, qOverload<>(&AZURESetup::open));
+  connect(make("save", "save", tr("&Save"), QKeySequence::Save, tr("Save the project")), &QAction::triggered, this,
+          &AZURESetup::save);
+  connect(make("validate", "validate", tr("&Validate"), QKeySequence(Qt::Key_F7),
+               tr("Check the project with the engine (AZURE2 --validate)")),
+          &QAction::triggered, this, &AZURESetup::validate);
+  auto runFromToolBar = [this](const QString &command) {
+    QString why;
+    if (!runCommand(command, why)) QMessageBox::warning(this, tr("Not run"), why);
+  };
+  connect(make("calculate", "calculate", tr("&Calculate"), QKeySequence(Qt::Key_F5),
+               tr("Save, then calculate the data sets from the parameters (no fit)")),
+          &QAction::triggered, this, [runFromToolBar]() { runFromToolBar("calculate"); });
+  connect(make("fit", "fit", tr("&Fit"), QKeySequence(Qt::Key_F6), tr("Save, then fit the parameters to the data")),
+          &QAction::triggered, this, [runFromToolBar]() { runFromToolBar("fit"); });
+  connect(make("stop", "stop", tr("S&top"), QKeySequence(Qt::SHIFT | Qt::Key_F5),
+               tr("Stop the run (a fit ends at its best point and writes its outputs there)")),
+          &QAction::triggered, this, &AZURESetup::stopRun);
+  connect(make("plot", "plot", tr("&Plot"), QKeySequence(Qt::Key_F8), tr("Show the last run's curves")),
+          &QAction::triggered, this, [this]() { tabWidget->setCurrentWidget(plotTab); });
+  connect(make("close", "close", tr("&Close Project"), QKeySequence::Close, tr("Close the project")), &QAction::triggered,
+          this, [this]() { closeProject(); });
+  for (const QString &name : {"calculate", "fit", "stop"}) actions_[name]->setShortcutContext(Qt::WindowShortcut);
   for (int i = 0; i < numRecent; i++) {
     recentFileActions[i] = new QAction(this);
     recentFileActions[i]->setVisible(false);
@@ -215,16 +291,18 @@ void AZURESetup::createMenus() {
   QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
   fileMenu->addAction(tr("&About AZURE2..."), this, &AZURESetup::showAbout);
   fileMenu->addSeparator();
-  fileMenu->addAction(tr("&New Project"), QKeySequence::New, this, &AZURESetup::newProject);
-  fileMenu->addAction(tr("&Open..."), QKeySequence::Open, this, qOverload<>(&AZURESetup::open));
+  fileMenu->addAction(actions_["new"]);
+  fileMenu->addAction(actions_["open"]);
   recentFileMenu = fileMenu->addMenu(tr("Open &Recent..."));
   for (int i = 0; i < numRecent; i++) recentFileMenu->addAction(recentFileActions[i]);
   recentSeparator = recentFileMenu->addSeparator();
   recentFileMenu->addAction(clearRecentAction);
   updateRecent();
-  fileMenu->addAction(tr("&Save"), QKeySequence::Save, this, &AZURESetup::save);
-  fileMenu->addAction(tr("Save &As..."), QKeySequence::SaveAs, this, &AZURESetup::saveAs);
+  fileMenu->addAction(actions_["save"]);
+  QAction *saveAsAction = fileMenu->addAction(tr("Save &As..."), QKeySequence::SaveAs, this, &AZURESetup::saveAs);
+  actions_.insert("saveAs", saveAsAction);
   fileMenu->addAction(tr("Con&vert an Old Project..."), this, &AZURESetup::convertProject);
+  fileMenu->addAction(actions_["close"]);
   fileMenu->addSeparator();
   fileMenu->addAction(tr("&Quit"), QKeySequence::Quit, this, &QWidget::close);
 
@@ -236,8 +314,31 @@ void AZURESetup::createMenus() {
   configMenu->addAction(tr("&Directories..."), this, &AZURESetup::editDirs);
   configMenu->addAction(tr("&Runtime Options..."), this, &AZURESetup::editOptions);
   configMenu->addSeparator();
-  configMenu->addAction(tr("&Validate Project"), QKeySequence(Qt::Key_F7), this, &AZURESetup::validate);
-  configMenu->addAction(diagnosticsDock->toggleViewAction());
+  configMenu->addAction(actions_["validate"]);
+
+  QMenu *runMenu = menuBar()->addMenu(tr("&Run"));
+  for (const QString &name : {"calculate", "fit", "stop"}) runMenu->addAction(actions_[name]);
+  runMenu->addSeparator();
+  runMenu->addAction(actions_["plot"]);
+
+  // View: the look (AzureTheme.h), the tool bar and the Diagnostics
+  QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+  QMenu *lookMenu = viewMenu->addMenu(tr("&Appearance"));
+  QActionGroup *looks = new QActionGroup(this);
+  for (const ThemeChoice choice : {ThemeChoice::System, ThemeChoice::Light, ThemeChoice::Dark}) {
+    QAction *a = lookMenu->addAction(choice == ThemeChoice::System  ? tr("Follow the &System")
+                                     : choice == ThemeChoice::Light ? tr("&Light")
+                                                                    : tr("&Dark"));
+    a->setObjectName("theme_" + themeChoiceName(choice));
+    a->setCheckable(true);
+    a->setChecked(azureThemeChoice() == choice);
+    looks->addAction(a);
+    connect(a, &QAction::triggered, this, [choice]() { setAzureTheme(choice); });
+  }
+  viewMenu->addAction(toolBar_->toggleViewAction());
+  QAction *dockAction = diagnosticsDock->toggleViewAction();
+  dockAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+  viewMenu->addAction(dockAction);
 
   // Tools: pyazr's commands as child processes (PythonTools.h), filled when the menu opens (pyazr importable or not)
   QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
@@ -261,6 +362,7 @@ void AZURESetup::updateRecent() {
   for (int i = numFiles; i < numRecent; i++) recentFileActions[i]->setVisible(false);
   recentSeparator->setVisible(numFiles > 0);
   clearRecentAction->setVisible(numFiles > 0);
+  if (startPage_) startPage_->setRecent(files);
 }
 
 void AZURESetup::addRecent(const QString &file) {
@@ -284,7 +386,15 @@ void AZURESetup::clearRecent() {
 
 void AZURESetup::updateTitle() {
   const bool modified = holder_->project().Modified() || levelsDirty_;
-  setWindowTitle(tr("AZURE2 -- %1%2").arg(QFileInfo(holder_->path()).fileName(), modified ? " *" : ""));
+  // [*] is Qt's place of the modified mark in the title
+  setWindowTitle(hasProject_ ? tr("%1[*] -- AZURE2").arg(QFileInfo(holder_->path()).fileName()) : tr("AZURE2"));
+  setWindowModified(hasProject_ && modified);
+  if (statusFile_) {
+    statusFile_->setText(hasProject_ ? QString("%1%2").arg(QDir::toNativeSeparators(holder_->path()),
+                                                           modified ? tr("  (modified)") : QString())
+                                     : tr("No project open"));
+    statusFile_->setToolTip(hasProject_ ? (modified ? tr("Changed since it was saved") : tr("Saved")) : QString());
+  }
 }
 
 void AZURESetup::updateLogo() {
@@ -331,11 +441,29 @@ void AZURESetup::editOptions() {
 void AZURESetup::validate() {
   QString why;
   commitTabs(why);
-  diagnosticsDock->show();
   diagnostics->validate();
 }
 
+void AZURESetup::diagnosticsDone(bool ok, int errors, int warnings) {
+  if (statusValidity_) {
+    QString text;
+    if (!ok && errors > 0) text = tr("%n error(s)", nullptr, errors);
+    else text = tr("Valid");
+    if (warnings > 0) text += tr(", %n warning(s)", nullptr, warnings);
+    statusValidity_->setText(text);
+    statusValidity_->setIcon(style()->standardIcon(!ok ? QStyle::SP_MessageBoxCritical
+                                                   : warnings > 0 ? QStyle::SP_MessageBoxWarning
+                                                                  : QStyle::SP_DialogApplyButton));
+    statusValidity_->setToolTip(diagnostics->summary() + "\n" + tr("Click to show the Diagnostics."));
+    statusValidity_->setVisible(hasProject_);
+  }
+  // nothing to show: the dock out of the way; a problem: the dock opens
+  if (!hasProject_) return;
+  diagnosticsDock->setVisible(!ok || errors > 0 || warnings > 0);
+}
+
 void AZURESetup::showRecord(const QString &section, const QString &record) {
+  showProject(true);
   if (section == "thm") {
     tabWidget->setCurrentWidget(thmTab);
     return;
@@ -390,6 +518,181 @@ void AZURESetup::saveTabScreenshots(const QString &dir) {
   tabWidget->setCurrentIndex(current);
 }
 
+QAction *AZURESetup::action(const QString &name) const { return actions_.value(name, nullptr); }
+
+void AZURESetup::createToolBar() {
+  toolBar_ = addToolBar(tr("Main"));
+  toolBar_->setObjectName("mainToolBar");
+  toolBar_->setMovable(false);
+  toolBar_->setIconSize(QSize(22, 22));
+  toolBar_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  for (const QString &name : {"new", "open", "save"}) toolBar_->addAction(actions_[name]);
+  toolBar_->addSeparator();
+  toolBar_->addAction(actions_["validate"]);
+  toolBar_->addSeparator();
+  for (const QString &name : {"calculate", "fit", "stop"}) toolBar_->addAction(actions_[name]);
+  toolBar_->addSeparator();
+  toolBar_->addAction(actions_["plot"]);
+  // the menu's words without the mnemonic
+  for (QAction *a : toolBar_->actions())
+    if (QWidget *w = toolBar_->widgetForAction(a)) w->setObjectName("tool_" + a->objectName().mid(7));
+}
+
+void AZURESetup::createStatusBar() {
+  statusFile_ = new QLabel;
+  statusFile_->setObjectName("statusFile");
+  statusFile_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  statusValidity_ = new QToolButton;
+  statusValidity_->setObjectName("statusValidity");
+  statusValidity_->setAutoRaise(true);
+  statusValidity_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  statusValidity_->setIconSize(QSize(16, 16));
+  statusValidity_->setText(tr("Not validated"));
+  connect(statusValidity_, &QToolButton::clicked, this, [this]() {
+    diagnosticsDock->show();
+    diagnosticsDock->raise();
+  });
+  jobLabel_ = new QLabel;
+  jobLabel_->setObjectName("statusJob");
+  jobBar_ = new QProgressBar;
+  jobBar_->setObjectName("statusProgress");
+  jobBar_->setMaximumWidth(fontMetrics().horizontalAdvance("M") * 14);
+  jobBar_->setTextVisible(false);
+  jobStop_ = new QToolButton;
+  jobStop_->setObjectName("statusStop");
+  jobStop_->setDefaultAction(actions_["stop"]);
+  jobStop_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  jobBox_ = new QWidget;
+  QHBoxLayout *job = new QHBoxLayout(jobBox_);
+  job->setContentsMargins(0, 0, 0, 0);
+  job->addWidget(jobLabel_);
+  job->addWidget(jobBar_);
+  job->addWidget(jobStop_);
+  jobBox_->hide();
+  statusBar()->addWidget(statusFile_, 1);
+  statusBar()->addPermanentWidget(jobBox_);
+  statusBar()->addPermanentWidget(statusValidity_);
+  statusValidity_->hide();
+  updateTitle();
+}
+
+void AZURESetup::updateActions() {
+  const bool idle = !running_;
+  actions_["new"]->setEnabled(idle);
+  actions_["open"]->setEnabled(idle);
+  for (const QString &name : {"save", "saveAs", "validate", "close"})
+    if (QAction *a = actions_.value(name)) a->setEnabled(hasProject_ && idle);
+  actions_["calculate"]->setEnabled(hasProject_ && idle);
+  actions_["fit"]->setEnabled(hasProject_ && idle);
+  actions_["stop"]->setEnabled(running_);
+  actions_["plot"]->setEnabled(hasProject_);
+}
+
+void AZURESetup::showProject(bool open) {
+  hasProject_ = open;
+  central_->setCurrentWidget(open ? static_cast<QWidget *>(tabWidget) : static_cast<QWidget *>(startPage_));
+  if (!open) {
+    diagnosticsDock->hide();
+    QList<QPair<QString, QString>> notes;
+    const QMap<QWidget *, QString> what = {
+        {pairsTab, tr("The pairs of nuclei: masses, spins, parities, charges, separation energies, channel radii.")},
+        {levelsTab, tr("The levels of the compound nucleus (J, parity, energy) and the widths of their channels.")},
+        {segmentsTab, tr("The data sets to fit and the extrapolations to calculate, one record each.")},
+        {effectsTab, tr("Targets, beams and detectors: energy loss, straggling, resolution, the folds of the data.")},
+        {potentialTab, tr("Potentials and the other format-3 sections of the nuclear part.")},
+        {thmTab, tr("The Trojan Horse experiments and the options of their vertex.")},
+        {fittingTab, tr("The minimizer, the priors, and every fit parameter with its limits.")},
+        {runTab, tr("Run calculate, fit, extrapolate, MINOS or the rate; the log and the chi-squared of each data set.")},
+        {plotTab, tr("The data and the calculation of the last run, the residuals; export as PNG, SVG, PDF or CSV.")}};
+    for (int i = 0; i < tabWidget->count(); i++) {
+      QWidget *tab = tabWidget->widget(i);
+      const QString text = what.contains(tab) ? what[tab]
+                           : tab == mcmcTab   ? tr("Sample the posterior of the parameters (the ensemble sampler).")
+                                              : QString();
+      if (!text.isEmpty()) notes << qMakePair(tabWidget->tabText(i).remove('&'), text);
+    }
+    startPage_->setTabNotes(notes);
+  }
+  updateTitle();
+  updateActions();
+  if (statusValidity_) statusValidity_->setVisible(open);
+  // the last validation (projectOpened's), now that a project is shown: the dock opens on a problem
+  if (open) diagnosticsDone(diagnostics->errorCount() == 0, diagnostics->errorCount(), diagnostics->warningCount());
+}
+
+bool AZURESetup::closeProject() {
+  if (running_ || !maybeSave()) return false;
+  holder_->setProject(azure2::front::Project::Empty(QDir::current().filePath("untitled.azr").toStdString()));
+  showProject(false);
+  return true;
+}
+
+bool AZURESetup::runCommand(const QString &command, QString &why) {
+  if (!hasProject_) {
+    why = tr("no project is open");
+    return false;
+  }
+  if (!runTab->setCommand(command)) {
+    why = tr("this build's engine has no command %1").arg(command);
+    return false;
+  }
+  tabWidget->setCurrentWidget(runTab);
+  return startRun(why);
+}
+
+void AZURESetup::showJobProgress(const QString &stage, qlonglong evaluation, qlonglong calls, double objective,
+                                 double best) {
+  if (!running_) return;
+  if (stage == "mcmc") {
+    jobBar_->setRange(0, (int)std::min<qlonglong>(calls, 1000000000));
+    jobBar_->setValue((int)std::min<qlonglong>(evaluation, 1000000000));
+    jobLabel_->setText(tr("mcmc: step %1 of %2").arg(evaluation).arg(calls));
+    return;
+  }
+  QString text = tr("%1: evaluation %2, chi-squared %3").arg(stage).arg(evaluation).arg(objective, 0, 'g', 7);
+  if (std::isfinite(best)) text += tr(" (best %1)").arg(best, 0, 'g', 7);
+  jobLabel_->setText(text);
+}
+
+bool AZURESetup::acceptsDrop(const QList<QUrl> &urls) {
+  for (const QUrl &u : urls)
+    if (u.isLocalFile() && u.toLocalFile().endsWith(".azr", Qt::CaseInsensitive)) return true;
+  return false;
+}
+
+void AZURESetup::dragEnterEvent(QDragEnterEvent *event) {
+  if (!running_ && event->mimeData()->hasUrls() && acceptsDrop(event->mimeData()->urls())) event->acceptProposedAction();
+}
+
+void AZURESetup::dropEvent(QDropEvent *event) {
+  if (openDropped(event->mimeData()->urls())) event->acceptProposedAction();
+}
+
+bool AZURESetup::openDropped(const QList<QUrl> &urls) {
+  if (running_) return false;
+  for (const QUrl &u : urls)
+    if (u.isLocalFile() && u.toLocalFile().endsWith(".azr", Qt::CaseInsensitive)) {
+      if (maybeSave()) open(u.toLocalFile());
+      return true;
+    }
+  return false;
+}
+
+void AZURESetup::restoreWindowState() {
+  QSettings settings;
+  if (settings.contains("window/geometry")) restoreGeometry(settings.value("window/geometry").toByteArray());
+  else resize(1280, 820);
+  // the dock's visibility is the validation's (diagnosticsDone), not the last session's
+  if (settings.contains("window/state")) restoreState(settings.value("window/state").toByteArray());
+  diagnosticsDock->hide();
+}
+
+void AZURESetup::saveWindowState() {
+  QSettings settings;
+  settings.setValue("window/geometry", saveGeometry());
+  settings.setValue("window/state", saveState());
+}
+
 void AZURESetup::closeEvent(QCloseEvent *event) {
   if (running_) {
     if (QMessageBox::question(this, tr("A run is in progress"), tr("Stop the run and quit?")) != QMessageBox::Yes) {
@@ -402,5 +705,6 @@ void AZURESetup::closeEvent(QCloseEvent *event) {
     event->ignore();
     return;
   }
+  saveWindowState();
   event->accept();
 }

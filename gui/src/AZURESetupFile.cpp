@@ -4,6 +4,9 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QProgressBar>
+#include <QLabel>
+#include <QStatusBar>
 
 #include "AZURESetup.h"
 #include "DiagnosticsPanel.h"
@@ -19,6 +22,7 @@
 void AZURESetup::newProject() {
   if (running_ || !maybeSave()) return;
   holder_->setProject(azure2::front::Project::Empty(QDir::current().filePath("untitled.azr").toStdString()));
+  showProject(true);
 }
 
 void AZURESetup::open() {
@@ -30,6 +34,10 @@ void AZURESetup::open() {
 
 void AZURESetup::open(QString filename) {
   if (filename.isEmpty() || running_) return;
+  // the start page's lists may ask twice for the file just opened (a click that also activates)
+  if (hasProject_ && QFileInfo(filename).absoluteFilePath() == QFileInfo(holder_->path()).absoluteFilePath() &&
+      !holder_->project().Modified() && !levelsDirty_)
+    return;
   QString why;
   if (readProjectFile(filename, why)) return;
   if (why.contains("--convert")) {
@@ -80,6 +88,7 @@ bool AZURESetup::readProjectFile(const QString &filename, QString &why) {
   }
   holder_->setProject(std::move(project));  // projectOpened() fills the tabs
   addRecent(QFileInfo(filename).absoluteFilePath());
+  showProject(true);
   return true;
 }
 
@@ -164,6 +173,7 @@ void AZURESetup::saveAs() {
 }
 
 bool AZURESetup::maybeSave() {
+  if (!hasProject_) return true;  // the start page's empty project holds nothing of the user's
   if (!holder_->project().Modified() && !levelsDirty_) return true;
   const QMessageBox::StandardButton answer =
       QMessageBox::question(this, tr("Unsaved changes"), tr("Save the changes to %1?").arg(holder_->path()),
@@ -203,6 +213,10 @@ bool AZURESetup::startRun(QString &why) {
   const QString command = runTab->command();
   const QStringList options = runTab->options() + fittingTab->programOptions(command);
   running_ = true;
+  updateActions();
+  jobLabel_->setText(tr("%1: starting").arg(command));
+  jobBar_->setRange(0, 0);  // busy until the run tells its steps (the sampler)
+  jobBox_->show();
   runTab->setRunning(true);
   if (mcmcTab) mcmcTab->setRunning(true);
   runTab->clearLog();
@@ -232,9 +246,16 @@ bool AZURESetup::startMCMC(QString &why) {
 
 void AZURESetup::runEnded(const RunOutcome &outcome) {
   running_ = false;
+  updateActions();
+  jobBox_->hide();
+  QString end = outcome.exitCode == 0 ? tr("The run ended") : tr("The run failed (exit %1)").arg(outcome.exitCode);
+  if (outcome.stopped) end += tr(", stopped on request");
+  if (outcome.haveChiSquared) end += tr(": total chi-squared %1").arg(outcome.totalChiSquared, 0, 'g', 10);
+  statusBar()->showMessage(end + ".", 30000);
   runTab->setRunning(false);
   if (mcmcTab) mcmcTab->setRunning(false);
-  runTab->showOutcome(outcome);
   plotTab->refresh();
+  runTab->setDataSetNames(plotTab->dataRecords());
+  runTab->showOutcome(outcome);
   emit runFinished(outcome);
 }

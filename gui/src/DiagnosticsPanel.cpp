@@ -4,6 +4,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
+#include <QStyle>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -14,6 +15,7 @@ DiagnosticsPanel::DiagnosticsPanel(ProjectHolder *holder, QWidget *parent) : QWi
   tree_->setHeaderLabels({tr("Severity"), tr("Code"), tr("Line"), tr("Record"), tr("Message")});
   tree_->setRootIsDecorated(false);
   tree_->header()->setSectionResizeMode(4, QHeaderView::Stretch);
+  tree_->setToolTip(tr("Double-click a diagnostic to go to its tab and record."));
   connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
     emit showRecord(item->data(0, Qt::UserRole).toString(), item->data(1, Qt::UserRole).toString());
   });
@@ -30,6 +32,12 @@ DiagnosticsPanel::DiagnosticsPanel(ProjectHolder *holder, QWidget *parent) : QWi
   layout->addWidget(tree_);
 }
 
+QString DiagnosticsPanel::summary() const { return summary_->text(); }
+
+void DiagnosticsPanel::activateRow(int row) {
+  if (QTreeWidgetItem *item = tree_->topLevelItem(row)) emit tree_->itemDoubleClicked(item, 0);
+}
+
 int DiagnosticsPanel::rowCount() const { return tree_->topLevelItemCount(); }
 
 QStringList DiagnosticsPanel::codes() const {
@@ -41,13 +49,17 @@ QStringList DiagnosticsPanel::codes() const {
 bool DiagnosticsPanel::validate() {
   tree_->clear();
   errors_ = 0;
+  warnings_ = 0;
   const azure2::front::Validation v = holder_->validate();
   if (!v.format3) {
     summary_->setText(QString::fromStdString(v.refusal));
     errors_ = 1;
+    emit validated(false, errors_, 0);
     return false;
   }
-  int warnings = 0;
+  int &warnings = warnings_;
+  const QIcon errorIcon = style()->standardIcon(QStyle::SP_MessageBoxCritical);
+  const QIcon warningIcon = style()->standardIcon(QStyle::SP_MessageBoxWarning);
   for (const azure2::front::Diagnostic &d : v.diagnostics) {
     QTreeWidgetItem *item = new QTreeWidgetItem(
         {QString::fromStdString(d.severity), QString::fromStdString(d.code), d.line ? QString::number(d.line) : QString(),
@@ -57,13 +69,16 @@ bool DiagnosticsPanel::validate() {
     item->setData(1, Qt::UserRole, QString::fromStdString(d.record));
     if (d.severity == "error") {
       errors_++;
-      item->setForeground(0, QColor(0xb0, 0x20, 0x20));
+      item->setForeground(0, QColor(0xd0, 0x30, 0x30));
+      item->setIcon(0, errorIcon);
     } else {
       warnings++;
+      item->setIcon(0, warningIcon);
     }
     tree_->addTopLevelItem(item);
   }
   summary_->setText(v.ok ? tr("Valid: %1 warning(s).").arg(warnings)
                          : tr("Not valid: %1 error(s), %2 other diagnostic(s).").arg(errors_).arg(warnings));
+  emit validated(v.ok, errors_, warnings);
   return v.ok;
 }

@@ -18,8 +18,8 @@ set(AZURESETUP_SOURCES
     LevelsModel.cpp LevelsTab.cpp LevelsFile.cpp ChannelsModel.cpp ChannelDetails.cpp AddLevelDialog.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp
     ChooseFileButton.cpp RichTextDelegate.cpp InfoDialog.cpp InTabDocs.cpp AboutAZURE2Dialog.cpp
-    AzureTheme.cpp FileDialogPolicy.cpp
-    AZURESetup.qrc)
+    AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp
+    AZURESetup.qrc ShellIcons.qrc)
 
 # The Plot tab is drawn with QPainter (PlotWidget.cpp) and exported with QtSvg and QPdfWriter: no plotting library.
 # dev's Qwt plot (USE_QWT) is not kept: it read the output files itself (docs/upgrade/qt_gui.md section 5).
@@ -29,6 +29,8 @@ list(REMOVE_ITEM AZURESETUP_SOURCES main.cpp)
 add_library(AZURESetupLib STATIC ${AZURESETUP_SOURCES} ${AZURESETUP_HEADERS})
 target_include_directories(AZURESetupLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(AZURESetupLib PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg azure2_front)
+# The start page lists the example projects of the checkout the program was built from (StartPage::examplePlaces).
+target_compile_definitions(AZURESetupLib PRIVATE AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 # A Qt built by a newer compiler than the one building AZURE2 (conda's Qt with an older system g++) needs its own
 # libstdc++ and libgcc_s at link and run time: e.g. -DGUI_LINK_OPTIONS="-L$CONDA_PREFIX/lib;-Wl,-rpath,$CONDA_PREFIX/lib".
 set(GUI_LINK_OPTIONS "" CACHE STRING "Extra link options of the GUI's programs (a list)")

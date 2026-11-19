@@ -2,6 +2,8 @@
 #define AZURESETUP_H
 
 #include <QMainWindow>
+#include <QMap>
+#include <QUrl>
 #include <QThread>
 
 #include "ProjectHolder.h"
@@ -17,13 +19,18 @@ class ThmTab;
 class PythonTools;
 class MCMCTab;
 class DiagnosticsPanel;
+class StartPage;
 
 QT_BEGIN_NAMESPACE
 class QAction;
 class QActionGroup;
 class QDockWidget;
+class QLabel;
 class QMenu;
+class QProgressBar;
+class QStackedWidget;
 class QTabWidget;
+class QToolBar;
 class QToolButton;
 QT_END_NAMESPACE
 
@@ -33,7 +40,13 @@ QT_END_NAMESPACE
  * its order: Particle Pairs (with the per-channel radii), Levels and Channels (with gamma decays and isospin),
  * Segments (from data, without data, model data), Experimental Effects, Nuclear Potential, THM, Fitting Settings and
  * Calculate.  A run is the program's run (azure2::front::Run) in a worker thread; the window stays responsive and a
- * run can be stopped.  Diagnostics come from the engine (Validate) and are listed in the panel below the tabs.
+ * run can be stopped.  Diagnostics come from the engine (Validate) and are listed in a dock below the tabs, hidden
+ * while there is nothing to show and opened by a problem.
+ *
+ * The shell (docs/upgrade/qt_gui.md section 11): a start page while no project is open, a tool bar of the main actions
+ * (New, Open, Save, Validate, Calculate, Fit, Stop, Plot), a status bar (the file and its modified mark, the
+ * validity, the running job with its progress and a Stop button), the View menu's look (System, Light, Dark), the
+ * window's state and the recent files kept in QSettings, an .azr dropped on the window opened.
  */
 class AZURESetup : public QMainWindow {
   Q_OBJECT
@@ -71,6 +84,26 @@ class AZURESetup : public QMainWindow {
   PythonTools *tools() const { return tools_; }
   DiagnosticsPanel *getDiagnostics() const { return diagnostics; }
   QTabWidget *tabs() const { return tabWidget; }
+  StartPage *startPage() const { return startPage_; }
+  /// A project is open (the tabs are shown; otherwise the start page).
+  bool hasProject() const { return hasProject_; }
+  /// The tool bar's actions by name: new, open, save, validate, calculate, fit, stop, plot.
+  QAction *action(const QString &name) const;
+  QToolBar *mainToolBar() const { return toolBar_; }
+  /// The status bar's parts: the file and modified mark, the validity (a button: opens the Diagnostics), the job.
+  QLabel *statusFile() const { return statusFile_; }
+  QToolButton *statusValidity() const { return statusValidity_; }
+  QLabel *statusJob() const { return jobLabel_; }
+  QProgressBar *statusProgress() const { return jobBar_; }
+  QDockWidget *diagnosticsDockWidget() const { return diagnosticsDock; }
+  /// Close the project (after asking to save) and show the start page.
+  bool closeProject();
+  /// Run `command` (calculate, fit, ...) from the tool bar: the Calculate tab's command set, then startRun.
+  bool runCommand(const QString &command, QString &why);
+  /// Whether a dropped file would be opened (an .azr).
+  static bool acceptsDrop(const QList<QUrl> &urls);
+  /// Open the first .azr of dropped files (after asking to save); false when there is none.
+  bool openDropped(const QList<QUrl> &urls);
 
  signals:
   void runFinished(const RunOutcome &outcome);
@@ -100,8 +133,20 @@ class AZURESetup : public QMainWindow {
   void levelsEdited();
   void runEnded(const RunOutcome &outcome);
   void showRecord(const QString &section, const QString &record);
+  void showJobProgress(const QString &stage, qlonglong evaluation, qlonglong calls, double objective, double best);
+  void diagnosticsDone(bool ok, int errors, int warnings);
+
+ protected:
+  void dragEnterEvent(QDragEnterEvent *event) override;
+  void dropEvent(QDropEvent *event) override;
 
  private:
+  void createToolBar();
+  void createStatusBar();
+  void updateActions();
+  void showProject(bool open);
+  void restoreWindowState();
+  void saveWindowState();
   void createActions();
   void createMenus();
   void updateRecent();
@@ -127,7 +172,7 @@ class AZURESetup : public QMainWindow {
   bool polarizedLogo_ = false;
   QAction *aMatrixAction, *rMatrixAction;
   QActionGroup *matrixActionGroup;
-  enum { numRecent = 5 };
+  enum { numRecent = 8 };
   QAction *recentFileActions[numRecent];
   QAction *recentSeparator, *clearRecentAction;
   QMenu *recentFileMenu;
@@ -145,6 +190,18 @@ class AZURESetup : public QMainWindow {
   PythonTools *tools_ = nullptr;
   DiagnosticsPanel *diagnostics;
   QDockWidget *diagnosticsDock;
+
+  QStackedWidget *central_ = nullptr;
+  StartPage *startPage_ = nullptr;
+  bool hasProject_ = false;
+  QToolBar *toolBar_ = nullptr;
+  QMap<QString, QAction *> actions_;
+  QLabel *statusFile_ = nullptr;
+  QToolButton *statusValidity_ = nullptr;
+  QLabel *jobLabel_ = nullptr;
+  QProgressBar *jobBar_ = nullptr;
+  QToolButton *jobStop_ = nullptr;
+  QWidget *jobBox_ = nullptr;
 };
 
 #endif

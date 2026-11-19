@@ -104,7 +104,16 @@ MCMCTab::MCMCTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
     if (o.high > o.low && qobject_cast<QSpinBox *>(editor))
       qobject_cast<QSpinBox *>(editor)->setRange((int)o.low, (int)o.high);
     editor->setToolTip(option + " " + help);
-    form->addRow(label, editor);
+    // the row's help in one line beside the editor
+    QWidget *row = new QWidget;
+    QHBoxLayout *h = new QHBoxLayout(row);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->addWidget(editor);
+    QLabel *hint = new QLabel(help);
+    hint->setProperty("role", "hint");
+    hint->setWordWrap(true);
+    h->addWidget(hint, 1);
+    form->addRow(label, row);
   }
   form->addRow(QString(), fresh_);
   QGroupBox *settings = new QGroupBox(tr("Sampling Settings"));
@@ -112,7 +121,9 @@ MCMCTab::MCMCTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
 
   run_ = new QPushButton(tr("&Run MCMC Sampling"));
   run_->setObjectName("mcmcRun");
-  stop_ = new QPushButton(tr("Stop Sampling"));
+  run_->setProperty("primary", true);
+  stop_ = new QPushButton(QIcon(":/actions/stop.svg"), tr("Stop Sampling"));
+  stop_->setProperty("danger", true);
   stop_->setEnabled(false);
   connect(run_, &QPushButton::clicked, this, &MCMCTab::runRequested);
   connect(stop_, &QPushButton::clicked, this, &MCMCTab::stopRequested);
