@@ -12,11 +12,19 @@
 
 namespace {
 
-// The columns of a row, in the engine's order (io::LevelColumnNames; LevelRows.h).
-enum Column {
-  kLevelJ, kLevelPi, kLevelE, kLevelFix, kAa, kIr, kS2, kL2, kLevelId, kIsActive, kChannelFix, kGamma, kJ1, kPi1, kJ2,
-  kPi2, kE2, kM1, kM2, kZ1, kZ2, kEntranceSepE, kSepE, kJ3, kPi3, kE3, kPType, kChRad, kG1, kG2, kEcMultMask, kBindingE,
-  kGammaIsRWA, kE1, kColumns
+// The columns of a row by their names (azure2::front::LevelColumnNames, the engine's io::LevelColumnNames): the GUI
+// types no column position.
+struct Columns {
+  static int At(const char *name) { return azure2::front::LevelColumnIndex(name); }
+  const int kLevelJ = At("levelJ"), kLevelPi = At("levelPi"), kLevelE = At("levelE"), kLevelFix = At("levelFix"),
+            kAa = At("aa"), kIr = At("ir"), kS2 = At("s2"), kL2 = At("l2"), kLevelId = At("levelID"),
+            kIsActive = At("isActive"), kChannelFix = At("channelFix"), kGamma = At("gamma"), kJ1 = At("j1"),
+            kPi1 = At("pi1"), kJ2 = At("j2"), kPi2 = At("pi2"), kE2 = At("e2"), kM1 = At("m1"), kM2 = At("m2"),
+            kZ1 = At("z1"), kZ2 = At("z2"), kEntranceSepE = At("entranceSepE"), kSepE = At("sepE"), kJ3 = At("j3"),
+            kPi3 = At("pi3"), kE3 = At("e3"), kPType = At("pType"), kChRad = At("chRad"), kG1 = At("g1"),
+            kG2 = At("g2"), kEcMultMask = At("ecMultMask"), kBindingE = At("bindingE"), kGammaIsRWA = At("gammaIsRWA"),
+            kE1 = At("e1");
+  const int kColumns = (int)azure2::front::LevelColumnNames().size();
 };
 
 QString Shortest(double v) { return QString::number(v, 'g', QLocale::FloatingPointShortest); }
@@ -28,6 +36,13 @@ double Number(const std::vector<std::string> &t, int c) {
 }  // namespace
 
 bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QString &why) {
+  const Columns col;
+  const int kE1 = col.kE1, kIr = col.kIr, kPType = col.kPType, kL2 = col.kL2, kLevelPi = col.kLevelPi, kJ1 = col.kJ1,
+            kPi1 = col.kPi1, kZ1 = col.kZ1, kM1 = col.kM1, kG1 = col.kG1, kJ2 = col.kJ2, kPi2 = col.kPi2,
+            kZ2 = col.kZ2, kM2 = col.kM2, kG2 = col.kG2, kE2 = col.kE2, kSepE = col.kSepE, kChRad = col.kChRad,
+            kEcMultMask = col.kEcMultMask, kIsActive = col.kIsActive, kLevelFix = col.kLevelFix, kLevelJ = col.kLevelJ,
+            kLevelE = col.kLevelE, kLevelId = col.kLevelId, kChannelFix = col.kChannelFix, kS2 = col.kS2,
+            kGamma = col.kGamma;
   maxLSpin->blockSignals(true);
   maxMultSpin->blockSignals(true);
   maxNumMultSpin->blockSignals(true);
@@ -109,6 +124,66 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
   return true;
 }
 
+azure2::front::LevelRow LevelsTab::channelRow(const ChannelsData &ch, const LevelsData &level, const PairsData &pair,
+                                               const PairsData &entrance, int id) const {
+  const Columns col;
+  const int kColumns = col.kColumns, kLevelJ = col.kLevelJ, kLevelPi = col.kLevelPi, kLevelE = col.kLevelE,
+            kLevelFix = col.kLevelFix, kAa = col.kAa, kIr = col.kIr, kS2 = col.kS2, kL2 = col.kL2,
+            kLevelId = col.kLevelId, kIsActive = col.kIsActive, kChannelFix = col.kChannelFix, kGamma = col.kGamma,
+            kJ1 = col.kJ1, kPi1 = col.kPi1, kJ2 = col.kJ2, kPi2 = col.kPi2, kE2 = col.kE2, kM1 = col.kM1,
+            kM2 = col.kM2, kZ1 = col.kZ1, kZ2 = col.kZ2, kEntranceSepE = col.kEntranceSepE, kSepE = col.kSepE,
+            kJ3 = col.kJ3, kPi3 = col.kPi3, kE3 = col.kE3, kPType = col.kPType, kChRad = col.kChRad, kG1 = col.kG1,
+            kG2 = col.kG2, kEcMultMask = col.kEcMultMask, kBindingE = col.kBindingE, kGammaIsRWA = col.kGammaIsRWA,
+            kE1 = col.kE1;
+  QVector<QString> tok(kColumns);
+  // a number: the token read when it holds the same value, else the shortest form of the value
+  auto number = [&ch, &tok](int c, double v) {
+    const QString was = c < ch.fileTokens.size() ? ch.fileTokens.at(c) : QString();
+    bool ok = false;
+    const double old = was.toDouble(&ok);
+    tok[c] = (ok && old == v) ? was : Shortest(v);
+  };
+  number(kLevelJ, level.jValue);
+  number(kLevelPi, level.piValue);
+  number(kLevelE, level.energy);
+  number(kLevelFix, level.isFixed);
+  number(kAa, 1);
+  number(kIr, ch.pairIndex + 1);
+  number(kS2, int(ch.sValue * 2));
+  number(kL2, ch.lValue * 2);
+  number(kLevelId, id);
+  number(kIsActive, level.isActive);
+  number(kChannelFix, ch.isFixed);
+  number(kGamma, ch.reducedWidth);
+  number(kJ1, pair.lightJ);
+  number(kPi1, pair.lightPi);
+  number(kJ2, pair.heavyJ);
+  number(kPi2, pair.heavyPi);
+  number(kE2, pair.excitationEnergy);
+  number(kM1, pair.lightM);
+  number(kM2, pair.heavyM);
+  number(kZ1, pair.lightZ);
+  number(kZ2, pair.heavyZ);
+  number(kEntranceSepE, entrance.seperationEnergy);
+  number(kSepE, pair.seperationEnergy);
+  // j3 pi3 e3: not used by the engine; kept as read
+  for (int c : {kJ3, kPi3}) tok[c] = c < ch.fileTokens.size() && !ch.fileTokens.at(c).isEmpty() ? ch.fileTokens.at(c) : "0";
+  tok[kE3] = kE3 < ch.fileTokens.size() && !ch.fileTokens.at(kE3).isEmpty() ? ch.fileTokens.at(kE3) : "0.0";
+  number(kPType, pair.pairType);
+  number(kChRad, pair.channelRadius);
+  number(kG1, pair.lightG);
+  number(kG2, pair.heavyG);
+  number(kEcMultMask, pair.ecMultMask);
+  // the THM binding energy and the amplitude flag (columns 32, 33): as read, not edited here
+  for (int c : {kBindingE, kGammaIsRWA}) tok[c] = c < ch.fileTokens.size() ? ch.fileTokens.at(c) : QString();
+  // the light particle's excitation energy (column 34): written when set or when the row had it
+  const bool hadE1 = kE1 < ch.fileTokens.size() && !ch.fileTokens.at(kE1).isEmpty();
+  if (pair.lightExcitation != 0. || hadE1) number(kE1, pair.lightExcitation);
+  azure2::front::LevelRow row;
+  for (const QString &s : tok) row.tokens.push_back(s.toStdString());
+  return row;
+}
+
 std::vector<azure2::front::LevelRow> LevelsTab::levelRows() {
   const QList<PairsData> pairs = pairsModel->getPairs();
   const QList<LevelsData> levels = levelsModel->getLevels();
@@ -150,53 +225,7 @@ std::vector<azure2::front::LevelRow> LevelsTab::levelRows() {
     for (const ChannelsData &ch : channels) {
       if (ch.levelIndex != levelRow || ch.pairIndex < 0 || ch.pairIndex >= pairs.size()) continue;
       const PairsData &pair = pairs.at(ch.pairIndex);
-      QVector<QString> tok(kColumns);
-      // a number: the token read when it holds the same value, else the shortest form of the value
-      auto number = [&ch, &tok](int c, double v) {
-        const QString was = c < ch.fileTokens.size() ? ch.fileTokens.at(c) : QString();
-        bool ok = false;
-        const double old = was.toDouble(&ok);
-        tok[c] = (ok && old == v) ? was : Shortest(v);
-      };
-      number(kLevelJ, level.jValue);
-      number(kLevelPi, level.piValue);
-      number(kLevelE, level.energy);
-      number(kLevelFix, level.isFixed);
-      number(kAa, 1);
-      number(kIr, ch.pairIndex + 1);
-      number(kS2, int(ch.sValue * 2));
-      number(kL2, ch.lValue * 2);
-      number(kLevelId, id);
-      number(kIsActive, level.isActive);
-      number(kChannelFix, ch.isFixed);
-      number(kGamma, ch.reducedWidth);
-      number(kJ1, pair.lightJ);
-      number(kPi1, pair.lightPi);
-      number(kJ2, pair.heavyJ);
-      number(kPi2, pair.heavyPi);
-      number(kE2, pair.excitationEnergy);
-      number(kM1, pair.lightM);
-      number(kM2, pair.heavyM);
-      number(kZ1, pair.lightZ);
-      number(kZ2, pair.heavyZ);
-      number(kEntranceSepE, pairs.at(0).seperationEnergy);
-      number(kSepE, pair.seperationEnergy);
-      // j3 pi3 e3: not used by the engine; kept as read
-      for (int c : {kJ3, kPi3}) tok[c] = c < ch.fileTokens.size() && !ch.fileTokens.at(c).isEmpty() ? ch.fileTokens.at(c) : "0";
-      tok[kE3] = kE3 < ch.fileTokens.size() && !ch.fileTokens.at(kE3).isEmpty() ? ch.fileTokens.at(kE3) : "0.0";
-      number(kPType, pair.pairType);
-      number(kChRad, pair.channelRadius);
-      number(kG1, pair.lightG);
-      number(kG2, pair.heavyG);
-      number(kEcMultMask, pair.ecMultMask);
-      // the THM binding energy and the amplitude flag (columns 32, 33): as read, not edited here
-      for (int c : {kBindingE, kGammaIsRWA}) tok[c] = c < ch.fileTokens.size() ? ch.fileTokens.at(c) : QString();
-      // the light particle's excitation energy (column 34): written when set or when the row had it
-      const bool hadE1 = kE1 < ch.fileTokens.size() && !ch.fileTokens.at(kE1).isEmpty();
-      if (pair.lightExcitation != 0. || hadE1) number(kE1, pair.lightExcitation);
-      azure2::front::LevelRow row;
-      for (const QString &s : tok) row.tokens.push_back(s.toStdString());
-      rows.push_back(row);
+      rows.push_back(channelRow(ch, level, pair, pairs.at(0), id));
     }
     // the members of an isospin level are one level: no blank line between them
     if (k + 1 < order.size() && level.fileId > 0 && levels.at(order.at(k + 1)).fileId == level.fileId) continue;

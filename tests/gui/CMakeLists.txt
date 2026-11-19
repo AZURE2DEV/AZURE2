@@ -8,3 +8,16 @@ add_test(NAME gui_window COMMAND gui_window_test ${CMAKE_SOURCE_DIR} $<TARGET_FI
 find_package(Python3 COMPONENTS Interpreter)
 set_tests_properties(gui_window PROPERTIES LABELS gui TIMEOUT 1500
                      ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2;AZURE2_TEST_PYTHON=${Python3_EXECUTABLE};PYTHONPATH=${CMAKE_SOURCE_DIR};PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+
+# The Levels and Particle Pairs tabs on the go (docs/upgrade/qt_gui.md section 11): keys typed into the widgets
+# (QTest's key events), the project text read back.  Needs Qt 6's Test module.
+find_package(Qt6 COMPONENTS Test QUIET)
+if(Qt6Test_FOUND)
+  add_executable(gui_levels_test gui_levels_test.cpp)
+  target_link_libraries(gui_levels_test PRIVATE AZURESetupLib Qt6::Test)
+  add_test(NAME gui_levels COMMAND gui_levels_test ${CMAKE_SOURCE_DIR})
+  set_tests_properties(gui_levels PROPERTIES LABELS gui TIMEOUT 600
+                       ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+else()
+  message(STATUS "Qt 6 Test not found: gui_levels is not built")
+endif()

@@ -4,6 +4,7 @@
 #include <QAbstractTableModel>
 #include <QStringList>
 #include <QList>
+#include <QMap>
 
 struct ChannelsData {
   static const int SIZE = 7;
@@ -45,13 +46,27 @@ class ChannelsModel : public QAbstractTableModel {
   QString getSpinLabel(const ChannelsData &channel) const;
   void setPairsModel(PairsModel *model);
 
+  /// The columns after the data's (docs/upgrade/qt_gui.md section 11.4): what the value of column 6 is with its unit
+  /// ("Γ [eV]", "C [fm^-1/2]", from the facade's ChannelAtLevel), and theta^2 = gamma^2 / gamma_W^2 of a particle
+  /// channel.  Display only: set by the tab for the channels it shows, without dataChanged (no edit of the project).
+  static const int ValueColumn = 6, MeaningColumn = 7, RatioColumn = 8, ColumnCount = 9;
+  struct Info {
+    QString meaning;  ///< "Γ [eV]"
+    QString tip;      ///< in words
+    double ratio = -1;  ///< theta^2; < 0 when not defined
+  };
+  void setInfo(int row, const Info &info);
+  /// Replace every channel (the undo stack): rows removed and inserted, so that the window sees an edit.
+  void setChannels(const QList<ChannelsData> &channels);
+
  signals:
   /// A channel's width or ANC (column 6) was set.
   void widthEdited();
 
  private:
   QList<ChannelsData> channelsList;
-  PairsModel *pairsModel;
+  QMap<int, Info> info_;
+  PairsModel *pairsModel = nullptr;
 };
 
 #endif

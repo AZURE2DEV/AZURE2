@@ -22,6 +22,7 @@ QT_BEGIN_NAMESPACE
 
 class QPushButton;
 class QTabWidget;
+class QUndoStack;
 
 QT_END_NAMESPACE
 
@@ -42,6 +43,15 @@ class PairsTab : public QWidget {
   void reset();
   /// Select pair `row` and remove it as the Remove button does (the tests).
   void removePairAt(int row);
+  /// The undo stack shared with the Levels tab (LevelsTab::setPairsModel): Ctrl+Z, Ctrl+Shift+Z here too.
+  void setUndoStack(QUndoStack *stack);
+  /// A number of pair `row` edited in place (column of PairsModel: 10, 11, 12, 15): false with the reason.
+  bool setPairNumber(int row, int column, const QString &text, QString &why);
+  /// What goes with pair `row` (its levels' channels, the data sets and extrapolations that name it), in words.
+  QStringList pairConsequences(int row) const;
+  QTableView *getPairsView() const { return pairsView; }
+  /// Ask before a removal (false: the tests' removePairAt removes at once).
+  void setConfirmRemoval(bool on) { confirmRemoval_ = on; }
 
  public slots:
   void addPair();
@@ -64,6 +74,7 @@ class PairsTab : public QWidget {
   PairsModel *pairsModel;
   QTableView *pairsView;
   QTabWidget *extras;
+  bool confirmRemoval_ = true;
 
  private:
   QPushButton *addButton;

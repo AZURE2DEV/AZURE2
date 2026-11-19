@@ -1,3 +1,8 @@
+#include <cmath>
+#include <QSet>
+#include <QShortcut>
+#include <QUndoStack>
+#include <functional>
 #include <QHeaderView>
 #include <QGridLayout>
 #include <QComboBox>
@@ -9,6 +14,11 @@
 #include <QInputDialog>
 #include <QTabWidget>
 #include "PairsTab.h"
+#include "LevelsTab.h"
+#include "LevelsViews.h"
+#include "ProjectHolder.h"
+#include <QLocale>
+#include <QToolTip>
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
 #include "MassCheckDialog.h"
@@ -48,7 +58,25 @@ PairsTab::PairsTab(QWidget *parent) :
   pairsView->setShowGrid(false);
 
   connect(pairsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this, SLOT(updateButtons(QItemSelection)));
-  connect(pairsView, SIGNAL(doubleClicked(QModelIndex)), this, SLOT(editPair()));
+  // a double click edits a number in place (excitation, separation energy, radius) and opens the dialog elsewhere
+  connect(pairsView, &QAbstractItemView::doubleClicked, this, [this](const QModelIndex &i) {
+    if (!PairsModel::editableInPlace(i.column())) editPair();
+  });
+  pairsView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed |
+                             QAbstractItemView::AnyKeyPressed);
+  {
+    auto *numbers = new CheckedEditDelegate(
+        CheckedEditDelegate::Kind::Number,
+        [this](const QModelIndex &index, const QVariant &value, QString &why) {
+          return setPairNumber(index.row(), index.column(), value.toString(), why);
+        },
+        this);
+    connect(numbers, &CheckedEditDelegate::refused, this, [this](const QModelIndex &index, const QString &why) {
+      const QRect r = pairsView->visualRect(index);
+      QToolTip::showText(pairsView->viewport()->mapToGlobal(r.bottomLeft()), why, pairsView, r, 6000);
+    });
+    for (int c : {10, 11, 12, (int)PairsModel::LightExcitationColumn}) pairsView->setItemDelegateForColumn(c, numbers);
+  }
 
   for (int i = 0; i < pairsModel->columnCount(QModelIndex()); i++) pairsView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
 
@@ -214,9 +242,12 @@ void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
 }
 
 void PairsTab::removePairAt(int row) {
+  const bool confirm = confirmRemoval_;
+  confirmRemoval_ = false;  // the tests' removal: no question
   pairsView->selectionModel()->select(pairsModel->index(row, 0),
                                       QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
   removePair();
+  confirmRemoval_ = confirm;
 }
 
 void PairsTab::removePair() {
@@ -230,6 +261,14 @@ void PairsTab::removePair() {
     if (previousPairType.toInt() == 10) previousIsGamma = true;
   }
   if (!previousIsGamma) {
+    const QStringList goes = pairConsequences(index.row());
+    if (confirmRemoval_ && !goes.isEmpty() &&
+        QMessageBox::question(this, tr("Remove Pair"),
+                              tr("Remove pair %1 (%2)?  The pairs after it move up one key.").arg(index.row() + 1)
+                                      .arg(PairsModel::plainText(pairsModel->getPairLabel(pairsModel->getPairs().at(index.row())))) +
+                                  "\n\n" + goes.join("\n") + "\n\n" + tr("Undo with Ctrl+Z."),
+                              QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Yes) != QMessageBox::Yes)
+      return;
     pairsModel->removeRows(index.row(), 1, QModelIndex());
     emit(pairRemoved(index.row()));
   } else {
@@ -464,4 +503,65 @@ void PairsTab::showInfo(int which, QString title) {
     } else
       infoDialog[which]->raise();
   }
+}
+
+void PairsTab::setUndoStack(QUndoStack *stack) {
+  if (!stack) return;
+  auto shortcut = [this](const QKeySequence &key, std::function<void()> f) {
+    auto *s = new QShortcut(key, this);
+    s->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(s, &QShortcut::activated, this, f);
+  };
+  shortcut(QKeySequence(Qt::CTRL | Qt::Key_Z), [stack]() { stack->undo(); });
+  shortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), [stack]() { stack->redo(); });
+  shortcut(QKeySequence(Qt::CTRL | Qt::Key_Y), [stack]() { stack->redo(); });
+}
+
+bool PairsTab::setPairNumber(int row, int column, const QString &text, QString &why) {
+  if (row < 0 || row >= pairsModel->numPairs() || !PairsModel::editableInPlace(column)) return false;
+  bool ok = false;
+  double v = QLocale::c().toDouble(text.trimmed(), &ok);
+  if (!ok) v = QLocale().toDouble(text.trimmed(), &ok);
+  const QString what = PairsModel::plainText(pairsModel->headerData(column, Qt::Horizontal, Qt::DisplayRole).toString()).replace('\n', ' ');
+  if (!ok || !std::isfinite(v)) {
+    why = tr("'%1' is not a number: %2").arg(text, what);
+    return false;
+  }
+  if (column == 12 && pairsModel->getPairs().at(row).pairType == 0 && v <= 0) {
+    why = tr("a particle pair's channel radius must be positive (fm)");
+    return false;
+  }
+  if ((column == 10 || column == PairsModel::LightExcitationColumn) && v < 0) {
+    why = tr("an excitation energy is not negative (MeV)");
+    return false;
+  }
+  if (pairsModel->data(pairsModel->index(row, column), Qt::EditRole).toDouble() == v) return true;
+  pairsModel->setData(pairsModel->index(row, column), v, Qt::EditRole);
+  emit pairEdited(row);
+  return true;
+}
+
+QStringList PairsTab::pairConsequences(int row) const {
+  QStringList out;
+  QWidget *w = window();
+  if (LevelsTab *levels = w ? w->findChild<LevelsTab *>() : nullptr) {
+    QSet<int> named;
+    int channels = 0;
+    for (const ChannelsData &c : levels->getChannelsModel()->getChannels())
+      if (c.pairIndex == row) {
+        channels++;
+        named.insert(c.levelIndex);
+      }
+    if (channels > 0) out << tr("%1 channel(s) of %2 level(s) go with it.").arg(channels).arg(named.size());
+  }
+  if (ProjectHolder *h = w ? w->findChild<ProjectHolder *>() : nullptr) {
+    const std::vector<std::string> uses = azure2::front::PairUses(h->project(), row + 1);
+    if (!uses.empty()) {
+      QStringList names;
+      for (const std::string &u : uses) names << QString::fromStdString(u);
+      out << tr("Records that name it (as the project was last saved or applied; the engine refuses them once the pair "
+                "is gone, and those naming a later pair by key point one pair off): %1").arg(names.join(", "));
+    }
+  }
+  return out;
 }

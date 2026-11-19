@@ -162,6 +162,8 @@ bool LevelsModel::removeRows(int position, int rows, const QModelIndex &index) {
 Qt::ItemFlags LevelsModel::flags(const QModelIndex &index) const {
   if (!index.isValid()) return Qt::ItemIsEnabled;
   if (index.column() == 0 || index.column() == 1) return QAbstractTableModel::flags(index) | Qt::ItemIsUserCheckable;
+  // J^pi and E are edited in place (the tab checks the value: docs/upgrade/qt_gui.md section 11.2)
+  if (index.column() == 2 || index.column() == 4) return QAbstractTableModel::flags(index) | Qt::ItemIsEditable;
   return QAbstractTableModel::flags(index);
 }
 
@@ -204,4 +206,17 @@ void LevelsModel::setNucleus(int row, const Nucleus &nucleus) {
   tempData.nucA = nucleus.A;
   levelsList.replace(row, tempData);
   emit(dataChanged(index(row, NucleusColumn), index(row, NucleusColumn)));
+}
+
+void LevelsModel::setLevels(const QList<LevelsData> &levels) {
+  if (!levelsList.isEmpty()) {
+    beginRemoveRows(QModelIndex(), 0, levelsList.size() - 1);
+    levelsList.clear();
+    endRemoveRows();
+  }
+  if (!levels.isEmpty()) {
+    beginInsertRows(QModelIndex(), 0, levels.size() - 1);
+    levelsList = levels;
+    endInsertRows();
+  }
 }
