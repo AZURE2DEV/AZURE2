@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QFile>
 #include <QFileInfo>
+#include <QWheelEvent>
 #include <QImage>
 #include <QMouseEvent>
 #include <QPainter>
@@ -65,7 +67,10 @@ PlotWidget::PlotWidget(QWidget *parent) : QWidget(parent) {
   setObjectName("plotWidget");
   setMinimumSize(320, 240);
   setAutoFillBackground(true);
-  setToolTip(tr("Drag a rectangle to zoom; double-click to see the whole range."));
+  setMouseTracking(true);
+  setFocusPolicy(Qt::WheelFocus);
+  setToolTip(tr("Wheel: zoom about the cursor (Ctrl: x only, Shift: y only).  Left drag: zoom to a rectangle.  Right "
+                "or middle drag, or Shift + left drag: pan.  Double-click: the whole range."));
 }
 
 void PlotWidget::setSeries(const QList<PlotSeries> &series) {
@@ -206,21 +211,27 @@ int PlotWidget::dataPointsDrawn() const {
   return n;
 }
 
-void PlotWidget::render(QPainter &p, const QRect &area) const {
+void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
   p.save();
   p.setRenderHint(QPainter::Antialiasing);
-  p.fillRect(area, Qt::white);
+  // on screen the window's palette (light or dark), in a file white paper
+  QColor paper = onScreen ? palette().color(QPalette::Base) : QColor(Qt::white);
+  paper.setAlpha(255);
+  const QColor ink = onScreen ? palette().color(QPalette::Text) : QColor(Qt::black);
+  const bool darkPaper = paper.lightness() < 128;
+  const QColor grid = darkPaper ? paper.lighter(170) : QColor(0xdd, 0xdd, 0xdd);
+  p.fillRect(area, paper);
   const Frame f = framesOf(area);
   const QRect &r = f.main;
   const QFontMetrics fm(p.font());
 
   // axes and ticks of the main panel
-  p.setPen(QPen(QColor(0xdd, 0xdd, 0xdd), 1, Qt::DotLine));
+  p.setPen(QPen(grid, 1, Qt::DotLine));
   const QVector<double> xt = logX_ ? LogTicks(view_.left(), view_.right()) : LinearTicks(view_.left(), view_.right(), 7);
   const QVector<double> yt = logY_ ? LogTicks(view_.top(), view_.bottom()) : LinearTicks(view_.top(), view_.bottom(), 6);
   for (double t : xt) p.drawLine(QPointF(mapX(t, r), r.top()), QPointF(mapX(t, r), r.bottom()));
   for (double t : yt) p.drawLine(QPointF(r.left(), mapY(t, r, view_, logY_)), QPointF(r.right(), mapY(t, r, view_, logY_)));
-  p.setPen(Qt::black);
+  p.setPen(ink);
   p.drawRect(r);
   const QRect xLabels = f.lower.isEmpty() ? r : f.lower;
   for (double t : xt) {
@@ -294,7 +305,7 @@ void PlotWidget::render(QPainter &p, const QRect &area) const {
       p.drawPath(path);
     }
     // the data with error bars
-    p.setPen(QPen(s.color.darker(130), 1.2));
+    p.setPen(QPen(darkPaper ? s.color.lighter(130) : s.color.darker(130), 1.2));
     p.setBrush(s.color);
     for (int i = 0; i < s.dataX.size(); i++) {
       if (!usable(s.dataX[i], s.dataY[i])) continue;
@@ -325,11 +336,11 @@ void PlotWidget::render(QPainter &p, const QRect &area) const {
           m = std::max(m, std::fabs(s.residual[i]));
     m *= 1.1;
     const QRectF lv(QPointF(view_.left(), -m), QPointF(view_.right(), m));
-    p.setPen(Qt::black);
+    p.setPen(ink);
     p.drawRect(lr);
     p.setPen(QPen(Qt::gray, 1, Qt::DashLine));
     p.drawLine(QPointF(lr.left(), mapY(0, lr, lv, false)), QPointF(lr.right(), mapY(0, lr, lv, false)));
-    p.setPen(Qt::black);
+    p.setPen(ink);
     for (double t : LinearTicks(-m, m, 4)) {
       const double y = mapY(t, lr, lv, false);
       p.drawLine(QPointF(lr.left(), y), QPointF(lr.left() + 5, y));
@@ -362,7 +373,9 @@ void PlotWidget::render(QPainter &p, const QRect &area) const {
     const int row = fm.height() + 2;
     QRect box(r.right() - width - 46, r.top() + 6, width + 40, row * (int)series_.size() + 8);
     p.setPen(QColor(0x99, 0x99, 0x99));
-    p.setBrush(QColor(255, 255, 255, 225));
+    QColor legendPaper = paper;
+    legendPaper.setAlpha(225);
+    p.setBrush(legendPaper);
     p.drawRect(box);
     for (int i = 0; i < series_.size(); i++) {
       const PlotSeries &s = series_[i];
@@ -372,16 +385,27 @@ void PlotWidget::render(QPainter &p, const QRect &area) const {
       p.setBrush(s.color);
       if (!s.dataX.isEmpty()) Marker(p, s.marker, QPointF(box.left() + 16, y), 3);
       p.setBrush(Qt::NoBrush);
-      p.setPen(Qt::black);
+      p.setPen(ink);
       p.drawText(QPointF(box.left() + 32, y + fm.ascent() / 2.0 - 1), s.label);
     }
+  }
+  // the cursor's coordinates, on screen only
+  if (onScreen && !cursorText_.isEmpty()) {
+    const QRect box(r.left() + 6, r.top() + 6, fm.horizontalAdvance(cursorText_) + 12, fm.height() + 6);
+    QColor back = paper;
+    back.setAlpha(215);
+    p.setPen(QColor(0x99, 0x99, 0x99));
+    p.setBrush(back);
+    p.drawRoundedRect(box, 3, 3);
+    p.setPen(ink);
+    p.drawText(box, Qt::AlignCenter, cursorText_);
   }
   p.restore();
 }
 
 void PlotWidget::paintEvent(QPaintEvent *) {
   QPainter p(this);
-  render(p, rect());
+  render(p, rect(), true);
 }
 
 bool PlotWidget::exportTo(const QString &file, QString &why) const {
@@ -409,6 +433,15 @@ bool PlotWidget::exportTo(const QString &file, QString &why) const {
     render(p, QRect(QPoint(0, 0), size));
     return p.end();
   }
+  if (suffix == "csv") {
+    QFile out(file);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text)) {
+      why = tr("cannot write %1").arg(file);
+      return false;
+    }
+    out.write(csv().toUtf8());
+    return true;
+  }
   if (suffix == "pdf") {
     QPdfWriter pdf(file);
     pdf.setPageSize(QPageSize(QSizeF(size.width() * 0.75, size.height() * 0.75), QPageSize::Point));
@@ -418,11 +451,104 @@ bool PlotWidget::exportTo(const QString &file, QString &why) const {
     render(p, QRect(QPoint(0, 0), size));
     return p.end();
   }
-  why = tr("%1: the plot is written as .png, .svg or .pdf").arg(file);
+  why = tr("%1: the plot is written as .png, .svg, .pdf or .csv").arg(file);
   return false;
 }
 
+QString PlotWidget::csv() const {
+  QString out;
+  auto num = [](double v) { return std::isfinite(v) ? QString::number(v, 'g', 10) : QString(); };
+  out += QString("# %1; %2\n").arg(xTitle_, yTitle_);
+  for (const PlotSeries &s : series_) {
+    if (!s.dataX.isEmpty()) {
+      out += QString("# %1: data\nx,y,error\n").arg(s.label);
+      for (int i = 0; i < s.dataX.size(); i++)
+        out += QString("%1,%2,%3\n").arg(num(s.dataX[i]), num(s.dataY[i]), num(s.dataError.value(i, NAN)));
+    }
+    if (!s.modelX.isEmpty()) {
+      const bool band = s.bandLow.size() == s.modelX.size();
+      out += QString("# %1: calculated\n%2\n").arg(s.label, band ? "x,y,band_low,band_high" : "x,y");
+      for (int i = 0; i < s.modelX.size(); i++)
+        out += band ? QString("%1,%2,%3,%4\n").arg(num(s.modelX[i]), num(s.modelY[i]), num(s.bandLow[i]), num(s.bandHigh[i]))
+                    : QString("%1,%2\n").arg(num(s.modelX[i]), num(s.modelY[i]));
+    }
+  }
+  return out;
+}
+
+bool PlotWidget::dataAt(const QPointF &pixel, QPointF &data) const {
+  const QRect r = framesOf(rect()).main;
+  if (!r.contains(pixel.toPoint()) || view_.isEmpty()) return false;
+  data = QPointF(unmapX(pixel.x(), r), unmapY(pixel.y(), r));
+  return true;
+}
+
+void PlotWidget::wheelZoom(const QPointF &pixel, double steps, Qt::KeyboardModifiers modifiers) {
+  QPointF at;
+  if (!dataAt(pixel, at)) at = view_.center();
+  const double factor = std::pow(1.25, -steps);  // a step in: the view 80 % as wide
+  // in the axis' own scale (log10 on a log axis), about the cursor
+  auto scale = [factor](double a, double b, double c, bool log) {
+    if (log) {
+      a = Log(a), b = Log(b), c = Log(c);
+      return std::make_pair(std::pow(10.0, c + (a - c) * factor), std::pow(10.0, c + (b - c) * factor));
+    }
+    return std::make_pair(c + (a - c) * factor, c + (b - c) * factor);
+  };
+  QRectF v = view_;
+  if (!(modifiers & Qt::ShiftModifier)) {
+    const auto x = scale(view_.left(), view_.right(), at.x(), logX_);
+    v.setLeft(x.first);
+    v.setRight(x.second);
+  }
+  if (!(modifiers & Qt::ControlModifier)) {
+    const auto y = scale(view_.top(), view_.bottom(), at.y(), logY_);
+    v.setTop(y.first);
+    v.setBottom(y.second);
+  }
+  view_ = v;
+  update();
+}
+
+void PlotWidget::panBy(const QPoint &pixels) {
+  const QRect r = framesOf(rect()).main;
+  if (r.width() <= 0 || r.height() <= 0) return;
+  auto shift = [](double a, double b, double fraction, bool log) {
+    if (log) {
+      const double la = Log(a), lb = Log(b), d = fraction * (lb - la);
+      return std::make_pair(std::pow(10.0, la - d), std::pow(10.0, lb - d));
+    }
+    const double d = fraction * (b - a);
+    return std::make_pair(a - d, b - d);
+  };
+  const auto x = shift(view_.left(), view_.right(), (double)pixels.x() / r.width(), logX_);
+  const auto y = shift(view_.top(), view_.bottom(), -(double)pixels.y() / r.height(), logY_);
+  view_ = QRectF(QPointF(x.first, y.first), QPointF(x.second, y.second));
+  update();
+}
+
+void PlotWidget::wheelEvent(QWheelEvent *e) {
+  const double steps = e->angleDelta().y() / 120.0;
+  if (steps == 0) return;
+  wheelZoom(e->position(), steps, e->modifiers());
+  e->accept();
+}
+
+void PlotWidget::leaveEvent(QEvent *) {
+  cursorText_.clear();
+  emit cursorMoved(NAN, NAN, false);
+  update();
+}
+
 void PlotWidget::mousePressEvent(QMouseEvent *e) {
+  const bool pan = e->button() == Qt::RightButton || e->button() == Qt::MiddleButton ||
+                   (e->button() == Qt::LeftButton && (e->modifiers() & Qt::ShiftModifier));
+  if (pan) {
+    panning_ = true;
+    panLast_ = e->position().toPoint();
+    setCursor(Qt::ClosedHandCursor);
+    return;
+  }
   if (e->button() != Qt::LeftButton) return;
   origin_ = e->position().toPoint();
   if (!rubber_) rubber_ = new QRubberBand(QRubberBand::Rectangle, this);
@@ -431,10 +557,29 @@ void PlotWidget::mousePressEvent(QMouseEvent *e) {
 }
 
 void PlotWidget::mouseMoveEvent(QMouseEvent *e) {
+  if (panning_) {
+    const QPoint now = e->position().toPoint();
+    panBy(now - panLast_);
+    panLast_ = now;
+  }
   if (rubber_ && rubber_->isVisible()) rubber_->setGeometry(QRect(origin_, e->position().toPoint()).normalized());
+  QPointF at;
+  if (dataAt(e->position(), at)) {
+    cursorText_ = QString("x = %1, y = %2").arg(at.x(), 0, 'g', 6).arg(at.y(), 0, 'g', 6);
+    emit cursorMoved(at.x(), at.y(), true);
+  } else if (!cursorText_.isEmpty()) {
+    cursorText_.clear();
+    emit cursorMoved(NAN, NAN, false);
+  }
+  update();
 }
 
 void PlotWidget::mouseReleaseEvent(QMouseEvent *e) {
+  if (panning_) {
+    panning_ = false;
+    unsetCursor();
+    return;
+  }
   if (!rubber_ || !rubber_->isVisible()) return;
   rubber_->hide();
   const QRect band = QRect(origin_, e->position().toPoint()).normalized();

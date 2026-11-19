@@ -17,6 +17,7 @@
 
 #include "azure2/experiment/ProjectPaths.h"
 #include "azure2/experiment/ProjectReader.h"
+#include "AZUREAPISampler.h"
 
 namespace azure2 {
 namespace front {
@@ -226,6 +227,32 @@ Curves ReadCurves(const Project &project) {
     }
   }
   return out;
+}
+
+bool ReadSamplerChain(const Project &project, SamplerChain &out, std::string &why) {
+  out = SamplerChain();
+  std::string dir = ex::PathToOpen(project.Directory(), project.ConfigValue("output_dir"));
+  if (!dir.empty() && dir.back() != '/') dir += '/';
+  out.file = dir + "samples.mcmc";
+  if (!std::ifstream(out.file)) {
+    why = "no samples.mcmc in the output directory yet (" + out.file + "): run mcmc first";
+    return false;
+  }
+  EngineSample sample;
+  try {
+    ReadSampleFile(out.file, sample);
+  } catch (const std::exception &e) {
+    why = e.what();
+    return false;
+  }
+  out.steps = sample.steps;
+  out.walkers = sample.walkers;
+  out.parameters = sample.parameters;
+  out.chain = std::move(sample.chain);
+  out.logProbability = std::move(sample.logProbability);
+  out.logLikelihood = std::move(sample.logLikelihood);
+  out.logPrior = std::move(sample.logPrior);
+  return true;
 }
 
 }  // namespace front

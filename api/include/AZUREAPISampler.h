@@ -48,4 +48,10 @@ struct EngineSample {
  */
 EngineSample SampleWithEngine(AZUREAPI &api, const EngineSampleRequest &request);
 
+/// samples.mcmc read back into `sample` (steps, walkers, parameters, the chain and the three log densities): the
+/// header "step,walker,logprob,loglikelihood,logprior,param0,..." and one row per walker per step, as
+/// AZURECalcMCMC::RecordStep writes them.  The one reader of the file (pyazr's sample_with_engine, the GUI's sampler
+/// results through azure2::front::ReadSamplerChain).  Throws std::runtime_error for a file that cannot be read.
+void ReadSampleFile(const std::string &path, EngineSample &sample);
+
 #endif

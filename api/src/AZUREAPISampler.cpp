@@ -28,68 +28,6 @@ std::string Written(double x) {
   return s.str();
 }
 
-/// samples.mcmc into `sample`: the header "step,walker,logprob,loglikelihood,logprior,param0,..." and one row per
-/// walker per step, as AZURECalcMCMC::RecordStep writes them (17 digits: the doubles the sampler held).
-void ReadSampleFile(const std::string &path, EngineSample &sample) {
-  std::ifstream file(path);
-  if (!file) throw std::runtime_error("the sampler's chain " + path + " cannot be opened.");
-  std::string line;
-  if (!std::getline(file, line) || line.compare(0, 42, "step,walker,logprob,loglikelihood,logprior") != 0)
-    throw std::runtime_error(path + " does not start with the header of samples.mcmc.");
-  const int columns = 1 + static_cast<int>(std::count(line.begin(), line.end(), ','));
-  const int parameters = columns - 5;
-  std::vector<int> steps, walkers;
-  std::vector<double> values;  // per row: logprob, loglikelihood, logprior, the parameters
-  int lineNumber = 1;
-  while (std::getline(file, line)) {
-    lineNumber++;
-    if (line.empty()) continue;
-    std::replace(line.begin(), line.end(), ',', ' ');
-    std::istringstream in(line);
-    in.imbue(std::locale::classic());
-    int step = 0, walker = 0;
-    in >> step >> walker;
-    for (int k = 0; k < 3 + parameters; k++) {
-      double v = 0.0;
-      in >> v;
-      values.push_back(v);
-    }
-    std::string rest;
-    if (!in || (in >> rest) || step < 0 || walker < 0)
-      throw std::runtime_error(path + ", line " + std::to_string(lineNumber) + ": not a row of " +
-                               std::to_string(columns) + " numbers.");
-    steps.push_back(step);
-    walkers.push_back(walker);
-  }
-  const int rows = static_cast<int>(steps.size());
-  const int nWalkers = rows ? 1 + *std::max_element(walkers.begin(), walkers.end()) : 0;
-  const int nSteps = rows ? 1 + *std::max_element(steps.begin(), steps.end()) : 0;
-  if (rows != nWalkers * nSteps)
-    throw std::runtime_error(path + " holds " + std::to_string(rows) + " rows, not " + std::to_string(nSteps) +
-                             " steps of " + std::to_string(nWalkers) + " walkers.");
-  sample.steps = nSteps;
-  sample.walkers = nWalkers;
-  sample.parameters = parameters;
-  sample.chain.assign(static_cast<size_t>(rows) * parameters, 0.0);
-  sample.logProbability.assign(rows, 0.0);
-  sample.logLikelihood.assign(rows, 0.0);
-  sample.logPrior.assign(rows, 0.0);
-  std::vector<char> seen(rows, 0);
-  const size_t width = 3 + parameters;
-  for (int r = 0; r < rows; r++) {
-    const size_t at = static_cast<size_t>(steps[r]) * nWalkers + walkers[r];
-    if (seen[at])
-      throw std::runtime_error(path + ": step " + std::to_string(steps[r]) + ", walker " + std::to_string(walkers[r]) +
-                               " is written twice.");
-    seen[at] = 1;
-    const double *row = &values[r * width];
-    sample.logProbability[at] = row[0];
-    sample.logLikelihood[at] = row[1];
-    sample.logPrior[at] = row[2];
-    std::copy(row + 3, row + width, sample.chain.begin() + at * parameters);
-  }
-}
-
 /// The values of a parameter vector made from `inputs` as the sampler makes its own (FillMnParams).
 AZUREParams VectorOfInputs(AZUREAPI &api, const LevelState &state, const LevelInputs &inputs) {
   AZUREParams seen;
@@ -151,6 +89,68 @@ void CarryValuesToInputs(AZUREAPI &api, const ROOT::Minuit2::MnUserParameters &w
 }
 
 }  // namespace
+
+// samples.mcmc into `sample` (AZUREAPISampler.h): the header "step,walker,logprob,loglikelihood,logprior,param0,..." and one row per
+// walker per step, as AZURECalcMCMC::RecordStep writes them (17 digits: the doubles the sampler held).
+void ReadSampleFile(const std::string &path, EngineSample &sample) {
+  std::ifstream file(path);
+  if (!file) throw std::runtime_error("the sampler's chain " + path + " cannot be opened.");
+  std::string line;
+  if (!std::getline(file, line) || line.compare(0, 42, "step,walker,logprob,loglikelihood,logprior") != 0)
+    throw std::runtime_error(path + " does not start with the header of samples.mcmc.");
+  const int columns = 1 + static_cast<int>(std::count(line.begin(), line.end(), ','));
+  const int parameters = columns - 5;
+  std::vector<int> steps, walkers;
+  std::vector<double> values;  // per row: logprob, loglikelihood, logprior, the parameters
+  int lineNumber = 1;
+  while (std::getline(file, line)) {
+    lineNumber++;
+    if (line.empty()) continue;
+    std::replace(line.begin(), line.end(), ',', ' ');
+    std::istringstream in(line);
+    in.imbue(std::locale::classic());
+    int step = 0, walker = 0;
+    in >> step >> walker;
+    for (int k = 0; k < 3 + parameters; k++) {
+      double v = 0.0;
+      in >> v;
+      values.push_back(v);
+    }
+    std::string rest;
+    if (!in || (in >> rest) || step < 0 || walker < 0)
+      throw std::runtime_error(path + ", line " + std::to_string(lineNumber) + ": not a row of " +
+                               std::to_string(columns) + " numbers.");
+    steps.push_back(step);
+    walkers.push_back(walker);
+  }
+  const int rows = static_cast<int>(steps.size());
+  const int nWalkers = rows ? 1 + *std::max_element(walkers.begin(), walkers.end()) : 0;
+  const int nSteps = rows ? 1 + *std::max_element(steps.begin(), steps.end()) : 0;
+  if (rows != nWalkers * nSteps)
+    throw std::runtime_error(path + " holds " + std::to_string(rows) + " rows, not " + std::to_string(nSteps) +
+                             " steps of " + std::to_string(nWalkers) + " walkers.");
+  sample.steps = nSteps;
+  sample.walkers = nWalkers;
+  sample.parameters = parameters;
+  sample.chain.assign(static_cast<size_t>(rows) * parameters, 0.0);
+  sample.logProbability.assign(rows, 0.0);
+  sample.logLikelihood.assign(rows, 0.0);
+  sample.logPrior.assign(rows, 0.0);
+  std::vector<char> seen(rows, 0);
+  const size_t width = 3 + parameters;
+  for (int r = 0; r < rows; r++) {
+    const size_t at = static_cast<size_t>(steps[r]) * nWalkers + walkers[r];
+    if (seen[at])
+      throw std::runtime_error(path + ": step " + std::to_string(steps[r]) + ", walker " + std::to_string(walkers[r]) +
+                               " is written twice.");
+    seen[at] = 1;
+    const double *row = &values[r * width];
+    sample.logProbability[at] = row[0];
+    sample.logLikelihood[at] = row[1];
+    sample.logPrior[at] = row[2];
+    std::copy(row + 3, row + width, sample.chain.begin() + at * parameters);
+  }
+}
 
 RunRequest SamplerRequest(int walkers, int steps, int samplerThreads, const std::string &basis, double parameterSpread,
                           double energySpread, bool overwriteSamples) {

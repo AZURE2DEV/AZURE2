@@ -12,7 +12,8 @@ byte for byte, as ``AZURE2 <command>`` on the saved project.
 Building and starting the Qt program
 ------------------------------------
 
-The Qt program needs Qt 6 (Core, Gui, Widgets, Network, Svg) and is built only
+The Qt program needs Qt 6.4 or newer (Core, Gui, Widgets, Network, Svg; CI
+builds it with the Qt 6.4 of Ubuntu 24.04) and is built only
 when asked::
 
    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON \
@@ -26,6 +27,32 @@ of this program needs nothing newer). Without ``-DBUILD_GUI=ON`` nothing of the
 Qt program is built and every other target is unchanged. The Plot tab is drawn
 by the program itself (no Qwt is needed; ``-DUSE_QWT`` is gone).
 
+The window
+----------
+
+While no project is open the window shows a start page: ``New Project`` and
+``Open Project``, the recent projects, the example projects found on this
+computer (``examples/`` and ``tests/upgrade/T1``-``T3`` of the checkout the
+program was built from, an installed ``share/azure2``, or the directory named
+by ``AZURE2_EXAMPLES``), and one line per tab saying what it is for. A click on
+a project opens it; an ``.azr`` file dropped on the window is opened too.
+``File > Close Project`` returns to the start page.
+
+The tool bar holds the main actions, each with its shortcut in its tool tip:
+New (Ctrl+N), Open (Ctrl+O), Save (Ctrl+S), Validate (F7), Calculate (F5), Fit
+(F6), Stop (Shift+F5) and Plot (F8); the ``Run`` menu holds the same. Calculate
+and Fit save the project and run that command with the options set in the
+Calculate tab. The status bar shows the project file (with ``(modified)`` after
+an edit; the title bar marks it too), whether the project is valid (``Valid``,
+or the number of errors and warnings; a click opens the Diagnostics), and while
+a run is going its progress and a Stop button.
+
+``View > Appearance`` chooses the look: ``Follow the System`` (light or dark as
+the desktop is; with a Qt older than 6.5 as the desktop's window colour is),
+``Light`` or ``Dark``. The choice, the window's size and layout and the recent
+projects are kept between sessions. ``AZURE2_THEME=native`` in the environment
+leaves the platform's own style and colours.
+
 Opening and saving a project
 ----------------------------
 
@@ -38,10 +65,14 @@ written back byte for byte; an edit changes only the lines of what was edited
 (a field of a record, a row of ``<levels>``, an entry of ``<config>``), with the
 engine's own writers.
 
-The engine checks the project as it stands: ``Configure > Validate Project``
-(F7) fills the Diagnostics panel below the tabs with the diagnostics of
-``AZURE2 --validate`` (severity, code, line, record and field, message). A
-double click on a diagnostic shows its record.
+The engine checks the project as it stands: ``Validate`` (F7, also when a
+project is opened) fills the Diagnostics panel below the tabs with the
+diagnostics of ``AZURE2 --validate`` (severity, code, line, record and field,
+message). The panel is hidden while there is nothing to show and opens by
+itself when a validation finds an error or a warning; ``View > Diagnostics``
+(Ctrl+Shift+D) shows or hides it. A double click on a diagnostic goes to its
+tab and record. Before New, Open, Close or Quit the program asks whether to
+save unsaved changes.
 
 The tabs
 --------
@@ -87,12 +118,15 @@ The tabs
        (``<parameterSettings>``) and the sampler's block (``<mcmc>``) as text.
    * - Calculate
      - The command (calculate, fit, extrapolate, MINOS, reaction rate, and the
-       sampler where the build has it) with its options: the uncertainty band
-       and its scaling, the parameter and capture files, the rate's pairs and
-       temperatures, the sampler's walkers and steps; the threads; the run's
-       lines, the chi-squared of each data set and the files the run wrote.
-       The rate's entrance and exit pairs are chosen from the project's pairs
-       (the exit also as -1, the total radiative capture).
+       sampler where the build has it) with its help in one line, and its
+       options, each with its help beside it: the uncertainty band (a check
+       box) and its scaling (enabled with the band), the parameter and capture
+       files (a path and a chooser), the rate's pairs (drop-downs of the
+       project's pairs; the exit also as -1, the total radiative capture) and
+       temperatures (spin boxes in GK), MINOS's Δχ², the sampler's walkers and
+       steps. A number left at its lowest value reads ``required`` or
+       ``default ...`` and is not given to the program. The run's lines (warnings
+       in amber, errors in red), and at the end the summary (below).
    * - MCMC
      - Shown only when the engine has the ``mcmc`` command. The Gaussian priors
        of the sampler (the ``<parameters>`` rows of ``<mcmc>``: Load Parameters
@@ -101,8 +135,13 @@ The tabs
        physical) and a fresh start (overwrite ``samples.mcmc``). Run starts
        ``AZURE2 mcmc`` with them; the progress bar follows the steps and the
        acceptance fraction is shown as the program prints it. The samples are
-       in ``output/samples.mcmc``; the burn-in is dropped when they are read
-       (pyazr), not by the sampler.
+       in ``output/samples.mcmc``; the burn-in is dropped when they are read,
+       not by the sampler. ``Results`` reads the chain back (``Read Results``):
+       the burn-in to leave out (steps), per parameter the mean, standard
+       deviation and the 16, 50 and 84 % quantiles over the kept steps and
+       walkers, the acceptance fraction (the share of walker moves that changed
+       the position), and a plot of a parameter's trace (a curve per walker),
+       its histogram, or the walkers' mean log posterior against the step.
    * - Plot
      - The data sets and extrapolations of the last run (below).
 
@@ -145,17 +184,31 @@ observable such as A_y or a phase shift) or the S factor (MeV b, for a cross
 section). Either axis can be logarithmic (points that are not positive are then
 left out). Where the run wrote the uncertainty band (``--covariance-band``) the
 1σ band is shaded. The lower panel shows the residuals (data − calculation) /
-error. Drag a rectangle to zoom; a double click or ``Reset Zoom`` shows the
-whole range. ``Export`` writes PNG, SVG or PDF. The tab is read again after
+error. The lists have a check box per curve and ``All`` / ``None``; a right
+click on a curve chooses its colour and marker (``Default style`` returns it to
+the program's). The mouse
+wheel zooms about the cursor (with Ctrl the x axis only, with Shift the y axis
+only); dragging a rectangle with the left button zooms to it; dragging with the
+right or middle button, or with Shift and the left button, pans; a double click
+or ``Reset Zoom`` shows the whole range. The cursor's coordinates are shown in
+the plot's corner and above it. ``Export`` writes PNG, SVG or PDF (on white,
+whatever the window's look), or CSV: the points drawn, per curve a block of
+the data (x, y, error) and one of the calculation (x, y and the band's limits
+where there is one). The tab is read again after
 every run; a file older than the project (records added since the run) is
 named in a note below the plot.
 
 Runs
 ----
 
-``Save and Run`` saves the project and runs the chosen command in a worker
-thread: the window stays usable, the run's lines appear as the program prints
-them, and the progress line shows the fit's objective. ``Stop AZURE2`` ends a fit
+``Save and Run`` (or Calculate and Fit in the tool bar) saves the project and
+runs the chosen command in a worker thread: the window stays usable, the run's
+lines appear as the program prints them, and the progress line shows the fit's
+objective, beside a small curve of the best χ² against the evaluation. When the
+run ends the summary gives the total χ² (and χ²/N over all points) and a table
+of the data sets: the program's segment number, the data set's name, its
+number of points N, its χ² and χ²/N; a click on a column's title sorts by it.
+``Open Plot`` shows the Plot tab with the new curves. ``Stop`` ends a fit
 at its best point; the outputs are written there and ``fitStatus.out`` says
 ``stopped`` (HESSE, MINOS and the band are not run after a stop). A calculation
 without a fit runs to its end once its set-up is done.

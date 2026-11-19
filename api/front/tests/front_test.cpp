@@ -10,6 +10,7 @@
 // Each check prints PASS or FAIL; exit 1 on a failure.
 #include "azure2/front/Engine.h"
 
+#include <map>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
@@ -138,6 +139,24 @@ int main(int argc, char **argv) {
   Check(calculate && fit, "the commands calculate and fit");
   Check(!front::Options().empty() && !front::Fitters().empty(), "the options and the fitters");
   Check(front::ConfigTableJson().find("\"use_brune\"") != std::string::npos, "the <config> table names use_brune");
+  {
+    // the options' editors (the GUI's Calculate tab): the unit the row's help names, when it applies, its other way
+    std::map<std::string, front::Option> byName;
+    for (const front::Option &o : front::Options()) byName[o.option] = o;
+    Check(byName.count("--temperature-min=") && byName["--temperature-min="].unit == "GK" &&
+              byName["--temperature-min="].instead == "--temperature-file" &&
+              byName["--temperature-min="].when == "without --temperature-file",
+          "--temperature-min: unit GK, the other way --temperature-file, asked without it: unit '" +
+              byName["--temperature-min="].unit + "', instead '" + byName["--temperature-min="].instead + "'");
+    Check(byName["--energy-spread="].unit == "keV" && byName["--walkers="].unit.empty() &&
+              byName["--covariance-band"].unit.empty(),
+          "units: --energy-spread keV, none for --walkers and a flag ('" + byName["--walkers="].unit + "')");
+    Check(byName["--scale-covariance"].needs == "--covariance-band" && byName["--covariance-band"].needs.empty() &&
+              byName["--scale-covariance"].when == "with --covariance-band",
+          "--scale-covariance applies with --covariance-band");
+    Check(byName["--delta-chi2="].lowOpen && byName["--delta-chi2="].low == 0 && !byName["--walkers="].lowOpen,
+          "--delta-chi2: above 0 (an open range), --walkers at least its low");
+  }
   {
     bool reaction = false;
     for (const front::KindInfo &k : front::RecordKinds())
@@ -347,6 +366,36 @@ int main(int argc, char **argv) {
     Check(observer.progress >= 25 && observer.progress < 2000, "T1_start: " + std::to_string(observer.progress) +
                                                                    " progress records, the fit ended soon after the request");
     Check(result.haveChiSquared, "T1_start: the final evaluation at the best point");
+  }
+
+  // (i) the sampler's chain read back by the engine's reader (a samples.mcmc written here: 2 steps, 2 walkers, 2
+  // parameters, rows out of order), a missing file and a broken one refused
+  {
+    const fs::path b = CopyProject(projects[0], fs::path("front_test_work") / "chain_T1");
+    front::Project p;
+    std::string why;
+    front::Project::Open(b.string(), p, why);
+    front::SamplerChain chain;
+    const bool none = !front::ReadSamplerChain(p, chain, why) && why.find("samples.mcmc") != std::string::npos;
+    Check(none, "chain: none before a sampler's run (" + why + ")");
+    why.clear();
+    {
+      std::ofstream f(b.parent_path() / "output" / "samples.mcmc");
+      f << "step,walker,logprob,loglikelihood,logprior,param0,param1\n"
+        << "0,0,-1.5,-1,-0.5,1.25,10\n0,1,-2.5,-2,-0.5,1.5,11\n1,1,-4.5,-4,-0.5,2,13\n1,0,-3.5,-3,-0.5,1.75,12\n";
+    }
+    const bool read = front::ReadSamplerChain(p, chain, why);
+    Check(read && chain.steps == 2 && chain.walkers == 2 && chain.parameters == 2 && chain.chain.size() == 8 &&
+              chain.chain[2 * 2 + 0 * 2 + 1] == 12 && chain.chain[2 * 2 + 1 * 2 + 0] == 2 && chain.logProbability[3] == -4.5 &&
+              chain.logLikelihood[1] == -2 && chain.logPrior[2] == -0.5,
+          "chain: [step][walker][parameter] as the engine reads samples.mcmc (" + why + ")");
+    {
+      std::ofstream f(b.parent_path() / "output" / "samples.mcmc");
+      f << "step,walker,logprob,loglikelihood,logprior,param0\n0,0,-1,-1,0,1\n0,0,-1,-1,0,1\n1,1,-1,-1,0,1\n"
+        << "1,0,-1,-1,0,1\n";
+    }
+    const bool twice = !front::ReadSamplerChain(p, chain, why) && why.find("twice") != std::string::npos;
+    Check(twice, "chain: a row written twice refused (" + why + ")");
   }
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;

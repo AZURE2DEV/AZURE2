@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-19 (agent shell) — `feature/upgrade-7-gui-shell`: CI for the Qt program, a modern shell
+
+**Design** `docs/upgrade/qt_gui.md` section 11.  Cut from `feature/upgrade-6` at `35cfcffe`.
+
+**CI** `.github/workflows/gui.yml` (new, its own workflow): ubuntu-24.04 with apt's Qt 6.4.2 builds `-DBUILD_GUI=ON`,
+counts the warnings of `gui/` and `api/front/` (a warning annotation, as build.yml), runs `api_front` and `ctest -L gui`
+offscreen, uploads the screenshots; failures as `::error` annotations.  macOS (brew `qt`) and Windows (MSYS2
+`qt6-base`, `qt6-svg`) jobs are written but untested (`continue-on-error`).  **The workflow has not run** (no push from
+here): the director's first push is its first run.  `packaging/docker/*`: the readline leftovers removed.
+
+**Look and window** (`gui/`): Fusion with a light and a dark palette and one style sheet (View > Appearance: System,
+Light, Dark; QSettings); SVG icons of the main actions (`gui/images/actions/`); a tool bar (New, Open, Save, Validate,
+Calculate F5, Fit F6, Stop Shift+F5, Plot F8); a status bar (file and modified mark, validity that opens the
+Diagnostics, the running job with progress and Stop); the Diagnostics dock hidden while there is nothing to show; a
+start page (recent and example projects, the tabs in one line each); File > Close; window state kept; a dropped `.azr`
+opened.  Calculate: each option's editor from the facade's row (spin boxes with range and unit, check boxes,
+drop-downs, files), its help beside it, dependent options enabled with their flag; Run/Stop; a fit's chi-squared curve;
+highlighted log; a sortable summary per data set and Open Plot.  Plot: wheel zoom, pan, cursor read-out, check-box
+lists with All/None, per-curve colour and marker, CSV export, dark on screen.  MCMC: a Results page (statistics after a
+burn-in, acceptance fraction, trace/histogram/log-posterior plots).
+
+**Facade** (`api/front/`): `Option::unit`, `when`, `needs`, `instead`, `lowOpen`; `SamplerChain`, `ReadSamplerChain`.
+**api/**: `ReadSampleFile` (`api/src/AZUREAPISampler.cpp`) moved out of an anonymous namespace and declared in
+`AZUREAPISampler.h` (the one reader of `samples.mcmc`; unchanged).  No engine file edited; no number moves.
+
+**Run** (`work/b-u7-shell`, `work/build_gui.sh`): build 0 warnings; `ctest -L gui` 2 of 2 (`gui_window` unchanged and
+passing, `gui_shell` new, 52 checks); `api_front` passed; `repo_consistency` passed; the gui sources and the new test
+pass `-fsyntax-only` against Qt 6.8.3's headers (no Qt 6.4 on this machine); `ctest -LE slow -j4` 393 of 397: besides
+`rmfit_enginepin` (as on the base), `physics_standalone` timed out at 300 s under load 27 (passed alone, 216 s) and
+`pyazr_ui_smoke`, `pyazr_ui_navigation` fail with "Failed to fetch" in headless Chrome while the server log shows every
+request answered 200; `navigation_test.py` fails the same way on the base sources (`AZURE2/` at `35cfcffe`) with an
+older module, so it is this machine's browser now, not this branch.  Screenshots before/after, light and dark:
+`work/qt-shots/u7-shell/`.
+
+**Not run**: the workflow itself; the macOS and Windows GUI builds; `tests/run_tests.sh` (no engine file touched);
+the GUI on a real display (high-DPI only by reasoning: no pixel font sizes, SVG icons).
+
+**Open**: a corner plot of two parameters; print; level markers in the plot; the theme's look on macOS/Windows native
+font metrics unseen.
+
 ## 2026-11-19 (director) — `feature/upgrade-6` joined and checked: the owner's answers, the Qt program, the page's navigation
 
 **What it is**: `98a4cf60` (GitHub's `feature/upgrade` `a405a9e9` + the owner's `feature/upgrade-5-fixes` and

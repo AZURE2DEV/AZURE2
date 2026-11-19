@@ -9,7 +9,6 @@ RUN dnf update -y && \
         mingw64-gcc-c++ \
         mingw64-pkg-config \
         mingw64-gsl \
-        mingw64-readline \
         mingw64-libgomp \
         cmake make git wget \
         wine \
@@ -63,7 +62,6 @@ RUN rm -rf build-windows && mkdir build-windows && cd build-windows && \
         -DCROSS_COMPILE_WINDOWS=ON \
         -DUSE_API=OFF \
         -DUSE_STAT=OFF \
-        -DUSE_READLINE=OFF \
         -DCODE_COVERAGE=OFF \
         -DCMAKE_BUILD_TYPE=Release && \
     echo "=== Starting compilation ===" && \

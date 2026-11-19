@@ -5,6 +5,8 @@
 
 #include "ProjectHolder.h"
 
+class PlotWidget;
+
 QT_BEGIN_NAMESPACE
 class QCheckBox;
 class QComboBox;
@@ -26,6 +28,12 @@ QT_END_NAMESPACE
  * --sampler-threads, --basis, --overwrite-samples) from the engine's table of options; Run starts the program's mcmc
  * command in the window's worker thread, its steps arrive as progress records (stage "mcmc") through the facade's
  * observer.  Burn-in is not the engine's: samples.mcmc holds every step, and a reader (pyazr) drops the burn-in.
+ *
+ * Results (docs/upgrade/qt_gui.md section 11): the chain of the last run (azure2::front::ReadSamplerChain, the
+ * engine's reader of samples.mcmc), the burn-in steps to drop chosen here: per parameter the mean, the standard
+ * deviation and the 16, 50 and 84 % quantiles over the kept steps and walkers; the acceptance fraction (the share of
+ * walker moves after the burn-in that changed the position); a plot of a parameter's trace (every walker against the
+ * step), of its histogram, or of the walkers' mean log posterior against the step.
  */
 class MCMCTab : public QWidget {
   Q_OBJECT
@@ -48,6 +56,16 @@ class MCMCTab : public QWidget {
   void setRunning(bool running);
   QString acceptance() const;
   int lastStep() const { return lastStep_; }
+  /// Read the chain of the last run and fill the Results page; false with `why`.
+  bool readResults(QString &why);
+  /// The burn-in: the first steps left out of the statistics.
+  void setBurnIn(int steps);
+  QTableWidget *resultsTable() const { return results_; }
+  PlotWidget *resultsPlot() const { return resultsPlot_; }
+  /// The share of moves after the burn-in that changed a walker's position (NaN before a chain is read).
+  double acceptanceFraction() const { return accepted_; }
+  /// What the plot shows: "trace:<parameter index>", "histogram:<parameter index>" or "logprob".
+  bool showResultPlot(const QString &what);
 
  public slots:
   void reload();
@@ -73,6 +91,16 @@ class MCMCTab : public QWidget {
   QPlainTextEdit *log_;
   bool dirty_ = false, filling_ = false;
   int lastStep_ = 0;
+  // the Results page
+  void fillResults();
+  QSpinBox *burnIn_ = nullptr;
+  QComboBox *plotChoice_ = nullptr;
+  QLabel *resultsNote_ = nullptr;
+  QTableWidget *results_ = nullptr;
+  PlotWidget *resultsPlot_ = nullptr;
+  azure2::front::SamplerChain chain_;
+  QStringList chainNames_;
+  double accepted_;
 };
 
 #endif

@@ -1,0 +1,199 @@
+name: gui
+
+# The Qt setup program AZURESetup (gui/, Qt 6 Widgets on the facade api/front/; docs/upgrade/qt_gui.md), built with
+# -DBUILD_GUI=ON, and its headless tests (ctest -L gui, QT_QPA_PLATFORM=offscreen) with the facade's (api_front).
+#
+# A workflow of its own rather than a fourth leg of build.yml: build.yml builds the command-line program and runs
+# the whole physics suite (up to hours on macOS) and packages it; the GUI needs a Qt the other legs do not install
+# and a different set of tests, and a red or slow GUI leg should neither hold up nor hide the engine's result.  Here
+# the GUI has its own status in the run list.
+#
+# linux (ubuntu-24.04, Qt 6.4 from apt) is the job that counts.  macos (Homebrew's qt) and windows (MSYS2's
+# qt6-base) are UNTESTED: they were written without a machine of either kind to try them on, and are marked
+# continue-on-error, so that they inform (their annotations show) without turning the run red.  When one of them
+# has been green for a while, drop its continue-on-error.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gui:
+    name: gui-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.untested }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 24.04 ships Qt 6.4.2: gui/ keeps to the API of Qt 6.4 (newer calls are guarded with
+          # QT_VERSION_CHECK), so this job is also the check of the oldest Qt the program supports.
+          - name: linux
+            os: ubuntu-24.04
+            untested: false
+          - name: macos
+            os: macos-15-intel
+            untested: true
+          - name: windows
+            os: windows-latest
+            untested: true
+
+    defaults:
+      run:
+        shell: ${{ matrix.name == 'windows' && 'msys2 {0}' || 'bash' }}
+
+    steps:
+      - name: Check out with the committed line endings (windows)
+        if: matrix.name == 'windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- linux
+      # qt6-base-dev: Core, Gui, Widgets, Network; qt6-svg-dev: Svg (the plot's SVG export, the SVG icons);
+      # qt6-qpa-plugins: the offscreen platform the tests run on (a recommendation of libqt6gui6 only, so not
+      # installed with --no-install-recommends).  pybind11, numpy and scipy in a venv, as in build.yml: the GUI test
+      # runs python -m pyazr (the Tools menu) with this build's module.
+      - name: Install dependencies (linux)
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config libgsl-dev python3-dev python3-venv \
+            qt6-base-dev qt6-svg-dev qt6-qpa-plugins libgl-dev fonts-dejavu-core
+          python3 -m venv "$RUNNER_TEMP/pyazr-venv"
+          PY="$RUNNER_TEMP/pyazr-venv/bin/python"
+          "$PY" -m pip install --quiet --upgrade pip
+          "$PY" -m pip install --quiet pybind11 numpy scipy mpmath
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
+          echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
+          dpkg -s qt6-base-dev | grep '^Version'
+
+      # ---------------------------------------------------------------- macos (untested)
+      - name: Install dependencies (macos)
+        if: matrix.name == 'macos'
+        run: |
+          brew install ninja gsl libomp qt
+          python3 -m venv "$RUNNER_TEMP/pyazr-venv"
+          PY="$RUNNER_TEMP/pyazr-venv/bin/python"
+          "$PY" -m pip install --quiet --upgrade pip
+          "$PY" -m pip install --quiet pybind11 numpy scipy mpmath
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
+          echo "PYBIND11_DIR=$("$PY" -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
+          echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
+          echo "QT_PREFIX=$(brew --prefix qt)" >> "$GITHUB_ENV"
+
+      # -------------------------------------------------------------- windows (untested)
+      # The package set of build.yml's Windows leg (libgomp is its own MSYS2 package) plus Qt 6's base and Svg.
+      - name: Set up MSYS2 (windows)
+        if: matrix.name == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-libgomp
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkg-config
+            mingw-w64-ucrt-x86_64-gsl
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-numpy
+            mingw-w64-ucrt-x86_64-python-scipy
+            mingw-w64-ucrt-x86_64-python-mpmath
+            mingw-w64-ucrt-x86_64-pybind11
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-svg
+
+      - name: Python for pyazr (windows)
+        if: matrix.name == 'windows'
+        run: |
+          PY="$(cygpath -m "$(command -v python3)")"
+          echo "PYAZR_PYTHON=$PY" >> "$GITHUB_ENV"
+
+      # --------------------------------------------------------------- build
+      # A failure's first lines as an annotation (scripts/ci_first_errors.sh): the log needs a login, the
+      # annotations are public with the run.
+      - name: Configure
+        run: |
+          trap 'echo "::error::gui-${{ matrix.name }} configure: failed at: $BASH_COMMAND"' ERR
+          EXTRA=()
+          if [ "${{ matrix.name }}" = "macos" ]; then
+            EXTRA+=(-DOpenMP_ROOT="$LIBOMP")
+            EXTRA+=(-DOpenMP_C_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include")
+            EXTRA+=(-DOpenMP_CXX_FLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include")
+            EXTRA+=(-DOpenMP_C_LIB_NAMES=omp)
+            EXTRA+=(-DOpenMP_CXX_LIB_NAMES=omp)
+            EXTRA+=(-DOpenMP_omp_LIBRARY="$LIBOMP/lib/libomp.dylib")
+            EXTRA+=(-DCMAKE_PREFIX_PATH="$QT_PREFIX")
+          fi
+          EXTRA+=(-DPYBIND11_FINDPYTHON=ON)
+          EXTRA+=(-DPython_EXECUTABLE="$PYAZR_PYTHON")
+          EXTRA+=(-DPython3_EXECUTABLE="$PYAZR_PYTHON")
+          EXTRA+=(-DPYTHON_EXECUTABLE="$PYAZR_PYTHON")
+          if [ -n "${PYBIND11_DIR:-}" ]; then EXTRA+=(-Dpybind11_DIR="$PYBIND11_DIR"); fi
+          set -o pipefail
+          if ! cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_API=ON \
+            -DBUILD_GUI=ON \
+            "${EXTRA[@]}" 2>&1 | tee configure.log; then
+            bash scripts/ci_first_errors.sh configure.log "gui-${{ matrix.name }} configure"
+            exit 1
+          fi
+          grep -i -E 'Qt6 version|Found Qt|Qt6_DIR' configure.log || true
+
+      # The build of the whole tree (the tests need the program AZURE2 and pyazr's module), then the warnings of
+      # gui/ and api/front/ counted.  The repository keeps 0 warnings (CLAUDE.md, "Definition of done"); like
+      # build.yml, which does not fail on a warning, this job reports them as a warning annotation and stays green.
+      - name: Build
+        id: build
+        run: |
+          set -o pipefail
+          if ! cmake --build build --parallel 2>&1 | tee build.log; then
+            bash scripts/ci_first_errors.sh build.log "gui-${{ matrix.name }} build"
+            exit 1
+          fi
+          WARN="$(grep -E '(/|^)(gui|api/front)/[^ :]+:[0-9]+(:[0-9]+)?: warning:' build.log | sort -u || true)"
+          N=$(printf '%s' "$WARN" | grep -c . || true)
+          echo "warnings in gui/ and api/front/: $N"
+          if [ "$N" -gt 0 ]; then
+            echo "::warning::gui-${{ matrix.name }}: $N compiler warning(s) in gui/ or api/front/:%0A$(printf '%s\n' "$WARN" | head -20 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          fi
+
+      # The facade's test and the GUI's headless tests.  The screenshots the GUI test writes (build/qt-shots) are
+      # kept as an artifact: they show the program as this platform's Qt draws it.
+      - name: Tests (api_front, ctest -L gui)
+        if: steps.build.outcome == 'success'
+        run: |
+          set -o pipefail
+          export QT_QPA_PLATFORM=offscreen
+          rc=0
+          ctest --test-dir build -R '^api_front$' --output-on-failure --timeout 900 2>&1 | tee gui-tests.log || rc=1
+          ctest --test-dir build -L gui --output-on-failure --timeout 1800 2>&1 | tee -a gui-tests.log || rc=1
+          if [ "$rc" -ne 0 ]; then
+            BAD="$(grep -E '^ *[0-9]+ - .*\((Failed|Timeout|SEGFAULT|Subprocess|Exception|Not Run)' gui-tests.log | sed 's/^ *[0-9]* - //' | paste -sd ' ' - || true)"
+            echo "::error::gui-${{ matrix.name }}: tests failed: ${BAD:-see gui-tests.log}"
+            { grep -n -E 'FAIL|Error|error:|Timeout|Segmentation|Abort' gui-tests.log | head -30; echo ...; tail -15 gui-tests.log; } \
+              | cut -c1-300 | sed 's/%/%25/g' | awk 'BEGIN { printf "::error title=gui-${{ matrix.name }} tests: failing lines::" } { printf "%s%%0A", $0 } END { print "" }'
+            exit 1
+          fi
+
+      - name: Upload the screenshots and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.name }}
+          path: |
+            build/qt-shots/
+            gui-tests.log
+            build.log
+          if-no-files-found: warn
+          retention-days: 7

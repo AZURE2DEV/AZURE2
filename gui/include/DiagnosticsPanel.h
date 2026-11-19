@@ -20,6 +20,11 @@ class DiagnosticsPanel : public QWidget {
  public:
   explicit DiagnosticsPanel(ProjectHolder *holder, QWidget *parent = nullptr);
   int errorCount() const { return errors_; }
+  int warningCount() const { return warnings_; }
+  /// The summary line ("Valid: no diagnostic", "Not valid: 2 error(s) ...").
+  QString summary() const;
+  /// Double-click on row `row` (the tests).
+  void activateRow(int row);
   int rowCount() const;
   /// The codes shown, for the tests.
   QStringList codes() const;
@@ -30,12 +35,15 @@ class DiagnosticsPanel : public QWidget {
 
  signals:
   void showRecord(const QString &section, const QString &record);
+  /// After every validation: valid or not, the errors and the other diagnostics.
+  void validated(bool ok, int errors, int warnings);
 
  private:
   ProjectHolder *holder_;
   QTreeWidget *tree_;
   QLabel *summary_;
   int errors_ = 0;
+  int warnings_ = 0;
 };
 
 #endif
