@@ -31,6 +31,16 @@ class PPair;
  */
 azure2::physics::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double radius, double Ec);
 
+/// A closed channel (binding energy `binding` > 0) whose potential also acts inside the channel radius
+/// (docs/upgrade/interior_potential.md section 6): a level's surface amplitude is gamma / D, 1/D = (f - b)/(f - S),
+/// and the potential's wave inside the radius adds ((S - b)/(f - b))^2 int_0^a u^2 dr / u(a)^2 to the exterior norm
+/// integral.  {1, 0} for a channel without such a potential.
+struct BoundInteriorFactor {
+  double dInverse = 1.0;      ///< (f - b)/(f - S), signed
+  double interiorNorm = 0.0;  ///< ((S - b)/(f - b))^2 int_0^a u^2 dr / u(a)^2 (fm)
+};
+BoundInteriorFactor BoundInterior(const PPair &pair, int l, int twoJ, double radius, double binding);
+
 /*!
  * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, with
  * the channel energy E_c = (E - S) - e (MeV, c.m.; S = GetSepE(), e = GetExE()), the order in which the collision

@@ -115,6 +115,9 @@ class CoulFunc {
   CoulWaves operator()(int l, int two_j, double radius, double energy);
   /// Penetrability \f$P_l\f$ at (l, two_j, radius, energy).
   double Penetrability(int l, int two_j, double radius, double energy);
+  /// P of the waves outside the radius alone: Penetrability without the interior factor of a potential that also acts
+  /// inside the radius (equal to it for any other pair).
+  double OuterPenetrability(int l, int two_j, double radius, double energy);
   /// Shift function \f$S_l\f$ at (l, two_j, radius, energy), positive energies.
   double PEShift(int l, int two_j, double radius, double energy);
   /// Hard-sphere phase factor exp(-i phi_l) = (G - iF)/|G + iF| at (l, two_j, radius, energy):

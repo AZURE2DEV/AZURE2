@@ -40,6 +40,15 @@ add_test(NAME upgrade_observed_level_record
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(upgrade_observed_level_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 
+# A bound level in a channel whose potential also acts inside the radius (docs/upgrade/interior_potential.md section 6):
+# the width factor, the norm identity an external-capture final state shares, and the single-particle limit.
+add_executable(interior_bound_test interior_bound_test.cpp)
+target_link_libraries(interior_bound_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_interior_bound
+         COMMAND interior_bound_test ${CMAKE_CURRENT_SOURCE_DIR}/interior_bound/interior_bound.azr
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(upgrade_interior_bound PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
 # physics/coulomb's default algorithm against GSL's Coulomb functions, an independent algorithm physics/ does not
 # link (docs/upgrade/coulomb.md section 5).
 add_executable(coulomb_gsl_crosscheck_test coulomb_gsl_crosscheck_test.cpp)

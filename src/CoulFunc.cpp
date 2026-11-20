@@ -266,6 +266,11 @@ double CoulFunc::PEShift_d2E(int l, int two_j, double radius, double energy) {
                                             energy < 4.0 * h, azure2::physics::Side::Above);
 }
 
+double CoulFunc::OuterPenetrability(int l, int two_j, double radius, double energy) {
+  const struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
+  return azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
+}
+
 const azure2::physics::ChannelTriple &CoulFunc::InteriorFunctions(int l, int two_j, double radius, double energy) {
   if (l == iL_ && two_j == iTwoJ_ && radius == iR_ && energy == iE_) return iTriple_;
   const struct CoulWaves coul = this->operator()(l, two_j, radius, energy);

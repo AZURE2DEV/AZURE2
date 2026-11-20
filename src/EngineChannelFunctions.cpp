@@ -1,6 +1,7 @@
 #include "EngineChannelFunctions.h"
 
 #include <cmath>
+#include <optional>
 
 #include "CompoundSystem.h"
 #include "ExternalCaptureAmplitudes.h"
@@ -8,9 +9,23 @@
 #include "Config.h"
 #include "Constants.h"
 #include "WhitFunc.h"
+#include "azure2/physics/HybridPotential.h"
 #include "azure2/physics/Widths.h"
 
 namespace phys = azure2::physics;
+
+BoundInteriorFactor BoundInterior(const PPair &pair, int l, int twoJ, double radius, double binding) {
+  BoundInteriorFactor out;
+  const std::optional<phys::HybridPotential> &potential = pair.GetHybridPotential(l);
+  if (!potential || !potential->interior_boundary) return out;
+  const double mu = pair.GetRedMass() * uconv, twoLDotI = pair.SpinOrbitFactor(l, twoJ), b = *potential->interior_boundary;
+  const phys::RegularValue u = phys::RegularSolution(*potential, pair.GetZ(1), pair.GetZ(2), mu, l, twoLDotI, radius, -binding);
+  const double f = u.log_derivative;
+  const double S = phys::HybridBoundShift(*potential, pair.GetZ(1), pair.GetZ(2), mu, l, twoLDotI, radius, binding);
+  out.dInverse = (f - b) / (f - S);
+  out.interiorNorm = std::pow((S - b) / (f - b), 2.0) * u.norm_fm;
+  return out;
+}
 
 phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, double radius, double Ec) {
   phys::ChannelValues v;
@@ -23,6 +38,11 @@ phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, do
     WhitFunc whit(&pair);
     const double W = whit(l, twoJ, radius, std::fabs(Ec));
     v.P = pair.GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
+    // A channel whose potential also acts inside the channel radius (docs/upgrade/interior_potential.md): the level's
+    // amplitude at the surface carries the factor 1/D = (f - b)/(f - S), S the decaying solution's own shift, so the
+    // conversion factor carries its square (the norm 1 + sum gamma^2 dS'/dE comes with dS_dE below, which is S').
+    const double dInverse = BoundInterior(pair, l, twoJ, radius, std::fabs(Ec)).dInverse;
+    v.P *= dInverse * dInverse;
   }
   v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);
   return v;

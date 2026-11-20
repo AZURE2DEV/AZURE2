@@ -86,12 +86,25 @@ void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, doub
   if (finalEnergy > 0.0) {
     CoulFunc coul(pair);
     nfIntegral = pow(hbarc, 2.0) / (2.0 * pair->GetRedMass() * uconv * radius) * coul.PEShift_dE(l, twoJ, radius, finalEnergy);
+    // With a potential that also acts inside the radius the surface amplitude carries |(f - b)/(f - L)| =
+    // sqrt(P'/P) (PEShift_dE above is already S').
     conversion = toAmplitude;
+    if (pair->GetHybridPotential(l) && pair->GetHybridPotential(l)->interior_boundary) {
+      const double primed = coul.Penetrability(l, twoJ, radius, finalEnergy);
+      const double outer = coul.OuterPenetrability(l, twoJ, radius, finalEnergy);
+      if (outer > 0.0) conversion *= sqrt(primed / outer);
+    }
   } else {
     NFIntegral newNFIntegral(pair, radius);
     nfIntegral = newNFIntegral(l, twoJ, levelEnergy);
     WhitFunc newWhitFunc(pair);
     conversion = toAmplitude / newWhitFunc(l, twoJ, radius, fabs(finalEnergy));
+    // A potential that also acts inside the radius (interior_potential.md section 6): the surface amplitude is
+    // gamma |1/D| (the sign stays the ANC's, as in the level conversion), and the norm integral becomes
+    // (hbar^2 / 2 mu a) dS'/dE = (N_f + the potential wave's interior part) / D^2.
+    const BoundInteriorFactor interior = BoundInterior(*pair, l, twoJ, radius, fabs(finalEnergy));
+    conversion *= fabs(interior.dInverse);
+    nfIntegral = (nfIntegral + interior.interiorNorm) * interior.dInverse * interior.dInverse;
   }
 }
 
