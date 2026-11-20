@@ -655,7 +655,8 @@ void OverviewChecks(const fs::path &source, const std::string &binary) {
           "overview: T1: total " + std::to_string(run.totalChiSquared) + " over " + std::to_string(run.points) +
               " points, " + run.parameterFile);
     // the stale mark: an edit saved after the run
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // above one second: the file times of some C++ libraries (MinGW's) are whole seconds
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
     front::Record r = p.Records("data")[0];
     for (front::Field &f : r.fields)
       if (f.key == "norm") f.value = "1.01 fixed";

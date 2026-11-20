@@ -243,7 +243,8 @@ int main(int argc, char **argv) {
   Settle();
 
   // (d) the stale mark
-  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  // above one second: the file times of some C++ libraries (MinGW's) are whole seconds
+  std::this_thread::sleep_for(std::chrono::milliseconds(1200));
   front::Record r = w.holder()->records("data")[0];
   for (front::Field &f : r.fields)
     if (f.key == "norm") f.value = "1.01 fixed";
@@ -354,7 +355,7 @@ int main(int argc, char **argv) {
       std::ifstream in(dataFile, std::ios::binary);
       content.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
     {
       std::ofstream out(dataFile, std::ios::binary);
       out << content;

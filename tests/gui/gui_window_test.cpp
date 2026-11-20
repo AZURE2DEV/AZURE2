@@ -690,9 +690,17 @@ int main(int argc, char **argv) {
       const int status = Shell(command);
       std::string report;
       const bool same = SameOutputs(mine.parent_path(), theirs.parent_path(), report);
-      Check(set && o.exitCode == 0 && status == 0 && same,
-            c.name + ": " + c.command + " from the window = AZURE2 " + c.command + " " + c.cli + ": " + report +
-                (set ? "" : " (an option's editor was not set)"));
+      const bool good = set && o.exitCode == 0 && status == 0 && same;
+      // a failure says what each run returned and where it wrote, and ends with the program's log
+      std::string detail;
+      if (!good) {
+        const std::string log = Bytes(theirs.parent_path() / "run.log");
+        detail = " [window exit " + std::to_string(o.exitCode) + ", output " + o.outputDirectory.toStdString() +
+                 ", " + std::to_string(o.outputFiles.size()) + " files; program exit " + std::to_string(status) +
+                 "; run.log ends: " + (log.size() > 600 ? log.substr(log.size() - 600) : log) + "]";
+      }
+      Check(good, c.name + ": " + c.command + " from the window = AZURE2 " + c.command + " " + c.cli + ": " + report +
+                      (set ? "" : " (an option's editor was not set)") + detail);
       for (const auto &opt : c.options) w.getRunTab()->setOption(QString::fromStdString(opt.first), opt.second == "1" ? "0" : "");
       if (c.name == "rate") {
         QComboBox *entrance = w.getRunTab()->findChild<QComboBox *>("option_rate-entrance");
