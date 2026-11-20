@@ -48,6 +48,9 @@ struct HybridPotentialSetting {
 struct HybridPotentialSettings {
   HybridPotentialSetting defaults;
   std::map<int, HybridPotentialSetting> pairs;
+  /// The settings of single orbital angular momenta, (pair key, l): a format-3 record with an l list.  They take
+  /// precedence over the pair's setting for those l (interior_potential.md section 3.3).
+  std::map<std::pair<int, int>, HybridPotentialSetting> byL;
 
   /// The setting that applies to a pair: its own, else the default.
   const HybridPotentialSetting &For(int pairKey) const;
@@ -55,6 +58,8 @@ struct HybridPotentialSettings {
   bool AnyEnabled() const;
   /// The potential of a pair, or none when the model is off for it.
   std::optional<physics::HybridPotential> PotentialFor(int pairKey) const;
+  /// The potentials of single l of a pair (byL), l -> potential; empty for a pair without such records.
+  std::map<int, physics::HybridPotential> PotentialsByL(int pairKey) const;
   /// The keys of the pairs with a section of their own, ascending.
   std::vector<int> ConfiguredPairs() const;
 };

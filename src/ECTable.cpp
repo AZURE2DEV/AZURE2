@@ -53,7 +53,7 @@ std::vector<double> TermKey(const PPair *pair, double radius, const Config &conf
           // relativistic kinematics change eta, rho and the flux factor of every node (checklist t3-25)
           configure.relativistic ? 1.0 : 0.0};
   // the nuclear potential of a hybrid pair, by value
-  const std::vector<double> potential = azure2::physics::PotentialKey(coul.HybridPotential());
+  const std::vector<double> potential = coul.PotentialKeyOfPair();
   key.insert(key.end(), potential.begin(), potential.end());
   return key;
 }

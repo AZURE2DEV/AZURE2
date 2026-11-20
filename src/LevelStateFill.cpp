@@ -161,7 +161,7 @@ void CompoundSystem::CalcShiftFunctions(const Config &configure, LevelState &sta
       const double threshold = d.pair->GetSepE() + d.pair->GetExE();
       const double resonanceEnergy = d.energy - threshold;
       CoulFunc theCoulombFunction(d.pair);
-      const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
+      const azure2::ShiftDerivativeMemo::Key key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, d.two_j, azure2::physics::PotentialKey(theCoulombFunction.Pot(d.l)),
                               theCoulombFunction.UsesTable(), d.pair->FunctionSettings().relativistic, d.pair->GetRedMass(),
                               d.pair->GetM(1) + d.pair->GetM(2), d.radius, threshold, d.energy};
       bool need1 = d.first, need2 = d.second;

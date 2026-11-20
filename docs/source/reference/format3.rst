@@ -666,6 +666,10 @@ Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pa
      - ``<integer >= 1>``
      - optional
      - the <levels> pair key, only where the label names two pairs
+   * - ``l``
+     - ``<number> ...``
+     - optional
+     - the orbital angular momenta this record is for (integers >= 0); a pair may have several records with different l, and one without l for every other l (interior_potential.md section 3.3); absent: every l
    * - ``coulomb_radius``
      - ``<number> <length unit>``
      - required
@@ -2364,6 +2368,9 @@ Diagnostic codes
    * - ``E_POTENTIAL_PAIR_KIND``
      - error
      - a potential record on a photon or beta pair (a potential belongs to a particle pair)
+   * - ``E_POTENTIAL_L``
+     - error
+     - the l list of a potential record: a value that is not an integer >= 0, an l that another record of the pair names, or l together with spin_orbit
    * - ``E_POT_INTERIOR_TWO_SPINS``
      - error
      - interior_boundary on a potential of a pair whose two particles both have spin (the interior R-function is then not diagonal in the channels; not implemented)

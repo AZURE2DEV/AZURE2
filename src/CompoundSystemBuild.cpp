@@ -358,7 +358,7 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
     }
   }
 
-  for (int p = 1; p <= this->NumPairs(); p++) this->Pair(p)->SetHybridPotential(configure.potentials.PotentialFor(this->Pair(p)->GetPairKey()));  // a value, none: plain Coulomb
+  for (int p = 1; p <= this->NumPairs(); p++) { this->Pair(p)->SetHybridPotential(configure.potentials.PotentialFor(this->Pair(p)->GetPairKey())); this->Pair(p)->SetHybridPotentialsByL(configure.potentials.PotentialsByL(this->Pair(p)->GetPairKey())); }  // a value, none: plain Coulomb
   if (configure.includeAllJPi)
     this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
   if (this->ApplyChannelRadii(configure) == -1) return -1;

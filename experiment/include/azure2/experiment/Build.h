@@ -86,6 +86,8 @@ struct BuiltProject {
   IsospinSpec isospin;
   /// The record of each pair's potential: pair key -> (record name, line).
   std::map<int, std::pair<std::string, int>> potentialRecords;
+  /// The record of each potential of a single l: (pair key, l) -> (record name, line).
+  std::map<std::pair<int, int>, std::pair<std::string, int>> potentialRecordsByL;
   /// The defaults of the table the potential records used (matching radius, step), one line each for the log.
   std::vector<std::string> potentialNotes;
   /// The record field each data-set parameter's value is written in (norm, shift offset and sqrt, the shift function's

@@ -60,7 +60,7 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(const PPair *pair, int l, int two_j
   if (!memo) return ChannelFunc(pair, radius).Shift(l, two_j, resonanceEnergy);
   const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
   const double redmass = pair->GetRedMass();
-  const std::optional<azure2::physics::HybridPotential> &potential = pair->GetHybridPotential();
+  const std::optional<azure2::physics::HybridPotential> &potential = pair->GetHybridPotential(l);
   for (int i = 0; i < memo->filled; i++) {
     const ThmShiftMemo::Entry &m = memo->entries[i];
     if (m.z1 == z1 && m.z2 == z2 && m.redmass == redmass && m.radius == radius && m.potential == potential &&
@@ -77,7 +77,7 @@ double ThmVertexBoundary::ShiftAtLevelEnergy(const PPair *pair, int l, int two_j
 bool ThmVertexAllowsPair(const CompoundSystem *compound, const Segment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTHM() || !compound->IsPairKey(segment.GetEntranceKey())) return true;
   const PPair *pair = compound->GetPair(compound->GetPairNumFromKey(segment.GetEntranceKey()));
-  if (!pair->GetHybridPotential()) return true;
+  if (!pair->HasHybridPotential()) return true;
   configure.outStream << "ERROR (E_THM_HYBRID_POTENTIAL): " << (isTest ? "test segment #" : "segment #") << key
                       << " (THM): entrance pair " << segment.GetEntranceKey()
                       << " has a hybrid nuclear potential (<potential>); the THM vertex uses point-Coulomb waves and "

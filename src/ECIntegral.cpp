@@ -183,7 +183,7 @@ void ECIntegral::Integrate(double chanrad) {
     // energy-independent final Whittaker.  Everything else keeps the adaptive
     // qagiu, which is the trusted path for fits and extrapolations.
     bool rateMode = configure_ && (configure_->paramMask & Config::CALCULATE_REACTION_RATE);
-    const ECRateGridEntry *grid = rateMode ? &getRateGrid(scratch_.rateGrids, params_.whitFunc.get(), azure2::physics::PotentialKey(pair()->GetHybridPotential()),
+    const ECRateGridEntry *grid = rateMode ? &getRateGrid(scratch_.rateGrids, params_.whitFunc.get(), azure2::physics::PotentialKey(pair()->GetHybridPotential(params_.lfValue)),
                                                          params_.lfValue, params_.twoJf, params_.bindingEnergy, chanrad)
                                          : nullptr;
     if (grid && grid->ok) {

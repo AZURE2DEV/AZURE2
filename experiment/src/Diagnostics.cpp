@@ -116,6 +116,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kLabJacobianAtLimit, E, "a laboratory-frame differential datum at the kinematic maximum lab angle, where dOmega_lab/dOmega_cm is 0 and the lab-frame model diverges (set-up)"},
       {kPotentialTwice, E, "two potential records for one pair"},
       {kPotentialPairKind, E, "a potential record on a photon or beta pair (a potential belongs to a particle pair)"},
+      {kPotentialL, E, "the l list of a potential record: a value that is not an integer >= 0, an l that another record of the pair names, or l together with spin_orbit"},
       {kPotInteriorTwoSpins, E, "interior_boundary on a potential of a pair whose two particles both have spin (the interior R-function is then not diagonal in the channels; not implemented)"},
       {kChannelRadiusTwice, E, "two channel_radius records for one selection of channels (pair, l, s, J)"},
       {kChannelRadiusPairKind, E, "a channel_radius record on a photon or beta pair (a radius belongs to a particle channel)"},

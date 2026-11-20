@@ -851,6 +851,26 @@ int main() {
       check("a record without interior_boundary has none",
             !b.potentials.pairs.at(7).interior_boundary && !b.potentials.pairs.at(7).Potential().interior_boundary);
       ExpectOne("E_POT_INTERIOR_TWO_SPINS", BuildText(potentials(gauss + "    interior_boundary 0\n")));
+      // records of single l: the pair's record stays for the other l; the settings of each l; the refusals
+      const std::string l1 = "potential p12C_p\n    pair p+12C\n    l 1 3\n    coulomb_radius 3.55 fm\n    central woods_saxon depth 45 MeV radius 3.55 fm diffuseness 0.6 fm\n    interior_boundary 0\n";
+      const BuiltProject m = BuildText(potentials(pot + l1));
+      for (const Diagnostic &d : m.diagnostics) std::printf("        %s: %s\n", d.code.c_str(), d.message.c_str());
+      const bool both = m.Ok() && m.diagnostics.empty() && m.potentials.pairs.count(7) && m.potentials.byL.count({7, 1}) &&
+                        m.potentials.byL.count({7, 3}) && m.potentials.byL.size() == 2;
+      check("a pair's record and a record for l = 1 and 3 build", both);
+      if (both) {
+        check("the l = 1 setting is the second record's", m.potentials.byL.at({7, 1}).V0 == 45.0 && m.potentials.byL.at({7, 1}).interior_boundary);
+        const std::map<int, azure2::physics::HybridPotential> byL = m.potentials.PotentialsByL(7);
+        check("PotentialsByL: l = 1 and 3 of pair 7, none of another pair", byL.size() == 2 && byL.count(1) && byL.count(3) && m.potentials.PotentialsByL(8).empty());
+        check("the pair's own record is unchanged by them", !m.potentials.pairs.at(7).interior_boundary);
+      }
+      check("a record with l alone (no record for the pair) builds", BuildText(potentials(l1)).Ok());
+      std::string again = l1;
+      again.replace(again.find("p12C_p"), 6, "again");
+      ExpectOne("E_POTENTIAL_L", BuildText(potentials(l1 + Set(again, "l", "    l 3"))));
+      check("another record of the pair for another l builds", BuildText(potentials(l1 + Set(again, "l", "    l 0 2"))).Ok());
+      ExpectOne("E_POTENTIAL_L", BuildText(potentials(Set(l1, "l", "    l 1.5"))));
+      ExpectOne("E_POTENTIAL_L", BuildText(potentials(l1 + "    spin_orbit woods_saxon depth 6 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s\n")));
     }
     // the refusals shared with pyazr and the API (SpinOrbitChecks.h)
     {

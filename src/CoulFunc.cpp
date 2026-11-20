@@ -17,8 +17,7 @@
  */
 
 CoulFunc::CoulFunc(const PPair *pPair) :
-  pair_(pPair),
-  potential_(pPair->GetHybridPotential()) {
+  pair_(pPair) {
   z1_ = pPair->GetZ(1);
   z2_ = pPair->GetZ(2);
   redmass_ = (double)pPair->GetRedMass();
@@ -34,11 +33,15 @@ CoulFunc::CoulFunc(const PPair *pPair) :
   // The table holds plain Coulomb functions of charged channels: not neutral
   // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
   const PairFunctionSettings &settings = pPair->FunctionSettings();
-  if (settings.useCoulombTable && z1_ * z2_ != 0 && !potential_)
+  if (settings.useCoulombTable && z1_ * z2_ != 0 && !pPair->HasHybridPotential())
     table_ = CoulombTable::Shared(settings.coulombTablePath, settings.coulombTableDefault);
   shiftDerivative1eV_ = settings.shiftDerivative1eV;
   tableUse_ = settings.tableUse;
 }
+
+const std::optional<azure2::physics::HybridPotential> &CoulFunc::Pot(int l) const { return pair_->GetHybridPotential(l); }
+
+std::vector<double> CoulFunc::PotentialKeyOfPair() const { return pair_->HybridPotentialKey(); }
 
 bool CoulFunc::TableLookup(int l, double radius, double energy) {
   if (l == tLastL_ && radius == tLastR_ && energy == tLastE_) return tOk_;
@@ -60,7 +63,7 @@ bool CoulFunc::TableLookup(int l, double radius, double energy) {
 std::complex<double> CoulFunc::HardSpherePhase(int l, int two_j, double radius, double energy) {
   // The table holds pairs without a potential only, whose functions do not depend on two_j.
   if (table_ && TableLookup(l, radius, energy)) return std::complex<double>(std::cos(tPhi_), -std::sin(tPhi_));
-  if (Interior()) return InteriorFunctions(l, two_j, radius, energy).exp_minus_i_phi;
+  if (Interior(l)) return InteriorFunctions(l, two_j, radius, energy).exp_minus_i_phi;
   return CoulombHardSpherePhase(this->operator()(l, two_j, radius, energy));
 }
 
@@ -166,7 +169,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
       radialMemo_->size = 0;
     }
     block = &radialMemo_->blocks[CoulRadialMemo::Key{z1_, z2_, l, two_j, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0,
-                                                     energy, potential_}];
+                                                     energy, Pot(l)}];
     auto w = block->find(radius);
     if (w != block->end()) {
       setLast(l, two_j, radius, energy, w->second);
@@ -177,7 +180,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
   // Otherwise computed at every call: there is no process-wide memo (docs/upgrade/coulomb.md section 3).
   struct CoulWaves newResult;
 
-  if (potential_) {
+  if (Pot(l)) {
     newResult = computeHybrid(l, two_j, radius, energy);
   } else {
     newResult = PlainWaves(l, radius, energy);
@@ -199,7 +202,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
 
 double CoulFunc::Penetrability(int l, int two_j, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tP_;
-  if (Interior()) return InteriorFunctions(l, two_j, radius, energy).P;
+  if (Interior(l)) return InteriorFunctions(l, two_j, radius, energy).P;
   struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
   return azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
@@ -217,7 +220,7 @@ double CoulFunc::PEShift(int l, int two_j, double radius, double energy) {
 double CoulFunc::PEShiftExact(int l, int two_j, double radius, double energy) {
   // physics/ChannelFunctions: S with the overflow guard just above a charged threshold (eta >~ 110; 11B+alpha
   // within ~1 keV, where a band of bare cross sections of 1e26-1e37 b once came from the unguarded formula).
-  if (Interior()) return InteriorFunctions(l, two_j, radius, energy).S;
+  if (Interior(l)) return InteriorFunctions(l, two_j, radius, energy).S;
   struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
   return azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
@@ -270,10 +273,10 @@ const azure2::physics::ChannelTriple &CoulFunc::InteriorFunctions(int l, int two
   outer.P = azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
   outer.S = azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
   outer.exp_minus_i_phi = CoulombHardSpherePhase(coul);
-  const double f = azure2::physics::RegularSolution(*potential_, z1(), z2(), redmass() * uconv, l,
+  const double f = azure2::physics::RegularSolution(*Pot(l), z1(), z2(), redmass() * uconv, l,
                                                     pair_->SpinOrbitFactor(l, two_j), radius, energy)
                        .log_derivative;
-  iTriple_ = azure2::physics::InteriorChannelFunctions(outer, f, *potential_->interior_boundary);
+  iTriple_ = azure2::physics::InteriorChannelFunctions(outer, f, *Pot(l)->interior_boundary);
   iL_ = l;
   iTwoJ_ = two_j;
   iR_ = radius;
@@ -287,7 +290,7 @@ CoulWaves CoulFunc::PlainWaves(int l, double radius, double energy) const {
 
 CoulWaves CoulFunc::computeHybrid(int l, int two_j, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
-  const azure2::physics::HybridPotential &potential = *potential_;
+  const azure2::physics::HybridPotential &potential = *Pot(l);
 
   // The engine's constants (Constants.h), as the plain Coulomb path uses them.
   const double UCONV = uconv;    // MeV/u

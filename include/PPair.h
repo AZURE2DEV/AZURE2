@@ -4,6 +4,8 @@
 #include <optional>
 #include <string>
 
+#include <map>
+
 #include "azure2/physics/HybridPotential.h"
 
 namespace azure2 {
@@ -146,6 +148,19 @@ class PPair {
   /// Throws std::invalid_argument (with the code of experiment/SpinOrbitChecks.h) for a spin-orbit term the pair cannot
   /// have: both particles spinning, or the term on a particle of spin 0.
   void SetHybridPotential(const std::optional<azure2::physics::HybridPotential> &p);
+  /// The potential of the channels of orbital angular momentum l: the one a record gave for that l
+  /// (SetHybridPotentialsByL), else the pair's.
+  const std::optional<azure2::physics::HybridPotential> &GetHybridPotential(int l) const {
+    const auto it = hybrid_by_l_.find(l);
+    return it != hybrid_by_l_.end() ? it->second : hybrid_potential_;
+  }
+  /// Has any channel of the pair a potential?
+  bool HasHybridPotential() const { return hybrid_potential_.has_value() || !hybrid_by_l_.empty(); }
+  /// Every value the pair's channel functions depend on through its potentials, for keys of tables: PotentialKey of
+  /// the pair's potential, followed, for each l with a potential of its own, by -1 - l and that potential's key.
+  std::vector<double> HybridPotentialKey() const;
+  /// The potentials of single l (records with an l list; never with a spin-orbit term).
+  void SetHybridPotentialsByL(const std::map<int, azure2::physics::HybridPotential> &byL);
   /// The 2J of the keys of this pair's channel functions (channel table, radial scratch, shift-derivative memo, EC
   /// scratch) for a channel of total J: 2J when the pair's potential has a spin-orbit term (its functions depend on
   /// J), azure2::physics::kNoSpinOrbit otherwise.  Every call site forms the key with this function.
@@ -179,6 +194,7 @@ class PPair {
   double red_mass_;
   double i1i2factor_;
   std::optional<azure2::physics::HybridPotential> hybrid_potential_;
+  std::map<int, std::optional<azure2::physics::HybridPotential>> hybrid_by_l_;
   PairFunctionSettings function_settings_;
 };
 

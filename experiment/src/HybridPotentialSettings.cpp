@@ -33,7 +33,16 @@ bool HybridPotentialSettings::AnyEnabled() const {
   if (defaults.enabled) return true;
   for (const auto &p : pairs)
     if (p.second.enabled) return true;
+  for (const auto &p : byL)
+    if (p.second.enabled) return true;
   return false;
+}
+
+std::map<int, physics::HybridPotential> HybridPotentialSettings::PotentialsByL(int pairKey) const {
+  std::map<int, physics::HybridPotential> out;
+  for (const auto &p : byL)
+    if (p.first.first == pairKey && p.second.enabled) out.emplace(p.first.second, p.second.Potential());
+  return out;
 }
 
 std::optional<physics::HybridPotential> HybridPotentialSettings::PotentialFor(int pairKey) const {

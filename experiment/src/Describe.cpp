@@ -244,6 +244,31 @@ std::string CentralText(const HybridPotentialSetting &s) {
   return "Woods-Saxon V0 " + Fmt(s.V0) + " MeV, R " + Fmt(s.R) + " fm, a " + Fmt(s.a) + " fm";
 }
 
+
+/// The potentials of a project in the order they are described: each pair's, then those of single l (records with an
+/// l list), with the record that made them (line 0: none known).
+struct PotentialItem {
+  int pair = 0;
+  int l = -1;  ///< -1: every l of the pair that has no potential of its own
+  const HybridPotentialSetting *setting = nullptr;
+  std::string name;
+  int line = 0;
+};
+std::vector<PotentialItem> PotentialItems(const Format3Project &p) {
+  std::vector<PotentialItem> items;
+  for (const auto &x : p.built.potentials.pairs) {
+    const auto r = p.built.potentialRecords.find(x.first);
+    const bool known = r != p.built.potentialRecords.end();
+    items.push_back({x.first, -1, &x.second, known ? r->second.first : std::string(), known ? r->second.second : 0});
+  }
+  for (const auto &x : p.built.potentials.byL) {
+    const auto r = p.built.potentialRecordsByL.find(x.first);
+    const bool known = r != p.built.potentialRecordsByL.end();
+    items.push_back({x.first.first, x.first.second, &x.second, known ? r->second.first : std::string(), known ? r->second.second : 0});
+  }
+  return items;
+}
+
 /// "; spin-orbit Woods-Saxon V_so 6 MeV, R_so 3.6 fm, a_so 0.6 fm on the light particle, operator 2 l.i" or "".
 std::string SpinOrbitText(const HybridPotentialSetting &s) {
   if (!s.spin_orbit) return "";
@@ -320,12 +345,11 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
     if (d.pair) out << "; pair " << Pair(p, d.pair);
     out << "\n";
   }
-  for (const auto &x : p.built.potentials.pairs) {
-    const HybridPotentialSetting &s = x.second;
-    const auto r = p.built.potentialRecords.find(x.first);
-    if (skip(r != p.built.potentialRecords.end() ? r->second.first : "")) continue;
-    out << "potential " << (r != p.built.potentialRecords.end() ? r->second.first + " (line " + std::to_string(r->second.second) + ")" : "?")
-        << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
+  for (const PotentialItem &x : PotentialItems(p)) {
+    const HybridPotentialSetting &s = *x.setting;
+    if (skip(x.name)) continue;
+    out << "potential " << (x.line ? x.name + " (line " + std::to_string(x.line) + ")" : "?")
+        << ": pair " << Pair(p, x.pair) << (x.l >= 0 ? ", l = " + std::to_string(x.l) : std::string()) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
         << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
         << SpinOrbitText(s)
         << (s.interior_boundary ? "; acts inside the channel radius too, R_pot with boundary constant " + Fmt(*s.interior_boundary) : std::string())
@@ -407,11 +431,11 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
     j.Key("pair").Integer(d.pair).EndObject();
   }
   j.EndArray().Key("potentials").BeginArray();
-  for (const auto &x : p.built.potentials.pairs) {
-    const HybridPotentialSetting &s = x.second;
-    const auto r = p.built.potentialRecords.find(x.first);
-    if (skip(r != p.built.potentialRecords.end() ? r->second.first : "")) continue;
-    j.BeginObject().Key("name").String(r != p.built.potentialRecords.end() ? r->second.first : "").Key("pair").Integer(x.first);
+  for (const PotentialItem &x : PotentialItems(p)) {
+    const HybridPotentialSetting &s = *x.setting;
+    if (skip(x.name)) continue;
+    j.BeginObject().Key("name").String(x.name).Key("pair").Integer(x.pair);
+    if (x.l >= 0) j.Key("l").Integer(x.l);
     j.Key("central").String(s.shape == physics::FormShape::Gaussian ? "gaussian" : "woods_saxon").Key("depth_MeV").Number(s.V0);
     if (s.shape == physics::FormShape::Gaussian)
       j.Key("width_fm").Number(s.r0);

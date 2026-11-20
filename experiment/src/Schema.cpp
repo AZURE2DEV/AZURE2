@@ -557,6 +557,9 @@ RecordKind PotentialKind() {
           "the channel radius (docs/upgrade/spin_orbit_potential.md section 1.1).  A pair without a record has none.";
   k.fields = {Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair of <levels> by its label (section 3.5)"),
               Rare(Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs")),
+              Opt("l", "Orbital angular momenta", Spec(ValueType::NumberList),
+                  "the orbital angular momenta this record is for (integers >= 0); a pair may have several records with "
+                  "different l, and one without l for every other l (interior_potential.md section 3.3); absent: every l"),
               Req("coulomb_radius", "Coulomb radius", PositiveWithUnit("length"),
                   "R_C of the uniformly charged sphere of the Coulomb term (the old <potential> block: 3.5 fm)"),
               Req("central", "Central term", Structured(f.central), "the central nuclear term V_N(r)"),

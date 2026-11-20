@@ -2,6 +2,7 @@
 // 3.11 and docs/upgrade/spin_orbit_potential.md section 3.3.  Each record names a particle pair of <levels> by its
 // label (the pair-key rule of the data sets, section 3.5) and becomes that pair's HybridPotentialSetting; numbers are
 // converted to fm and MeV with the unit table (bit-exact for fm and MeV).  A pair without a record has no potential.
+#include <algorithm>
 #include <map>
 
 #include "azure2/experiment/BuildContext.h"
@@ -60,6 +61,8 @@ std::string DefaultNote(const ValidatedRecord &r, const std::string &field) {
 
 void BuildPotentials(Context &c) {
   std::map<int, const ValidatedRecord *> recordOfPair;
+  std::map<std::pair<int, int>, const ValidatedRecord *> recordOfPairL;  // records with an l list
+  std::map<int, const ValidatedRecord *> anyRecordOfPair;                // the first record of each pair, either kind
   for (const ValidatedRecord &r : c.v_.records) {
     if (r.kind != "potential") continue;
     const Value *pair = r.Get("pair");
@@ -77,15 +80,38 @@ void BuildPotentials(Context &c) {
                   " pair; a hybrid potential bends the radial waves of two particles and belongs to a particle pair");
       continue;
     }
-    const auto first = recordOfPair.find(key);
-    if (first != recordOfPair.end()) {
-      c.Error(codes::kPotentialTwice, r, "pair",
-              "pair " + std::to_string(key) + " (" + text + ") has a potential already (potential " + first->second->name +
-                  ", line " + std::to_string(first->second->line) + "); one record per pair");
-      continue;
-    }
-    recordOfPair[key] = &r;
     const Value *spinOrbit = r.Get("spin_orbit");
+    // the l list: integers >= 0, none named by another record of the pair, and not with a spin-orbit term (whose keys
+    // are the pair's)
+    std::vector<int> ls;
+    if (const Value *lv = r.Get("l")) {
+      std::string problem;
+      for (const Number &n : lv->numbers) {
+        const int l = static_cast<int>(n.value);
+        if (!(n.value >= 0.0) || n.value != l) problem = "'" + n.text + "' is not an integer >= 0";
+        else if (std::find(ls.begin(), ls.end(), l) != ls.end()) problem = "l = " + n.text + " is named twice";
+        else if (recordOfPairL.count({key, l}))
+          problem = "l = " + n.text + " of pair " + std::to_string(key) + " (" + text + ") has a potential already (potential " +
+                    recordOfPairL[{key, l}]->name + ", line " + std::to_string(recordOfPairL[{key, l}]->line) + ")";
+        ls.push_back(l);
+      }
+      if (problem.empty() && spinOrbit) problem = "a record with an l list cannot have a spin-orbit term (give the term on the pair's record without l)";
+      if (!problem.empty()) {
+        c.Error(codes::kPotentialL, r, "l", problem);
+        continue;
+      }
+    } else {
+      const auto first = recordOfPair.find(key);
+      if (first != recordOfPair.end()) {
+        c.Error(codes::kPotentialTwice, r, "pair",
+                "pair " + std::to_string(key) + " (" + text + ") has a potential already (potential " + first->second->name +
+                    ", line " + std::to_string(first->second->line) + "); one record per pair, or records with different l");
+        continue;
+      }
+      recordOfPair[key] = &r;
+    }
+    for (int l : ls) recordOfPairL[{key, l}] = &r;
+    anyRecordOfPair.emplace(key, &r);
     if (spinOrbit && c.opt_.relativistic) {
       c.Error(codes::kSoRelativistic, r, "spin_orbit", "a spin-orbit term cannot be combined with relativistic=1 (<config>)");
       continue;
@@ -128,8 +154,14 @@ void BuildPotentials(Context &c) {
       s.step_fm = InBase(*h);
     else
       c.out_.potentialNotes.push_back(DefaultNote(r, "step"));
-    c.out_.potentials.pairs[key] = s;
-    c.out_.potentialRecords[key] = {r.name, r.line};
+    if (ls.empty()) {
+      c.out_.potentials.pairs[key] = s;
+      c.out_.potentialRecords[key] = {r.name, r.line};
+    }
+    for (int l : ls) {
+      c.out_.potentials.byL[{key, l}] = s;
+      c.out_.potentialRecordsByL[{key, l}] = {r.name, r.line};
+    }
   }
 
   // The THM vertex uses point-Coulomb waves: a THM data set or extrapolation whose entrance pair has a potential is
@@ -137,8 +169,8 @@ void BuildPotentials(Context &c) {
   for (const std::vector<Member> *members : {&c.data_, &c.extrapolations_})
     for (const Member &m : *members) {
       if (!m.record->Has("thm")) continue;
-      const auto p = recordOfPair.find(m.entranceKey);
-      if (p == recordOfPair.end()) continue;
+      const auto p = anyRecordOfPair.find(m.entranceKey);
+      if (p == anyRecordOfPair.end()) continue;
       const PairInfo *info = c.Pair(m.entranceKey);
       const bool spinOrbit = p->second->Has("spin_orbit");
       c.Error(spinOrbit ? codes::kSoThm : codes::kThmHybridPotential, *m.record, "thm",

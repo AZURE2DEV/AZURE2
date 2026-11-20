@@ -314,6 +314,9 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
     hash.Add(potential ? 1 : 0);
     if (potential)
       for (double v : azure2::physics::PotentialKey(potential)) hash.Add(v);
+    // potentials of single l (records with an l list): the rest of the pair's key, nothing for a pair without them
+    const std::vector<double> all = pair->HybridPotentialKey(), base = azure2::physics::PotentialKey(potential);
+    for (std::size_t i = base.size(); i < all.size(); i++) hash.Add(all[i]);
   }
   return hash.Hex();
 }

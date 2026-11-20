@@ -271,3 +271,21 @@ void PPair::SetHybridPotential(const std::optional<azure2::physics::HybridPotent
   }
   hybrid_potential_ = p;
 }
+
+std::vector<double> PPair::HybridPotentialKey() const {
+  std::vector<double> key = azure2::physics::PotentialKey(hybrid_potential_);
+  for (const auto &p : hybrid_by_l_) {
+    key.push_back(-1.0 - p.first);
+    const std::vector<double> k = azure2::physics::PotentialKey(p.second);
+    key.insert(key.end(), k.begin(), k.end());
+  }
+  return key;
+}
+
+void PPair::SetHybridPotentialsByL(const std::map<int, azure2::physics::HybridPotential> &byL) {
+  hybrid_by_l_.clear();
+  for (const auto &p : byL) {
+    if (p.second.spin_orbit) throw std::invalid_argument("a potential of a single l cannot have a spin-orbit term");
+    hybrid_by_l_.emplace(p.first, p.second);
+  }
+}

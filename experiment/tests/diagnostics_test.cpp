@@ -498,7 +498,7 @@ int main() {
                                             "E_UNKNOWN_SECTION", "E_UNREAD_LINE",
                                             "E_CONFIG_OPTIONS_CONTRADICT", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
                                             "E_SO_RELATIVISTIC", "E_SO_THM", "E_SO_NEEDS_J", "E_SO_NO_TERM",
-                                            "E_POT_INTERIOR_TWO_SPINS",
+                                            "E_POT_INTERIOR_TWO_SPINS", "E_POTENTIAL_L",
                                             "E_STOPPING_PROJECTILE", "E_STOPPING_ACTIVE", "E_STOPPING_SCALE_CONFLICT"};
   for (const DiagnosticCode &c : DiagnosticCodes())
     if (!buildCodes.count(c.code)) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);

@@ -25,8 +25,8 @@
  */
 double ShftFunc::ZeroEnergyLimit(int l, int two_j) const {
   const WhitFunc &w = *params_.whitFunc;
-  if (potential_)  // the zero-energy decaying solution of the radial equation with the potential
-    return InteriorShift(l, two_j, 0.0, azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), 0.0));
+  if (pair_->GetHybridPotential(l))  // the zero-energy decaying solution of the radial equation with the potential
+    return InteriorShift(l, two_j, 0.0, azure2::physics::HybridBoundShift(*pair_->GetHybridPotential(l), w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), 0.0));
   const double c = w.z1() * w.z2() * fstruc * w.redmass() * uconv / hbarc;
   return azure2::physics::zero_energy_shift(c, radius(), l);  // K_n without GSL (coulomb.md section 1.4)
 }
@@ -34,14 +34,14 @@ double ShftFunc::ZeroEnergyLimit(int l, int two_j) const {
 // S' of a closed channel whose potential also acts inside the channel radius (interior_potential.md Eq. (4) with
 // P = 0): real, with a pole at a bound state of the potential (f = S).  S itself without an interior boundary.
 double ShftFunc::InteriorShift(int l, int two_j, double binding, double S) const {
-  if (!potential_->interior_boundary) return S;
+  if (!pair_->GetHybridPotential(l)->interior_boundary) return S;
   const WhitFunc &w = *params_.whitFunc;
-  const double f = azure2::physics::RegularSolution(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l,
+  const double f = azure2::physics::RegularSolution(*pair_->GetHybridPotential(l), w.z1(), w.z2(), w.redmass() * uconv, l,
                                                     pair_->SpinOrbitFactor(l, two_j), radius(), -binding)
                        .log_derivative;
   azure2::physics::ChannelTriple outer;
   outer.S = S;
-  return azure2::physics::InteriorChannelFunctions(outer, f, *potential_->interior_boundary).S;
+  return azure2::physics::InteriorChannelFunctions(outer, f, *pair_->GetHybridPotential(l)->interior_boundary).S;
 }
 
 double ShftFunc::theWhitFunc(double x, void *p) {
@@ -72,9 +72,9 @@ double ShftFunc::operator()(int l, int two_j, double energy) {
   params_.bindingEnergy = binding;
   params_.lValue = l;
   params_.twoJ = two_j;
-  if (potential_) {
+  if (pair_->GetHybridPotential(l)) {
     const WhitFunc &w = *params_.whitFunc;
-    return InteriorShift(l, two_j, binding, azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), binding));
+    return InteriorShift(l, two_j, binding, azure2::physics::HybridBoundShift(*pair_->GetHybridPotential(l), w.z1(), w.z2(), w.redmass() * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius(), binding));
   }
 
   // Neutral channel: the Whittaker function is rho k_l(rho) up to a constant,

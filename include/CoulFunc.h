@@ -125,13 +125,15 @@ class CoulFunc {
   /// Second energy derivative of the shift function (numerical).
   double PEShift_d2E(int l, int two_j, double radius, double energy);
 
-  /// The pair's hybrid nuclear potential (PPair::GetHybridPotential), none for plain Coulomb functions.
-  const std::optional<azure2::physics::HybridPotential> &HybridPotential() const { return potential_; }
+  /// Every value of the pair's potentials (PPair::HybridPotentialKey), for the keys of tables of the whole pair.
+  std::vector<double> PotentialKeyOfPair() const;
   /// Whether P, S and the phase come from the universal Coulomb table.
   bool UsesTable() const { return table_ != nullptr; }
   /// Does the pair's potential also act inside the channel radius (HybridPotential::interior_boundary)?  Then P, S
   /// and the phase are the primed functions of docs/upgrade/interior_potential.md Eqs. (4), (5).
-  bool Interior() const { return potential_ && potential_->interior_boundary; }
+  bool Interior(int l) const { return Pot(l) && Pot(l)->interior_boundary; }  // (Pot: CoulFunc.cpp)
+  /// The potential of the channels of orbital angular momentum l (PPair::GetHybridPotential(l)).
+  const std::optional<azure2::physics::HybridPotential> &Pot(int l) const;
 
   /// The external-capture integrals ask for F, G at the radii the adaptive quadrature chooses, the same radii for
   /// every term of one entrance l and energy.  With a memo (the caller's, used by one thread at a time), operator()
@@ -183,8 +185,6 @@ class CoulFunc {
   double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
   bool tOk_ = false;
 
-  /// The pair's hybrid nuclear potential; none: plain Coulomb functions.
-  std::optional<azure2::physics::HybridPotential> potential_;
 };
 
 #endif
