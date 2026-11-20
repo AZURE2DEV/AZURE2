@@ -451,6 +451,8 @@ class NuclearPotential:
     spin_orbit: Optional[dict] = None
     matching_radius: Optional[float] = None
     step: Optional[float] = None
+    interior_boundary: Optional[float] = None
+    l: Optional[int] = None
 
     @property
     def is_woods_saxon(self):
@@ -469,6 +471,10 @@ class NuclearPotential:
         if so:
             shape += (f" spin-orbit V_so={so['depth']:g} R_so={so['radius']:g} "
                       f"a_so={so['diffuseness']:g} on {so['on']}")
+        if self.l is not None:
+            who += f" l={self.l}"
+        if self.interior_boundary is not None:
+            shape += f" interior b={self.interior_boundary:g}"
         return (f"NuclearPotential({who}, {shape} R_C={self.coulomb_radius:g}"
                 f"{'' if self.own or self.pair == 0 else ', inherited'})")
 

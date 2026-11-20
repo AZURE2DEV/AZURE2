@@ -265,10 +265,10 @@ Forms MakeForms() {
                           "the interference sign of the final state's L amplitude (default +)")}};
   f.channelSpin = {{Keyword("coherent", {}, "the coherent scattering length"), Unkeyed({Pos("spin", Spec(ValueType::Spin))}, "the channel spin")}};
   f.central = {{Keyword("woods_saxon",
-                        {Kw("depth", PositiveWithUnit("energy"), "V0 > 0, attractive"), Kw("radius", PositiveWithUnit("length"), "R"),
+                        {Kw("depth", WithUnit("energy"), "V0: > 0 attractive, < 0 repulsive"), Kw("radius", PositiveWithUnit("length"), "R"),
                          Kw("diffuseness", PositiveWithUnit("length"), "a")},
                         "V_N(r) = -V0 / (1 + exp((r - R)/a))"),
-                Keyword("gaussian", {Kw("depth", PositiveWithUnit("energy"), "V0 > 0, attractive"), Kw("width", PositiveWithUnit("length"), "r0")},
+                Keyword("gaussian", {Kw("depth", WithUnit("energy"), "V0: > 0 attractive, < 0 repulsive"), Kw("width", PositiveWithUnit("length"), "r0")},
                         "V_N(r) = -V0 exp(-(r/r0)^2)")}};
   f.spinOrbit = {{Keyword("woods_saxon",
                           {Kw("depth", PositiveWithUnit("energy"), "V_so > 0: lowers j = l + i"), Kw("radius", PositiveWithUnit("length"), "R_so"),

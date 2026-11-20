@@ -1,5 +1,9 @@
 # The interior R-function of a hybrid potential
 
+**Status (2026-11-20): built on `feature/upgrade-6-interior-potential`** — steps 1 to 4 of §4 and the bound levels;
+§8 lists what was built and where it differs from the design below. The text of §1 to §7 is the design note as
+reviewed ("no engine code is changed by it" was true of the note).
+
 A design note for review; no engine code is changed by it. Asked for by the owner (R. J. deBoer, 2026-11-19) after a
 test of the hybrid model on ¹²C + α. Code references are to `3a96c0a1`. The numbers of §2.5 were run with
 `docs/upgrade/interior_potential_check.py` (scipy 1.18 DOP853, mpmath Coulomb functions; not the engine's code);
@@ -200,3 +204,41 @@ Not designed in this note.
 5. **Fit parameters.** The potential's depth, radius and diffuseness are not fit parameters today
    (`spin_orbit_potential.md` §1.4 item 3). With R_pot standing in for background poles the depth is what one wants
    to fit. In this change, or after?
+
+## 8. As built (2026-11-20)
+
+The owner's answers to §7, as relayed 2026-11-19: b is an explicit input with no default; a signed depth is
+allowed; a pair with two spinning particles is refused; the width of the warning is the larger of the level's
+observed width and the potential state's; the potential's parameters as fit parameters come later.
+
+| design | built |
+|---|---|
+| `RegularLogDerivative`, `PrimedChannelFunctions` | `RegularSolution` (f and the interior norm), `InteriorChannelFunctions` (`physics/HybridPotential`); test `physics_interior_potential` against `physics/tests/make_interior_potential_reference.py` |
+| record word `interior boundary <b>` | **`interior_boundary <b>`** (one word, a number); `l <l> ...` as designed |
+| `E_POT_L_OVERLAP` | `E_POTENTIAL_L` (an l named twice, not an integer >= 0, or an l list with a spin-orbit term) |
+| `E_POT_INTERIOR_THM`, `E_POT_INTERIOR_RELATIVISTIC` | the hybrid model's existing refusals apply unchanged; plus `E_POT_INTERIOR_TWO_SPINS` |
+| `W_POT_LEVEL_DOUBLE` as a record diagnostic | an engine set-up warning (`WarnLevelDoublesPotential`, `src/CompoundSystemChecks.cpp`): it needs the channel functions. States are the zeros of f − S (bound states and resonances; above threshold only zeros narrower than half their energy); a pole of R_pot (f = b) is not a state and is not looked for |
+| `W_POT_INTERIOR_CAPTURE` | not built: capture runs with the primed entrance functions and the exterior integral; §6 is still open |
+| depth > 0 | signed (`E_OUT_OF_RANGE` for 0) |
+
+**Bound levels** (not worked out in §2). Below threshold S′ = b + (S − b)(f − b)/(f − S). A level's amplitude at the
+surface is γ/D, 1/D = (f − b)/(f − S), and
+
+    C² = (2μa/ħ²W(a)²) γ² D⁻² / (1 + Σ γ² dS′/dE),
+    (ħ²/2μa) dS′/dE = D⁻² [ ∫ₐ^∞ W²/W(a)² dr + ((S − b)/(f − b))² ∫₀ᵃ u²/u(a)² dr ].
+
+`ParticleChannelValues` carries D⁻² in the ANC conversion factor; an external-capture final state
+(`ECFinalStateFactors`) carries |1/D| in its conversion and the bracket times D⁻² as its norm integral (an unbound
+final state: √(P′/P)). At a bound state of the potential (f = S) the limit of a large γ is the potential's
+single-particle ANC. The sign of an ANC stays the sign of γ; the surface amplitude has the sign of γ/D, which matters
+only for a level with two closed particle channels (not carried: a known limit).
+
+**Checks.** `upgrade_interior_bound` (tests/upgrade/interior_bound, ¹²C + α, the potential of §2.5, a = 5.35 fm):
+the factor to 2 × 10⁻¹⁶; the norm identity to 1.3 × 10⁻⁵ over l = 0 to 3 and bindings 0.05 to 30 MeV; the
+single-particle ANC² at the potential's bound states (l = 0: 2.4276 MeV, l = 1: 9.6065 MeV, l = 2: 2.6152 MeV below
+threshold) to 2.3 × 10⁻⁵; the phase without levels against the regular solution integrated to 14 fm, 2.3 × 10⁻⁸ rad
+at 80 points; the potential's l = 1 resonance at 2.3988 MeV, 412 keV (f = S; the owner's scripts with R_C = 3.5 fm:
+2.435 MeV, 479 keV by the phase), and the warning for the level placed on it.
+
+**Still open.** Capture from the potential's interior (§6); the potential's parameters as fit parameters; the
+physics suite of the owner's E1 fits (§5, last but one item); the signed surface amplitude above.

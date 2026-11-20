@@ -6,9 +6,11 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "AChannel.h"
@@ -16,10 +18,12 @@
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
+#include "CoulFunc.h"
 #include "JGroup.h"
 #include "PPair.h"
 #include "ParameterLabel.h"
 #include "azure2/physics/Constants.h"
+#include "azure2/physics/HybridPotential.h"
 #include "azure2/physics/LevelParameters.h"
 
 /*!
@@ -261,4 +265,118 @@ void WarnLargeRadiativeWidths(const CompoundSystem &compound, const LevelInputs 
                         << " more level" << (((numFlagged - listed) == 1) ? "" : "s")
                         << " with a smaller ratio." << std::endl;
   configure.outStream << std::endl;
+}
+
+std::vector<PotentialState> InteriorPotentialStates(const PPair &pair, int l, int twoJ, double radius, double low, double high) {
+  namespace phys = azure2::physics;
+  std::vector<PotentialState> states;
+  const std::optional<phys::HybridPotential> &potential = pair.GetHybridPotential(l);
+  if (!potential || !potential->interior_boundary || !(high > low)) return states;
+  const double mu = pair.GetRedMass() * uconv, twoLDotI = pair.SpinOrbitFactor(l, twoJ);
+  CoulFunc coul(&pair);
+  // f - S: the regular solution's logarithmic derivative less the shift of the waves outside the radius (the decaying
+  // solution below threshold).  A zero is a state of the potential; f has poles, where the difference changes sign too.
+  auto mismatch = [&](double Ec) {
+    const double f = phys::RegularSolution(*potential, pair.GetZ(1), pair.GetZ(2), mu, l, twoLDotI, radius, Ec).log_derivative;
+    const double S = Ec > 0.0 ? coul.OuterShift(l, twoJ, radius, Ec)
+                              : phys::HybridBoundShift(*potential, pair.GetZ(1), pair.GetZ(2), mu, l, twoLDotI, radius, -Ec);
+    return f - S;
+  };
+  const double step = 0.05;
+  const int n = std::max(1, static_cast<int>(std::ceil((high - low) / step)));
+  double prevE = low, prev = mismatch(low);
+  for (int i = 1; i <= n; i++) {
+    const double E = low + (high - low) * i / n, g = mismatch(E);
+    if (std::isfinite(g) && std::isfinite(prev) && g * prev < 0.0 && prevE * E > 0.0) {  // not across the threshold
+      double lo = prevE, hi = E, glo = prev;
+      for (int it = 0; it < 50; it++) {
+        const double mid = 0.5 * (lo + hi), gm = mismatch(mid);
+        if (gm * glo < 0.0) hi = mid;
+        else {
+          lo = mid;
+          glo = gm;
+        }
+      }
+      const double Er = 0.5 * (lo + hi);
+      if (std::fabs(mismatch(Er)) < 1e-5) {  // a zero, not a pole of f
+        PotentialState state;
+        state.Ec = Er;
+        if (Er > 0.0) {
+          const double h = std::min(1e-3, 0.25 * Er);
+          const double slope = (mismatch(Er + h) - mismatch(Er - h)) / (2.0 * h);  // < 0: f falls, S rises
+          const double P = coul.OuterPenetrability(l, twoJ, radius, Er);
+          state.width = slope < 0.0 ? 2.0 * P / -slope : 0.0;
+          // Above the barrier f - S has zeros that are no resonances (the phase does not rise through 90 degrees
+          // within a width): a zero wider than half its own energy is not counted.
+          if (!(slope < 0.0) || state.width > 0.5 * Er) continue;
+        }
+        states.push_back(state);
+      }
+    }
+    prevE = E;
+    prev = g;
+  }
+  return states;
+}
+
+int WarnLevelDoublesPotential(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure) {
+  namespace phys = azure2::physics;
+  struct Key {
+    int pair, l, twoJ;
+    double radius;
+    bool operator<(const Key &o) const { return std::tie(pair, l, twoJ, radius) < std::tie(o.pair, o.l, o.twoJ, o.radius); }
+  };
+  const double margin = 5.0;  // MeV searched beyond the levels: a broad state of the potential can sit that far off
+  std::map<Key, std::vector<PotentialState>> statesOf;
+  int flagged = 0;
+  for (int j = 1; j <= compound.NumJGroups(); j++) {
+    const JGroup *group = compound.GetJGroup(j);
+    if (!group->IsInRMatrix()) continue;
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      const AChannel *channel = group->GetChannel(ch);
+      if (channel->GetRadType() != 'P') continue;
+      const PPair *pair = compound.GetPair(channel->GetPairNum());
+      const int l = channel->GetL();
+      if (!pair->GetHybridPotential(l) || !pair->GetHybridPotential(l)->interior_boundary) continue;
+      const int twoJ = pair->SpinOrbitTwoJ(group->GetJ());
+      const double threshold = pair->GetSepE() + pair->GetExE();
+      // the levels with a width in this channel, and the range of their channel energies
+      std::vector<int> levels;
+      double low = 0.0, high = 0.0;
+      for (int la = 1; la <= group->NumLevels(); la++) {
+        if (!group->GetLevel(la)->IsInRMatrix() || table.Level(j, la).gamma[ch - 1] == 0.0) continue;
+        const double Ec = table.Level(j, la).E - threshold;
+        low = levels.empty() ? Ec : std::min(low, Ec);
+        high = levels.empty() ? Ec : std::max(high, Ec);
+        levels.push_back(la);
+      }
+      if (levels.empty()) continue;
+      const Key key{channel->GetPairNum(), l, twoJ, channel->GetRadius()};
+      if (!statesOf.count(key)) statesOf[key] = InteriorPotentialStates(*pair, l, twoJ, channel->GetRadius(), low - margin, high + margin);
+      for (int la : levels) {
+        const ObservedLevel &observed = table.Level(j, la);
+        double levelWidth = 0.0;
+        for (int c = 1; c <= group->NumChannels(); c++)
+          if (group->GetChannel(c)->GetRadType() == 'P' && static_cast<phys::ObservedKind>(observed.kind[c - 1]) == phys::ObservedKind::Width)
+            levelWidth += std::fabs(observed.W[c - 1]);
+        const double Ec = observed.E - threshold;
+        for (const PotentialState &state : statesOf[key]) {
+          const double width = std::max(levelWidth, state.width);
+          // a bound state and a bound level have no width: 1 keV then
+          if (std::fabs(Ec - state.Ec) > std::max(width, 1e-3)) continue;
+          std::ostringstream msg;
+          msg << std::setprecision(6) << "**WARNING: " << AZURELabel::Level(group, inputs.E(j, la), j, la) << " lies within one width of a "
+              << (state.Ec > 0.0 ? "resonance" : "bound state") << " of the potential of pair " << channel->GetPairNum() << " (l = " << l
+              << ") that acts inside the channel radius: E_x = " << state.Ec + threshold << " MeV";
+          if (state.Ec > 0.0) msg << ", width " << state.width * 1e3 << " keV";
+          msg << " (the level: " << observed.E << " MeV, particle width " << levelWidth * 1e3 << " keV)." << std::endl
+              << "  The potential already produces this state; a level on top of it describes it twice." << std::endl;
+          configure.outStream << msg.str();
+          flagged++;
+          break;
+        }
+      }
+    }
+  }
+  return flagged;
 }

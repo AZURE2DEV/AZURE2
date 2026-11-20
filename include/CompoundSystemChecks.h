@@ -1,6 +1,9 @@
 #ifndef COMPOUNDSYSTEM_CHECKS_H
 #define COMPOUNDSYSTEM_CHECKS_H
 
+#include <vector>
+
+class PPair;
 class CompoundSystem;
 class LevelInputs;
 class ObservedLevelTable;
@@ -25,5 +28,21 @@ constexpr double kMassCheckTolerance = 1.0e-3;  ///< MeV
 /// Warns of every R-matrix level whose radiative width exceeds 10 % of its particle width, from the observed widths
 /// of `table` (CompoundSystem::ObservedWidthsAt).
 void WarnLargeRadiativeWidths(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure);
+
+/// A bound state or a resonance of a potential that also acts inside the channel radius (f = S of the waves outside):
+/// its channel energy (MeV, c.m.; negative: bound) and width (MeV; 0 for a bound state).
+struct PotentialState {
+  double Ec = 0.0;
+  double width = 0.0;
+};
+/// The states of the potential of (pair, l, 2j) at `radius` with channel energies in [low, high] (MeV), found as
+/// the zeros of f - S on a 50 keV grid (above threshold only those narrower than half their energy); empty for a
+/// channel without an interior potential.
+std::vector<PotentialState> InteriorPotentialStates(const PPair &pair, int l, int twoJ, double radius, double low, double high);
+/// Warns of every level with a width in a channel whose potential also acts inside the channel radius that lies within
+/// one width (the larger of the level's observed particle width and the state's) of a state of that potential: the
+/// potential already produces it (docs/upgrade/interior_potential.md section 3.4, W_POT_LEVEL_DOUBLE).  Returns the
+/// number of such levels.
+int WarnLevelDoublesPotential(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure);
 
 #endif

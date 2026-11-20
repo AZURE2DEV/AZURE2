@@ -77,7 +77,7 @@ double TwoLDotI(int l, int two_j, int two_i);
 /// The potential of one hybrid pair, with the numerical settings of its radial integration.
 struct HybridPotential {
   double coulomb_radius_fm = 3.5;     ///< R_C of the uniformly charged sphere (fm)
-  double central_depth_MeV = 0.0;     ///< V0 > 0 (MeV), attractive
+  double central_depth_MeV = 0.0;     ///< V0 (MeV): > 0 attractive, < 0 repulsive
   FormFactor central;                 ///< shape of the central term
   double matching_radius_fm = 15.0;   ///< r_m (fm): beyond it the solution is the point-Coulomb one
   double step_fm = 0.0275;            ///< Numerov step (fm), adjusted so that a_c is a node

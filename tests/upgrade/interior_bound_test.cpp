@@ -12,15 +12,28 @@
 //  (c) at a bound state of the potential itself (f = S, found by bisection) the limit of a large reduced width,
 //      C^2 = 2 P / (dS'/dE), is the single-particle ANC^2 of the potential, 1/(W(a)^2 (int_0^a u^2/u(a)^2 + N_f)),
 //      as the mean of its values 1 keV above and below the state (both factors have a pole on it).
+//  (d) the set-up warning (WarnLevelDoublesPotential): InteriorPotentialStates finds the bound states of (c) and the
+//      l = 1 resonance of the potential near 2.40 MeV (about 410 keV wide), and of the project's three levels the one
+//      at 9.585 MeV (E_c = 2.42 MeV) is reported, once.
+//  (e) without levels the channel's phase is the potential's: the engine's exp(-i phi') at a = 5.35 fm against the
+//      phase shift of the regular solution integrated to 14 fm, where the nuclear potential has died out, and matched
+//      to the waves there (no R_pot, no boundary constant, another radius), l = 0-3 at 0.3-6 MeV.
 //
 //   interior_bound_test <interior_bound.azr>      (ctest: upgrade_interior_bound)
 #include <cmath>
 #include <cstdio>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+#include <Minuit2/MnUserParameters.h>
 
 #include "AChannel.h"
+#include "AZUREParams.h"
+#include "CompoundSystemChecks.h"
+#include "CoulFunc.h"
 #include "CompoundSystem.h"
 #include "Config.h"
 #include "Constants.h"
@@ -67,7 +80,7 @@ int main(int argc, char **argv) {
   const double mu = pair->GetRedMass() * uconv, toNorm = 2.0 * mu * a / (hbarc * hbarc);
 
   double worstP = 0.0, worstN = 0.0, worstC = 0.0;
-  int nPoints = 0, nStates = 0;
+  int nPoints = 0, nStates = 0, statesMissed = 0;
   for (int l = 0; l <= 3; l++) {
     const phys::HybridPotential &pot = *pair->GetHybridPotential(l);
     const double b = *pot.interior_boundary;
@@ -120,6 +133,10 @@ int main(int argc, char **argv) {
           worstC = std::fmax(worstC, std::fabs(c2 / single - 1.0));
           std::printf("    l=%d: bound state of the potential at %.6f MeV below threshold, single-particle ANC^2 %.6g fm^-1\n", l, Bb, single);
           nStates++;
+          bool found = false;
+          for (const PotentialState &s : InteriorPotentialStates(*pair, l, twoJ, a, -Bb - 1.0, -Bb + 1.0))
+            if (std::fabs(s.Ec + Bb) < 1e-6 && s.width == 0.0) found = true;
+          if (!found) statesMissed++;
         }
       }
       pointCheck(B);
@@ -134,6 +151,52 @@ int main(int argc, char **argv) {
   check(line, worstN < 1e-4);
   std::snprintf(line, sizeof line, "(c) %d bound states of the potential: the large-width limit is the single-particle ANC^2 to %.2g", nStates, worstC);
   check(line, nStates > 0 && worstC < 1e-4);
+  // (e)
+  {
+    const double kPi = std::acos(-1.0);
+    double worst = 0.0;
+    int n = 0;
+    CoulFunc coul(pair);
+    for (int l = 0; l <= 3; l++) {
+      const phys::HybridPotential &pot = *pair->GetHybridPotential(l);
+      const int twoJ = pair->SpinOrbitTwoJ(l);
+      for (double E = 0.3; E < 6.01; E += 0.3) {
+        const double rFar = 14.0, rho = std::sqrt(2.0 * mu * E) / hbarc * rFar;
+        const double f = phys::RegularSolution(pot, pair->GetZ(1), pair->GetZ(2), mu, l, pair->SpinOrbitFactor(l, twoJ), rFar, E).log_derivative;
+        const CoulWaves w = coul(l, twoJ, rFar, E);
+        const double direct = std::atan2(rho * w.dF - f * w.F, f * w.G - rho * w.dG);
+        const double engine = std::arg(coul.HardSpherePhase(l, twoJ, a, E));
+        double d = std::fmod(engine - direct, kPi);  // phases are equal modulo pi
+        if (d > 0.5 * kPi) d -= kPi;
+        if (d < -0.5 * kPi) d += kPi;
+        if (std::fabs(d) > 1e-4) std::printf("    l=%d E=%.2f MeV: engine %.6f, direct %.6f rad\n", l, E, engine, direct);
+        worst = std::fmax(worst, std::fabs(d));
+        n++;
+      }
+    }
+    std::snprintf(line, sizeof line, "(e) the phase without levels is the potential's phase shift: %d points, largest difference %.2g rad", n, worst);
+    check(line, worst < 1e-4);
+  }
+  // (d)
+  const std::vector<PotentialState> resonances = InteriorPotentialStates(*pair, 1, pair->SpinOrbitTwoJ(1), a, 0.05, 10.0);
+  std::snprintf(line, sizeof line, "(d) the states of the potential: the %d bound states found again, one l = 1 resonance below 10 MeV (%.4f MeV, %.1f keV)",
+                nStates, resonances.empty() ? 0.0 : resonances[0].Ec, resonances.empty() ? 0.0 : resonances[0].width * 1e3);
+  check(line, statesMissed == 0 && resonances.size() == 1 && std::fabs(resonances[0].Ec - 2.40) < 0.02 &&
+                  std::fabs(resonances[0].width - 0.41) < 0.02);
+  AZUREParams params;
+  cn.FillMnParams(params, setUp.state, setUp.inputs, &cfg);
+  cn.FillCompoundFromParams(params.GetMinuitParams().Params(), setUp.state);
+  cn.CalcShiftFunctions(cfg, setUp.state);
+  const std::optional<ObservedLevelTable> table = cn.ObservedOfFitValues(cfg, setUp.state, setUp.inputs);
+  check("(d) the observed values of the project's levels", table.has_value());
+  if (table) {
+    sink.str("");
+    const int warned = WarnLevelDoublesPotential(cn, setUp.inputs, *table, cfg);
+    const std::string text = sink.str();
+    check("(d) one level is reported, the one at 9.585 MeV",
+          warned == 1 && text.find("E=9.5850") != std::string::npos && text.find("resonance of the potential") != std::string::npos);
+    if (warned != 1) std::printf("%s", text.c_str());
+  }
   std::printf("%s\n", failures ? "FAILED" : "all checks passed");
   return failures ? 1 : 0;
 }

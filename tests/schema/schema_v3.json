@@ -1904,8 +1904,7 @@
          "optional": false,
          "dimension": "energy",
          "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "positive": true,
-         "doc": "V0 > 0, attractive"
+         "doc": "V0: > 0 attractive, < 0 repulsive"
         },
         {
          "name": "radius",
@@ -1943,8 +1942,7 @@
          "optional": false,
          "dimension": "energy",
          "units": ["MeV", "keV", "eV", "meV", "ueV"],
-         "positive": true,
-         "doc": "V0 > 0, attractive"
+         "doc": "V0: > 0 attractive, < 0 repulsive"
         },
         {
          "name": "width",

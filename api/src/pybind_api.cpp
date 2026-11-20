@@ -87,7 +87,7 @@ std::string ReadProjectText(const std::string &path);  // pybind_project.cpp: th
 void BindDataRows(py::module_ &m);
 std::vector<std::string> OwnerFieldsOf(ParamKind kind);
 // pybind_potentials.cpp: the view of a session's hybrid potentials
-pybind11::tuple SessionPotentialView(const Config &config, int pair);
+pybind11::tuple SessionPotentialView(const Config &config, int pair, int l);
 // pybind_thm_reports.cpp: the THM reports of a session as dicts
 py::list ThmExperimentsList(AZUREAPI &api);
 py::dict ThmLineshapeDict(const ThmLineshapeReport &r);
@@ -223,7 +223,7 @@ class Session {
   // The session's Config holds one setting per pair (the project's potential records) and a default for the pairs
   // that name none; CompoundSystem::Fill gives each pair its potential when the session is made.
   // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit, matching_radius, step) for the given pair, resolved against the default.
-  py::tuple get_potential(int pair) { return SessionPotentialView(*config_, pair); }
+  py::tuple get_potential(int pair, int l) { return SessionPotentialView(*config_, pair, l); }
 
   // -- data bookkeeping ------------------------------------------------------
 
@@ -753,8 +753,9 @@ PYBIND11_MODULE(_azure2, m) {
       .def("option_sources", &Session::option_sources,
            "The options of the calculation in effect: {name: (value, source)}, source 'default', 'project' (the "
            "<config> key) or 'keyword' (given to the session).")
-      .def("get_potential", &Session::get_potential, py::arg("pair"),
-           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step) for a pair.")
+      .def("get_potential", &Session::get_potential, py::arg("pair"), py::arg("l") = -1,
+           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step, "
+           "interior_boundary or None) for a pair; with l >= 0 the pair's record of that orbital angular momentum when it has one.")
       .def("update_data", &Session::update_data, py::call_guard<EngineCallScope>(),
            "Refill the data arrays; returns the number of segments.")
       .def("parameter_records", &Session::parameter_records,

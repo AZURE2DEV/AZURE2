@@ -697,6 +697,13 @@ add_test(NAME pyazr_potential_record
                  ${CMAKE_CURRENT_SOURCE_DIR}/potential_record_test.py)
 set_tests_properties(pyazr_potential_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr's view of a potential that also acts inside the channel radius: interior_boundary, the record of one l, a
+# negative depth (docs/upgrade/interior_potential.md section 8).
+add_test(NAME pyazr_interior_potential_view
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/interior_potential_view_test.py)
+set_tests_properties(pyazr_interior_potential_view PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # chiSquared.out written through the API carries the Park, abundance and scattering-length totals
 # (2026-10-27, audit item 30).
 # The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective().value_and_grad[0] = the sum

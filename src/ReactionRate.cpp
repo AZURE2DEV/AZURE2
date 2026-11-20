@@ -596,7 +596,10 @@ ReactionRate::ReactionRate(const CompoundSystem *compound, const LevelState &sta
   // Warn once if a level has a radiative width comparable to its particle width,
   // where the R-Matrix treatment of capture breaks down.
   if (const std::optional<ObservedLevelTable> observed = compound_->ObservedWidthsAt(configure, params, state_, inputs_))
+  {
     WarnLargeRadiativeWidths(*compound_, inputs_, *observed, configure);
+    WarnLevelDoublesPotential(*compound_, inputs_, *observed, configure);
+  }
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound_->CalcShiftFunctions(configure, state_);
 }
 

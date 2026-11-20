@@ -58,8 +58,8 @@ SpinOrbitTerm WoodsSaxonSpinOrbit(double depth_MeV, double radius_fm, double dif
 }
 
 HybridPotential WoodsSaxonPotential(double depth_MeV, double radius_fm, double diffuseness_fm) {
-  if (depth_MeV <= 0.0 || radius_fm <= 0.0 || diffuseness_fm <= 0.0)
-    throw std::invalid_argument("WoodsSaxon: V0, R, a must be positive");
+  if (!(depth_MeV != 0.0) || radius_fm <= 0.0 || diffuseness_fm <= 0.0)
+    throw std::invalid_argument("WoodsSaxon: V0 must not be zero, R and a must be positive");
   HybridPotential p;
   p.central_depth_MeV = depth_MeV;
   p.central.shape = FormShape::WoodsSaxon;
@@ -69,7 +69,7 @@ HybridPotential WoodsSaxonPotential(double depth_MeV, double radius_fm, double d
 }
 
 HybridPotential GaussianPotential(double depth_MeV, double width_fm) {
-  if (depth_MeV <= 0.0 || width_fm <= 0.0) throw std::invalid_argument("Gaussian: V0, r0 must be positive");
+  if (!(depth_MeV != 0.0) || width_fm <= 0.0) throw std::invalid_argument("Gaussian: V0 must not be zero, r0 must be positive");
   HybridPotential p;
   p.central_depth_MeV = depth_MeV;
   p.central.shape = FormShape::Gaussian;

@@ -12,7 +12,7 @@ class _HybridPotentials:
 
 
     @engine_call
-    def nuclear_potential(self, pair=0):
+    def nuclear_potential(self, pair=0, l=None):
         """The hybrid model's setting for one particle pair.
 
         Returns a :class:`NuclearPotential` -- ``enabled``, ``type``
@@ -23,9 +23,16 @@ class _HybridPotentials:
         ``pair=0`` addresses that default: the setting every pair falls back to
         when it has none.  A model where no pair is named therefore behaves as
         it did when the potential was a single global object.
+
+        ``l`` (an orbital angular momentum) asks for the pair's record of that
+        l (a ``potential`` record with an ``l`` list) and gives the pair's
+        record when it has none of that l.  ``interior_boundary`` is the
+        boundary constant b of a potential that also acts inside the channel
+        radius (the record's ``interior_boundary``), ``None`` without one.
         """
         pair = self._check_potential_pair(pair)
-        enabled, type_, V0, R, a, r0, own, rc, so, rm, step = self._engine.get_potential(pair)
+        enabled, type_, V0, R, a, r0, own, rc, so, rm, step, interior = self._engine.get_potential(
+            pair, -1 if l is None else int(l))
         spin_orbit = None
         if len(so):
             spin_orbit = {"depth": float(so[0]), "radius": float(so[1]), "diffuseness": float(so[2]),
@@ -33,7 +40,9 @@ class _HybridPotentials:
         return NuclearPotential(pair=pair, enabled=bool(enabled), type=str(type_),
                                 V0=float(V0), R=float(R), a=float(a),
                                 r0=float(r0), own=bool(own), coulomb_radius=float(rc),
-                                spin_orbit=spin_orbit, matching_radius=float(rm), step=float(step))
+                                spin_orbit=spin_orbit, matching_radius=float(rm), step=float(step),
+                                interior_boundary=None if interior is None else float(interior),
+                                l=None if l is None else int(l))
 
     @engine_call
     def nuclear_potentials(self):

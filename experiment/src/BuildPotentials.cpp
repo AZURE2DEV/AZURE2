@@ -80,6 +80,10 @@ void BuildPotentials(Context &c) {
                   " pair; a hybrid potential bends the radial waves of two particles and belongs to a particle pair");
       continue;
     }
+    if (const Value *depth = central->Get("depth"); depth && !(depth->number.value != 0.0)) {
+      c.Error(codes::kOutOfRange, r, "central", "the depth must not be 0 (> 0 attractive, < 0 repulsive)");
+      continue;
+    }
     const Value *spinOrbit = r.Get("spin_orbit");
     // the l list: integers >= 0, none named by another record of the pair, and not with a spin-orbit term (whose keys
     // are the pair's)

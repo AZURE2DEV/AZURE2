@@ -77,7 +77,7 @@ void Values() {
         "defaults R_C = 3.5 fm, r_m = 15 fm, step 0.0275 fm");
   int refused = 0;
   for (auto make : {+[] { WoodsSaxonPotential(0.0, 3.6, 0.6); }, +[] { WoodsSaxonPotential(20.0, -1.0, 0.6); },
-                    +[] { WoodsSaxonPotential(20.0, 3.6, 0.0); }, +[] { GaussianPotential(-1.0, 3.0); },
+                    +[] { WoodsSaxonPotential(20.0, 3.6, 0.0); }, +[] { GaussianPotential(0.0, 3.0); },
                     +[] { GaussianPotential(20.0, 0.0); }}) {
     try {
       make();
@@ -85,7 +85,10 @@ void Values() {
       refused++;
     }
   }
-  Check(refused == 5, "the factories refuse non-positive parameters");
+  Check(refused == 5, "the factories refuse a zero depth and non-positive lengths");
+  Check(RadialPotential(WoodsSaxonPotential(-20.0, 3.6, 0.6), 0, 0, 900.0, 0, 0.0, 1.0) > 0.0 &&
+            RadialPotential(GaussianPotential(-20.0, 3.0), 0, 0, 900.0, 0, 0.0, 1.0) > 0.0,
+        "a negative depth is a repulsive potential");
 }
 
 // p + 12C as pair 1 of tests/hybrid_potential (and make_hybrid_bound_reference.py): masses 1.00728 and 12 u

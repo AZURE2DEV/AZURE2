@@ -450,7 +450,7 @@ warning at load when Γ/E_r > 1 % or another level of the same J^π lies within 
 
 [Added 2026-11-10, `spin_orbit_potential.md` §3.3 without the spin–orbit term.] One record per particle pair:
 `pair` (the label; `pair_key` only where two pairs have it, the rule of §3.5), `coulomb_radius` (required: the old
-block implied 3.5 fm), `central woods_saxon depth radius diffuseness | gaussian depth width` (depth > 0 attractive),
+block implied 3.5 fm), `central woods_saxon depth radius diffuseness | gaussian depth width` (depth > 0 attractive, < 0 repulsive, not 0),
 `matching_radius` and `step` (the solver's numbers, which the potential value carries and the tables key on; defaults
 15 fm and 0.0275 fm, noted in the run log when used). Lengths and energies in any unit of the table. A pair without a
 record has no potential; there is no default record: the converter expands the old block's default into one record

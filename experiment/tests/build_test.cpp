@@ -838,6 +838,21 @@ int main() {
       ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(pot + Set(so, "spin_orbit",
                                                                  "    spin_orbit woods_saxon depth 0 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s"))));
     }
+    // the depth of the central term is signed (a negative depth is a repulsive potential) and may not be 0
+    {
+      std::string repulsive = pot;
+      const std::size_t at = repulsive.find("depth ");
+      check("the potential record of the test has a depth", at != std::string::npos);
+      if (at != std::string::npos) {
+        repulsive.insert(at + 6, "-");
+        const BuiltProject s = BuildText(potentials(repulsive));
+        check("a negative depth builds, the setting's V0 < 0", s.Ok() && s.potentials.pairs.count(7) && s.potentials.pairs.at(7).V0 < 0.0);
+        std::string zero = pot;
+        const std::size_t end = zero.find(' ', at + 6);  // the end of the number
+        zero.replace(at + 6, end - at - 6, "0");
+        ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(zero)));
+      }
+    }
     // the interior R-function of a potential (interior_boundary, docs/upgrade/interior_potential.md): the constant as
     // written, carried by the potential value; refused on a pair with two spinning particles
     {
