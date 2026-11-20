@@ -364,6 +364,17 @@ int WarnLevelDoublesPotential(const CompoundSystem &compound, const LevelInputs 
           const double width = std::max(levelWidth, state.width);
           // a bound state and a bound level have no width: 1 keV then
           if (std::fabs(Ec - state.Ec) > std::max(width, 1e-3)) continue;
+          if (state.Ec < 0.0 && group->GetLevel(la)->IsECLevel()) {
+            // An external-capture final state on a bound state of the potential is the intended use (Koonin, Tombrello
+            // and Fox: the final state is the potential's wave function, interior_potential.md section 6.2): a note.
+            std::ostringstream note;
+            note << std::setprecision(6) << "NOTE: the external-capture final state " << AZURELabel::Level(group, inputs.E(j, la), j, la)
+                 << " lies on a bound state of the potential of pair " << channel->GetPairNum() << " (l = " << l << ", E_x = "
+                 << state.Ec + threshold << " MeV): inside the channel radius it is the potential's own wave function," << std::endl
+                 << "  scaled by its ANC (docs/upgrade/interior_potential.md section 6.2)." << std::endl;
+            configure.outStream << note.str();
+            break;
+          }
           std::ostringstream msg;
           msg << std::setprecision(6) << "**WARNING: " << AZURELabel::Level(group, inputs.E(j, la), j, la) << " lies within one width of a "
               << (state.Ec > 0.0 ? "resonance" : "bound state") << " of the potential of pair " << channel->GetPairNum() << " (l = " << l

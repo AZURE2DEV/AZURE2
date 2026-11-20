@@ -12,6 +12,8 @@
 #   (b) --no-ec-table gives the same numbers to 1e-9: these channels are integrated directly either way (ECTable.cpp);
 #   (c) with the potential's record restricted to l = 1 the final channel (l = 0) has no interior: the run warns that
 #       the final state gets no capture from the potential's interior, and the full model does not;
+#       a final state on the potential's bound state, the intended use, draws a note instead of the warning that a
+#       level describes a state of the potential twice;
 #   (d) interior_charge_e1 changes the cross section, and is refused without interior_boundary
 #       (E_POT_INTERIOR_CHARGE).
 #
@@ -80,6 +82,10 @@ if grep -q "gets no capture from the potential's interior" "$WORK/l1_535/run.log
 else bad "(c) no warning for the final channel without an interior boundary constant"; fi
 if grep -q "gets no capture from the potential's interior" "$WORK/a535/run.log"; then bad "(c) the full model is warned about"
 else ok "(c) no such warning for the full model"; fi
+if grep -q "NOTE: the external-capture final state .* lies on a bound state of the potential" "$WORK/a535/run.log" &&
+   ! grep -q "J^pi=0+.* lies within one width of a bound state" "$WORK/a535/run.log"; then
+  ok "(c) the final state on the potential's bound state draws a note, not the warning of a level that doubles it"
+else bad "(c) the final state on the potential's bound state: no note, or the doubled-level warning"; fi
 
 d=$(worst a535 charge)
 if above "$d" 1.0; then ok "(d) interior_charge_e1 0.01 changes the cross section (relative change up to $d)"
