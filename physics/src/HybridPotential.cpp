@@ -220,5 +220,63 @@ double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV,
   return s0 + (S(bindingMin) - s0) * (B_MeV / bindingMin);
 }
 
+RegularValue RegularSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                             double E_MeV) {
+  const int n_a = std::max(4, static_cast<int>(std::lround(a_fm / p.step_fm)));
+  const double dr = a_fm / n_a, dr2 = dr * dr;
+  const int npts = n_a + 3;  // nodes 0 .. n_a + 2: the difference at a reads two nodes beyond it
+  const double k2 = 2.0 * mu_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm);
+  std::vector<double> u(npts, 0.0), g(npts, 0.0);
+  for (int i = 1; i < npts; ++i) g[i] = k2 * (E_MeV - RadialPotential(p, z1, z2, mu_MeV, l, two_l_dot_i, i * dr));
+
+  // The first two nodes from the series of the regular solution in a constant potential (the centrifugal term apart).
+  const double w = -(g[1] + l * (l + 1) / dr2);  // (2 mu/hbar^2)(V - E) without the centrifugal term, fm^-2
+  for (int i = 1; i <= 2; ++i) {
+    const double r = i * dr, x = w * r * r;
+    double term = 1.0, sum = 1.0;
+    for (int k = 1; k <= 6; ++k) {
+      term *= x / (2.0 * k * (2 * l + 2 * k + 1));
+      sum += term;
+    }
+    u[i] = std::pow(r, l + 1) * sum;
+  }
+  const double kRescale = 1e250;
+  for (int i = 3; i < npts; ++i) {
+    u[i] = ((2.0 - (5.0 * dr2 / 6.0) * g[i - 1]) * u[i - 1] - (1.0 + (dr2 / 12.0) * g[i - 2]) * u[i - 2]) /
+           (1.0 + (dr2 / 12.0) * g[i]);
+    if (std::fabs(u[i]) > kRescale)
+      for (int j = 0; j <= i; ++j) u[j] /= kRescale;
+  }
+
+  RegularValue v;
+  const double ua = u[n_a];
+  const double du = (u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr);
+  v.log_derivative = a_fm * du / ua;
+  // int_0^a u^2 dr: Simpson's rule on the nodes; an odd number of intervals takes the first three by the 3/8 rule.
+  auto sq = [&](int i) { return u[i] * u[i]; };
+  double sum = 0.0;
+  int first = 0;
+  if (n_a % 2) {
+    sum += 3.0 * dr / 8.0 * (sq(0) + 3.0 * sq(1) + 3.0 * sq(2) + sq(3));
+    first = 3;
+  }
+  for (int i = first; i + 2 <= n_a; i += 2) sum += dr / 3.0 * (sq(i) + 4.0 * sq(i + 1) + sq(i + 2));
+  v.norm_fm = sum / (ua * ua);
+  return v;
+}
+
+ChannelTriple InteriorChannelFunctions(const ChannelTriple &outer, double f, double b) {
+  if (std::isinf(f)) return outer;
+  const std::complex<double> L(outer.S, outer.P);
+  const std::complex<double> d = f - L;  // f - L
+  const std::complex<double> Lp = b + (L - b) * (f - b) / d;
+  ChannelTriple t;
+  t.S = Lp.real();
+  t.P = Lp.imag();
+  const double sign = (f - b) < 0.0 ? -1.0 : 1.0;
+  t.exp_minus_i_phi = outer.exp_minus_i_phi * std::conj(d) / std::abs(d) * sign;
+  return t;
+}
+
 }  // namespace physics
 }  // namespace azure2

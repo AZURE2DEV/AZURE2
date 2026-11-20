@@ -162,6 +162,44 @@ DecayingValue DecayingSolution(const HybridPotential &p, int z1, int z2, double 
 double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                         double B_MeV);
 
+/// The regular solution u of the radial equation (u(0) = 0) at the channel radius, as the interior R-function of the
+/// potential needs it (docs/upgrade/interior_potential.md).
+struct RegularValue {
+  double log_derivative = 0.0;  ///< f = a u'(a)/u(a), real at any E (infinite where u(a) = 0)
+  double norm_fm = 0.0;         ///< int_0^a u^2 dr / u(a)^2 (fm): df/dE = -(2 mu a/hbar^2) norm_fm (note Eq. (6))
+};
+
+/*!
+ * Integrates the radial equation outward (the stable direction of the regular solution) from the origin to the channel
+ * radius a (fm) at energy E (MeV, c.m., any sign) for charges z1, z2, reduced mass mu (MeV), l and <2 l.i> =
+ * two_l_dot_i.  Numerov on the grid of IntegrateInward (a on a node), started at the first two nodes from the series
+ * u = r^(l+1) [1 + x/(2(2l+3)) + x^2/(8(2l+3)(2l+5)) + ...], x = (2 mu/hbar^2)(V - E) r^2 with V the potential without
+ * its centrifugal term at the first node; u'(a) by the five-point central difference, the integral by Simpson's rule
+ * on the nodes; all O(step^4).
+ */
+RegularValue RegularSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                             double E_MeV);
+
+/// S, P and exp(-i phi) of a channel, as the level and collision matrices read them.
+struct ChannelTriple {
+  double S = 0.0;
+  double P = 0.0;
+  std::complex<double> exp_minus_i_phi = 1.0;
+};
+
+/*!
+ * The channel functions of a channel whose potential also acts inside the channel radius: with R = R_pot + the poles,
+ * R_pot = 1/(f - b), the collision matrix keeps its form with (note Eqs. (4), (5))
+ *
+ *   S' + i P' = b + (L - b)(f - b)/(f - L),   L = S + i P,
+ *   exp(-i phi') = exp(-i phi) conj(f - L)/|f - L| sgn(f - b)        (sgn(0) = +1),
+ *
+ * f the logarithmic derivative of the regular solution (RegularSolution), b the boundary constant of R_pot.  Without
+ * levels U = exp(-2 i phi') is the scattering of the potential for any a and b.  f = +-infinity gives the unprimed
+ * functions.  Below threshold (P = 0) S' is real and has a pole where f = S, a bound state of the potential.
+ */
+ChannelTriple InteriorChannelFunctions(const ChannelTriple &outer, double f, double b);
+
 }  // namespace physics
 }  // namespace azure2
 

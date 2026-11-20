@@ -211,6 +211,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME physics_hybrid_potential COMMAND physics_hybrid_potential_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/hybrid_bound.csv)
 
+# The interior R-function of a hybrid potential: the regular solution and the primed channel functions against an
+# independent integration (tests/data/interior_potential.csv, make_interior_potential_reference.py;
+# docs/upgrade/interior_potential.md).
+add_executable(physics_interior_potential_test tests/interior_potential_test.cpp)
+target_link_libraries(physics_interior_potential_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_interior_potential_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_interior_potential COMMAND physics_interior_potential_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/interior_potential.csv)
+
 # The spin-orbit term: its angular factor against an m-scheme, the radial term, a delta-shell closed form, and the
 # channel functions against an independent integration (tests/data/spin_orbit.csv, make_spin_orbit_reference.py).
 add_executable(physics_spin_orbit_test tests/spin_orbit_test.cpp)
