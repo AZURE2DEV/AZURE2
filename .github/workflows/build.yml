@@ -557,7 +557,7 @@ jobs:
   # each new dev commit:
   #
   #   https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip
-  #   https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos.dmg
+  #   https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos-x86_64.tar.gz
   #   https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-x86_64.AppImage
   #
   # Linux was added when the run artifacts went to 7-day retention: before, the
@@ -638,7 +638,7 @@ jobs:
           TAG=continuous-windows
           # Nothing packaged on any platform: fail visibly, and do not move
           # the tag to a commit none of the files was built from.
-          if [ ! -f AZURE2-windows-x86_64.zip ] && ! ls dist-macos/*.dmg >/dev/null 2>&1 \
+          if [ ! -f AZURE2-windows-x86_64.zip ] && ! ls dist-macos/*.tar.gz >/dev/null 2>&1 \
              && ! ls dist-linux/*.AppImage >/dev/null 2>&1; then
             echo "::error::no platform packaged in this run; pre-release not updated"
             exit 1
@@ -659,14 +659,23 @@ jobs:
           else
             echo "No Windows zip in this run; leaving the previous one in place."
           fi
-          # The macOS disk image, when that platform packaged successfully.
-          DMG=$(ls dist-macos/*.dmg 2>/dev/null | head -1 || true)
-          if [ -n "$DMG" ]; then
-            cp "$DMG" AZURE2-macos.dmg
-            gh release upload "$TAG" AZURE2-macos.dmg --clobber
+          # The macOS tarball (the command-line program and azure2-coulomb-table),
+          # when that platform packaged successfully.  Until 2026-11-20 this step
+          # looked for the .dmg of the Qt build, which the macOS leg no longer
+          # makes, so the page kept a disk image of the old code beside two
+          # downloads of the new one.  That file is removed once a tarball is up:
+          # the three downloads are then builds of the same commit.
+          MACTAR=$(ls dist-macos/*.tar.gz 2>/dev/null | head -1 || true)
+          if [ -n "$MACTAR" ]; then
+            cp "$MACTAR" AZURE2-macos-x86_64.tar.gz
+            gh release upload "$TAG" AZURE2-macos-x86_64.tar.gz --clobber
             UPDATED="$UPDATED macOS"
+            if gh release view "$TAG" --json assets -q '.assets[].name' | grep -qx 'AZURE2-macos.dmg'; then
+              gh release delete-asset "$TAG" AZURE2-macos.dmg --yes
+              echo "Removed the old AZURE2-macos.dmg (Qt build of the previous code)."
+            fi
           else
-            echo "No macOS disk image in this run; leaving the previous one in place."
+            echo "No macOS tarball in this run; leaving the previous one in place."
           fi
           # The Linux AppImage, under a stable name, when Linux packaged
           # successfully.  Release assets keep no file mode, hence chmod +x in
