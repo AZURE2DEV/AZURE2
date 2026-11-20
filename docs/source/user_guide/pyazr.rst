@@ -1353,7 +1353,10 @@ width``; the depth is positive for an attractive well and negative for a
 repulsive one. ``interior_boundary <b>`` makes the potential act inside the channel
 radius too (its R-function with boundary constant ``b`` joins the levels'; capture
 then includes the potential's interior, with ``interior_charge_e1 <q>`` and
-``interior_charge_e2 <q>`` as additional charges inside the radius), and
+``interior_charge_e2 <q>`` as additional charges inside the radius; these and the
+potential's depth, radius and diffuseness are inputs, not fit parameters of the
+engine, and ``pyazr.record_fit.fit_record_settings`` fits them from outside by
+refitting the project at each trial value, with a profile interval for each), and
 ``l <l> ...`` restricts a record to those orbital angular momenta
 (:ref:`theory-hybrid-potential`); ``nuclear_potential(pair, l=...)`` shows the
 record of one ``l`` and its ``interior_boundary``. The pair is named by its

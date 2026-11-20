@@ -157,7 +157,8 @@ vanish or change sign.
 
 Limits: a pair whose two particles both have spin is refused (``E_POT_INTERIOR_TWO_SPINS``; :math:`R_{pot}` would
 couple the channel spins); no capture from the interior into an unbound final state; the potential's parameters and
-the interior charge are not fit parameters.  A potential may be given per orbital angular
+the interior charge are not fit parameters of the engine (``pyazr.record_fit.fit_record_settings`` fits them from
+outside, refitting the project at each trial value).  A potential may be given per orbital angular
 momentum with the record's ``l`` list.  The design note is ``docs/upgrade/interior_potential.md``.
 
 Checks

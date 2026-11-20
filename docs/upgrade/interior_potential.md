@@ -406,6 +406,65 @@ listed in `FOR_THE_OWNER.md` §8.
 state as a 0⁺ level, as external capture always did) and a potential record with `interior_boundary` that covers
 l = 0 as well as l = 1; a project without that final state has no computed capture at all.
 
-**Still open.** Unbound final states and the rate mode (step 4); q and the potential's parameters as fit
-parameters; the cross term of §6.2; the theory page's worked example.
+**Still open.** Unbound final states and the rate mode (step 4); the cross term of §6.2; the theory page's worked
+example. Fitting q and the potential's parameters: §10.
+
+## 10. The interior charge and the potential's parameters in a fit (2026-11-20)
+
+Asked for by the owner on that day, after the ¹²C(α,γ) trial of §6.6 (his fit archive,
+`12C+a_onefile/11-19-26_hpot_test`, entry "INTERIOR CAPTURE TRIAL"): with the interior charge the KTF structure
+describes the Dyer and Barnes E1 data as well as the R-matrix control (χ² 23.7 against 24.7 on 24 points), and χ²
+rises from 23.7 to 44 for ±0.0025 in q, so q has to be fitted, not scanned by hand.
+
+### 10.1 What a potential's value touches
+
+Read in the code at `b4f97eda` (a survey; the lists are not exhaustive):
+
+- One `CompoundSystem` is shared, const, by every pooled working copy and thread of a fit; `CoulFunc`, `ShftFunc`,
+  `WhitFunc` and `ECIntegral` read the pair's potential from it. No fit parameter changes it today.
+- Keyed by the potential's value (`PotentialKey`), so a changed potential would miss them: the shift-derivative
+  memo, the radial memo of the Coulomb waves, the capture tables' terms, the rate grid, the amplitude file's
+  signature, the channel table's pair signature.
+- **Not** keyed, so they would be silently stale: each site's channel-table rows (recomputed only when its energy
+  moves; `channel_table.md` §2 states the rule that rows do not depend on fit parameters), the shifted capture
+  amplitudes (keyed by energy), the level state's shifts, each final state's norm integral and conversion factor
+  (set once at set-up), and the observed-to-formal transformation of the levels at set-up.
+
+So the depth, radius, diffuseness and b of a potential as engine fit parameters mean a set-up's worth of work per
+evaluation and a rule of the channel table given up; `spin_orbit_potential.md` §7.7 recommended against it for the
+same reason. The interior charge is different: the capture amplitude is linear in it (A₀ + q A₁, the last line of
+`ECIntegral::CalculateDirect`) and nothing else depends on it.
+
+### 10.2 Built: the fit from outside (`pyazr.record_fit`)
+
+`fit_record_settings(project, [Setting(record, field, text, start, step, ...)], ...)` minimises over any numbers
+written in records. Each trial writes the values into a copy of the project, opens a session and runs the engine's
+fit of the project's own free parameters; the outer step is Gauss–Newton on the objective's least-squares rows at
+that fit (`scipy.optimize.least_squares`, finite differences of a tenth of each setting's step). It returns the
+values, the fitted objective, the linear errors and covariance of the settings from that Jacobian, and on request
+the interval of each setting over which the profile (the other settings and the levels refitted) rises by Δ.
+It covers the interior charge, the depth, radius and diffuseness (through the `central` field), b, and any other
+record number; it holds no formula.
+
+- Cost: one set-up and one fit per trial (the ¹²C(α,γ) trial: about 3 s), 5 to 15 trials for one setting.
+- It is not a joint MIGRAD: the covariance between a setting and the levels is not returned (the profile interval
+  includes it), and the settings are not in `param.sav`.
+- Each trial's session writes `output/intEC.dat` of the project's directory, as any session does.
+
+Check (`pyazr_record_fit`): on `tests/interior_capture/models/direct.azr` with the model's own cross sections as
+data (true charge 0.02), from 0.012: 0.02 to 10⁻⁶; the Δ = 1 interval's ends give the minimum + 1 in an independent
+session (10⁻³) and its half-width is the linear error to 5 %; the charge and the depth together are nearly
+degenerate in one cross section (joint error of the charge twice its error alone) and come back within their joint
+errors; a value the engine refuses raises with the engine's reason.
+
+### 10.3 Proposed, not built: the interior charge as an engine parameter
+
+A parameter kind owned by the potential record, on the pattern of the isospin shift (compound side, its own prior,
+its value in the level state): the amplitude split kept as (A₀, A₁) per point and pathway wherever an amplitude is
+stored (the site, the shifted amplitudes, `intEC.dat` with a new signature version, the amplitude cache, the line
+window's parts), A₀ + q A₁ formed per evaluation, q out of `PotentialKey`, `Nuis` in place of `Num` in the schema
+with a write-back source, the analytic gradient from the cotangent the adjoint already has (or the central
+difference every other kind falls back to), a column in the least-squares Jacobian's list. About 20 to 25 files.
+It buys a joint MIGRAD with the levels (their covariance with q, MINOS, the sampler). Whether that is worth it
+against §10.2 is the owner's decision; the potential's shape parameters stay with §10.2 either way (§10.1).
 
