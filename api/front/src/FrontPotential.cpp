@@ -51,6 +51,14 @@ bool ReadLevelRow(const LevelRow &row, std::unique_ptr<io::LevelRow> &out) {
   return !in.fail();
 }
 
+/// The compound nucleus of a row as the engine and the Pairs tab infer it from the pair's columns (PPair): Z1 + Z2,
+/// round(M1 + M2) of a particle pair, Z2, round(M2) of a photon pair, Z2 - Z1, round(M2) of a beta pair.
+std::pair<int, int> NucleusOf(const io::LevelRow &r) {
+  if (r.pType() == 10) return {r.z2(), (int)std::lround(r.m2())};
+  if (r.pType() == 20) return {r.z2() - r.z1(), (int)std::lround(r.m2())};
+  return {r.z1() + r.z2(), (int)std::lround(r.m1() + r.m2())};
+}
+
 std::vector<io::LevelRow> ReadLevelRows(const std::vector<LevelRow> &rows) {
   std::vector<io::LevelRow> out;
   for (const LevelRow &r : rows) {
@@ -107,6 +115,7 @@ struct WaveSetUp {
   ex::Format3Project built;
   double radius = 0.0;
   std::string radiusNote;
+  int twoJ = -1;  ///< the 2J asked (the lowest of the wave's when it names none and the potential depends on J)
 };
 
 bool SetUpWave(const Project &project, const Record &record, int pairKey, int l, int twoJ, WaveSetUp &w, std::string &why) {
@@ -137,6 +146,13 @@ bool SetUpWave(const Project &project, const Record &record, int pairKey, int l,
   try {
     w.pair = std::make_unique<PPair>(*w.row, PairFunctionSettings());
     w.pair->SetHybridPotential(setting->second.Potential());
+    // a wave without J of a potential that depends on J (a `wave` names a J): its lowest J, |l - s| of the smallest s
+    if (twoJ < 0 && ph::DependsOnJ(*w.pair->GetHybridPotential())) {
+      const int a = (int)std::lround(2 * w.row->j1()), b = (int)std::lround(2 * w.row->j2());
+      for (int twoS = std::abs(a - b); twoS <= a + b; twoS += 2)
+        if (twoJ < 0 || std::abs(2 * l - twoS) < twoJ) twoJ = std::abs(2 * l - twoS);
+    }
+    w.twoJ = twoJ;
     w.args = PotentialWaveOf(*w.pair, l, twoJ, "the potential panel");
   } catch (const std::exception &e) {
     why = e.what();
@@ -145,6 +161,7 @@ bool SetUpWave(const Project &project, const Record &record, int pairKey, int l,
   // the channel radius: the pair's, or a <channelRadii> record's for (l, s, J); channel spins s that differ: the first
   w.radius = w.pair->GetPairRadius();
   const int twoJ1 = (int)std::lround(2 * w.row->j1()), twoJ2 = (int)std::lround(2 * w.row->j2());
+  twoJ = w.twoJ;
   bool first = true;
   for (int twoS = std::abs(twoJ1 - twoJ2); twoS <= twoJ1 + twoJ2; twoS += 2) {
     if (twoJ >= 0 && (twoJ < std::abs(2 * l - twoS) || twoJ > 2 * l + twoS)) continue;
@@ -245,7 +262,7 @@ bool PotentialWaveOf(const Project &project, const Record &record, int pairKey, 
   const PotentialWaveArgs &a = w.args;
   const int z1 = w.pair->GetZ(1), z2 = w.pair->GetZ(2);
   out.l = l;
-  out.twoJ = twoJ;
+  out.twoJ = w.twoJ;
   out.parity = w.row->pi1() * w.row->pi2() * (l % 2 == 0 ? 1 : -1);
   out.radius = w.radius;
   out.radiusNote = w.radiusNote;
@@ -414,7 +431,7 @@ std::vector<PartialWaveState> PartialWaveStates(const std::vector<LevelRow> &row
     bool group = false;
     for (const io::LevelRow &r : read)
       group = group || (r.isActive() == 1 && r.levelPi() == parity && (int)std::lround(2 * r.levelJ()) == j &&
-                        (int)std::lround(r.z1() + r.z2()) == pair->z1() + pair->z2());
+                        NucleusOf(r) == NucleusOf(*pair));
     s.key = keyCovers && !group;
     s.included = s.level || (includeAllJPi && s.key);
     out.push_back(s);
@@ -456,7 +473,7 @@ std::vector<MissingPartialWave> PartialWavesWithoutLevel(const std::vector<Level
   std::map<Key, MissingPartialWave> formed;
   for (const auto &kv : pairs) {
     const io::LevelRow &p = *kv.second;
-    const int Z = p.z1() + p.z2(), A = (int)std::lround(p.m1()) + (int)std::lround(p.m2());
+    const int Z = NucleusOf(p).first, A = NucleusOf(p).second;
     const int a = (int)std::lround(2 * p.j1()), b = (int)std::lround(2 * p.j2());
     // identical particles: only l + s even (the engine's set-up; the pair's flag as the engine's tables give it)
     const bool identical = identicalPairs.count(kv.first) > 0;
@@ -475,11 +492,10 @@ std::vector<MissingPartialWave> PartialWavesWithoutLevel(const std::vector<Level
   for (auto &kv : formed) {
     MissingPartialWave &m = kv.second;
     bool carried = false;
-    // an active level of the J^pi in the nucleus (each row of a level carries the level's J^pi and its pair's particles:
-    // Z1 + Z2, A1 + A2 is the compound nucleus for a particle and a photon pair alike)
+    // an active level of the J^pi in the nucleus (each row of a level carries the level's J^pi and its pair's columns)
     for (const io::LevelRow &r : read)
       carried = carried || (r.isActive() == 1 && (int)std::lround(2 * r.levelJ()) == m.twoJ && r.levelPi() == m.parity &&
-                            r.z1() + r.z2() == m.nucleusZ && (int)std::lround(r.m1()) + (int)std::lround(r.m2()) == m.nucleusA);
+                            NucleusOf(r) == std::make_pair(m.nucleusZ, m.nucleusA));
     if (carried) continue;
     m.key = keyMaxL >= 0 && m.l <= keyMaxL;
     out.push_back(m);

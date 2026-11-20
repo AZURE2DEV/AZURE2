@@ -1182,7 +1182,7 @@ struct PotentialLevel {
 };
 /// What one partial wave of a pair's potential is and gives, at the channel radius.
 struct PotentialWaveReport {
-  int l = 0, twoJ = -1;
+  int l = 0, twoJ = -1;     ///< twoJ: the 2J computed (a wave without J of a J-dependent potential: its lowest)
   int parity = 1;           ///< of the J^pi the wave forms (pi1 pi2 (-1)^l)
   double radius = 0;        ///< a_c (fm): the pair's, or a <channelRadii> record's
   std::string radiusNote;   ///< where it comes from, or that its channel spins have different ones (the first is used)
@@ -1246,7 +1246,7 @@ std::vector<PartialWaveState> PartialWaveStates(const std::vector<LevelRow> &row
 /// A J^pi that the particle pairs of `rows` form with l <= lMax and that no active level carries.
 struct MissingPartialWave {
   int twoJ = 0, parity = 1;
-  int nucleusZ = 0, nucleusA = 0;  ///< the compound nucleus (Z1 + Z2, A1 + A2 of a pair that forms it)
+  int nucleusZ = 0, nucleusA = 0;  ///< the compound nucleus (Z1 + Z2, round(M1 + M2) of a pair that forms it)
   int pairKey = 0;                 ///< a particle pair that forms it, with its lowest l
   int l = 0;
   bool key = false;                ///< includeAllJPi adds it (its lowest l <= the key's maximum l)
