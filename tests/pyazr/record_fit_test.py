@@ -13,6 +13,10 @@ On tests/interior_capture/models/direct.azr (alpha + 12C, the potential model's 
       0.017 and 45.86.  The two are nearly degenerate in this one cross section, so the minimum is a long valley:
       the objective found is below 0.01, both values lie within 3 of their joint linear errors of the truth, and
       the charge's joint error is more than 1.5 times its error alone;
+  (5) with a free parameter of the project's own (the data set's norm, prior 1 +- 5 %), so that every trial runs
+      the engine's fit: from 0.016 the charge comes back to 0.02 within 1e-4 with the norm at 1 (1e-3), and the
+      linear error is half the profile interval to 10 % (the fits leave scatter in the rows; the differences of
+      the Jacobian must be far above it);
   (4) a start the engine refuses (a zero depth) raises with the engine's reason; the project file is unchanged
       and no trial file is left.
 Needs the compiled engine and scipy; skips cleanly without them.
@@ -106,6 +110,17 @@ try:
           r2.objective < 1e-2 and e2 is not None and abs(r2.values[0] - 0.02) < 3 * e2[0] and abs(r2.values[1] - 45.891) < 3 * e2[1]
           and e2[0] > 1.5 * r.errors[0],
           f"{r2.values!r} {e2!r} {r2.objective!r} after {len(r2.evaluations)} trials")
+
+    fitted = os.path.join(work, "fit_norm.azr")
+    with open(fitted, "w") as f:
+        f.write(open(project).read().replace("    norm           1 fixed\n", "    norm           1 fit prior 1 5%\n"))
+    r5 = fit_record_settings(fitted, [Setting("a12C", "interior_charge_e1", "{:.12g}", start=0.016, step=0.002)], intervals=True)
+    lo5, up5 = r5.intervals[0]
+    norm = float(r5.fit.x[0]) if r5.fit is not None and len(r5.fit.x) == 1 else float("nan")
+    check("(5) with the data set's norm fitted in every trial: 0.02 (1e-4), norm 1 (1e-3), linear error = half the interval (10 %)",
+          abs(r5.values[0] - 0.02) < 1e-4 and abs(norm - 1.0) < 1e-3 and r5.errors is not None and lo5 is not None and up5 is not None
+          and abs(r5.errors[0] / (0.5 * (up5 - lo5)) - 1.0) < 0.10,
+          f"{r5.values!r} norm {norm!r} errors {r5.errors!r} interval {lo5!r} {up5!r} after {len(r5.evaluations)} trials")
 
     zero = Setting("a12C", "central", "woods_saxon depth {:.12g} MeV radius 3.55 fm diffuseness 0.6 fm", start=0.0, step=1.0)
     message = ""

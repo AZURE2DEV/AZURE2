@@ -55,7 +55,7 @@ class RecordFitResult:
     :class:`pyazr.session_fit.EngineFitResult` (``None`` for a project without free parameters), ``intervals`` one
     ``(lower, upper)`` per setting where the profile over the other settings rises by ``delta`` (``None`` on a side
     without a crossing inside the limits or within 60 steps; empty unless asked for), ``errors`` and ``covariance``
-    of the settings from the Jacobian of the profiled least-squares rows at the minimum (linear errors, by finite
+    of the settings from the Jacobian of the profiled least-squares rows at the minimum (linear errors, by central
     differences of a tenth of each step; ``None`` when the rows are fewer than the settings), ``evaluations`` every trial
     as ``(values, objective, outcome)`` in order, ``converged`` whether the outer minimiser met its tolerance,
     ``project`` the path of the project written with the values (``write=``), else ``None``."""
@@ -82,7 +82,8 @@ def fit_record_settings(project, settings, *, method="migrad", session=None, tol
         usually acts through the computed capture.
     tolerance : the outer minimiser (Gauss-Newton on the objective's least-squares rows after each trial's fit,
         ``scipy.optimize.least_squares``) stops when the settings, in units of their steps, move by less than this.
-    max_evaluations : the limit of trials of the minimisation (each interval side has its own limit of 60).
+    max_evaluations : the limit of Gauss-Newton steps of the minimisation (each takes one trial and two more per
+        setting for the Jacobian).
     intervals : also find, for each setting, where the profile over the others rises by ``delta``.
     write : a path; the project with the best values is written there (the project's own free parameters keep their
         written values: the fit's are in ``fit``).
@@ -184,7 +185,20 @@ def fit_record_settings(project, settings, *, method="migrad", session=None, tol
             r = optimize.minimize(lambda u: trial(full(u))[0], np.zeros(len(free)), method="Nelder-Mead",
                                   options={"xatol": tolerance, "fatol": tolerance, "maxfev": limit})
             return full(r.x), float(r.fun), bool(r.success), None
-        r = optimize.least_squares(rows_of, np.zeros(len(free)), bounds=(lower, upper), diff_step=0.1, xtol=tolerance,
+        def jacobian(u):
+            # Central differences of a tenth of each setting's step (one-sided at a limit).  scipy's own differences
+            # take a step of 1e-8 where the unknown is 0, which it is at the start: far below the scatter the
+            # trials' fits leave in the rows.
+            u = np.atleast_1d(np.asarray(u, float))
+            columns = []
+            for k in range(len(free)):
+                up, down = u.copy(), u.copy()
+                up[k] = min(u[k] + 0.1, upper[k])
+                down[k] = max(u[k] - 0.1, lower[k])
+                columns.append((rows_of(up) - rows_of(down)) / (up[k] - down[k]) if up[k] > down[k] else np.zeros(len(first)))
+            return np.column_stack(columns)
+
+        r = optimize.least_squares(rows_of, np.zeros(len(free)), jac=jacobian, bounds=(lower, upper), xtol=tolerance,
                                    ftol=1e-12, gtol=1e-12, max_nfev=limit)
         return full(r.x), float(2.0 * r.cost), bool(r.status > 0), r
 
