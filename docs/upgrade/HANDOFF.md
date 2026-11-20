@@ -36,7 +36,10 @@ with the paper's constants the reference reproduces its B = 1.5866 MeV, C = 4.34
 (upgrade_predictions: it lists every `.azr` under `tests/`, so the new models are kept as `.azr.in`, and it passes;
 rmfit_enginepin: this machine, no installed `.so`, as on the parent branch); after the last changes the affected tests
 (physics_potential_*, experiment_build, experiment_schema, pyazr_schema, repo_consistency, upgrade_predictions) and
-`tests/potential_capture/check.sh` pass. RUN_TESTS_PLACEHOLDER
+`tests/potential_capture/check.sh` pass. `tests/run_tests.sh` (4 threads) on that engine: passed 187, failed
+0 (the parent's 186 and `potential_capture`). **Not run**: `ctest -L slow`, the GUI build (no `gui/` or `api/front/`
+change), a comparison of two engines (nothing moves without the field: the potential's key and the arithmetic of
+`IntegrateOutward` and `BackgroundR` are unchanged, and `run_tests` and `tests/potential_background/check.sh` pass).
 
 **Open.** Levels on top with measured capture data (how much a_c dependence they bring back); M1/E2 against an
 independent calculation (the code takes them, untested); the closed-entrance branch (built, untested); an unbound

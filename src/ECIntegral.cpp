@@ -220,7 +220,7 @@ void ECIntegral::Integrate(double chanrad) {
 }
 
 /*!
- * The interior direct capture of a background partial wave (docs/upgrade/potential_background.md section 5, Eq. (C6)):
+ * The interior direct capture of a background partial wave (docs/upgrade/potential_background.md section 5, Eq. (C5)):
  * when the entrance partial wave (l_i, 2J_i) of this pair has a background with `capture interior`, the integrals of
  * the exterior waves, FW = int_a^inf F W~_f w dr and GW alike (or GW = int W_i W~_f w for a closed entrance channel),
  * get the part inside a, K(E) D_u(a) W~_f(a): K the kernel of physics/ InteriorCaptureIntegral (the potential's
