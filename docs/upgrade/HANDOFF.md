@@ -4,6 +4,24 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-capture, follow-up 5) — subtract + capture end to end; E2 and M1 checked
+
+1. **A subtracted box pole put back as a level** (potential_background.md section 5.11): the engine's conventions (internal
+   capture −Ω 2i √P √P_γ γ A γ_γ, the hard-sphere and channel-capture terms) give the level's photon amplitude
+   γ_pγ = (i/2)(√(μa)/ħc) a_X γ_p ∫₀^a φ_p u_f w (Eq. (C7): the closed-channel integral with the box state in place of the
+   decaying wave); for one level Brune's amplitudes are the formal ones (only an observed width carries 1/(1 + γ²S̃')).
+   check.sh section 10 (`make_subtract_level.py` writes `models/subtract_level.azr.in`): the s-wave box state at 7.59 MeV
+   subtracted and put back reproduces the unsubtracted model to 3.2e-7 (capture, both states, 0.02-9 MeV) and 1.4e-6°
+   (s-wave phase); without the level's photon widths the capture misses by up to 17 %. The identity holds exactly in
+   the approved design.
+2. **E2 and M1** (section 5.12): the engine's interior capture uses the exterior's weights and factors for every
+   multipole; check.sh section 11 against `make_reference_e2m1.py` (independent: the golden rule with Edmonds' reduced
+   elements): E2 (s1/2, d3/2 -> d5/2) to 2.3e-7 and M1 orbital (d3/2 -> d5/2) to 3.8e-8; without capture interior the
+   references are missed by 30 % and 14 %. Not checked: M1's spin term (g factors 0 in the model), E2 without the
+   long-wavelength approximation. Nothing is refused: the engine computes them and they are now tested.
+No engine source changed in this round (tests, scripts, the note).
+Run: FOLLOWUP5_RUN
+
 ## 2026-11-20 (potential-capture, follow-up 4) — an independent review's findings
 
 Each finding was checked before it was changed; details and numbers in `potential_background.md` section 5.10.

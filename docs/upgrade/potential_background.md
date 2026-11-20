@@ -277,7 +277,7 @@ the energy tables (`ECTable`) and the reaction-rate grid tabulate or sum the sam
 **Operators.** E1 and E2 with the engine's effective charge (Z₁(m₂/M)^L + Z₂(−m₁/M)^L in the long-wavelength form, the
 charge function otherwise): the same weight as the exterior. M1 (r^0, the orbital and spin factors applied after) comes
 with the same code: the interior overlap of the background's wave with the bound state; it is not zero when the two
-partial waves have different potentials. Tested: E1 only (5.7). Not covered: an unbound final state, a final state in a
+partial waves have different potentials. Tested: E1 (5.7), E2 and M1's orbital term (5.12). Not covered: an unbound final state, a final state in a
 background wave (both refused), two spinning particles in the pair (as for the background), M1 and E2 against an
 independent calculation.
 
@@ -520,10 +520,80 @@ checked here before it was changed.
 7. **A behaviour change outside the potential**: a parameter file with a non-finite value is refused for every model
    (HANDOFF, follow-up 2); listed there for the owner.
 
-**Not done**: the end-to-end test of `subtract` with capture (a level at (E_p, γ_p, B_bg) whose γ-ray amplitude
-equals the box state's interior overlap, reproducing the unsubtracted model) needs the engine's internal γ-amplitude
-convention written as the same radial overlap; the identity is tested at the level of the kernel (finding 6) and the
-elastic part end to end (tests/potential_background, section 7.2), not the capture end to end.
+The end-to-end test of `subtract` with capture, left open in this round, is section 5.11.
+
+### 5.11 A subtracted pole put back as a level: the photon amplitude, and the end-to-end identity
+
+**The engine's conventions** (`physics/CollisionMatrix.h`, `src/ChannelTables.cpp`, `src/UnitExternalCapture.cpp`,
+`src/ECIntegral.cpp`). A photon channel has √P_γ = (E_γ/ħc)^{L+1/2} and phases 1. For an entrance channel c with
+Ω_c = e^{iω_c} e^{−iφ̃_c} and the level matrix A of its J^π group:
+
+    internal capture       T_int = −Ω_c 2i √P̃_c √P_γ Σ_λμ γ_λc A_λμ γ_μγ,
+    hard-sphere term       T_hs  = Ω_c √P_γ s_f a_X f ∫ X ū_f w dr,   X = cos φ̃ F − sin φ̃ G,
+    channel capture        T_cc  = Ω_c √P_γ s_f I_cc 2i √P̃_c Σ_λμ γ_λc A_λμ γ_μc',                          (C6)
+
+with s_f = γ_f N_f^{−1/2} K_c (the final state's ANC), f = FluxFactor/√(ħc) = (μ/2E)^{1/4}/√(ħc), a_X the multipole's
+charge and angular factor of `CalculateDirect` (E1: −i √(αħc) Z_eff √48/3 i^{l+1−l_f} ⟨l 0 1 0|l_f 0⟩ √(2l+1)
+√(2J_f+1) W(1 l_f J l; s J_f)), I_cc the channel-capture integral and ū_f the final state's interior and exterior in
+the integrals' scale. T_cc has the form of T_int with γ_μγ → γ^ext = −s_f γ_μc' I_cc (`external_reduced_width`).
+
+**The box state's photon amplitude.** In the unsubtracted model the interior wave of pole p is γ_p² φ_p(r) D/(E_p − E)
+(Eq. (C2)), D the surface term of the full wave. With a level λ = p in the level matrix (formal, B_c = B_bg) on the
+background with p subtracted, the dressed waves give: the hard-sphere wave X̃ vanishes at a_c, so the full wave's
+surface term is D = D_X'/(1 − R_L L̃), D_X' = cos φ̃ D_F − sin φ̃ D_G = ρ/|H̃| = √(ρ P̃) (the Wronskian), and the level's
+share is γ_p D/(E_p − E) = A γ_p √(ρP̃). The pole's capture in the units of T_hs is therefore
+Ω_c √P_γ s_f a_X f A γ_p² √(ρP̃) ∫ φ_p ū_f w; equal to T_int when
+
+    γ_pγ = (i/2) (√(μ a)/ħc) a_X γ_p J_p,   J_p = ∫_0^a φ_p(r) u_f(r) w(r) dr,                                (C7)
+
+using f √ρ = √(μa)/ħc (independent of E), u_f = s_f ū_f the normalised bound state (C W̃(a) φ_f inside a_c) and φ_p =
+u_p/u_p(a). (C7) is the engine's closed-channel integral (`CalculateDirect`, E < 0) with the decaying wave over its
+value at a_c replaced by the box state over its value at a_c: −s_f γ_p I_cc with I_cc = a_X (−i/2) (√(μa)/ħc)
+∫ φ_p ū_f w. For E1 (s → p) it is real.
+
+**Brune's parameters.** For one level, E_p − E − γ_p²(S̃(E) − B_bg) = (E_b − E) − γ_p²(S̃(E) − S̃(E_b)) with E_b the root of
+E_p − E_b − γ_p²(S̃(E_b) − B_bg): Brune's amplitudes are the formal ones (γ̃ = γ, the particle's and the photon's), and only
+an observed width carries 1/(1 + γ̃² S̃'(E_b)). The engine reads a photon width as the observed total of the internal
+and the complex external amplitude at E_b and subtracts the latter (`subtract_external_capture`): g_int = sign(g)
+√(g² − Im² g_ext) − Re g_ext.
+
+**What holds, and the test** (check.sh section 10; `make_subtract_level.py` writes the model; synthetic). The model of
+section 9 at a_c = 4.87 fm, B_bg = 0: the s-wave box state with 2 nodes (E_p = 7.5915 MeV, γ_p² = 1.6465 MeV)
+subtracted and replaced by a 1/2⁺ level at E_b = 9.874 MeV (E_x = 11.3289 MeV), Γ_p = 18.845 MeV (observed, from
+the dressed S̃, P̃ of the subtracted background), and photon amplitudes from (C7) with J_p by scipy (0.34322 MeV^½ into
+3/2⁻, −0.25082 MeV^½ into 1/2⁻). The two models agree to 3.2·10⁻⁷ in the capture into both states (0.02-9 MeV) and to
+1.4·10⁻⁶° in the s-wave phase shift: **the identity holds exactly** (to the numerics) in this design, in which the
+subtracted pole gives no interior capture and the level that replaces it carries its γ-ray amplitude. Without the
+level's photon widths the capture misses by 8-15 %, and without the level by more. A first attempt put γ̃_γ =
+γ_γ/(1 + γ²S̃')^½ in Brune's basis; the capture then missed by 2-6 %, and one factor, 0.8182 = (1 + γ_p²S̃')^½, fitted
+at every energy and both states: the structure of (C7) is right, the factor was the convention of the previous
+paragraph.
+
+### 5.12 E2 and M1 through the interior capture
+
+The interior capture is one code for every multipole the engine's external capture has: the weight w(r) = r^L (times
+the charge function without the long-wavelength approximation) for EL, r⁰ for M1, and the factors applied after the
+integrals (the effective charge, the angular coefficients, M1's orbital and spin terms) are those of the exterior. It
+is checked against an independent calculation (`tests/potential_capture/make_reference_e2m1.py`: scipy and mpmath,
+the golden rule with Edmonds' reduced matrix elements of e Z₂ r² Y₂ and of √(3/4π) μ_N g_l **l**) on a synthetic
+model (check.sh section 11, `models/e2m1.azr.in`): the final state is VD's bound 0d5/2 state (B = 3.68047 MeV,
+C = 2.50868 fm⁻¹ᐟ²) in a d5/2 wave with `only bound_state`, the s1/2 and d3/2 waves with capture interior (a_c = 4 fm),
+E_cm = 0.5-4 MeV.
+
+| pathway | engine against the reference |
+|---|---|
+| E2, s1/2 → d5/2 (interior + exterior) | 1.5-2.5·10⁻⁷ |
+| E2, d3/2 → d5/2 | 0.1-5·10⁻⁷ |
+| M1 (orbital), d3/2 → d5/2 | 1.2·10⁻⁷-2·10⁻⁶ |
+| E2, M1 d5/2 → d5/2 (the final state's own wave: exterior only), final ANC 10⁻³ | 10⁻⁶ |
+| the same at the state's own ANC 2.509 fm⁻¹ᐟ² | 0.86-0.93 (E2), 0.76-0.80 (M1) |
+
+The last row is not the interior capture: the final level is also an R-matrix level of its own d5/2 channel (its ANC
+gives it a reduced width), and its pole changes the d5/2 scattering wave and adds channel capture through it, which
+the reference's hard-sphere wave leaves out; with the ANC at 10⁻³ (the pole's effect ∝ C⁴, the capture ∝ C²) the two
+agree to 10⁻⁶, and the test runs at that ANC. Not checked: M1's spin term (the pair's g factors are 0 in the model),
+E2 without the long-wavelength approximation (the charge function; the default is the long-wavelength form), and E1
+or E2 from a wave whose final state lies in the same partial wave (refused: a final state in a background wave).
 
 ## 6. Scope, parameters, validity
 
