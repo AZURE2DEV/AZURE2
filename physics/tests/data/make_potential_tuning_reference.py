@@ -20,6 +20,8 @@ Rows (CSV): kind, system, l, x, value
           400 fm (Sturm), with the potential depth x (MeV)
   depth   the depth (MeV) of the s wave of he3 that gives a0 = x fm with VD's two bound s states: scipy's brentq on the
           a0 above
+  dw_*    a depth and Gaussian width (dw_depth, dw_width) and their s-wave a and r (dw_a, dw_r) and bound states
+          (dw_bound), computed here: the engine's depth-and-range solve from the start potential is to find them back
 
 Run: python3 make_potential_tuning_reference.py > potential_tuning.csv   (a few minutes)
 """
@@ -45,7 +47,7 @@ def mu(s):
     return s["m1"] * s["m2"] / (s["m1"] + s["m2"]) * UCONV
 
 
-def V(s, V0, l, r):
+def V(s, V0, l, r, r0=None):
     e2 = ALPHA * HBARC
     if s["z"] == 0:
         vc = 0.0
@@ -53,13 +55,13 @@ def V(s, V0, l, r):
         vc = s["z"] * e2 / (2.0 * s["rc"]) * (3.0 - (r / s["rc"]) ** 2)
     else:
         vc = s["z"] * e2 / r
-    return vc - V0 * math.exp(-(r / s["r0"]) ** 2) + HBARC ** 2 / (2.0 * mu(s)) * l * (l + 1) / r ** 2
+    return vc - V0 * math.exp(-(r / (r0 or s["r0"])) ** 2) + HBARC ** 2 / (2.0 * mu(s)) * l * (l + 1) / r ** 2
 
 
-def solve(s, V0, l, E, rmax, dense=False):
+def solve(s, V0, l, E, rmax, dense=False, width=None):
     k2 = 2.0 * mu(s) / HBARC ** 2
     r0 = 1e-4
-    return solve_ivp(lambda r, y: [y[1], k2 * (V(s, V0, l, r) - E) * y[0]], (r0, rmax),
+    return solve_ivp(lambda r, y: [y[1], k2 * (V(s, V0, l, r, width) - E) * y[0]], (r0, rmax),
                      [r0 ** (l + 1), (l + 1) * r0 ** l], method="DOP853", rtol=1e-12, atol=1e-30,
                      dense_output=dense)
 
@@ -70,8 +72,8 @@ def kin(s, E):
     return k, eta
 
 
-def phase(s, V0, l, E):
-    sol = solve(s, V0, l, E, R_M)
+def phase(s, V0, l, E, width=None):
+    sol = solve(s, V0, l, E, R_M, width=width)
     u, du = sol.y[0, -1], sol.y[1, -1]
     k, eta = kin(s, E)
     rho = mp.mpf(k * R_M)
@@ -87,7 +89,7 @@ def phase(s, V0, l, E):
     return d
 
 
-def ere(s, V0, l):
+def ere(s, V0, l, width=None):
     if s["z"]:
         energies = np.linspace(0.05, 0.4, 40)
     else:
@@ -95,7 +97,7 @@ def ere(s, V0, l):
     xs, ys = [], []
     for E in energies:
         k, eta = kin(s, E)
-        d = phase(s, V0, l, E)
+        d = phase(s, V0, l, E, width)
         if s["z"]:
             c02 = 2.0 * math.pi * eta / math.expm1(2.0 * math.pi * eta)
             h = float(mp.re(mp.digamma(1j * eta)) - mp.log(eta))
@@ -108,9 +110,9 @@ def ere(s, V0, l):
     return -1.0 / c[0], 2.0 * c[1]
 
 
-def bound(s, V0, l):
+def bound(s, V0, l, width=None):
     E = -0.01
-    sol = solve(s, V0, l, E, 400.0, dense=True)
+    sol = solve(s, V0, l, E, 400.0, dense=True, width=width)
     r = np.linspace(1e-3, 400.0, 400001)
     u = sol.sol(r)[0]
     return int(np.sum(np.sign(u[1:]) * np.sign(u[:-1]) < 0))
@@ -146,6 +148,16 @@ def main():
         lo, hi = hi, hi + step
     depth = brentq(lambda v: ere(he3, v, 0)[0] - target, min(lo, hi), max(lo, hi), xtol=1e-9)
     print(f"bound,he3,0,{depth},{bound(he3, depth, 0)}")
+    # depth and width for (a, r): the a and r of a chosen (V0, r0) on the branch of the start potential, which the
+    # engine is to find back from its start (VD's s wave; n + 4He's 40 MeV, 2 fm)
+    for name, sysname, V0, r0 in (("he3", "he3", 70.0, 2.4), ("nalpha", "nalpha", 35.0, 2.2)):
+        sy = SYSTEMS[sysname]
+        a, r = ere(sy, V0, 0, r0)
+        print(f"dw_depth,{name},0,0,{V0}")
+        print(f"dw_width,{name},0,0,{r0}")
+        print(f"dw_a,{name},0,0,{a:.12e}")
+        print(f"dw_r,{name},0,0,{r:.12e}")
+        print(f"dw_bound,{name},0,0,{bound(sy, V0, 0, r0)}")
     print(f"depth,he3,0,{target},{depth:.12e}")
 
 

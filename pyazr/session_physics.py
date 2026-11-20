@@ -172,6 +172,45 @@ class SessionPhysics:
                 "points": int(out["points"]), "bound_states": int(out["bound_states"])}
 
     @engine_call
+    def potential_depth_for(self, pair, a, l=0, J=None, r=None):
+        """The depth (and range) of a pair's potential in one partial wave for a chosen scattering length (and
+        effective range), on the branch of its present number of bound states.
+
+        With ``r`` None: the wave's depth V0 for which :meth:`potential_scattering_length` gives ``a``.  With ``r``: its
+        depth and Gaussian width r0 (``exp(-(r/r0)^2)``, the record's ``width``) for which it gives both.  The number of
+        bound states (Pauli-forbidden ones included) is kept: within that branch a falls monotonically from +inf to -inf
+        with the depth, so a has one depth; (a, r) is solved by nested one-dimensional searches over widths 0.4-2.5 times
+        the present one (``docs/upgrade/potential_background.md`` sections 13.2 and 13.4).  The scattering length is the
+        more robust input; the effective range depends more on the potential's shape and on the fit window.
+
+        Parameters
+        ----------
+        pair, l, J : as :meth:`potential_box_states`.
+        a : the scattering length asked (fm^(2l+1)).
+        r : the effective range asked (fm^(1-2l)), or None for the depth alone.
+
+        Returns
+        -------
+        dict: ``found`` (bool), ``why`` (the reason when not found: no pair is given then), ``depth`` (MeV), ``width`` (fm;
+        the present one for the depth alone), ``a``, ``r`` (what that depth and width give), ``bound_states`` (the
+        branch), ``nodes`` (of the zero-energy solution inside the matching radius), ``r_range`` ((low, high): the r
+        found with a = ``a`` over the widths scanned; (0, 0) for the depth alone).
+
+        Raises ``ValueError`` as :meth:`potential_box_states`.
+        """
+        pair, l = session_checks.channel_request(self.pairs, pair, l)
+        try:
+            out = self._engine.potential_depth_for(pair, l, -1 if J is None else round(2 * J), float(a),
+                                                   float("nan") if r is None else float(r))
+        except Exception as e:
+            raise ValueError(str(e)) from None
+        found = bool(out["found"])
+        return {"found": found, "why": str(out["why"]), "depth": float(out["depth"]) if found else None,
+                "width": float(out["width"]) if found else None, "a": float(out["a"]), "r": float(out["r"]),
+                "bound_states": int(out["bound_states"]), "nodes": int(out["nodes"]),
+                "r_range": (float(out["r_low"]), float(out["r_high"]))}
+
+    @engine_call
     def jpi_block(self, jgroup, e_x, params=None):
         """One J^pi group of this session on excitation energies: channel functions, U, T, phase shifts, |A|, det A^-1.
 

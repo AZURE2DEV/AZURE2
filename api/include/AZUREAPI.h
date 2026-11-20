@@ -488,6 +488,14 @@ class AZUREAPI {
    * throws as GetPotentialBoxStates; a refused expansion has ok = false and its reason.
    */
   azure2::physics::EffectiveRange GetPotentialEffectiveRange(int pairKey, int l, int twoJ) const;
+  /*!
+   * The depth of the potential of pair `pairKey` in (l, 2J) for the scattering length `a` (physics/
+   * DepthForScatteringLength), or, when `r` is finite, its depth and Gaussian width for a and the effective range r
+   * (DepthWidthForEffectiveRange), on the branch of the present number of bound states (potential_background.md
+   * section 13.2, 13.4).  The answer as DepthWidthForRange (width_fm = the present width for the depth alone); found =
+   * false with the reason when there is none.  The same throws as GetPotentialBoxStates.
+   */
+  azure2::physics::DepthWidthForRange GetPotentialDepthFor(int pairKey, int l, int twoJ, double a, double r) const;
 
   /*!
    * External-capture integrals on a requested energy grid.

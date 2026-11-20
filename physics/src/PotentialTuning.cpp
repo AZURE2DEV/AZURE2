@@ -273,5 +273,116 @@ DepthForLength DepthForScatteringLength(const HybridPotential &p, int z1, int z2
   return out;
 }
 
+namespace {
+
+/// The depth at width w (Gaussian) that gives a_target with `bound` bound states: start at V0 (r0/w)^2 (the same
+/// V r0^2, about the same number of states), moved in 1 % steps until the count is `bound`, then
+/// DepthForScatteringLength.  found = false when the branch is not reached within a factor 3 of the start.
+DepthForLength DepthAtWidth(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                            double a_target, int bound, double w) {
+  HybridPotential q = p;
+  q.central.width_fm = w;
+  const double v0 = p.central_depth_MeV * std::pow(p.central.width_fm / w, 2);
+  q.central_depth_MeV = v0;
+  int n = PotentialBoundStates(q, z1, z2, mu_MeV, l, two_l_dot_i).bound;
+  const double dir = n < bound ? 1.01 : 1.0 / 1.01;
+  while (n != bound) {
+    q.central_depth_MeV *= dir;
+    if (q.central_depth_MeV > 3.0 * v0 || q.central_depth_MeV < v0 / 3.0) {
+      DepthForLength none;
+      none.why = "no depth near " + std::to_string(v0) + " MeV has " + std::to_string(bound) + " bound state(s) at r0 = " +
+                 std::to_string(w) + " fm";
+      return none;
+    }
+    const int m = PotentialBoundStates(q, z1, z2, mu_MeV, l, two_l_dot_i).bound;
+    if ((n < bound && m > bound) || (n > bound && m < bound)) {  // jumped over the branch: it is narrower than a step
+      DepthForLength none;
+      none.why = "the branch of " + std::to_string(bound) + " bound state(s) is not found at r0 = " + std::to_string(w) + " fm";
+      return none;
+    }
+    n = m;
+  }
+  return DepthForScatteringLength(q, z1, z2, mu_MeV, l, two_l_dot_i, a_target);
+}
+
+}  // namespace
+
+DepthWidthForRange DepthWidthForEffectiveRange(const HybridPotential &p, int z1, int z2, double mu_MeV, int l,
+                                               double two_l_dot_i, double a_target, double r_target) {
+  DepthWidthForRange out;
+  if (p.central.shape != FormShape::Gaussian) {
+    out.why = "the depth and the range are solved for a Gaussian central term (exp(-(r/r0)^2)) only";
+    return out;
+  }
+  const double w0 = p.central.width_fm;
+  if (!(w0 > 0.0) || !(p.central_depth_MeV > 0.0)) {
+    out.why = "the potential's depth and width must be positive";
+    return out;
+  }
+  const int bound = PotentialBoundStates(p, z1, z2, mu_MeV, l, two_l_dot_i).bound;
+  out.boundStates = bound;
+  // f(w) = r at the depth that gives a_target on the branch, minus r_target; NaN where the depth is not found
+  auto f = [&](double w, DepthForLength *d) {
+    const DepthForLength x = DepthAtWidth(p, z1, z2, mu_MeV, l, two_l_dot_i, a_target, bound, w);
+    if (d) *d = x;
+    return x.found ? x.r - r_target : std::numeric_limits<double>::quiet_NaN();
+  };
+  const int n = 40;
+  const double lo = 0.4 * w0, hi = 2.5 * w0;
+  std::vector<double> ws(n + 1), fs(n + 1);
+  bool any = false;
+  for (int i = 0; i <= n; ++i) {
+    ws[i] = lo * std::pow(hi / lo, double(i) / n);
+    fs[i] = f(ws[i], nullptr);
+    if (std::isfinite(fs[i])) {
+      const double r = fs[i] + r_target;
+      if (!any) out.rLow = out.rHigh = r;
+      out.rLow = std::min(out.rLow, r);
+      out.rHigh = std::max(out.rHigh, r);
+      any = true;
+    }
+  }
+  // the sign change nearest w0 between two neighbours where the depth was found
+  int best = -1;
+  for (int i = 0; i < n; ++i)
+    if (std::isfinite(fs[i]) && std::isfinite(fs[i + 1]) && (fs[i] < 0.0) != (fs[i + 1] < 0.0))
+      if (best < 0 || std::fabs(std::log(ws[i] / w0)) < std::fabs(std::log(ws[best] / w0))) best = i;
+  if (best < 0) {
+    out.why = any ? "no width r0 in [" + std::to_string(lo) + ", " + std::to_string(hi) + "] fm gives r = " +
+                        std::to_string(r_target) + " with a = " + std::to_string(a_target) + " on the branch of " +
+                        std::to_string(bound) + " bound state(s): r runs from " + std::to_string(out.rLow) + " to " +
+                        std::to_string(out.rHigh) + " there"
+                  : "a = " + std::to_string(a_target) + " is not reached on the branch of " + std::to_string(bound) +
+                        " bound state(s) for any width scanned";
+    return out;
+  }
+  double a = ws[best], b = ws[best + 1], fa = fs[best];
+  while (b - a > 1e-9 * w0) {
+    const double m = std::sqrt(a * b), fm = f(m, nullptr);
+    if (!std::isfinite(fm)) break;
+    if ((fm < 0.0) == (fa < 0.0)) {
+      a = m;
+      fa = fm;
+    } else {
+      b = m;
+    }
+  }
+  const double w = std::sqrt(a * b);
+  DepthForLength d;
+  f(w, &d);
+  out.width_fm = w;
+  out.depth_MeV = d.depth_MeV;
+  out.a = d.a;
+  out.r = d.r;
+  out.nodes = d.nodes;
+  out.found = d.found && d.boundStates == bound && std::fabs(d.a - a_target) <= 1e-6 * std::fabs(a_target) &&
+              std::fabs(d.r - r_target) <= 1e-5 * std::max(1.0, std::fabs(r_target));
+  if (!out.found)
+    out.why = "the solve ended at r0 = " + std::to_string(w) + " fm, V0 = " + std::to_string(d.depth_MeV) +
+              " MeV with a = " + std::to_string(d.a) + ", r = " + std::to_string(d.r) + ": not the values asked (" +
+              (d.why.empty() ? std::string("r(w) is not continuous there") : d.why) + ")";
+  return out;
+}
+
 }  // namespace physics
 }  // namespace azure2

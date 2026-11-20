@@ -98,6 +98,28 @@ struct DepthForLength {
 DepthForLength DepthForScatteringLength(const HybridPotential &p, int z1, int z2, double mu_MeV, int l,
                                         double two_l_dot_i, double a_target);
 
+/*!
+ * The depth V0 (MeV) and Gaussian width r0 (fm) of the central term of p (a Gaussian: refused otherwise) for which
+ * PotentialEffectiveRange gives both a_target and r_target, with the number of bound states p has (its branch;
+ * potential_background.md section 13.4).  Nested one-dimensional solves: for a width w the depth V*(w) that gives
+ * a_target on the branch (DepthForScatteringLength, started at V0 (r0/w)^2 and moved onto the branch first), then
+ * r(w) = r at V*(w) scanned over 40 widths spaced in ln w on [0.4 r0, 2.5 r0]; the sign change of r(w) - r_target
+ * nearest r0 is bisected to 1e-9 relative in w.  found = false, with `why` naming the range of r reached on the branch,
+ * when no width of the scan gives r_target (no pair is returned then), and when the end point misses a_target or
+ * r_target by more than 1e-6 or 1e-5 relative.
+ */
+struct DepthWidthForRange {
+  bool found = false;
+  std::string why;
+  double depth_MeV = 0.0, width_fm = 0.0;
+  double a = 0.0, r = 0.0;     ///< a_l and r_l at that depth and width
+  int boundStates = 0;         ///< the branch: as p's
+  int nodes = 0;               ///< nodes of the zero-energy solution on (0, r_m)
+  double rLow = 0.0, rHigh = 0.0;  ///< the range of r found on the branch over the widths scanned (with a = a_target)
+};
+DepthWidthForRange DepthWidthForEffectiveRange(const HybridPotential &p, int z1, int z2, double mu_MeV, int l,
+                                               double two_l_dot_i, double a_target, double r_target);
+
 }  // namespace physics
 }  // namespace azure2
 

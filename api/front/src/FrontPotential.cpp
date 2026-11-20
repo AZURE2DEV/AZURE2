@@ -353,6 +353,26 @@ bool PotentialDepthForScatteringLength(const Project &project, const Record &rec
   return true;
 }
 
+bool PotentialDepthForEffectiveRange(const Project &project, const Record &record, int pairKey, int l, int twoJ, double a,
+                                     double r, PotentialDepth &out, std::string &why) {
+  out = PotentialDepth();
+  WaveSetUp w;
+  if (!SetUpWave(project, record, pairKey, l, twoJ, w, why)) return false;
+  const ph::DepthWidthForRange d = ph::DepthWidthForEffectiveRange(w.args.potential, w.pair->GetZ(1), w.pair->GetZ(2),
+                                                                   w.args.mu, l, w.args.ldoti, a, r);
+  out.found = d.found;
+  out.why = d.why;
+  out.depth = d.depth_MeV;
+  out.width = d.width_fm;
+  out.a = d.a;
+  out.r = d.r;
+  out.boundStates = d.boundStates;
+  out.nodes = d.nodes;
+  out.rLow = d.rLow;
+  out.rHigh = d.rHigh;
+  return true;
+}
+
 bool PotentialDepthForBinding(const Project &project, const Record &record, int pairKey, int l, int twoJ, double energy,
                               PotentialDepth &out, std::string &why) {
   out = PotentialDepth();

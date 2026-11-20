@@ -37,8 +37,8 @@ QT_END_NAMESPACE
  *  - the poles: the box states of the selected wave at the channel radius (front::PotentialWaveOf: E_p, E_x, gamma_p^2,
  *    theta^2, nodes, the subtracted one marked) beside the project's levels of the same J^pi;
  *  - tuning: the wave's own a and r and bound states (read out as it is edited), the depth for a chosen a (the branch of
- *    the current number of bound states), the depth that binds a level below threshold with the potential's ANC beside
- *    the level's.
+ *    the current number of bound states), the depth and Gaussian width for a chosen a and r (the same branch), the depth
+ *    that binds a level below threshold with the potential's ANC beside the level's.
  * The engine's messages of the edited record (Validate of a copy, the set-up's checks of the wave) are shown as they
  * come.  Apply writes the record with Project::SetRecord (an unchanged wave keeps its text).  Every computation runs
  * in a worker thread (PhysicsWorker); the window never waits for it.
@@ -87,6 +87,9 @@ class PotentialPanel : public QWidget {
   QLabel *waveTitle() const { return waveTitle_; }
   QLineEdit *lengthEdit() const { return lengthEdit_; }
   QPushButton *lengthButton() const { return lengthButton_; }
+  QLineEdit *rangeAEdit() const { return rangeA_; }
+  QLineEdit *rangeREdit() const { return rangeR_; }
+  QPushButton *rangeButton() const { return rangeButton_; }
   QComboBox *bindCombo() const { return bindCombo_; }
   QPushButton *bindButton() const { return bindButton_; }
   QLabel *tuningLabel() const { return tuning_; }
@@ -139,6 +142,7 @@ class PotentialPanel : public QWidget {
   void showMessages();
   void findLength();
   void findBinding();
+  void findRange();
   void useDepth();
   void createPotential();
   void editRecord();
@@ -168,6 +172,7 @@ class PotentialPanel : public QWidget {
   QStringList recordMessages_;
   azure2::front::PotentialDepth depth_;
   int depthRow_ = -1;
+  bool depthWithWidth_ = false;  ///< the depth found comes with a width (depth and range)
   int ticket_ = 0;
 
   QLabel *title_, *help_, *messages_, *readOut_, *tuning_, *waveTitle_, *busy_;
@@ -175,8 +180,8 @@ class PotentialPanel : public QWidget {
   QPushButton *create_, *edit_, *addWave_, *removeWave_, *apply_, *revert_;
   QTableWidget *waves_, *poles_, *levels_;
   QDoubleSpinBox *eMax_;
-  QLineEdit *lengthEdit_;
-  QPushButton *lengthButton_, *bindButton_, *useDepth_;
+  QLineEdit *lengthEdit_, *rangeA_, *rangeR_;
+  QPushButton *lengthButton_, *bindButton_, *useDepth_, *rangeButton_;
   QComboBox *bindCombo_;
 };
 

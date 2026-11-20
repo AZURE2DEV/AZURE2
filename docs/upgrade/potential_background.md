@@ -993,10 +993,49 @@ fm⁻¹ᐟ² (scipy 4.0931604450).
 ### 13.3 Where they are
 
 - pyazr: `Session.potential_scattering_length(pair, l, J)` → a, r, their spreads, the window, the bound states (a row
-  of `describe()["functions"]`); `AZUREAPI::GetPotentialEffectiveRange`.  The arguments of the three potential calls of
+  of `describe()["functions"]`); `AZUREAPI::GetPotentialEffectiveRange`.  `Session.potential_depth_for(pair, a, l, J,
+  r=None)` → the depth for a (13.2), or with r the depth and width (13.4), with `found` and the reason;
+  `AZUREAPI::GetPotentialDepthFor`.  The arguments of the three potential calls of
   the session are one function, `PotentialWaveOf` (`api/include/PotentialWave.h`).
 - The Qt program: the Potential panel of the Particle Pairs tab and the Levels tab's check of the partial waves
   (`qt_gui.md` section 19), through the facade (`api/front/src/FrontPotential.cpp`: the record as edited is built by the
   engine's reader on a copy of the project; the box states and a₀ equal the session's bit for bit, api_front (h)).
 - Not built: the Coulomb-modified function for l > 0; a depth as a fit parameter (section 6: a scan with refits); the
-  depth of a Woods-Saxon radius or a Gaussian width (only the depth is tuned).
+  radius or diffuseness of a Woods-Saxon term (13.4 solves a Gaussian's width).
+
+### 13.4 The depth and the range for a scattering length and an effective range
+
+Approved by the PI (2026-11-21, "Yes, want it"): besides the depth for a₀, the depth V₀ and the Gaussian width r₀ (the
+record's `width`, V_N = −V₀ exp(−(r/r₀)²)) for which the potential's own expansion (13.1) gives both a chosen a and a
+chosen r, on the branch of the present number of bound states (`DepthWidthForEffectiveRange`).  A Woods-Saxon term is
+refused (its range has two parameters).
+
+**Solver.**  Nested one-dimensional solves, each with a bracket, so that a failure is seen and not returned as a pair:
+for a width w, the depth V*(w) that gives a on the branch (started at V₀(r₀/w)², the same V r₀² and so about the same
+number of states, moved in 1 % steps onto the branch, then 13.2); then r(w) = r at V*(w) on 40 widths spaced in ln w
+over [0.4 r₀, 2.5 r₀]; the sign change of r(w) − r nearest r₀ is bisected to 10⁻⁹ in w.  The end point is checked: a
+and r within 10⁻⁶ and 10⁻⁵ (relative) of the asked values, the bound-state count the start's; otherwise, and when no
+width of the scan brackets r, `found` is false and the reason names the range of r reached on the branch with that a
+("r runs from ... to ..."): no depth or width is given.  Several sign changes (r(w) not monotonic) give the one nearest
+the present width; the others are not reported.  The window of the expansion follows the width (k_hi = 0.5/r₀), so a
+and r at each width are those 13.1 defines.  Cost: about 4 s for ³He + α on this machine (some 10⁴ expansions); the
+panel runs it off the GUI thread.
+
+**Which input is robust.**  a is the intercept of the expansion, fixed well by the phase shifts near threshold; r is its
+slope, which depends more on the potential's shape (the same (a, r) is reached by other shapes at other depths) and on
+the window (the 1-5·10⁻⁵ relative difference of r between the engine's and scipy's windows in 13.1 against 4·10⁻⁷ for
+a).  (V₀, r₀) is ill-conditioned in (a, r): that 10⁻⁵ in r becomes 10⁻⁴ in the pair.  Fix a; treat r as the softer
+condition.
+
+**Test** (`physics_potential_tuning` 6, against `make_potential_tuning_reference.py`'s rows `dw_*`: scipy computes a and
+r of a chosen pair, the engine finds the pair back from another start):
+
+| | start | scipy's pair, its (a, r) | found | a, r there |
+|---|---|---|---|---|
+| ³He + α, s wave (charged) | 67.5 MeV, 2.520 fm | 70 MeV, 2.4 fm; 40.70518 fm, 0.998364 fm | 69.996824 MeV, 2.4000747 fm | 40.705179, 0.99836399 |
+| n + ⁴He, s wave (neutral) | 40 MeV, 2.0 fm | 35 MeV, 2.2 fm; 3.650984 fm, 1.720587 fm | 35.003729 MeV, 2.199769 fm | 3.6509844, 1.7205867 |
+
+(both on the start's branch: 2 and 1 bound states); r = 5 fm with a₀ = 30.95 fm (³He + α) is reported as not found, r
+running from −8.47 to 0.99 fm over the widths with that a; a Woods-Saxon term is refused.  pyazr
+(`Session.potential_depth_for(pair, a, l, J, r)`, `pyazr_potential_api` (g)), the facade (api_front (h)) and the panel
+(gui_potential (e)) find the same pair and the same refusal.

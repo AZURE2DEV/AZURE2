@@ -12,6 +12,11 @@
 //     solution at E = -0.01 MeV out to 400 fm, for deep, shallow and unbound waves.
 //  5. The depth that gives a0 = 40 fm in VD's branch (two bound s states) against scipy's brentq, to 1e-6 relative; the
 //     a0 there; the branch kept.  A charged l = 1 wave is refused with its reason.
+//  6. The depth and width for a chosen (a, r): from VD's s wave (67.5 MeV, 2.52 fm) the engine finds back the (70 MeV,
+//     2.4 fm) whose a and r scipy computed (40.705 fm, 0.998 fm), from n + 4He (40 MeV, 2 fm) the (35 MeV, 2.2 fm), to
+//     3e-4 (the conditioning of (V0, r0) in (a, r) times the 1e-5 between the two expansions' r); the
+//     branch kept; an r out of reach (5 fm) reported as not found with the range of r it found, no pair returned; a
+//     Woods-Saxon term refused.
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -128,6 +133,37 @@ int main(int argc, char **argv) {
                 d.boundStates == PotentialBoundStates(s.Potential(67.5), s.z1, s.z2, s.Mu(), 0, 0.0).bound,
             what);
     }
+  }
+  // 6. depth and width for (a, r)
+  for (const std::string sys : {"he3", "nalpha"}) {
+    std::map<std::string, double> v;
+    for (const Row &r : rows)
+      if (r.system == sys && r.kind.rfind("dw_", 0) == 0) v[r.kind] = r.value;
+    if (v.size() != 5) {
+      Check(false, sys + ": the dw_ rows of the reference");
+      continue;
+    }
+    const System &s = SystemOf(sys);
+    const HybridPotential start = s.Potential(sys == "he3" ? 67.5 : 40.0);
+    const DepthWidthForRange d = DepthWidthForEffectiveRange(start, s.z1, s.z2, s.Mu(), 0, 0.0, v["dw_a"], v["dw_r"]);
+    char what[400];
+    std::snprintf(what, sizeof what, "%s: (a, r) = (%.6g, %.6g) found at V0 = %.8g MeV, r0 = %.8g fm (scipy's %.8g, %.8g); "
+                  "a, r there %.8g, %.8g; %d bound (scipy %d) %s", sys.c_str(), v["dw_a"], v["dw_r"], d.depth_MeV,
+                  d.width_fm, v["dw_depth"], v["dw_width"], d.a, d.r, d.boundStates, (int)v["dw_bound"], d.why.c_str());
+    // the solve reaches the asked a and r to 1e-6 (its own check); the pair agrees with scipy's to 3e-4: (V0, r0) is
+    // ill-conditioned in (a, r), and the two expansions' r differ by about 1e-5 (section 13.1)
+    Check(d.found && std::fabs(d.a / v["dw_a"] - 1) < 1e-6 && std::fabs(d.r / v["dw_r"] - 1) < 1e-5 &&
+              std::fabs(d.depth_MeV / v["dw_depth"] - 1) < 3e-4 && std::fabs(d.width_fm / v["dw_width"] - 1) < 3e-4 &&
+              d.boundStates == (int)v["dw_bound"],
+          what);
+  }
+  {
+    const DepthWidthForRange d = DepthWidthForEffectiveRange(kHe3.Potential(67.5), 2, 2, kHe3.Mu(), 0, 0.0, 30.95, 5.0);
+    Check(!d.found && d.why.find("r runs from") != std::string::npos && d.depth_MeV == 0.0,
+          "r = 5 fm with a0 = 30.95 fm out of reach: not found, no pair returned: " + d.why);
+    HybridPotential ws = WoodsSaxonPotential(60.0, 2.5, 0.6);
+    const DepthWidthForRange e = DepthWidthForEffectiveRange(ws, 0, 2, kNAlpha.Mu(), 0, 0.0, 3.0, 1.5);
+    Check(!e.found && e.why.find("Gaussian") != std::string::npos, "a Woods-Saxon term refused: " + e.why);
   }
   const EffectiveRange p = PotentialEffectiveRange(kHe3.Potential(83.589554), 2, 2, kHe3.Mu(), 1, 0.0);
   Check(!p.ok && p.why.find("l = 0 only") != std::string::npos, "charged l = 1 refused: " + p.why);

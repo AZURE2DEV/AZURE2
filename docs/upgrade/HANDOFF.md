@@ -25,6 +25,13 @@ users will not neglect some missing waves."
    `maxOrbitalMomentum`, the save writes the tab's maximum l as `maxOrbitalMomentum` (so the key reaches every J^pi the
    tab lists); `commitTabs` is split, `commitLevels` its first half.  qt_gui.md section 19; graphical_interface.rst.
 4. A fix of a test: `pyazr_potential_api` was skipped under ctest (pyazr not on the path); it now runs.
+5. Added on the PI's approval (2026-11-21, "Yes, want it"): the depth and Gaussian width for a chosen (a0, r0) on the
+   branch of the bound states (`physics::DepthWidthForEffectiveRange`, nested bracketed 1-D solves; not found, with the
+   range of r reached, when the branch has none); pyazr `Session.potential_depth_for(pair, a, l, J, r=None)`
+   (+ describe row), `AZUREAPI::GetPotentialDepthFor`, the facade's `PotentialDepthForEffectiveRange`, the panel's
+   "Depth and range" row.  Tested against scipy (charged 3He + 4He, neutral n + 4He; potential_background.md 13.4).
+   Sections 5.11-5.12 of potential_background.md and sections 10-11 of tests/potential_capture/check.sh (the capture
+   branch's two newer commits, to be merged by the director) are not touched here.
 Not done: the Coulomb-modified expansion for l > 0 (refused with the reason); tuning of a width or radius; a web-UI
 form; pyazr's version not bumped (dev series; James decides at the merge).
 Run: see the final report of the branch (build 0 warnings, ctest, run_tests.sh).

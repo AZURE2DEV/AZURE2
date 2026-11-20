@@ -610,6 +610,25 @@ class Session {
     out["bound_states"] = e.boundStates;
     return out;
   }
+  py::dict potential_depth_for(int pair, int l, int two_j, double a, double r) {
+    azure2::physics::DepthWidthForRange d;
+    {
+      EngineCallScope engine;
+      d = api_->GetPotentialDepthFor(pair, l, two_j, a, r);
+    }
+    py::dict out;
+    out["found"] = d.found;
+    out["why"] = d.why;
+    out["depth"] = d.depth_MeV;
+    out["width"] = d.width_fm;
+    out["a"] = d.a;
+    out["r"] = d.r;
+    out["bound_states"] = d.boundStates;
+    out["nodes"] = d.nodes;
+    out["r_low"] = d.rLow;
+    out["r_high"] = d.rHigh;
+    return out;
+  }
   py::array_t<double> coulomb_functions(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
@@ -921,6 +940,11 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("l"), py::arg("two_j"),
            "The scattering length and effective range of a pair's potential alone in (l, 2J): {ok, why, a, r, "
            "a_spread, r_spread, e_low, e_high (MeV c.m.), points, bound_states} (AZUREAPI::GetPotentialEffectiveRange).")
+      .def("potential_depth_for", &Session::potential_depth_for, PrecisionGuard(), py::arg("pair"), py::arg("l"),
+           py::arg("two_j"), py::arg("a"), py::arg("r"),
+           "The depth (and, for a finite r, the Gaussian width) of a pair's potential in (l, 2J) for the scattering "
+           "length a (and effective range r) on the branch of its bound states: {found, why, depth (MeV), width (fm), a, "
+           "r, bound_states, nodes, r_low, r_high} (AZUREAPI::GetPotentialDepthFor).")
       .def("jpi_block", &Session::jpi_block, PrecisionGuard(), py::arg("params"), py::arg("jgroup"),
            py::arg("excitation"),
            "One J^pi group (1-based) at every parameter value `params` on excitation energies E_x (MeV): its channel "

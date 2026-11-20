@@ -478,14 +478,20 @@ its Coulomb radius, central term, spin-orbit term, matching radius and step.
   zero-energy wave. ``Depth for a =`` finds the wave's depth that gives a with
   the same number of bound states (between two depths at which a state is bound
   at threshold, a falls from +∞ to −∞, so there is one such depth).
+  ``Depth and range for a = ..., r = ...`` finds the depth and the Gaussian
+  width r0 that give both on the same branch, shows the a and r reached
+  beside the asked ones, and says so when the branch has none (with the range
+  of r it found). The scattering length is the more robust input; the
+  effective range depends more on the potential's shape and the energy
+  window, so treat it as the softer condition.
   ``Depth to bind`` finds, for a level of the J^pi below threshold, the depth
   within ±30 % that binds the wave at the level's energy, with the potential's
   own ANC beside the level's. ``Use this depth`` puts it into the wave
   (``Apply`` writes it).
 
 The same numbers from Python: ``Session.potential_box_states``,
-``Session.potential_bound_state`` and ``Session.potential_scattering_length``
-(:doc:`pyazr`).
+``Session.potential_bound_state``, ``Session.potential_scattering_length`` and
+``Session.potential_depth_for`` (:doc:`pyazr`).
 
 The parameter table
 -------------------

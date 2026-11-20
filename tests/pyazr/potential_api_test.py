@@ -13,7 +13,10 @@ an interior background on every partial wave, a_c = 3.5 fm):
   (e) potential_box_states(1, l=0, J=1/2) numbers its states 0, 1, 2, ... ascending, with positive residues;
   (f) potential_scattering_length(1, l=0, J=1/2) gives the s-wave a0 and r0 of VD (two bound s states) as
       physics/tests/data/make_potential_tuning_reference.py (scipy, mpmath, numpy: a0 30.953078 fm, r0 0.929216 fm) to
-      3e-5 and 1e-3, and refuses the charged p wave (the Coulomb-modified expansion of l > 0 is not built).
+      3e-5 and 1e-3, and refuses the charged p wave (the Coulomb-modified expansion of l > 0 is not built);
+  (g) potential_depth_for: the depth for a0 = 40 fm (scipy's brentq: 65.28518406 MeV); the depth and width for the a, r
+      scipy computed at 70 MeV, 2.4 fm (found back to 3e-4, the asked a and r reached); r = 5 fm with a0 = 30.95 fm
+      reported as not found with the range of r, no depth given.
 """
 import math
 import os
@@ -94,6 +97,23 @@ with warnings.catch_warnings():
             check("(f) the charged p wave refused", False, "no error")
         except ValueError as e:
             check("(f) the charged p wave refused", "l = 0 only" in str(e), str(e))
+
+        d = s.potential_depth_for(1, 40.0, l=0, J=0.5)
+        check("(g) the depth for a0 = 40 fm as scipy's brentq", d["found"] and abs(d["depth"] / 65.28518406 - 1) < 1e-6
+              and d["bound_states"] == 2, str(d))
+        dw = {}
+        with open(os.path.join(ROOT, "physics", "tests", "data", "potential_tuning.csv")) as f:
+            for line in f:
+                kind, system, l, x, value = line.strip().split(",")
+                if system == "he3" and kind.startswith("dw_"):
+                    dw[kind] = float(value)
+        d = s.potential_depth_for(1, dw["dw_a"], l=0, J=0.5, r=dw["dw_r"])
+        check("(g) depth and width for (a, r) found back (scipy's 70 MeV, 2.4 fm)",
+              d["found"] and abs(d["depth"] / dw["dw_depth"] - 1) < 3e-4 and abs(d["width"] / dw["dw_width"] - 1) < 3e-4
+              and abs(d["a"] / dw["dw_a"] - 1) < 1e-6 and abs(d["r"] / dw["dw_r"] - 1) < 1e-5, str(d))
+        d = s.potential_depth_for(1, 30.95, l=0, J=0.5, r=5.0)
+        check("(g) r = 5 fm out of reach: not found, the range of r named, no depth", not d["found"]
+              and "r runs from" in d["why"] and d["depth"] is None, str(d))
 
 # (c) continued: without the backgrounds the functions are the undressed ones, and differ
 try:

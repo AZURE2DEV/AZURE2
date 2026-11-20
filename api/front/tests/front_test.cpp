@@ -859,6 +859,13 @@ void PotentialChecks(const fs::path &source) {
     Check(ok,
           "potential: the depth for a0 = 40 fm " + std::to_string(d.depth) + " MeV (scipy's brentq 65.28518406), two bound "
           "states kept, " + std::to_string(d.nodes) + " nodes " + d.why);
+    ok = front::PotentialDepthForEffectiveRange(p, pp.record, 1, 0, 1, 40.70517885783, 0.9983639931671, d, why) && d.found &&
+         std::fabs(d.depth / 70.0 - 1) < 3e-4 && std::fabs(d.width / 2.4 - 1) < 3e-4 && d.boundStates == 2;
+    Check(ok, "potential: depth and width for scipy's (a, r) of (70 MeV, 2.4 fm): " + std::to_string(d.depth) + " MeV, " +
+                  std::to_string(d.width) + " fm " + d.why);
+    ok = front::PotentialDepthForEffectiveRange(p, pp.record, 1, 0, 1, 30.95, 5.0, d, why) && !d.found &&
+         d.why.find("r runs from") != std::string::npos;
+    Check(ok, "potential: r = 5 fm not reached, said so: " + d.why);
     ok = front::PotentialDepthForBinding(p, pp.record, 1, 1, 3, -1.4548867432, d, why) && d.found &&
          std::fabs(d.depth / 83.589554 - 1) < 1e-6 && std::fabs(d.anc - 4.0931604450) < 2e-4 && d.nodes == 1;
     Check(ok,

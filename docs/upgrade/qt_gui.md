@@ -900,6 +900,10 @@ record pop-up of section 16.10 from the panel).
   expansion, l = 0; any l for a neutral pair), with the spread of the extrapolation and the energy window, its bound
   states and the nodes of its zero-energy solution.  *Depth for a*: the depth with that a in the branch of the present
   number of bound states (`physics::DepthForScatteringLength`; the result names the branch and the node count).
+  *Depth and range for a, r* (added on the PI's approval of 2026-11-21): the depth and Gaussian width with both on the
+  same branch (`physics::DepthWidthForEffectiveRange`, `potential_background.md` 13.4); the achieved a and r are shown
+  beside the asked ones, and a branch without such a pair is said so in red with the range of r it reached, nothing to
+  use.  The help says that a is the robust input and r the model-dependent one.
   *Depth to bind*: a level of the J^π below threshold; the depth within ±30 % that binds the wave at its E_c
   (`physics::DepthBindingAt`, the depth the set-up's refusal of `capture interior` prints), the eigenvalue, the node
   count, and the potential's own ANC beside the level's as written.  *Use this depth* puts it into the row (not
@@ -936,7 +940,8 @@ written as expected (exterior only, exterior + interior with its B kept, capture
 engine's E_POTENTIAL_WAVE, central removing the line); the p3/2 poles equal to the facade's with node 1 marked; the
 3/2- level beside them; the depth binding it (83.589552 MeV, the written 83.589554) with the potential's ANC 4.093160
 (scipy 4.0931604450); a0 = 30.953065 fm read out (scipy 30.953078), the depth for 40 fm 65.2851799 MeV (brentq
-65.28518406), used and read out again as 40; the 1/2+ level removed: the panel's warning, the check's list, a blank
+65.28518406), used and read out again as 40; the depth and width for scipy's (a, r) of (70 MeV, 2.4 fm) found back
+to 3e-4 with the asked values beside the achieved, and r = 5 fm reported as out of reach; the 1/2+ level removed: the panel's warning, the check's list, a blank
 level that brings it back (width 0, fixed) and the warning gone; includeAllJPi from the check and the save's
 `includeAllJPi=1`, `maxOrbitalMomentum=3`.  Screenshots: `AZURE2_QT_SHOTS/u9-potential`.  `api_front` (h): the
 facade (section 19.2) against the session and scipy.

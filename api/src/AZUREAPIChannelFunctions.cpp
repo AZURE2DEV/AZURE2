@@ -168,3 +168,20 @@ azure2::physics::EffectiveRange AZUREAPI::GetPotentialEffectiveRange(int pairKey
   const PotentialWaveArgs a = WaveArgs(compound_.get(), pairKey, l, twoJ, "potential_scattering_length");
   return azure2::physics::PotentialEffectiveRange(a.potential, a.pair->GetZ(1), a.pair->GetZ(2), a.mu, l, a.ldoti);
 }
+
+azure2::physics::DepthWidthForRange AZUREAPI::GetPotentialDepthFor(int pairKey, int l, int twoJ, double a, double r) const {
+  const PotentialWaveArgs w = WaveArgs(compound_.get(), pairKey, l, twoJ, "potential_depth_for");
+  const int z1 = w.pair->GetZ(1), z2 = w.pair->GetZ(2);
+  if (std::isfinite(r)) return azure2::physics::DepthWidthForEffectiveRange(w.potential, z1, z2, w.mu, l, w.ldoti, a, r);
+  const azure2::physics::DepthForLength d = azure2::physics::DepthForScatteringLength(w.potential, z1, z2, w.mu, l, w.ldoti, a);
+  azure2::physics::DepthWidthForRange out;
+  out.found = d.found;
+  out.why = d.why;
+  out.depth_MeV = d.depth_MeV;
+  out.width_fm = w.potential.central.width_fm;
+  out.a = d.a;
+  out.r = d.r;
+  out.boundStates = d.boundStates;
+  out.nodes = d.nodes;
+  return out;
+}

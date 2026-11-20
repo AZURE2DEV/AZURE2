@@ -1,6 +1,7 @@
 """The session's diagnostic calls described as rows (``Session.describe()["functions"]``): :meth:`Session.channel_functions`,
 :meth:`Session.potential_box_states`, :meth:`Session.potential_bound_state`,
-:meth:`Session.potential_scattering_length`, :meth:`Session.jpi_block` and the five THM calls of :mod:`pyazr.session_thm`.
+:meth:`Session.potential_scattering_length`, :meth:`Session.potential_depth_for`, :meth:`Session.jpi_block` and the
+five THM calls of :mod:`pyazr.session_thm`.
 
 Each row has the shape of a row of the physics table (``pyazr.kinds()["physics"]``): ``name``, ``summary``, ``doc``,
 ``axis`` (the argument a plot puts on its horizontal axis, None for none), ``at_x`` (the answer depends on the fit
@@ -152,6 +153,32 @@ SESSION_FUNCTIONS = {
          _r("e_window", "MeV", "the window (low, high), c.m.", "list"),
          _r("points", "", "energies fitted", "scalar"),
          _r("bound_states", "", "bound states of the potential in the wave", "scalar")],
+        at_x=False),
+    "potential_depth_for": _row(
+        "potential_depth_for", "The depth (and Gaussian width) of a pair's potential in one partial wave for a chosen "
+        "scattering length (and effective range).",
+        "On the branch of its present number of bound states: the depth for a (one per branch), or the depth and width for "
+        "a and r by nested searches over widths 0.4-2.5 times the present one; not found, with the reason, when there "
+        "is none (docs/upgrade/potential_background.md sections 13.2, 13.4).",
+        [dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels> (a pair with a potential)",
+              domain="a particle pair of the project"),
+         dict(_ARG, name="a", kind="real", unit="fm^(2l+1)", doc="the scattering length asked", domain="finite",
+              example=40.0),
+         dict(_ARG, name="l", kind="integer", doc="orbital angular momentum (0 for a charged pair)",
+              domain="integer >= 0", lower=0.0, default=0, example=0),
+         dict(_ARG, name="J", kind="real", doc="the channel's total J: required when the potential depends on J, "
+              "ignored when it does not", domain="a multiple of 1/2 >= 0, or None", example=0.5),
+         dict(_ARG, name="r", kind="real", unit="fm^(1-2l)", doc="the effective range asked; None: the depth alone",
+              domain="finite, or None")],
+        [_r("found", "", "a solution on the branch (bool)", "scalar"),
+         _r("why", "", "the reason when none", "text"),
+         _r("depth", "MeV", "V0 (None when not found)", "scalar"),
+         _r("width", "fm", "the Gaussian r0 (None when not found)", "scalar"),
+         _r("a", "fm^(2l+1)", "a at that depth and width", "scalar"),
+         _r("r", "fm^(1-2l)", "r at that depth and width", "scalar"),
+         _r("bound_states", "", "the branch: bound states of the wave", "scalar"),
+         _r("nodes", "", "nodes of the zero-energy solution inside r_m", "scalar"),
+         _r("r_range", "fm^(1-2l)", "the r found with a over the widths scanned (low, high)", "list")],
         at_x=False),
     "jpi_block": _row(
         "jpi_block", "One J^pi group on excitation energies: channel functions, U, T, phase shifts, |A| and det A^-1.",

@@ -285,6 +285,26 @@ int main(int argc, char **argv) {
     const front::PotentialDepth d = panel->depthFound();
     Check(d.found && std::fabs(d.depth / 65.28518406 - 1) < 1e-6 && d.boundStates == 2,
           "(e) the depth for a0 = 40 fm: " + std::to_string(d.depth) + " MeV (brentq 65.28518406), two bound states kept");
+    // depth and range: scipy's (a, r) of (70 MeV, 2.4 fm) (physics/tests/data/potential_tuning.csv)
+    panel->rangeAEdit()->setText("40.70517885783");
+    panel->rangeREdit()->setText("0.9983639931671");
+    panel->rangeButton()->click();
+    Settle(panel);
+    const front::PotentialDepth dw = panel->depthFound();
+    Check(dw.found && std::fabs(dw.depth / 70.0 - 1) < 3e-4 && std::fabs(dw.width / 2.4 - 1) < 3e-4 && dw.boundStates == 2 &&
+              panel->tuningLabel()->text().contains("asked"),
+          "(e) depth and width for scipy's (a, r): " + std::to_string(dw.depth) + " MeV, " + std::to_string(dw.width) +
+              " fm (70, 2.4), the achieved a and r beside the asked");
+    if (!shots.isEmpty()) panel->window()->grab().save(shots + "/potential_panel_range.png");
+    panel->rangeREdit()->setText("5");
+    panel->rangeAEdit()->setText("30.95");
+    panel->rangeButton()->click();
+    Settle(panel);
+    Check(!panel->depthFound().found && !panel->useDepthButton()->isEnabled() &&
+              panel->tuningLabel()->text().contains("r runs from"),
+          "(e) r = 5 fm out of reach: said so, nothing to use");
+    panel->lengthButton()->click();
+    Settle(panel);
     if (!shots.isEmpty()) panel->window()->grab().save(shots + "/potential_panel_tuning.png");
     panel->useDepthButton()->click();
     Settle(panel);

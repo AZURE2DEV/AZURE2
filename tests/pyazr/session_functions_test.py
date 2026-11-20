@@ -101,8 +101,9 @@ with warnings.catch_warnings():
         answers["potential_box_states"] = [s.potential_box_states(1, l=0, J=0.5, e_min=-50.0, e_max=30.0)]
         answers["potential_bound_state"] = [s.potential_bound_state(1, l=1, J=1.5, energy=-1.5)]
         answers["potential_scattering_length"] = [s.potential_scattering_length(1, l=0, J=0.5)]
-check("ten rows", sorted(described) == sorted(["channel_functions", "potential_box_states", "potential_bound_state",
-                                                  "potential_scattering_length",
+        answers["potential_depth_for"] = [s.potential_depth_for(1, 40.0, l=0, J=0.5)]
+check("eleven rows", sorted(described) == sorted(["channel_functions", "potential_box_states", "potential_bound_state",
+                                                  "potential_scattering_length", "potential_depth_for",
                                                   "jpi_block", "thm_experiments", "thm_background", "thm_lineshape",
                                                   "thm_vertex", "thm_distortion"]),
       str(sorted(described)))

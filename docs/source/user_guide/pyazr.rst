@@ -1097,7 +1097,11 @@ pair and l = 0 only; :math:`k^{2l+1}\cot\delta_l` for a neutral pair), with the 
 (``e_window``, MeV c.m.: 24 energies with :math:`k` from :math:`0.125/R_N` to :math:`0.5/R_N`, :math:`R_N` the
 Gaussian width or :math:`R + 2a` of a Woods-Saxon term), the spread of the extrapolation (``a_spread``, ``r_spread``:
 the differences to two other fits; about :math:`10^{-5}` of ``a`` for ³He + α) and the potential's bound states in the
-wave (``bound_states``, Pauli-forbidden ones included).  All three are rows of ``s.describe()["functions"]``.
+wave (``bound_states``, Pauli-forbidden ones included); ``s.potential_depth_for(pair, a, l, J, r=None)`` the wave's
+depth for that ``a`` (or, with ``r``, its depth and Gaussian width for both) with the same number of bound states,
+``found`` False with the reason (the range of ``r`` reached) when that branch has none.  The scattering length is the
+more robust input; the effective range depends more on the potential's shape.  All four are rows of
+``s.describe()["functions"]``.
 
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the

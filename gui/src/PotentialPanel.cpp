@@ -194,6 +194,17 @@ PotentialPanel::PotentialPanel(ProjectHolder *holder, Hooks hooks, QWidget *pare
   lengthButton_->setToolTip(tr("The depth of this wave that gives the scattering length a, with the number of bound "
                                "states it has now (its branch)"));
   connect(lengthButton_, &QPushButton::clicked, this, &PotentialPanel::findLength);
+  rangeA_ = new QLineEdit;
+  rangeA_->setPlaceholderText(tr("a (fm)"));
+  rangeA_->setMaximumWidth(150);
+  rangeR_ = new QLineEdit;
+  rangeR_->setPlaceholderText(tr("r (fm)"));
+  rangeR_->setMaximumWidth(150);
+  rangeButton_ = new QPushButton(tr("Find depth and width"));
+  rangeButton_->setToolTip(tr("The depth and the Gaussian width r0 of this wave that give both a and r, with the number "
+                              "of bound states it has now.  a is the more robust input; r depends more on the "
+                              "potential's shape and on the energy window of the expansion."));
+  connect(rangeButton_, &QPushButton::clicked, this, &PotentialPanel::findRange);
   bindCombo_ = new QComboBox;
   bindCombo_->setMinimumContentsLength(24);
   bindCombo_->setToolTip(tr("A level of this J\u03c0 below the pair's threshold"));
@@ -217,6 +228,14 @@ PotentialPanel::PotentialPanel(ProjectHolder *holder, Hooks hooks, QWidget *pare
   lengthRow->addWidget(lengthButton_);
   lengthRow->addStretch(1);
   tl->addRow(tr("Depth for a ="), lengthRow);
+  QHBoxLayout *rangeRow = new QHBoxLayout;
+  rangeRow->addWidget(rangeA_);
+  rangeRow->addWidget(new QLabel(tr("fm,  r =")));
+  rangeRow->addWidget(rangeR_);
+  rangeRow->addWidget(new QLabel(tr("fm")));
+  rangeRow->addWidget(rangeButton_);
+  rangeRow->addStretch(1);
+  tl->addRow(tr("Depth and range for a ="), rangeRow);
   QHBoxLayout *bindRow = new QHBoxLayout;
   bindRow->addWidget(bindCombo_, 1);
   bindRow->addWidget(bindButton_);
@@ -775,6 +794,9 @@ void PotentialPanel::showReport() {
   bindCombo_->clear();
   const bool ok = reportOk_ && reportRow_ >= 0 && reportRow_ < rows_.size();
   lengthButton_->setEnabled(ok && report_.effectiveRange);
+  rangeButton_->setEnabled(ok && report_.effectiveRange && report_.width > 0);
+  rangeButton_->setToolTip(ok && report_.width <= 0 ? tr("The range is solved for a Gaussian central term only")
+                                                    : rangeButton_->toolTip());
   bindButton_->setEnabled(false);
   if (!ok) {
     waveTitle_->setText(hasRecord_ ? tr("<i>Select a wave.</i>") : QString());
@@ -869,6 +891,7 @@ void PotentialPanel::findLength() {
       [=]() {
         depth_ = *out;
         depthRow_ = row;
+        depthWithWidth_ = false;
         if (!*ok || !out->found) {
           tuning_->setText(QString("<font color='#b00020'>%1</font>").arg(Q(*ok ? out->why : *why).toHtmlEscaped()));
           useDepth_->setEnabled(false);
@@ -906,6 +929,7 @@ void PotentialPanel::findBinding() {
       [=]() {
         depth_ = *out;
         depthRow_ = row;
+        depthWithWidth_ = false;
         if (!*ok || !out->found) {
           tuning_->setText(QString("<font color='#b00020'>%1</font>").arg(Q(*ok ? out->why : *why).toHtmlEscaped()));
           useDepth_->setEnabled(false);
@@ -924,12 +948,60 @@ void PotentialPanel::findBinding() {
       });
 }
 
+void PotentialPanel::findRange() {
+  const int row = currentRow();
+  bool okA = false, okR = false;
+  const double a = rangeA_->text().trimmed().toDouble(&okA), r = rangeR_->text().trimmed().toDouble(&okR);
+  if (row < 0 || !okA || !okR) {
+    tuning_->setText(tr("<font color='#b00020'>Type the scattering length and the effective range (numbers, fm).</font>"));
+    return;
+  }
+  const std::string text = holder_->project().Text(), path = holder_->project().Path();
+  const front::Record record = editedRecord();
+  const int key = pair_, l = rows_[row].wave.l, twoJ = requestTwoJ(rows_[row]);
+  auto out = std::make_shared<front::PotentialDepth>();
+  auto ok = std::make_shared<bool>(false);
+  auto why = std::make_shared<std::string>();
+  tuning_->setText(tr("searching (a few seconds)..."));
+  worker_->submit(
+      "depth",
+      [=](PhysicsSessionState &, const std::atomic<bool> &) {
+        *ok = front::PotentialDepthForEffectiveRange(front::Project::FromText(text, path), record, key, l, twoJ, a, r,
+                                                     *out, *why);
+      },
+      [=]() {
+        depth_ = *out;
+        depthRow_ = row;
+        depthWithWidth_ = true;
+        if (!*ok || !out->found) {
+          tuning_->setText(tr("<font color='#b00020'>No depth and width on this branch (%1 bound state(s)) give a = %2 "
+                              "and r = %3: %4</font>")
+                               .arg(out->boundStates)
+                               .arg(Num(a), Num(r), Q(*ok ? out->why : *why).toHtmlEscaped()));
+          useDepth_->setEnabled(false);
+        } else {
+          tuning_->setText(tr("V0 = <b>%1 MeV</b>, r0 = <b>%2 fm</b> give a = %3 (asked %4) and r = %5 (asked %6).  "
+                              "Branch kept: %7 bound state(s); the zero-energy wave has %8 node(s).")
+                               .arg(Num(out->depth, 10), Num(out->width, 10), Num(out->a, 8), Num(a, 8), Num(out->r, 7),
+                                    Num(r, 7))
+                               .arg(out->boundStates)
+                               .arg(out->nodes));
+          useDepth_->setEnabled(true);
+        }
+        emit computed();
+      });
+}
+
 void PotentialPanel::useDepth() {
   if (depthRow_ < 0 || depthRow_ >= rows_.size() || !depth_.found) return;
   Row &r = rows_[depthRow_];
   r.line = true;
   r.wave.depth = QString::number(depth_.depth, 'g', 10).toStdString();
   r.wave.depthUnit = front::PotentialWave().depthUnit;  // the facade's unit of the depth found
+  if (depthWithWidth_) {
+    r.wave.width = QString::number(depth_.width, 'g', 10).toStdString();
+    r.wave.widthUnit = front::PotentialWave().widthUnit;
+  }
   r.edited = true;
   fillRow(depthRow_);
   waves_->setCurrentCell(depthRow_, kDepth);

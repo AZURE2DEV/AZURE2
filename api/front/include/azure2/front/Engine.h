@@ -1218,11 +1218,18 @@ struct PotentialDepth {
   int boundStates = 0;      ///< bound states at that depth (the branch kept)
   int nodes = 0;            ///< nodes of the zero-energy solution (scattering length) or of the bound state (binding)
   double energy = 0, anc = 0;  ///< binding: the eigenvalue (MeV, c.m.) and the potential's own ANC (fm^-1/2) there
+  double width = 0;         ///< depth and range: the Gaussian r0 (fm)
+  double rLow = 0, rHigh = 0;  ///< depth and range: the r found with the asked a over the widths scanned
 };
 /// The depth of the wave for a scattering length `a` (fm^(2l+1)) in the branch of the record's depth
 /// (physics/ DepthForScatteringLength).
 bool PotentialDepthForScatteringLength(const Project &project, const Record &record, int pairKey, int l, int twoJ,
                                        double a, PotentialDepth &out, std::string &why);
+/// The depth and Gaussian width of the wave for a scattering length `a` and an effective range `r` in the branch of
+/// the record's depth (physics/ DepthWidthForEffectiveRange; potential_background.md section 13.4).  `found` false with
+/// the reason (the range of r reached) when the branch has no such pair.
+bool PotentialDepthForEffectiveRange(const Project &project, const Record &record, int pairKey, int l, int twoJ, double a,
+                                     double r, PotentialDepth &out, std::string &why);
 /// The depth of the wave nearest the record's within +-30 % that binds it at `energy` (MeV, c.m., < 0: the level's
 /// E_x minus the threshold; physics/ DepthBindingAt, the depth the set-up's refusal of `capture interior` prints), the
 /// eigenvalue and the potential's own ANC there (PotentialBoundStateANC).

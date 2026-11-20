@@ -71,6 +71,10 @@ const QString PotentialPanel::helpText = QObject::tr(
     "shifts, the Coulomb-modified effective-range expansion for a charged pair and l = 0), with the number of its bound "
     "states.  <i>Depth for a</i> finds the wave's depth that gives a chosen a with the same number of bound states (a "
     "falls from +&infin; to &minus;&infin; between the depths at which states are bound, so there is one such depth). "
+    "<i>Depth and range for a, r</i> finds the depth and the Gaussian width r<sub>0</sub> that give both, on the same "
+    "branch, and says so when the branch has no such pair (it shows the range of r it found).  The scattering length "
+    "is the more robust input: it is the intercept of the expansion; the effective range, its slope, depends more on "
+    "the potential's shape and on the energy window, so fix a first and use r as a second, softer condition.  "
     "<i>Depth to bind</i> finds the depth within &plusmn;30 % that binds the wave at a level's energy, with the "
     "potential's own ANC beside the level's.  <i>Use this depth</i> writes it into the wave; Apply writes the record.</p>"
     "</li></ul>");

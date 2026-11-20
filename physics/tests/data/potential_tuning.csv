@@ -33,4 +33,14 @@ bound,nalpha,0,40.0,1
 bound,nalpha,0,20.0,1
 bound,nalpha,0,5.0,0
 bound,he3,0,65.28518405595936,2
+dw_depth,he3,0,0,70.0
+dw_width,he3,0,0,2.4
+dw_a,he3,0,0,4.070517885783e+01
+dw_r,he3,0,0,9.983639931671e-01
+dw_bound,he3,0,0,2
+dw_depth,nalpha,0,0,35.0
+dw_width,nalpha,0,0,2.2
+dw_a,nalpha,0,0,3.650984428198e+00
+dw_r,nalpha,0,0,1.720586696997e+00
+dw_bound,nalpha,0,0,1
 depth,he3,0,40.0,6.528518405596e+01
