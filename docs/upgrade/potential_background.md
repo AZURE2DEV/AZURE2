@@ -375,13 +375,15 @@ the 8-point Lagrange stencil returned numbers off by up to a factor 50. The phys
 pole: the amplitude carries e^{−iφ̃} times the integral (invariant under φ̃ → φ̃ + π), and channel capture √P̃ e^{−iφ̃} =
 √ρ/H̃, which passes smoothly through zero.
 
-**Fix** (`ECTable.cpp`, `Reduction`): for an entrance wave with a background the factor is built from the undressed
-waves, smooth and never zero, times the dressed phase only where the integral flips with it: e^{+iφ̃}√P (P of the
-undressed waves) for the hard-sphere term, e^{−iφ} of the undressed waves for channel capture; the channel table's
-dressed P̃ and phase are not used for such a wave. The dressing itself is applied exactly at the requested energy (the
-factor is evaluated there and multiplies the interpolated quotient). A wave without a background takes the old
-factors: nothing else moves. The signature of `intEC.dat` gets a mark for a pair whose potential has a background, so a
-file written by the old table is recomputed; no other signature changes.
+**Fix** (first, e4e92530): for an entrance wave with a background the table divided by factors of the undressed waves,
+smooth through a pole of R⁰. That was not enough (review, 2026-11-20, 5.10 finding 1): across a narrow resonance of
+the potential the amplitude itself turns within a few keV, below the spacing of the table's nodes (50 per decade, 13 keV
+at 0.3 MeV), and the table was up to 21 % off there. **Now** (`ECTable.cpp`): an entrance wave with an interior
+background is integrated directly at every energy, never from the table, so table on and off give the same numbers for
+it (to the last digit); every other wave keeps the table as before. The signature of `intEC.dat` gets a mark for a pair
+whose potential has a background ("background direct v3"), so a file of an earlier table is recomputed; no other
+signature changes. Cost: the capture of the 24-energy model of 5.7 takes the same time with the table off as on (the
+table's nodes are integrals too); a fit with many folded points pays one integral per sub-point for those waves.
 
 **Numbers** (`tests/potential_capture`'s model, E_cm = 0.02-9 MeV, B_bg = 0 against s −0.05, d −0.27; a_c = 4.87 fm):
 
@@ -392,6 +394,8 @@ file written by the old table is recomputed; no other signature changes.
 | table on against `--no-ec-table` | off by the same factors above 6 MeV (B_bg = 0 too) | 2.1·10⁻⁶ (capture), 3.1·10⁻⁶ (without) |
 | `--no-ec-table`, B_bg ≠ 0 against 0 | identical | identical |
 
+(With the direct integrals of the later fix, below, check.sh gives the reference to 3.1·10⁻⁶ over 0.02-9 MeV at the four
+radii, the radii to 3.2·10⁻⁶, B_bg ≠ 0 and table off to 6.9·10⁻⁷: the direct integrals' tolerance, 10⁻⁴ nominal.)
 Over the grid a_c = 3.5, 4.0, 4.87, 5.5 fm × the two B_bg × table on/off with `capture interior`, every σ agrees with
 every other to 2.1·10⁻⁶ and with the independent reference (`make_reference.py`, extended to 9 MeV) to 1.6·10⁻⁶; close to the poles (E within 10⁻¹¹ to 10⁻⁴ MeV of 7.591485 and
 7.673467 MeV at 4.87 fm) the capture is smooth and B_bg- and table-independent to 8·10⁻⁷.
@@ -464,6 +468,62 @@ note gives the potential's own ANC 4.09316 fm⁻¹ᐟ² (scipy: 4.0931604450) an
 for a potential that has them), and pyazr opens and saves the project byte for byte. `--convert` takes old formats
 only (a format-3 file is refused as "already format 3"), so there is nothing to convert. `experiment_build` has the
 field's cases (reaches the wave; refused without a capture interior and with a background).
+
+### 5.10 An independent review (2026-11-20) and what was changed
+
+The director's review of the branch (its models and scripts in the research directory) named the following; each was
+checked here before it was changed.
+
+1. **The energy table across a narrow resonance of the potential** (reproduced: an s1/2 depth of 100 MeV puts a
+   resonance about 20 keV wide at E_cm = 0.30 MeV; table on against off up to 21 % apart, table off against the
+   reference 4.4·10⁻⁵): fixed by integrating a background wave directly (5.8). Test: check.sh section 8, table on =
+   table off to every digit and both = `make_reference.py --s-depth=100` (`data/reference_narrow.csv`) to 5.1·10⁻⁵ (the Numerov error, magnified by the resonance).
+2. **A closed entrance wave with a background** (by reading; confirmed): the closed branch of `ECIntegral` normalised
+   the decaying wave by W̃(a), the levels see W̃_d(a) = W̃(a)(1 − R⁰(S − B)) (the ANC ↔ γ factor reads it). Fixed for
+   the exterior and the interior part alike. Test: check.sh section 9, a second pair 3He + 4He(2.0 MeV) with an s-wave
+   background and capture interior, all capture through its channel: continuous through its threshold (σ = 2.05973 and
+   2.06086·10⁻¹² b at E_cm = 1.9999 and 2.0001 MeV, the slope of its neighbours); with W̃(a) it jumped by a factor 2.44.
+3. **The API for a GUI**: `channel_functions` asks for J when a `wave` names J (it took 2J = −1 before and ignored the
+   J-specific depths and backgrounds); F, F', G, G', P, S and the phase are now all the dressed ones in a background
+   wave (before, F, G and the phase were undressed while P and S were dressed; the test checks P = ρ/(F² + G²) and
+   δ = −atan2(F, G) on the returned set); `nuclear_potential(pair).waves` lists the `wave` fields;
+   `Session.potential_box_states(pair, l, J, radius, boundary, e_min, e_max)` gives E_p, γ_p² and the node numbers;
+   `Session.potential_bound_state(pair, l, J, energy, window)` the potential's eigenvalue and its ANC (both rows of
+   `Session.describe()["functions"]`, so the web page's Physics tab draws them). Not exposed: the potential's own
+   scattering length (it needs the phase shifts near threshold and an effective-range fit; the extrapolation records
+   and `tests/scattering_length/ere.py` do that). Test: `pyazr_potential_api`.
+4. **`describe`**: the text lists the waves (5.9) and the JSON block has `waves` (only for a potential that has them).
+5. **The NaN step of an LM fit** (the reported abort, on the evaluation project): its exact cause was not found here
+   (the project is not used). Two places that give NaN at a pole of R⁰ are now defined: exactly on a pole the
+   denominator a u' − B u rounds to zero and R_pot was infinite, which the dressing turned into NaN (inf/inf) -- now
+   R_pot is taken one representable energy above, finite (|R| ≈ 10¹³ for VD's s wave); and W̃_d/W̃ was 1/(1 + R⁰(S̃ −
+   B)), where S̃ − B ≈ −1/R⁰ is lost to rounding against B near a pole -- now 1 − R⁰(S − B) with the undressed S. With
+   the guard of the parameter vector (HANDOFF, follow-up 2) a non-finite step is rejected, not evaluated. Test:
+   `physics_potential_capture` evaluates exactly at a bisected pole (E_p to the last bit): R_pot, the dressed waves
+   and W̃_d/W̃ finite.
+6. **Smaller points.**
+   - The node count of a box state missed a sign change in the last interval (r_{n_a−1}, a): counted now. The node
+     numbers of the tests' states did not change (tests/potential_background passes as before).
+   - **Near a subtracted pole** R_pot and γ_p²/(E_p − E) cancel; the residual error is about γ_p²(δE_p/x² + δγ_p²/x),
+     x = E − E_p. E_p is now bisected to the last bit (was 10⁻¹¹ MeV), and within 1 keV of E_p R⁰ (and the capture
+     kernel) is the straight line between its values at ±1 keV: continuous there to 4·10⁻⁹ of R⁰ (the test: 1 eV inside
+     the window's edge against the edge), exact at E_p by construction. Outside the window the error is below
+     10⁻⁷ γ_p² for δE_p ≈ 10⁻¹⁵ MeV and δγ_p²/γ_p² ≈ 10⁻¹⁰ (Richardson). The capture kernel's subtracted part is
+     γ_p² I_p/(E_p − E) with a constant overlap I_p: (K − K_sub)(E_p − E) is the same at three energies to 1e-6 (test).
+   - The label of the written ANC: a level given by its reduced-width amplitude (the row's flag) is said to be so,
+     not printed as an ANC.
+   - The 1 keV binding rule and its note apply only to a final channel that a wave with capture interior reaches by a
+     multipole of the photon pair (E1: |l_i − l_f| = 1; M1: l_i = l_f; E2: |l_i − l_f| = 2 or l_i = l_f > 0).
+   - Set-up (`CheckPotentialWaves`): `subtract n` naming a state the box does not have is refused when the project is
+     set up (before, at the first evaluation); a background on a channel whose radius lies beyond the matching radius
+     (where it would not act) is refused; a `wave` whose (l, J) is no channel of its pair is warned about.
+7. **A behaviour change outside the potential**: a parameter file with a non-finite value is refused for every model
+   (HANDOFF, follow-up 2); listed there for the owner.
+
+**Not done**: the end-to-end test of `subtract` with capture (a level at (E_p, γ_p, B_bg) whose γ-ray amplitude
+equals the box state's interior overlap, reproducing the unsubtracted model) needs the engine's internal γ-amplitude
+convention written as the same radial overlap; the identity is tested at the level of the kernel (finding 6) and the
+elastic part end to end (tests/potential_background, section 7.2), not the capture end to end.
 
 ## 6. Scope, parameters, validity
 

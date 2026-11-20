@@ -1082,6 +1082,16 @@ too, the row ``weisskopf_width`` of :doc:`physics_functions` (the closed form of
 present ones by +0.8 % (E1), +2.3 % (E2), +3.1 % (E3), −3.1 % (E4), +1.3 % (M1), +1.9 % (M2), −0.8 % (M3) and −7.2 %
 (M4), new / old): every number of the table is the engine's.
 
+A pair's nuclear potential through the session (the research option of ``docs/upgrade/potential_background.md``):
+``s.nuclear_potential(pair).waves`` lists the potential record's ``wave`` fields (``l``, ``J``, ``depth``, ``width``,
+``background``, ``only_bound_state``); ``s.channel_functions`` needs ``J`` when a ``wave`` names one, and in a partial
+wave with an interior background returns the dressed functions together (``P = rho/(F^2 + G^2)`` and ``delta_hs =
+-atan2(F, G)`` of the returned F, G); ``s.potential_box_states(pair, l, J, radius, boundary, e_min, e_max)`` gives
+the box states of the potential (energies ``E`` MeV c.m., residues ``gamma2`` MeV, ``nodes``: the poles of its interior
+R-function and what ``subtract`` names); ``s.potential_bound_state(pair, l, J, energy, window)`` the potential's
+eigenvalue nearest ``energy`` (MeV, < 0) and the ANC of its normalised state (fm^-1/2).  Both are rows of
+``s.describe()["functions"]``.
+
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the
 channel's Wigner limit, :math:`P_l` the penetrability the engine formed the observed width with (the session's own

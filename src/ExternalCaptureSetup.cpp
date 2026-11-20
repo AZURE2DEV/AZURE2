@@ -314,13 +314,13 @@ std::string WorkingCopy::ECSignature(const CompoundSystem *compound, const Confi
     hash.Add(potential ? 1 : 0);
     if (potential)
       for (double v : azure2::physics::PotentialKey(potential)) hash.Add(v);
-    // An interior background: the energy table of its integrals divides by the undressed waves since 2026-11-20 (the
-    // dressed P~ and phi~ made it wrong near a pole of R0, ECTable.cpp Reduction), so a file written before is
-    // recomputed.  Added only for a potential with a background: no other signature moves.
+    // An interior background: its entrance waves are integrated directly, not from the energy table, since 2026-11-20
+    // (the table was wrong near a pole of R0 and across a narrow resonance of the potential, ECTable.cpp), so a file
+    // written before is recomputed.  Added only for a potential with a background: no other signature moves.
     bool background = false;
     if (potential)
       for (const azure2::physics::PartialWave &w : potential->waves) background = background || w.background.has_value();
-    if (background) hash.Add("background table v2");
+    if (background) hash.Add("background direct v3");
   }
   return hash.Hex();
 }

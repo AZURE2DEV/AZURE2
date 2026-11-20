@@ -1,5 +1,6 @@
 """The session's diagnostic calls described as rows (``Session.describe()["functions"]``): :meth:`Session.channel_functions`,
-:meth:`Session.jpi_block` and the five THM calls of :mod:`pyazr.session_thm`.
+:meth:`Session.potential_box_states`, :meth:`Session.potential_bound_state`, :meth:`Session.jpi_block` and the five THM
+calls of :mod:`pyazr.session_thm`.
 
 Each row has the shape of a row of the physics table (``pyazr.kinds()["physics"]``): ``name``, ``summary``, ``doc``,
 ``axis`` (the argument a plot puts on its horizontal axis, None for none), ``at_x`` (the answer depends on the fit
@@ -91,6 +92,48 @@ SESSION_FUNCTIONS = {
          _r("delta_hs", "rad", "hard-sphere phase shift"),
          _r("open", "", "E > 0 and the engine's functions defined there (bool)"), _r("e_cm", "MeV", "the energies")],
         axis="e_cm", at_x=False),
+    "potential_box_states": _row(
+        "potential_box_states", "The box states of a pair's potential in one partial wave: the poles E_p, gamma_p^2 of "
+        "its interior R-function.",
+        "The eigenvalues of the radial equation of the potential inside the radius with r u'/u = boundary there, their "
+        "node numbers (what `subtract` names) and residues gamma_p^2 (docs/upgrade/potential_background.md sections 1 "
+        "and 3).",
+        [dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels> (a pair with a potential)",
+              domain="a particle pair of the project"),
+         dict(_ARG, name="l", kind="integer", doc="orbital angular momentum", domain="integer >= 0", lower=0.0,
+              default=0, example=0),
+         dict(_ARG, name="J", kind="real", doc="the channel's total J: required when the potential depends on J, "
+              "ignored when it does not", domain="a multiple of 1/2 >= 0, or None", example=0.5),
+         dict(_ARG, name="radius", kind="real", unit="fm", doc="box radius; 0: the pair's channel radius",
+              domain="finite >= 0", lower=0.0, default=0.0),
+         dict(_ARG, name="boundary", kind="real", doc="boundary-condition constant B", domain="finite", default=0.0),
+         dict(_ARG, name="e_min", kind="real", unit="MeV", doc="lower end of the energy window (c.m.)",
+              domain="finite", default=-60.0),
+         dict(_ARG, name="e_max", kind="real", unit="MeV", doc="upper end of the energy window (c.m.)",
+              domain="finite > e_min", default=20.0)],
+        [_r("nodes", "", "node numbers of the box states", "list"), _r("E", "MeV", "their energies E_p (c.m.)", "list"),
+         _r("gamma2", "MeV", "their residues gamma_p^2", "list")],
+        at_x=False),
+    "potential_bound_state": _row(
+        "potential_bound_state", "The bound state of a pair's potential in one partial wave nearest an energy, and its "
+        "ANC.",
+        "The eigenvalue of the potential's radial equation from 0 to infinity nearest the energy within the window, "
+        "and the ANC of the normalised state: what `capture interior` compares a final level with "
+        "(docs/upgrade/potential_background.md section 5.3).",
+        [dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels> (a pair with a potential)",
+              domain="a particle pair of the project"),
+         dict(_ARG, name="l", kind="integer", doc="orbital angular momentum", domain="integer >= 0", lower=0.0,
+              default=0, example=1),
+         dict(_ARG, name="J", kind="real", doc="the channel's total J: required when the potential depends on J, "
+              "ignored when it does not", domain="a multiple of 1/2 >= 0, or None", example=0.5),
+         dict(_ARG, name="energy", kind="real", unit="MeV", doc="c.m. energy below threshold near which to look",
+              domain="finite < 0", upper=0.0, default=-1.0, example=-1.5),
+         dict(_ARG, name="window", kind="real", unit="MeV", doc="half-width of the search", domain="finite > 0",
+              lower=0.0, default=2.0)],
+        [_r("found", "", "an eigenvalue in the window (bool)", "scalar"),
+         _r("E", "MeV", "the eigenvalue (c.m.)", "scalar"), _r("anc", "fm^-1/2", "the ANC of the normalised state",
+                                                               "scalar")],
+        at_x=False),
     "jpi_block": _row(
         "jpi_block", "One J^pi group on excitation energies: channel functions, U, T, phase shifts, |A| and det A^-1.",
         "The level matrix A, the collision matrix U and T of the group's open particle channels (physics/"

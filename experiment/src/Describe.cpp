@@ -438,6 +438,23 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
           .Key("radius_fm").Number(s.spin_orbit->form.radius_fm).Key("diffuseness_fm").Number(s.spin_orbit->form.diffuseness_fm)
           .Key("on").String(s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light")
           .Key("operator").String("2l.s").EndObject();
+    // the `wave` fields (the key only for a potential that has them, so that the others' JSON is as before)
+    if (!s.waves.empty()) {
+      j.Key("waves").BeginArray();
+      for (const physics::PartialWave &w : s.waves) {
+        j.BeginObject().Key("l").Integer(w.l);
+        if (w.two_j >= 0) j.Key("two_J").Integer(w.two_j);
+        if (w.depth_MeV) j.Key("depth_MeV").Number(*w.depth_MeV);
+        if (w.width_fm) j.Key("width_fm").Number(*w.width_fm);
+        if (w.background) {
+          j.Key("background").BeginObject().Key("boundary").Number(w.background->boundary).Key("subtract").BeginArray();
+          for (int n : w.background->subtract_nodes) j.Integer(n);
+          j.EndArray().Key("capture_interior").Bool(w.background->capture).EndObject();
+        }
+        j.Key("only_bound_state").Bool(w.bound_state_only).EndObject();
+      }
+      j.EndArray();
+    }
     j.EndObject();
   }
   j.EndArray().EndObject();

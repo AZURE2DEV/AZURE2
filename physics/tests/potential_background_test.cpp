@@ -310,7 +310,7 @@ double Threshold() {
   Check(std::fabs(r.F - (1.0 - Rr * (S - B))) < 1e-14 &&
             std::fabs(1.0 / (1.0 + Rr * (DressShift(S, Rr, B) - B)) - r.F) < 1e-14,
         "the W factor 1/(1 + R0 (S~ - B)) = 1 - R0 (S - B) = W~_d/W~ of DressWaves");
-  const double Bf = BackgroundWFactor(p, 2, 2, kMu_MeV, 0, -1, 0.0, a, -0.5, ChannelBoundShift(p, 2, 2, kMu_MeV, 0, -1, 0.0, a, 0.5));
+  const double Bf = BackgroundWFactor(p, 2, 2, kMu_MeV, 0, -1, 0.0, a, -0.5);
   const double R0m = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, -0.5, *w.background);
   const double Sm = HybridBoundShift(p, 2, 2, kMu_MeV, 0, 0.0, a, 0.5);
   Check(std::fabs(Bf - (1.0 - R0m * (Sm + 0.5))) < 1e-12 * (1.0 + std::fabs(Bf)), "BackgroundWFactor at E = -0.5 MeV");

@@ -112,14 +112,37 @@ void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, doub
  * depth is changed).  An unbound final state is refused.  Prints the potential's eigenvalue and its own ANC, C_pot =
  * 1 / (|W~(a)| (int_0^a phi^2 + N_f)^1/2) with phi the interior regular solution normalised at a and N_f = int_a^inf
  * W~^2 / W~(a)^2 (nfIntegral), next to the level's ANC as written in <levels> (`writtenAnc`; NaN when the row holds
- * a width or an amplitude).
+ * a reduced-width amplitude).  Only for a final channel that a wave with capture interior reaches by a multipole of
+ * the photon pair (`multipoleMask`).
  */
 constexpr double kInteriorCaptureEigenTolerance_MeV = 1e-3;
 
+/// The level's ANC as written, or the word that it is not written as one.
+std::string WrittenAncText(double writtenAnc) {
+  if (std::isnan(writtenAnc)) return "none (the level gives a reduced-width amplitude, MeV^1/2)";
+  std::ostringstream t;
+  t << writtenAnc << " fm^-1/2";
+  return t.str();
+}
+
+/// Does a wave with interior capture of `pot` reach a final channel of orbital momentum lf by a multipole of `mask`
+/// (isE1, isM1, isE2): E1 |l_i - l_f| = 1, M1 l_i = l_f, E2 |l_i - l_f| = 2 or l_i = l_f > 0?
+bool InteriorCaptureReaches(const azure2::physics::HybridPotential &pot, int lf, int mask) {
+  for (const azure2::physics::PartialWave &w : pot.waves) {
+    if (!w.background || !w.background->capture) continue;
+    const int d = std::abs(w.l - lf);
+    if (((mask & isE1) && d == 1) || ((mask & isM1) && d == 0) || ((mask & isE2) && (d == 2 || (d == 0 && lf > 0))))
+      return true;
+  }
+  return false;
+}
+
 void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double radius, int l, int twoJ, double levelEnergy,
-                                    double nfIntegral, double writtenAnc, const Config &configure) {
+                                    double nfIntegral, double writtenAnc, int multipoleMask, const Config &configure) {
   const std::optional<azure2::physics::HybridPotential> &pot = pair->GetHybridPotential();
   if (!pot || !azure2::physics::HasInteriorCapture(*pot)) return;
+  // only a final channel that a capture wave reaches needs the potential's bound state (review 2026-11-20)
+  if (!InteriorCaptureReaches(*pot, l, multipoleMask)) return;
   const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
   const std::string wave = "l = " + std::to_string(l) + (twoJ >= 0 ? ", 2J = " + std::to_string(twoJ) : std::string()) +
                            " of pair " + std::to_string(pair->GetPairKey());
@@ -162,7 +185,7 @@ void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double r
     configure.outStream << "NOTE: interior capture into the final state of photon pair " << exitPairKey << " (" << wave
                         << ", only bound_state, E_f = " << finalEnergy << " MeV): the potential's eigenvalue " << ev.E_MeV
                         << " MeV (" << (ev.E_MeV - finalEnergy) * 1e3 << " keV from E_f); its own ANC " << ancPot
-                        << " fm^-1/2, the level's ANC as written " << writtenAnc << " fm^-1/2; at a_c the interior shape's "
+                        << " fm^-1/2, the level's ANC as written " << WrittenAncText(writtenAnc) << "; at a_c the interior shape's "
                         << "a u'/u = " << ell << " against the point-Coulomb exterior's a W'/W = " << S
                         << " (the interior bound wave is the potential's shape, continued in value from the Whittaker "
                         << "function times the level's ANC)." << std::endl;
@@ -176,8 +199,8 @@ void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double r
   configure.outStream << "NOTE: interior capture into the final state of photon pair " << exitPairKey << " (" << wave
                       << ", E_f = " << finalEnergy << " MeV): the potential's eigenvalue " << ev.E_MeV << " MeV ("
                       << (ev.E_MeV - finalEnergy) * 1e3 << " keV from E_f); its own ANC " << ancPot
-                      << " fm^-1/2, the level's ANC as written " << writtenAnc
-                      << " fm^-1/2 (the interior bound wave is the potential's shape, normalised to the level's ANC)."
+                      << " fm^-1/2, the level's ANC as written " << WrittenAncText(writtenAnc)
+                      << " (the interior bound wave is the potential's shape, normalised to the level's ANC)."
                       << std::endl;
 }
 
@@ -277,13 +300,18 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
         if (!NoteUnboundFinalState(configure, exitPair, theFinalPair, unboundNoted)) return -1;
         ECFinalStateFactors(theFinalPair, finalRadius, this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
                             exitPair->GetHeavyExE(), configure, nfIntegralValue, ecConvert);
+        // the level's value as written in <levels>: an ANC (fm^-1/2) for this closed channel unless the row's flag says
+        // it is a reduced-width amplitude (MeV^1/2); NaN then (the note says so)
         double writtenAnc = std::numeric_limits<double>::quiet_NaN();
-        for (const azure2::experiment::LevelRowSlot &slot : tables.rowSlots)
-          if (slot.group == jGroupNum && slot.level == levelNum && slot.channel == ch) writtenAnc = slot.value;
+        for (size_t row = 0; row < tables.rowSlots.size() && row < rows.size(); row++) {
+          const azure2::experiment::LevelRowSlot &slot = tables.rowSlots[row];
+          if (slot.group == jGroupNum && slot.level == levelNum && slot.channel == ch && !rows[row].gammaIsRWA())
+            writtenAnc = slot.value;
+        }
         try {
           CheckInteriorCaptureFinalState(exitPair->GetPairKey(), theFinalPair, finalRadius, this->Group(jGroupNum)->GetChannel(ch)->GetL(),
                                          theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE(), nfIntegralValue,
-                                         writtenAnc, configure);
+                                         writtenAnc, ec->second, configure);
         } catch (const std::runtime_error &e) {
           configure.outStream << "ERROR: " << e.what() << std::endl;
           return -1;

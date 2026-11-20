@@ -541,6 +541,16 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
         ratio = sign * pow(10.0, log10Ratio);
       }
     }
+    // A closed entrance wave with an interior background: the levels see the dressed decaying wave, whose value at a_c
+    // is W~_d(a) = W~(a) (1 - R0 (S - B)) (Eq. (9) below threshold; the ANC <-> gamma factor reads the same), so the
+    // exterior wave per unit of the level feed is W~(r)/W~_d(a), as H(r)/H~(a) above threshold (review 2026-11-20;
+    // the interior part added to GW_ is divided alike).
+    if (const std::optional<azure2::physics::HybridPotential> &pot = pair()->GetHybridPotential())
+      if (azure2::physics::BackgroundOf(*pot, theInitialLValue, params_.twoJi) && chanRad <= pot->matching_radius_fm)
+        ratio /= azure2::physics::BackgroundWFactor(*pot, pair()->GetZ(1), pair()->GetZ(2), redMass * uconv,
+                                                    theInitialLValue, params_.twoJi,
+                                                    pair()->SpinOrbitFactor(theInitialLValue, params_.twoJi), chanRad,
+                                                    outEnergy);
     overlapIntegral = complex(0.0, -0.5) * ratio *
         sqrt(redMass * uconv * chanRad) / hbarc;
   }

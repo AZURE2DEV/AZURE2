@@ -30,6 +30,9 @@ engine), hbar v = (hbar c)^2 k / mu c^2.  S(E) = E sigma exp(2 pi eta).
 Output (stdout, CSV): the bound states (B, ANC) as comment lines, then per energy sigma (b) and S (MeV b) for each final
 state and their sum.  Energies are kept above 10 keV (mpmath's Coulomb functions slow down without bound as eta grows).
 
+With --s-depth=V, the s1/2 depth V (MeV) in place of 67.5 (check.sh section 8: 100 MeV, a narrow s-wave resonance at
+E_cm = 0.30 MeV; data/reference_narrow.csv).
+
 With --paper, the paper's hbar^2/2u = 20.7343 MeV fm^2 and nuclear masses (4.001506179127 u, 3.0149322473 u, its
 section III.A), to compare with its numbers (B = 1.5866 MeV, C(3/2-) = 4.34 fm^-1/2, Fig. 6).
 
@@ -54,6 +57,11 @@ Z1, Z2 = 2, 2
 E2 = ALPHA * HBARC
 RC, GAUSS = 3.095, 0.15747
 DEPTH = {(0, 1): 67.5, (1, 1): 81.815179, (1, 3): 83.589554, (2, 3): 66.0, (2, 5): 69.0}
+# --s-depth=V: the s1/2 depth V (MeV) in place of 67.5 (the narrow-resonance case of check.sh section 8: V = 100 MeV
+# puts an s-wave resonance at E_cm = 0.30 MeV, about 20 keV wide)
+for _a in sys.argv[1:]:
+    if _a.startswith("--s-depth="):
+        DEPTH[(0, 1)] = float(_a.split("=", 1)[1])
 R_MATCH, R_OUT = 15.0, 30.0
 K2 = (M1 * M2 / (M1 + M2) / 20.7343) if PAPER else 2.0 * MU / HBARC ** 2  # 2 mu / hbar^2 (fm^-2 MeV^-1)
 

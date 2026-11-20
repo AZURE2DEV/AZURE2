@@ -26,7 +26,7 @@ phys::ChannelValues ParticleChannelValues(const PPair &pair, int l, int twoJ, do
     // Eq. (9) continued below threshold; v.S is already the dressed S~)
     if (pair.GetHybridPotential())
       W *= phys::BackgroundWFactor(*pair.GetHybridPotential(), pair.GetZ(1), pair.GetZ(2), pair.GetRedMass() * uconv, l,
-                                   twoJ, pair.SpinOrbitFactor(l, twoJ), radius, Ec, v.S);
+                                   twoJ, pair.SpinOrbitFactor(l, twoJ), radius, Ec);
     v.P = pair.GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
   }
   v.dS_dE = cf.ShiftDerivative(l, twoJ, Ec);

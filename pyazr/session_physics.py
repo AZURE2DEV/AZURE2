@@ -44,7 +44,8 @@ class SessionPhysics:
             belong): the pair's, or the one a ``channel_radius`` record gives the pair's channels of this ``l``.
             When records with ``s`` or ``J`` give those channels more than one radius, 0 is refused
             (``ValueError``): name the radius.
-        J : the channel's total J, required (and only allowed) for a pair whose potential has a spin-orbit term.
+        J : the channel's total J, required (and only allowed) for a pair whose functions depend on J: a spin-orbit
+            term, or a ``wave`` of its potential with its own J.
 
         Returns
         -------
@@ -53,7 +54,10 @@ class SessionPhysics:
         = -phi of :func:`pyazr.physics.hard_sphere_phase`), ``open`` (bool: E > 0 and the engine's functions defined
         there) and ``e_cm``.  The numbers follow the session's options: the Coulomb table when one is in use (about
         1e-7 from the exact routine of :mod:`pyazr.physics`), the hybrid model's Numerov
-        solution for a pair with a nuclear potential.  Where ``open`` is False every field but ``S`` is 0, and ``S``
+        solution for a pair with a nuclear potential.  In a partial wave with an interior background every field is
+        the dressed one (``docs/upgrade/potential_background.md`` Eq. (9)): the functions the levels on top see, so
+        that ``delta_hs`` = -phi~ and ``P`` = rho/|H~|^2 belong together; a wave with ``only bound_state`` gives the
+        point-Coulomb functions.  Where ``open`` is False every field but ``S`` is 0, and ``S``
         is the engine's closed-channel shift function at the channel radius (0 at another radius).
 
         Raises :class:`pyazr.ParameterIndexError` for an unknown pair, :class:`pyazr.DomainError` for a photon pair
@@ -70,6 +74,68 @@ class SessionPhysics:
         out["open"] = (energies > 0) & ((out["F"] != 0) | (out["G"] != 0))
         out["e_cm"] = energies.copy()
         return out
+
+    @engine_call
+    def potential_box_states(self, pair, l=0, J=None, radius=0.0, boundary=0.0, e_min=-60.0, e_max=20.0):
+        """The box states of a pair's potential in one partial wave: the poles of its interior R-function.
+
+        The eigenvalues E_p of the radial equation of the potential (the partial wave's own depth and width, as the
+        session reads the ``potential`` record) inside ``radius`` with r u'(r)/u(r) = ``boundary`` there, their node
+        numbers and residues gamma_p^2: R_pot(E) = sum_p gamma_p^2 / (E_p - E)
+        (``docs/upgrade/potential_background.md`` sections 1 and 3; the node number is what ``subtract`` names).
+
+        Parameters
+        ----------
+        pair : particle-pair key (1-based, as in ``<levels>``) of a pair with a potential.
+        l : orbital angular momentum (whole number >= 0).
+        J : the channel's total J; required when the potential depends on J (a spin-orbit term or a ``wave`` with its
+            own J), ignored when it does not.
+        radius : the box radius (fm); 0: the pair's channel radius.
+        boundary : the boundary-condition constant B (dimensionless), as ``background interior boundary``.
+        e_min, e_max : the energy window (MeV, c.m.).
+
+        Returns
+        -------
+        dict: ``nodes`` (int array), ``E`` (MeV, c.m.), ``gamma2`` (MeV), one entry per state, ascending in E.
+
+        Raises ``ValueError`` for a pair without a potential, a J needed or not possible, an empty window.
+        """
+        pair, l = session_checks.channel_request(self.pairs, pair, l)
+        try:
+            out = self._engine.potential_box_states(pair, l, -1 if J is None else round(2 * J), float(radius),
+                                                    float(boundary), float(e_min), float(e_max))
+        except Exception as e:
+            raise ValueError(str(e)) from None
+        return {"nodes": np.asarray(out["nodes"], int), "E": np.asarray(out["E"], float),
+                "gamma2": np.asarray(out["gamma2"], float)}
+
+    @engine_call
+    def potential_bound_state(self, pair, l=0, J=None, energy=-1.0, window=2.0):
+        """The bound state of a pair's potential in one partial wave nearest to an energy, and its ANC.
+
+        The eigenvalue of the radial equation of the potential (0 to infinity: its own exterior) nearest ``energy``
+        within ``window``, and the ANC of the normalised state, u = C W(r) beyond the potential: what the rule of
+        ``capture interior`` compares the final level with (``docs/upgrade/potential_background.md`` section 5.3).
+
+        Parameters
+        ----------
+        pair, l, J : as :meth:`potential_box_states`.
+        energy : c.m. energy (MeV) below threshold (< 0) near which to look.
+        window : half-width of the search (MeV).
+
+        Returns
+        -------
+        dict: ``found`` (bool), ``E`` (MeV, c.m.; 0 when not found), ``anc`` (fm^-1/2; 0 when not found).
+
+        Raises ``ValueError`` as :meth:`potential_box_states`, and for an energy >= 0.
+        """
+        pair, l = session_checks.channel_request(self.pairs, pair, l)
+        try:
+            out = self._engine.potential_bound_state(pair, l, -1 if J is None else round(2 * J), float(energy),
+                                                     float(window))
+        except Exception as e:
+            raise ValueError(str(e)) from None
+        return {"found": bool(out["found"]), "E": float(out["E"]), "anc": float(out["anc"])}
 
     @engine_call
     def jpi_block(self, jgroup, e_x, params=None):

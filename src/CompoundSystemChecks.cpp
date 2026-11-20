@@ -20,7 +20,57 @@
 #include "PPair.h"
 #include "ParameterLabel.h"
 #include "azure2/physics/Constants.h"
+#include "azure2/physics/HybridPotential.h"
 #include "azure2/physics/LevelParameters.h"
+
+int CheckPotentialWaves(const CompoundSystem &compound, const Config &configure) {
+  for (int p = 1; p <= compound.NumPairs(); p++) {
+    const PPair *pair = compound.GetPair(p);
+    const std::optional<azure2::physics::HybridPotential> &pot = pair->GetHybridPotential();
+    if (!pot || pot->waves.empty()) continue;
+    std::vector<bool> used(pot->waves.size(), false);
+    for (int j = 1; j <= compound.NumJGroups(); j++) {
+      const JGroup *group = compound.GetJGroup(j);
+      for (int ch = 1; ch <= group->NumChannels(); ch++) {
+        const AChannel *c = group->GetChannel(ch);
+        if (c->GetRadType() != 'P' || c->GetPairNum() != p) continue;
+        const int l = c->GetL(), twoJ = pair->SpinOrbitTwoJ(group->GetJ());
+        const azure2::physics::PartialWave *w = azure2::physics::FindWave(*pot, l, twoJ);
+        if (!w) continue;
+        used[w - pot->waves.data()] = true;
+        if (!w->background) continue;
+        const std::string what = "pair " + std::to_string(pair->GetPairKey()) + ", wave l = " + std::to_string(l) +
+                                 (w->two_j >= 0 ? ", J = " + std::to_string(w->two_j) + "/2" : std::string());
+        if (c->GetRadius() > pot->matching_radius_fm) {
+          configure.outStream << "ERROR (E_POTENTIAL_WAVE): " << what << ": an interior background at the channel radius "
+                              << c->GetRadius() << " fm, beyond the matching radius " << pot->matching_radius_fm
+                              << " fm, where the potential does not act: it would be ignored.  Raise matching_radius or "
+                                 "lower the channel radius." << std::endl;
+          return -1;
+        }
+        if (!w->background->subtract_nodes.empty()) {
+          try {
+            azure2::physics::SubtractedBoxStates(azure2::physics::ForPartialWave(*pot, l, twoJ), pair->GetZ(1),
+                                                 pair->GetZ(2), pair->GetRedMass() * uconv, l, pair->SpinOrbitFactor(l, twoJ),
+                                                 c->GetRadius(), *w->background);
+          } catch (const std::exception &e) {
+            configure.outStream << "ERROR (E_POTENTIAL_WAVE): " << what << ", channel radius " << c->GetRadius()
+                                << " fm: subtract names a box state the potential does not have there (" << e.what()
+                                << ").  Name the node number of a state the box has (potential_background.md section 3)."
+                                << std::endl;
+            return -1;
+          }
+        }
+      }
+    }
+    for (size_t i = 0; i < pot->waves.size(); i++)
+      if (!used[i])
+        configure.outStream << "WARNING: pair " << pair->GetPairKey() << ": the wave l = " << pot->waves[i].l
+                            << (pot->waves[i].two_j >= 0 ? ", J = " + std::to_string(pot->waves[i].two_j) + "/2" : std::string())
+                            << " of its potential is no channel of the model: it does nothing." << std::endl;
+  }
+  return 0;
+}
 
 /*!
  * An identical pair with spin (p+p, d+d, 3He+3He) may not have a channel forbidden by Bose/Fermi symmetry, one with

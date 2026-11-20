@@ -4,6 +4,36 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-capture, follow-up 4) — an independent review's findings
+
+Each finding was checked before it was changed; details and numbers in `potential_background.md` section 5.10.
+1. **Energy table across a narrow resonance** of the background's potential (reproduced: up to 21 % at E_cm = 0.30 MeV
+   for an s1/2 depth of 100 MeV): a background entrance wave is now integrated directly, never from the table (table on
+   = table off to every digit); `intEC.dat` signature mark "background direct v3" for such pairs only. Test: check.sh 8.
+2. **Closed entrance wave with a background** (confirmed: a factor 2.44 jump at the threshold): normalised by the
+   dressed W̃_d(a), exterior and interior part. Test: check.sh 9 (continuity through the threshold of a second pair).
+3. **API**: `channel_functions` J-aware for a `wave` with a J, all of F, G, P, S, phase dressed together;
+   `nuclear_potential().waves`; `Session.potential_box_states`, `Session.potential_bound_state` (rows of
+   `describe()["functions"]`). Test: `pyazr_potential_api`, `pyazr_session_functions` (nine rows). Not exposed: the
+   potential's own a0.
+4. **describe**: waves in the text and the JSON.
+5. **The NaN LM step**: the exact cause not identified (the project is not used here); the exact pole of R_pot (inf/inf)
+   and the rounding of S̃ − B in W̃_d/W̃ are defined now; tested exactly at a bisected pole.
+6. Node count includes the last interval; E_p bisected to the last bit and a 1 keV window around a subtracted pole
+   (R0 and the capture kernel the line through its edges); the written-ANC label for an amplitude; the binding rule
+   only for a final channel a capture wave reaches; set-up refusals of `subtract n` without such a state and of a
+   background beyond the matching radius, a warning for a `wave` that is no channel.
+7. **Behaviour change for the owner (James)**: since follow-up 2 a parameter file (`--parameter-file`, `param.sav`)
+   with a non-finite value (`nan`, `inf`) is refused for every model, not only for potentials (exit 1, the line named;
+   `reference/command_line.rst`). Before, it was applied and the first evaluation aborted.
+Not done: the end-to-end test of `subtract` with capture (needs the internal γ-amplitude convention written as the box
+state's overlap); tested at the kernel level.
+Run: build 0 warnings; `ctest -LE slow -j4` 399/401 (rmfit_enginepin, this machine; pyazr_ui_node, a session-function
+row without a starting J, fixed and rerun with the UI, session-function, potential-API, describe, consistency and docs
+tests: 24/24); `tests/run_tests.sh` (4 threads) passed 187, failed 0; `tests/potential_capture/check.sh` (sections 8, 9
+new) and `tests/potential_background/check.sh` pass; the closed-channel check with the undressed W~(a) restored in a
+scratch rebuild shows the 2.44 jump.
+
 ## 2026-11-20 (potential-capture, follow-up 3) — `only bound_state`: a wave's potential for the bound-state shape alone
 
 From a test on an evaluation project: `capture interior` needs a binding depth in the final-state waves, and that depth

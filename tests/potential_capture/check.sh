@@ -17,7 +17,9 @@
 #   6. 1 and 3 threads: identical outputs;
 #   7. `only bound_state` on the p waves: their elastic channel functions are those without a potential (identical),
 #      the capture equals the one with the potential in the p waves where it is negligible beyond a_c (8 fm), the
-#      bound-state rule and note, and the record through --validate, --describe and pyazr.
+#      bound-state rule and note, and the record through --validate, --describe and pyazr;
+#   8. a narrow resonance of the background's potential: table on = table off = make_reference.py;
+#   9. capture through a closed entrance wave with a background, continuous through its threshold.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -244,6 +246,40 @@ if python3 -c "import pyazr" 2> /dev/null; then
 else
   echo "  skip  pyazr round trip (pyazr not importable)"
 fi
+
+# ---- 8. a narrow resonance of the background's potential (review 2026-11-20, finding 1): the s1/2 depth 100 MeV puts
+#         an s-wave resonance about 20 keV wide at E_cm = 0.30 MeV; the energy table, which tabulated a quotient of the
+#         dressed phase, was up to 21 % off across it.  A background wave is now integrated directly: table on and off
+#         are the same numbers, and both equal make_reference.py --s-depth=100 (data/reference_narrow.csv)
+edited "$HERE/models/capture_a40.azr.in" "$WORK/models/narrow.azr" awk '
+  /wave            l 0 J 1\/2 depth 67.5 MeV/ { sub(/depth 67.5 MeV/, "depth 100.0 MeV") }
+  /^    energies       list / { $0 = "    energies       list 0.27 0.28 0.29 0.295 0.3 0.305 0.31 0.32 MeV cm" } { print }'
+run narrow "$WORK/models/narrow.azr" extrapolate 2
+run narrow_notab "$WORK/models/narrow.azr" extrapolate 2 -- --no-ec-table
+if res="$(python3 -I "$HERE/compare.py" "$HERE/data/reference_narrow.csv" "$WORK/narrow" "$WORK/narrow_notab" --tol 2e-4 2>&1)" &&
+   res2="$(python3 -I "$HERE/compare.py" --spread "$WORK/narrow" "$WORK/narrow_notab" --tol 1e-12 2>&1)"; then
+  ok "narrow s-wave resonance at 0.30 MeV: table on = table off ($res2), = make_reference.py ($res)"
+else
+  bad "narrow s-wave resonance: ${res:-} ${res2:-}"
+fi
+
+# ---- 9. a closed entrance wave with a background (review 2026-11-20, finding 2): models/closed_channel.azr.in, a
+#         second pair 3He + 4He(2.0 MeV) with an s-wave background and capture interior, the final state's ANC in pair 1
+#         set to 0 so that all capture runs through pair 2's channel (a 1/2+ level at E_x = 3.6 MeV in both pairs,
+#         --no-ignore-externals): the capture is continuous through pair 2's threshold at E_cm = 2.0 MeV, closed below
+#         (the decaying wave over the dressed W~_d(a)) and open above (the dressed outgoing wave).  With the undressed
+#         W~(a) it jumped by a factor 2.44 there.
+cp "$HERE/models/closed_channel.azr.in" "$WORK/models/closed.azr"
+run closed "$WORK/models/closed.azr" extrapolate 2 -- --no-ignore-externals
+sig() { awk -v E="$1" '$1 + 0 == E + 0 { print $4 }' "$WORK/closed/output/AZUREOut_aa=1_R=3.extrap"; }
+lo="$(sig 1.9999)"; hi="$(sig 2.0001)"; lo2="$(sig 1.999)"; hi2="$(sig 2.001)"
+if awk -v a="$lo" -v b="$hi" -v c="$lo2" -v d="$hi2" 'BEGIN { exit !(a ~ /^[0-9]/ && b ~ /^[0-9]/ && c ~ /^[0-9]/ && d ~ /^[0-9]/ &&
+       a > 1e-14 && (b - a) / a < 1e-3 && (b - a) / a > -1e-3 && ((b - a) - (d - c) / 10) ^ 2 < (0.2 * (d - c) / 10) ^ 2) }'; then
+  ok "capture through a closed background wave continuous through its threshold: sigma(1.9999) = $lo, sigma(2.0001) = $hi b (the slope of 1.999 - 2.001 MeV)"
+else
+  bad "capture through a closed background wave not continuous at its threshold: $lo2 $lo | $hi $hi2"
+fi
+grep -q "Could not\|ERROR" "$WORK/closed/run.log" && bad "closed_channel run: $(grep -m1 'ERROR' "$WORK/closed/run.log")"
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))

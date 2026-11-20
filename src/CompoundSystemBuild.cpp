@@ -363,6 +363,7 @@ int CompoundSystem::Fill(const Config &configure, LevelState &state, LevelInputs
     this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
   if (this->ApplyChannelRadii(configure) == -1) return -1;
   if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
+  if (CheckPotentialWaves(*this, configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     if (this->ParseExternalCapture(configure, ecPairs, section.rows) == -1) return -1;
 

@@ -675,6 +675,13 @@ add_test(NAME pyazr_hybrid_threshold
                  ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_threshold_test.py)
 set_tests_properties(pyazr_hybrid_threshold PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A pair's potential through the session (potential_background.md, review 2026-11-20): its `wave` fields, the channel
+# functions J-aware and dressed together, the potential's box states and its bound state against scipy.
+add_test(NAME pyazr_potential_api
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/potential_api_test.py)
+set_tests_properties(pyazr_potential_api PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77)
+
 # The spin-orbit term of a hybrid pair through pyazr: channel functions per J against an independent integration, the
 # API's term equal to the record's, the refusals, external capture per J (tests/spin_orbit_potential, ec_ratio.csv).
 add_test(NAME pyazr_spin_orbit_potential

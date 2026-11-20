@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "azure2/physics/Constants.h"
 #include "azure2/physics/HybridPotential.h"
@@ -133,11 +134,95 @@ void BoundStateRule() {
   Check((f1 < 0.0) != (f2 < 0.0), "the matching function changes sign through the eigenvalue");
 }
 
+// The poles of R0 (review 2026-11-20, findings 5 and 6), on VD's s wave at a = 4.87 fm, B = 0 (a box pole at 7.59 MeV):
+//  - exactly at the bisected pole (to the last bit) R_pot, the dressed waves and the closed-channel factor are finite,
+//    and R_pot keeps the sign and size of the pole's neighbourhood;
+//  - with the pole subtracted, R0 at E_p and within the 1 keV window is finite and on the line through its values at
+//    the window's edges, and continuous with R0 outside (1e-6 MeV and 2e-3 MeV away: the same to 1e-6 of R0);
+//  - the kernel of the interior capture: the subtracted part is gamma_p^2 I_p/(E_p - E) with a constant I_p;
+//  - the node count includes the last interval: the states found are numbered 0, 1, 2, ... without a gap.
+void Poles() {
+  HybridPotential p = GaussianPotential(67.5, 1.0 / std::sqrt(0.15747));
+  p.coulomb_radius_fm = 3.095;
+  p.matching_radius_fm = 15.0;
+  p.step_fm = 0.0275;
+  const double a = 4.87;
+  const std::vector<BoxState> st = InteriorBoxStates(p, 2, 2, kMu_MeV, 0, 0.0, a, 0.0, -60.0, 9.0);
+  bool numbered = !st.empty();
+  for (size_t i = 0; i < st.size(); ++i) numbered = numbered && st[i].nodes == (int)i;
+  Check(numbered, "box states of VD's s wave at 4.87 fm numbered 0, 1, ... (" + std::to_string(st.size()) + " states)");
+  if (st.empty()) return;
+  const BoxState &top = st.back();
+  char text[240];
+  std::snprintf(text, sizeof text, "the highest box pole below 9 MeV at E_p = %.15g MeV (expected near 7.5915)", top.E_MeV);
+  Check(std::fabs(top.E_MeV - 7.5915) < 1e-3, text);
+  const double Rp = InteriorRFunction(p, 2, 2, kMu_MeV, 0, 0.0, a, top.E_MeV, 0.0);
+  const double Rn = InteriorRFunction(p, 2, 2, kMu_MeV, 0, 0.0, a, std::nextafter(top.E_MeV, 0.0), 0.0);
+  std::snprintf(text, sizeof text, "R_pot at the bisected pole finite: %.3e (at the energy below: %.3e)", Rp, Rn);
+  Check(std::isfinite(Rp) && std::isfinite(Rn) && std::fabs(Rp) > 1e8, text);
+  WavesAtRadius w;
+  w.F = 0.3;
+  w.Fp = 0.9;
+  w.G = 2.0;
+  w.Gp = -1.1;
+  const WavesAtRadius d = DressWaves(w, 1.5, Rp, 0.0);
+  Check(std::isfinite(d.F) && std::isfinite(d.G) && std::isfinite(d.Fp) && std::isfinite(d.Gp),
+        "the dressed waves at the bisected pole are finite");
+  // subtracted: the window
+  InteriorBackground bg;
+  bg.subtract_nodes = {top.nodes};
+  const double r0 = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, top.E_MeV, bg);
+  const double rl = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, top.E_MeV - kSubtractedPoleWindow_MeV, bg);
+  const double rh = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, top.E_MeV + kSubtractedPoleWindow_MeV, bg);
+  const double out = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, top.E_MeV + 2e-3, bg);
+  const double in = BackgroundR(p, 2, 2, kMu_MeV, 0, 0.0, a, top.E_MeV + kSubtractedPoleWindow_MeV - 1e-6, bg);
+  std::snprintf(text, sizeof text, "subtracted pole: R0(E_p) = %.10g = the window's midpoint %.10g; R0 at 2 keV %.10g, "
+                "1 eV inside the edge %.10g against the edge %.10g", r0, 0.5 * (rl + rh), out, in, rh);
+  Check(std::isfinite(r0) && std::fabs(r0 - 0.5 * (rl + rh)) < 1e-12 * (1.0 + std::fabs(r0)) &&
+            std::fabs(in - rh) < 1e-6 * (1.0 + std::fabs(rh)) && std::fabs(out - rh) < 1e-2 * (1.0 + std::fabs(rh)),
+        text);
+  // the capture kernel with the pole subtracted: K_unsubtracted - K_subtracted = gamma_p^2 I_p / (E_p - E), I_p the
+  // overlap of the box state with the bound state, a constant: (K_un - K_sub)(E) (E_p - E) the same at three energies
+  // (the subtraction acts on the capture as on R0; a subtracted pole's capture belongs to the level that replaces it)
+  {
+    HybridPotential pf = GaussianPotential(83.589554, 1.0 / std::sqrt(0.15747));
+    pf.coulomb_radius_fm = 3.095;
+    pf.step_fm = 0.0275;
+    const auto w1 = [](double r) { return r; };
+    InteriorBackground un;
+    double c[3];
+    const double Es[3] = {top.E_MeV - 0.7, top.E_MeV - 0.05, top.E_MeV + 0.4};
+    for (int k = 0; k < 3; ++k) {
+      const double ku = InteriorCaptureIntegral(p, 0, 0.0, Es[k], un, pf, 1, 0.0, -1.4548867, 2, 2, kMu_MeV, a, w1);
+      const double ks = InteriorCaptureIntegral(p, 0, 0.0, Es[k], bg, pf, 1, 0.0, -1.4548867, 2, 2, kMu_MeV, a, w1);
+      c[k] = (ku - ks) * (top.E_MeV - Es[k]);
+    }
+    std::snprintf(text, sizeof text, "subtracted capture kernel: (K - K_sub)(E_p - E) = %.10g, %.10g, %.10g at three energies",
+                  c[0], c[1], c[2]);
+    Check(std::fabs(c[1] / c[0] - 1.0) < 1e-6 && std::fabs(c[2] / c[0] - 1.0) < 1e-6, text);
+  }
+  // the closed-channel factor 1 - R0 (S - B) at a pole below threshold: finite
+  const std::vector<BoxState> below = InteriorBoxStates(p, 2, 2, kMu_MeV, 0, 0.0, a, 0.0, -60.0, -0.01);
+  if (!below.empty()) {
+    const double f = BackgroundWFactor([&] {
+      HybridPotential q = p;
+      PartialWave pw;
+      pw.l = 0;
+      pw.background = InteriorBackground();
+      q.waves = {pw};
+      return q;
+    }(), 2, 2, kMu_MeV, 0, -1, 0.0, a, below.back().E_MeV);
+    std::snprintf(text, sizeof text, "W~_d/W~ at the bisected pole %.6g MeV below threshold finite: %.3e", below.back().E_MeV, f);
+    Check(std::isfinite(f), text);
+  }
+}
+
 }  // namespace
 
 int main() {
   ZeroPotentialKernel();
   BoundStateRule();
+  Poles();
   if (failures) {
     std::printf("potential_capture: %d FAILED\n", failures);
     return 1;

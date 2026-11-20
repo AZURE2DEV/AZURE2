@@ -1,6 +1,7 @@
 #ifndef AZUREAPI_H
 #define AZUREAPI_H
 
+#include "azure2/physics/HybridPotential.h"
 #include "AZUREMain.h"
 #include "CompoundSystemSetUp.h"
 
@@ -462,6 +463,22 @@ class AZUREAPI {
    * model does to the external region.
    */
   vector_r GetCoulombFunctions(const vector_r &request) const;
+
+  /*!
+   * The box states of the potential of pair `pairKey` in the partial wave (l, 2J) (2J < 0: none; needed when the
+   * potential depends on J): the eigenvalues E_p (MeV, c.m.) in [eMin, eMax] of the radial equation inside `radius`
+   * (fm; <= 0: the pair's radius) with r u'/u = `boundary` at it, their node numbers and residues gamma_p^2 (MeV), the
+   * poles of the interior R-function (physics/ InteriorBoxStates; potential_background.md section 1).  Throws
+   * std::invalid_argument for no such pair, no potential, a J needed or impossible.
+   */
+  std::vector<azure2::physics::BoxState> GetPotentialBoxStates(int pairKey, int l, int twoJ, double radius,
+                                                               double boundary, double eMin, double eMax) const;
+  /*!
+   * The bound state of the potential of pair `pairKey` in (l, 2J) nearest to `energy` (MeV, c.m., < 0) within
+   * `window` (MeV): {found (1/0), E (MeV, c.m.), ANC (fm^-1/2, of the normalised state with the potential's own
+   * exterior)} (physics/ NearestEigenvalue, PotentialBoundStateANC).  The same throws as GetPotentialBoxStates.
+   */
+  std::vector<double> GetPotentialBoundState(int pairKey, int l, int twoJ, double energy, double window) const;
 
   /*!
    * External-capture integrals on a requested energy grid.

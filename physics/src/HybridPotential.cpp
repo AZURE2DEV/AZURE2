@@ -381,8 +381,10 @@ InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double 
   v.u = u[n_a].real();
   v.du_dr = ((u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr)).real();
   if (nodes) {
+    // sign changes between neighbouring nodes up to a; the interval (r_{n_a - 1}, a) included (a zero there is inside
+    // (0, a) unless u(a) = 0 exactly), which the count left out before 2026-11-20
     int n = 0;
-    for (int i = 2; i < n_a; ++i)
+    for (int i = 2; i <= n_a; ++i)
       if ((u[i].real() < 0.0) != (u[i - 1].real() < 0.0) && u[i].real() != 0.0) ++n;
     *nodes = n;
   }
@@ -398,7 +400,12 @@ double InteriorLogDerivative(const HybridPotential &p, int z1, int z2, double mu
 double InteriorRFunction(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                          double E_MeV, double boundary) {
   const InteriorValue v = IntegrateOutward(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
-  return v.u / (a_fm * v.du_dr - boundary * v.u);
+  const double denominator = a_fm * v.du_dr - boundary * v.u;
+  // Exactly on a pole (the denominator rounds to zero): the value one representable energy above, finite (|R| of
+  // order gamma_p^2 / (1e-16 E)) where the formula gives an infinity that the dressing turns into NaN (inf/inf).
+  if (denominator == 0.0)
+    return InteriorRFunction(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, std::nextafter(E_MeV, 1e300), boundary);
+  return v.u / denominator;
 }
 
 namespace {
@@ -427,8 +434,11 @@ std::vector<BoxState> InteriorBoxStates(const HybridPotential &p, int z1, int z2
     const double f1 = BoxCondition(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, boundary, E1);
     if ((f0 < 0.0) != (f1 < 0.0)) {
       double lo = E, hi = E1, flo = f0;
-      while (hi - lo > 1e-11) {
+      // to the last representable energy (the subtraction near E_p cancels to that precision; potential_background.md
+      // section 5.10): until the midpoint is one of the ends
+      while (true) {
         const double mid = 0.5 * (lo + hi);
+        if (!(mid > lo && mid < hi)) break;
         const double fm = BoxCondition(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, boundary, mid);
         if ((fm < 0.0) == (flo < 0.0)) {
           lo = mid;
@@ -475,12 +485,33 @@ std::vector<BoxState> SubtractedBoxStates(const HybridPotential &p, int z1, int 
   return named;
 }
 
+namespace {
+
+/// R_pot minus the named poles at E, the states given (no window).
+double SubtractedR(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                   double E_MeV, const InteriorBackground &bg, const std::vector<BoxState> &states) {
+  double R = InteriorRFunction(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, bg.boundary);
+  for (const BoxState &s : states) R -= s.gamma2_MeV / (s.E_MeV - E_MeV);
+  return R;
+}
+
+}  // namespace
+
 double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                    double E_MeV, const InteriorBackground &bg) {
-  double R = InteriorRFunction(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, bg.boundary);
-  if (bg.subtract_nodes.empty()) return R;
-  for (const BoxState &s : SubtractedBoxStates(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, bg)) R -= s.gamma2_MeV / (s.E_MeV - E_MeV);
-  return R;
+  if (bg.subtract_nodes.empty()) return InteriorRFunction(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, bg.boundary);
+  const std::vector<BoxState> states = SubtractedBoxStates(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, bg);
+  // Within kSubtractedPoleWindow_MeV of a subtracted pole R_pot and gamma_p^2/(E_p - E) cancel (at the pole both are
+  // infinite): R0 there is the straight line between its values at the window's edges (potential_background.md
+  // section 5.10: R0 is smooth through E_p; the line's error is (w^2/2) R0'' at most).
+  for (const BoxState &s : states)
+    if (std::fabs(E_MeV - s.E_MeV) < kSubtractedPoleWindow_MeV) {
+      const double e0 = s.E_MeV - kSubtractedPoleWindow_MeV, e1 = s.E_MeV + kSubtractedPoleWindow_MeV;
+      const double r0 = SubtractedR(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, e0, bg, states);
+      const double r1 = SubtractedR(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, e1, bg, states);
+      return r0 + (r1 - r0) * (E_MeV - e0) / (e1 - e0);
+    }
+  return SubtractedR(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, bg, states);
 }
 
 bool HasInteriorCapture(const HybridPotential &p) {
@@ -498,6 +529,24 @@ double InteriorCaptureIntegral(const HybridPotential &pi, int li, double two_l_d
                                const InteriorBackground &bg, const HybridPotential &pf, int lf, double two_l_dot_i_f,
                                double Ef_MeV, int z1, int z2, double mu_MeV, double a_fm,
                                const std::function<double(double r_fm)> &weight) {
+  // Near a subtracted pole the kernel is the line between its values at the window's edges, as R0 (BackgroundR).
+  for (const BoxState &s : SubtractedBoxStates(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, bg))
+    if (std::fabs(E_MeV - s.E_MeV) < kSubtractedPoleWindow_MeV) {
+      const double e0 = s.E_MeV - kSubtractedPoleWindow_MeV, e1 = s.E_MeV + kSubtractedPoleWindow_MeV;
+      const double k0 = InteriorCaptureKernelAt(pi, li, two_l_dot_i_i, e0, bg, pf, lf, two_l_dot_i_f, Ef_MeV, z1, z2,
+                                                mu_MeV, a_fm, weight);
+      const double k1 = InteriorCaptureKernelAt(pi, li, two_l_dot_i_i, e1, bg, pf, lf, two_l_dot_i_f, Ef_MeV, z1, z2,
+                                                mu_MeV, a_fm, weight);
+      return k0 + (k1 - k0) * (E_MeV - e0) / (e1 - e0);
+    }
+  return InteriorCaptureKernelAt(pi, li, two_l_dot_i_i, E_MeV, bg, pf, lf, two_l_dot_i_f, Ef_MeV, z1, z2, mu_MeV, a_fm,
+                                 weight);
+}
+
+double InteriorCaptureKernelAt(const HybridPotential &pi, int li, double two_l_dot_i_i, double E_MeV,
+                               const InteriorBackground &bg, const HybridPotential &pf, int lf, double two_l_dot_i_f,
+                               double Ef_MeV, int z1, int z2, double mu_MeV, double a_fm,
+                               const std::function<double(double r_fm)> &weight) {
   // The entrance and final waves on one grid: the step of IntegrateOutward is set by a and step_fm alone.
   if (pi.step_fm != pf.step_fm) throw std::invalid_argument("InteriorCaptureIntegral: the two potentials have different steps");
   const OutwardGrid gi = IntegrateOutwardGrid(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, E_MeV);
@@ -505,8 +554,7 @@ double InteriorCaptureIntegral(const HybridPotential &pi, int li, double two_l_d
   const int n = gi.n_a;
   const double h = gi.dr;
   // R_pot(E) as InteriorRFunction forms it (the same grid and difference): g_E(a) = R0, the background of the dressed waves
-  const InteriorValue vi = IntegrateOutward(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, E_MeV);
-  const double Rpot = vi.u / (a_fm * vi.du_dr - bg.boundary * vi.u);
+  const double Rpot = InteriorRFunction(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, E_MeV, bg.boundary);
   std::vector<double> g = NormalisedAtA(gi);
   for (double &x : g) x *= Rpot;
   for (const BoxState &s : SubtractedBoxStates(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, bg)) {
@@ -630,11 +678,15 @@ double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV
 }
 
 double BackgroundWFactor(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
-                         double a_fm, double E_MeV, double S_dressed) {
+                         double a_fm, double E_MeV) {
   const InteriorBackground *bg = BackgroundOf(p, l, two_j);
   if (!bg) return 1.0;
-  const double R0 = BackgroundR(ForPartialWave(p, l, two_j), z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, *bg);
-  return 1.0 / (1.0 + R0 * (S_dressed - bg->boundary));
+  const HybridPotential q = ForPartialWave(p, l, two_j);
+  const double R0 = BackgroundR(q, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, *bg);
+  // 1 - R0 (S - B) with the undressed S: the same number as 1/(1 + R0 (S~ - B)), without S~ - B, which near a pole of
+  // R0 is -1/R0 lost to rounding against B (2026-11-20, review)
+  const double S = HybridBoundShift(q, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, -E_MeV);
+  return 1.0 - R0 * (S - bg->boundary);
 }
 
 WavesAtRadius DressWaves(const WavesAtRadius &w, double rho, double R0, double B) {

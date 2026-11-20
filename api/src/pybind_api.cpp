@@ -559,6 +559,38 @@ class Session {
 
   // -- external region and caches --------------------------------------------
 
+  // The potential's box states and bound state (AZUREAPIChannelFunctions.cpp): dicts of plain values.
+  py::dict potential_box_states(int pair, int l, int two_j, double radius, double boundary, double e_min, double e_max) {
+    std::vector<azure2::physics::BoxState> states;
+    {
+      EngineCallScope engine;
+      states = api_->GetPotentialBoxStates(pair, l, two_j, radius, boundary, e_min, e_max);
+    }
+    std::vector<int> nodes;
+    std::vector<double> e, g2;
+    for (const azure2::physics::BoxState &b : states) {
+      nodes.push_back(b.nodes);
+      e.push_back(b.E_MeV);
+      g2.push_back(b.gamma2_MeV);
+    }
+    py::dict out;
+    out["nodes"] = nodes;
+    out["E"] = e;
+    out["gamma2"] = g2;
+    return out;
+  }
+  py::dict potential_bound_state(int pair, int l, int two_j, double energy, double window) {
+    std::vector<double> v;
+    {
+      EngineCallScope engine;
+      v = api_->GetPotentialBoundState(pair, l, two_j, energy, window);
+    }
+    py::dict out;
+    out["found"] = v[0] != 0.0;
+    out["E"] = v[1];
+    out["anc"] = v[2];
+    return out;
+  }
   py::array_t<double> coulomb_functions(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
@@ -754,7 +786,7 @@ PYBIND11_MODULE(_azure2, m) {
            "The options of the calculation in effect: {name: (value, source)}, source 'default', 'project' (the "
            "<config> key) or 'keyword' (given to the session).")
       .def("get_potential", &Session::get_potential, py::arg("pair"),
-           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step) for a pair.")
+           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius, spin_orbit [] or [V_so, R_so, a_so, on], matching_radius, step, waves) for a pair; waves: one dict per `wave` field (l, J, depth, width, background {boundary, subtract, capture_interior} or None, only_bound_state).")
       .def("update_data", &Session::update_data, py::call_guard<EngineCallScope>(),
            "Refill the data arrays; returns the number of segments.")
       .def("parameter_records", &Session::parameter_records,
@@ -858,6 +890,14 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa, PrecisionGuard(),
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, PrecisionGuard(), py::arg("request"))
+      .def("potential_box_states", &Session::potential_box_states, PrecisionGuard(), py::arg("pair"), py::arg("l"),
+           py::arg("two_j"), py::arg("radius"), py::arg("boundary"), py::arg("e_min"), py::arg("e_max"),
+           "The box states of a pair's potential in (l, 2J): {nodes, E (MeV c.m.), gamma2 (MeV)} "
+           "(AZUREAPI::GetPotentialBoxStates).")
+      .def("potential_bound_state", &Session::potential_bound_state, PrecisionGuard(), py::arg("pair"), py::arg("l"),
+           py::arg("two_j"), py::arg("energy"), py::arg("window"),
+           "The bound state of a pair's potential in (l, 2J) nearest an energy: {found, E (MeV c.m.), anc (fm^-1/2)} "
+           "(AZUREAPI::GetPotentialBoundState).")
       .def("jpi_block", &Session::jpi_block, PrecisionGuard(), py::arg("params"), py::arg("jgroup"),
            py::arg("excitation"),
            "One J^pi group (1-based) at every parameter value `params` on excitation energies E_x (MeV): its channel "

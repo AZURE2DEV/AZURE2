@@ -275,11 +275,15 @@ double DressShift(double S, double R0, double boundary);
 double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
                          double a_fm, double B_MeV);
 
-/// The factor that takes the decaying solution W~(a) of the partial wave (l, 2J) at E < 0 to the dressed one, from the
-/// dressed S~ (ChannelBoundShift): W~_d / W~ = 1 - R0 (S - B) = 1 / (1 + R0 (S~ - B)), Eq. (9) on a real wave; 1 for a
-/// wave without background.  The ANC <-> gamma factor of a level below threshold reads it.
+/// The factor that takes the decaying solution W~(a) of the partial wave (l, 2J) at E <= 0 to the dressed one:
+/// W~_d / W~ = 1 - R0 (S - B), S = a W~'/W~ undressed (HybridBoundShift), Eq. (9) on a real wave; 1 for a wave without
+/// background.  The ANC <-> gamma factor of a level below threshold and the closed-channel capture read it.
 double BackgroundWFactor(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
-                         double a_fm, double E_MeV, double S_dressed);
+                         double a_fm, double E_MeV);
+
+/// Half-width (MeV) of the window around a subtracted box pole inside which R0 and the capture kernel are the line
+/// between their values at the window's edges (potential_background.md section 5.10).
+constexpr double kSubtractedPoleWindow_MeV = 1e-3;
 
 /// The box states of bg.subtract_nodes (InteriorBoxStates, searched upward in windows of 25 MeV up to 200 MeV), in the
 /// order named; p as for IntegrateOutward.  Throws std::runtime_error when a named state is not found below 200 MeV.
@@ -307,6 +311,12 @@ const InteriorBackground *InteriorCaptureOf(const HybridPotential &p, int l, int
  * integral by Simpson's rule (the 3/8 rule on the last three intervals when their number is odd): O(h^4).
  */
 double InteriorCaptureIntegral(const HybridPotential &pi, int li, double two_l_dot_i_i, double E_MeV,
+                               const InteriorBackground &bg, const HybridPotential &pf, int lf, double two_l_dot_i_f,
+                               double Ef_MeV, int z1, int z2, double mu_MeV, double a_fm,
+                               const std::function<double(double r_fm)> &weight);
+
+/// InteriorCaptureIntegral at E without the window around a subtracted pole (its value at the window's edges).
+double InteriorCaptureKernelAt(const HybridPotential &pi, int li, double two_l_dot_i_i, double E_MeV,
                                const InteriorBackground &bg, const HybridPotential &pf, int lf, double two_l_dot_i_f,
                                double Ef_MeV, int z1, int z2, double mu_MeV, double a_fm,
                                const std::function<double(double r_fm)> &weight);
