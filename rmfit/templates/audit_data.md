@@ -27,6 +27,23 @@ an archived campaign and its `audit_*.py` scripts (reuse them).
    the file's resonance energies agree with the level scheme (ENSDF via `pyazr.nds.fetch_levels`).
 7. **Against the source**: re-fetch the EXFOR entry where one exists and compare values, units and error columns
    row by row; list files with no identifiable source.
+8. **Experimental effects, from the reference itself** (the evaluator 2026-11-19: "we need to do a careful job for each data
+   set that we enter to check the reference for experimental resolution, energy scale uncertainties and observable
+   systematic uncertainties and then use AZURE2's experimental effects capabilities to model them").  Read the
+   publication (local library and Box first: the `rclone-box-drive` skill; EXFOR alone is not enough) and record, per
+   set, with the page, table or equation it comes from:
+   - **detector geometry** (size, distance, angles) -> finite-geometry attenuation, Q_k coefficients;
+   - **target thickness and beam energy spread** -> target integration or beam-energy convolution (`<targetInt>`);
+     whether the quoted energies are beam or effective (mid-target) energies (the `azure2-target-energies` skill);
+   - **beam-energy calibration uncertainty** (and separate accelerators or runs) -> an energy shift with a penalty;
+   - **source of the absolute scale and its uncertainty** (an adopted reference cross section, a normalization to
+     another measurement) -> `dataNormError` in percent, and which sets share one scale;
+   - **whether the published values are already corrected** for each of these.
+   Write "not given in the reference" where it is not, never a silent default.  Report it as one table, a row per
+   set: effect | value from the reference (citation) | how the `.azr` treats it now | what modelling it would take.
+   Whether to add the effect to the fit stays the evaluator's decision.  In one archived capture fit all three
+   (Q-coefficients, a 9 keV energy error in the database copy, the absolute-scale anchor) were found only after
+   fitting.
 
 ## The model's segment table (from pyazr; key = `<segmentsData>` line counted from 1)
 
