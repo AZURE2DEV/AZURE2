@@ -43,3 +43,11 @@ bound-state shape of the interior capture only; potential_background.md section 
 widths (3/2⁻ at E_x = 8 MeV, Γ = 1 MeV; 1/2⁻ at 9 MeV, Γ = 2 MeV) and p-wave phase-shift extrapolations: `check.sh`
 section 7 compares it with the same levels without any potential (identical p waves), with the potential in the p
 waves (capture equal where that potential is negligible beyond a_c), the binding rule, and the record's round trips.
+
+**`models/subtract_level.azr.in`** (written by `make_subtract_level.py`): section 9's model at 4.87 fm with the s-wave
+box state of 2 nodes subtracted and put back as a 1/2⁺ level whose particle and photon amplitudes are the box state's
+(potential_background.md section 5.11); check.sh section 10 compares it with the unsubtracted model.
+
+**`models/e2m1.azr.in`**, **`data/reference_e2m1.csv`** (`make_reference_e2m1.py`): E2 and M1 (orbital) capture into
+VD's bound 0d5/2 state through the interior capture of the s1/2 and d3/2 waves, the final level's ANC 10⁻³ so that its
+own pole is negligible; check.sh section 11 (section 5.12).

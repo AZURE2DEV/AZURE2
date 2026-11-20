@@ -19,7 +19,10 @@
 #      the capture equals the one with the potential in the p waves where it is negligible beyond a_c (8 fm), the
 #      bound-state rule and note, and the record through --validate, --describe and pyazr;
 #   8. a narrow resonance of the background's potential: table on = table off = make_reference.py;
-#   9. capture through a closed entrance wave with a background, continuous through its threshold.
+#   9. capture through a closed entrance wave with a background, continuous through its threshold;
+#  10. a subtracted box pole put back as a level with the box state's particle and photon amplitudes reproduces the
+#      unsubtracted potential (capture and elastic);
+#  11. E2 and M1 through the interior capture against an independent calculation.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -280,6 +283,78 @@ else
   bad "capture through a closed background wave not continuous at its threshold: $lo2 $lo | $hi $hi2"
 fi
 grep -q "Could not\|ERROR" "$WORK/closed/run.log" && bad "closed_channel run: $(grep -m1 'ERROR' "$WORK/closed/run.log")"
+
+# ---- 10. subtract + capture end to end (potential_background.md section 5.11): the s-wave box state with 2 nodes of
+#          section 9's model at 4.87 fm (E_p = 7.59 MeV) subtracted and put back as a 1/2+ level whose particle and
+#          photon amplitudes are the box state's (models/subtract_level.azr.in, make_subtract_level.py: Brune's E_b and
+#          observed width from the formal (E_p, gamma_p, B_bg), the photon amplitude from the box state's overlap with
+#          the bound state by scipy) reproduces the unsubtracted model: capture into both states and the s-wave phase
+#          shift.  Without the level's photon widths, or without the level, it does not.
+ph='
+extrapolation ph_s
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              1/2
+    l              0
+    s              1/2
+    energies       list 0.1 0.5 1.0 2.0 3.0 4.0 5.0 6.0 7.0 7.5 7.59 8.0 9.0 MeV cm
+'
+addph() { awk -v ph="$ph" '/^<\/extrapolations>/ { printf "%s", ph } { print }' "$1"; }
+edited "$WORK/models/a487.azr" "$WORK/models/sub_U.azr" addph
+edited "$HERE/models/subtract_level.azr.in" "$WORK/models/sub_S.azr" addph
+edited "$WORK/models/sub_S.azr" "$WORK/models/sub_S0g.azr" awk '$1 == "0.5" && $2 == "1" && ($6 == "2" || $6 == "3") && NF >= 31 { $12 = "0" } { print }'
+edited "$WORK/models/sub_S.azr" "$WORK/models/sub_Snolev.azr" awk '$1 == "0.5" && $2 == "1" && NF >= 31 && $3 != "40" { $3 = "40"; $12 = "0" } { print }'
+for m in sub_U sub_S sub_S0g sub_Snolev; do run "$m" "$WORK/models/$m.azr" extrapolate 2 -- --no-ignore-externals; done
+phs() { awk 'NF >= 4 { print $1, $4 }' "$WORK/$1/output/AZUREOut_aa=1_R=1.extrap"; }
+dph="$(paste <(phs sub_U) <(phs sub_S) | awk 'NF == 4 { d = $2 - $4; if (d < 0) d = -d; if (d > m) m = d } END { if (NR != 13) print "x"; else printf "%.3g", m + 0 }')"
+if res="$(python3 -I "$HERE/compare.py" --spread "$WORK/sub_U" "$WORK/sub_S" --tol 1e-5 2>&1)" &&
+   awk -v d="$dph" 'BEGIN { exit !(d ~ /^[0-9.e+-]+$/ && d + 0 < 1e-4) }'; then
+  ok "subtract + its level = the unsubtracted potential: capture $res; s-wave phase to $dph deg"
+else
+  bad "subtract + its level against the unsubtracted potential: capture ${res:-}; s-wave phase ${dph:-}"
+fi
+if res="$(python3 -I "$HERE/compare.py" --spread "$WORK/sub_U" "$WORK/sub_S0g" --at-least 0.05 2>&1)" &&
+   res2="$(python3 -I "$HERE/compare.py" --spread "$WORK/sub_U" "$WORK/sub_Snolev" --at-least 0.05 2>&1)"; then
+  ok "the level carries the subtracted pole's capture: without its photon widths $res; without the level $res2"
+else
+  bad "without the level's photon widths or the level the capture should differ: ${res:-} ${res2:-}"
+fi
+
+# ---- 11. E2 and M1 through the interior capture (potential_background.md section 5.12): models/e2m1.azr.in, the
+#          final state VD's bound 0d5/2 state (d5/2 `only bound_state`), the s1/2 and d3/2 waves with capture interior;
+#          the photon pair's multipole E2 (s1/2 -> d5/2, d3/2 -> d5/2 through the interior, d5/2 -> d5/2 exterior
+#          only), then M1 (d3/2 -> d5/2 interior, d5/2 -> d5/2), orbital (the pair's g factors are 0).  The final
+#          level's ANC is 1e-3 fm^-1/2, so that its own pole in the d5/2 channel is negligible: the capture is then
+#          (1e-3/C)^2 times the independent calculation of make_reference_e2m1.py (data/reference_e2m1.csv, at the
+#          state's own ANC C).  Without capture interior on d3/2 (M1) or s1/2 (E2) it is not.
+cp "$HERE/models/e2m1.azr.in" "$WORK/models/e2.azr"
+edited "$WORK/models/e2.azr" "$WORK/models/m1.azr" awk '$27 == "10" && NF >= 31 { $8 = "2"; $31 = "2" } { print }'
+edited "$WORK/models/e2.azr" "$WORK/models/e2_nos.azr" sed 's/\(l 0 J 1\/2 depth 67.5 MeV background interior boundary 0.0\) capture interior$/\1/'
+edited "$WORK/models/m1.azr" "$WORK/models/m1_nod.azr" sed 's/\(l 2 J 3\/2 depth 66.0 MeV background interior boundary 0.0\) capture interior$/\1/'
+for m in e2 m1 e2_nos m1_nod; do run "$m" "$WORK/models/$m.azr" extrapolate 2 -- --no-ignore-externals; done
+e2m1() {  # e2m1 RUN COLUMN: the largest |sigma/sigma_ref - 1| over the energies, the reference scaled to the ANC 1e-3
+  python3 -I - "$HERE/data/reference_e2m1.csv" "$WORK/$1/output/AZUREOut_aa=1_R=2.extrap" "$2" <<'PY'
+import csv, re, sys
+lines = open(sys.argv[1]).read().split("\n")
+C = float(re.search(r"ANC = ([0-9.eE+-]+)", lines[0]).group(1))
+ref = {round(float(r["E_cm_MeV"]), 4): float(r[sys.argv[3]]) for r in csv.DictReader(l for l in lines if l and not l.startswith("#"))}
+got = {round(float(l.split()[0]), 4): float(l.split()[3]) for l in open(sys.argv[2]) if len(l.split()) >= 5}
+d = [abs(got[E] / (ref[E] * (1e-3 / C) ** 2) - 1.0) for E in ref if E in got]
+print(f"{max(d):.3e}" if len(d) == len(ref) else "missing")
+PY
+}
+d2="$(e2m1 e2 sigma_E2_b)"; d1="$(e2m1 m1 sigma_M1_b)"; n2="$(e2m1 e2_nos sigma_E2_b)"; n1="$(e2m1 m1_nod sigma_M1_b)"
+if awk -v a="$d2" -v b="$d1" 'BEGIN { exit !(a ~ /^[0-9.e+-]+$/ && b ~ /^[0-9.e+-]+$/ && a + 0 < 1e-4 && b + 0 < 1e-4) }'; then
+  ok "E2 and M1 with interior capture = make_reference_e2m1.py: largest relative difference E2 $d2, M1 $d1"
+else
+  bad "E2 ($d2) or M1 ($d1) with interior capture against make_reference_e2m1.py"
+fi
+if awk -v a="$n2" -v b="$n1" 'BEGIN { exit !(a ~ /^[0-9.e+-]+$/ && b ~ /^[0-9.e+-]+$/ && a + 0 > 1e-2 && b + 0 > 1e-2) }'; then
+  ok "without capture interior on s1/2 (E2) or d3/2 (M1) the reference is missed: E2 $n2, M1 $n1"
+else
+  bad "without capture interior the E2 ($n2) and M1 ($n1) references should be missed"
+fi
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))

@@ -1,0 +1,47 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+2.5 1 0 1 1 1 1 4 1 1 1 0.001 0.5 1 0 1 0 3.0160293 4.0026032 2 2 3.6804742644370187 3.6804742644370187 0 0 0.0 0 4.0 0 0 0
+2.5 1 0 1 1 2 5 4 1 1 1 0 1 1 2.5 1 0 0 7.0169292 0 4 3.6804742644370187 0 0 0 0.0 10 0 0 0 4
+
+0.5 1 40 1 1 1 1 0 2 1 1 0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 3.6804742644370187 3.6804742644370187 0 0 0.0 0 4.0 0 0 0
+0.5 1 40 1 1 2 5 4 2 1 1 0 1 1 2.5 1 0 0 7.0169292 0 4 3.6804742644370187 0 0 0 0.0 10 0 0 0 4
+
+1.5 1 40 1 1 1 1 4 3 1 1 0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 3.6804742644370187 3.6804742644370187 0 0 0.0 0 4.0 0 0 0
+1.5 1 40 1 1 2 5 4 3 1 1 0 1 1 2.5 1 0 0 7.0169292 0 4 3.6804742644370187 0 0 0 0.0 10 0 0 0 4
+
+</levels>
+<data>
+</data>
+<extrapolations>
+extrapolation gs
+    reaction       4He(h,g)7Be
+    quantity       sigma
+    unit           b
+    energies       list 0.5 1.0 2.0 4.0 MeV cm
+</extrapolations>
+<targets>
+</targets>
+<potentials>
+potential he3he4
+    pair            h+4He
+    coulomb_radius  3.095 fm
+    central         gaussian depth 67.5 MeV width 2.5200031651 fm
+    wave            l 0 J 1/2 depth 67.5 MeV background interior boundary 0.0 capture interior
+    wave            l 2 J 3/2 depth 66.0 MeV background interior boundary 0.0 capture interior
+    wave            l 2 J 5/2 depth 69.0 MeV only bound_state
+    matching_radius 15 fm
+    step            0.0275 fm
+</potentials>
