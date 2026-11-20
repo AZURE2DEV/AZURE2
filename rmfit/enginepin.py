@@ -68,6 +68,16 @@ def so_path(pyazr_dir):
     return cands[0] if cands else None
 
 
+def engine_so(azure2_root):
+    """The engine module the pyazr of ``azure2_root`` imports: ``pyazr/_azure2*`` first, else the one in
+    ``$PYAZR_ENGINE_DIR`` (a build configured with -DPYAZR_OUTPUT_DIR writes it there and pyazr appends that directory
+    to its package path, feature/upgrade 2026-11-17)."""
+    so = so_path(os.path.join(os.path.abspath(azure2_root), "pyazr"))
+    if not so and os.environ.get("PYAZR_ENGINE_DIR"):
+        so = so_path(os.environ["PYAZR_ENGINE_DIR"])
+    return so
+
+
 def keeps_close_levels(azure2_root=None):
     """Does this engine keep two same-J^pi levels with different level IDs apart when they are within 1 keV?
 
@@ -78,7 +88,7 @@ def keeps_close_levels(azure2_root=None):
     if azure2_root is None:
         from . import AZURE2_ROOT
         azure2_root = AZURE2_ROOT
-    so = so_path(os.path.join(os.path.abspath(azure2_root), "pyazr"))
+    so = engine_so(azure2_root)
     if not so:
         return False
     key = (so, os.path.getmtime(so))
@@ -98,7 +108,7 @@ def fingerprint(azure2_root=None, cli=None):
         azure2_root = AZURE2_ROOT
     root = os.path.abspath(azure2_root)
     pyazr_dir = os.path.join(root, "pyazr")
-    so = so_path(pyazr_dir)
+    so = engine_so(root)
     fp = {
         "azure2_root": root,
         "so": os.path.basename(so) if so else None,
@@ -110,6 +120,8 @@ def fingerprint(azure2_root=None, cli=None):
         "cli_md5": None,
         "python": sys.version.split()[0],
     }
+    if so and os.path.dirname(os.path.abspath(so)) != pyazr_dir:
+        fp["engine_dir"] = os.path.dirname(os.path.abspath(so))   # recorded only when outside pyazr/ (PYAZR_ENGINE_DIR)
     init_py = os.path.join(pyazr_dir, "__init__.py")
     if os.path.exists(init_py):
         with open(init_py) as fh:
@@ -160,9 +172,12 @@ def guard_lines_sh(recorded):
     root = recorded["azure2_root"]
     so = recorded.get("so") or "_azure2.cpython-312-x86_64-linux-gnu.so"
     md5 = recorded["so_md5"]   # (no quotes inside the f-strings: Python < 3.12 rejects them)
+    edir = recorded.get("engine_dir")
     return (f'export AZURE2_ROOT="{root}"\n'
             f'export PYAZR_ROOT="$AZURE2_ROOT"\n'
-            f'm=$(md5sum "$AZURE2_ROOT/pyazr/{so}" | cut -c1-32)\n'
+            + (f'export PYAZR_ENGINE_DIR="{edir}"\n'
+               f'm=$(md5sum "$PYAZR_ENGINE_DIR/{so}" | cut -c1-32)\n' if edir else
+               f'm=$(md5sum "$AZURE2_ROOT/pyazr/{so}" | cut -c1-32)\n') +
             f'if [ "$m" != "{md5}" ]; then\n'
             f'  echo "$(date) ENGINE PIN FAILED: $m != {md5} ({short(recorded)})"\n'
             f'  exit 1\n'
@@ -176,9 +191,12 @@ def guard_lines_csh(recorded):
                 "if (! $?AZURE2_ROOT) setenv AZURE2_ROOT ${HOME}/AZURE2\n")
     root = recorded["azure2_root"]
     so = recorded.get("so") or "_azure2.cpython-312-x86_64-linux-gnu.so"
+    edir = recorded.get("engine_dir")
     return (f"setenv AZURE2_ROOT {root}\n"
             f"setenv PYAZR_ROOT $AZURE2_ROOT\n"
-            f"set m = `md5sum ${{AZURE2_ROOT}}/pyazr/{so} | cut -c1-32`\n"
+            + (f"setenv PYAZR_ENGINE_DIR {edir}\n"
+               f"set m = `md5sum ${{PYAZR_ENGINE_DIR}}/{so} | cut -c1-32`\n" if edir else
+               f"set m = `md5sum ${{AZURE2_ROOT}}/pyazr/{so} | cut -c1-32`\n") +
             f"if (\"$m\" != \"{recorded['so_md5']}\") then\n"
             f"  echo \"`date` ENGINE PIN FAILED: $m != {recorded['so_md5']} ({short(recorded)})\"\n"
             f"  exit 1\n"
