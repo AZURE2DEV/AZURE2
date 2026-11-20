@@ -4,6 +4,50 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-background, research branch `feature/upgrade-9-potential-background`) — the interior R-function of a potential as an R-matrix background
+
+Side branch for the PI (not to be merged without his word). Design note and results: `docs/upgrade/potential_background.md`
+(status line at its top). Base `8aa3d8ed`.
+
+**What was built.** `physics/HybridPotential.h`: the regular solution integrated outward (the one Numerov recurrence,
+`NumerovNext`, now shared with the inward integration), R_pot = 1/(a u'/u − B), its box states (poles, residues,
+nodes), the background with named box states subtracted, the dressing of the waves at a_c (Eq. (9): a real map of
+determinant 1), the dressed S and ANC factor below threshold, a depth and a Gaussian width per partial wave. Record:
+`wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] [background interior boundary <B> [subtract <n>]]` in the `potential`
+record (`E_POTENTIAL_WAVE`). Engine: one place for the open channels, `CoulFunc::ChannelWaves` (P, S, S′, S″, the
+hard-sphere phase, the EC phases at a_c); `ShftFunc` and `ParticleChannelValues` below threshold; an EC final state in
+a background wave and the scattering-length threshold formula for an s wave with a background are refused. Off unless
+a `wave ... background` field is given; with no `wave` field the potential's key and every output are unchanged.
+
+**Tests.** `physics_potential_background` (closed forms 5e-9-8e-7, point Coulomb vs mpmath 3e-8, the identity U of
+the pure potential problem from R_pot + exterior = e^{2iδ} of scipy to 2.4e-7 for a_c = 3-6 fm, l = 0-3; S̃ continuous
+through threshold); `tests/potential_background/check.sh` (engine phase shifts = scipy's to 7e-6° at two radii; the
+potential's own bound state as a level with its pole subtracted restores the potential to 1e-4° at a_c = 4.0 and 5.5 fm;
+gradient 9e-10; threads); `experiment_build` cases. Every check passes.
+
+**Run.** Build `work/b-u9-potential-background`, 0 warnings. `ctest -LE slow -j4`: 394/397 on the first engine commit
+(repo_consistency: a check.sh awk bound, fixed; upgrade_predictions: lines of the new models, written; rmfit_enginepin:
+this machine, as in the director's runs); after the fixes the affected 28 tests, and after each later commit the
+physics, experiment and the new check, pass. `tests/run_tests.sh` (4 threads) on the final engine build: passed 186, failed 0.
+**Not run**: `ctest -L slow`, the GUI build (no `gui/` or `api/front/` change), the comparison of two engines (no output
+can move without a `wave` field: the potential's key and the arithmetic are unchanged; `run_tests` is the evidence).
+
+**Results (synthetic, ³He + ⁴He; EXFOR returned HTTP 403, so no measured data).** With no level in a partial wave the
+background removes the a_c dependence exactly; the model dependence moves to the choice of potential (five published
+potentials that fit the s-wave phase shifts give a₀ = 24.2-31.0 fm). With a free background pole, data at 0.7-4 MeV give
+a₀ = 27-43 fm over a_c = 3.5-6 fm (truth 31.0), and data from 2.5 MeV give 26.7-38.2 fm over fits that are all
+acceptable. A level on top of a wrong potential brings the a_c dependence back (and a near-threshold level leaves a₀
+undetermined: 28-180 fm along a flat χ² valley). The fitted 1/2⁺ and 5/2⁺ background poles follow the box poles of the
+potential's interior R-function (θ² 1.3-2.4, moving 2-3 MeV per 0.5 fm); none of the potentials has a 1/2⁺ or 5/2⁺
+resonance below E_c.m. = 15 MeV.
+
+**Open.** Interior direct capture (needed before a capture project can use the background; hence no S(0) result);
+the test on measured data; the depth as a fit parameter; pyazr/GUI forms; `LineWindow` with a background final state;
+the existing scattering-length formula ignores the hybrid exterior for every hybrid pair (pre-existing, not changed);
+the VD p₃/₂ depth binds at 1.455 MeV with the engine's masses, not the paper's 1.5866 MeV (cause not found).
+Research files (not in the repository): `work/u9-potential-background/` (scripts, runs, results, the driver
+`tools/potdrive.cpp` linked against the build's `libazure2_physics.a`).
+
 ## 2026-11-20 (director) — round 8 joined: the Physics tab, the polish, the Overview page, changes on disk
 
 Merged into `feature/upgrade-6` after `0bab4c51`: `feature/upgrade-8-physqt`, `-polish`, `-overview` (their entries

@@ -1,8 +1,11 @@
 # The interior of a potential as the background of an R-matrix channel
 
 **Status (2026-11-20): research, side branch `feature/upgrade-9-potential-background`; not for merge without the
-PI's word.** Sections 1-6 are the design; section 7 says what is built, section 8 gives the results, section 9 what
-is not done.
+PI's word.** Built and tested in the engine as an option that is off unless a `potential` record has a `wave ...
+background interior` field; no Sphinx page (the option is not for users yet; the field is listed, generated, in
+`reference/format3.rst`). Sections 1-6 are the design; 7 what is built and its tests; 8 the radius experiment
+(synthetic: EXFOR was not reachable); 9 what is not done; 10 the PI's questions on ³He + ⁴He (R_pot poles, resonances,
+the scattering length); 11 the recommendation; 12 the references and what was verified.
 
 A channel of a pair with a `potential` record takes its exterior functions (P, S, φ) from the radial equation with a
 nuclear potential acting between the channel radius a_c and the matching radius r_m (`hybrid_potential.rst`). This
@@ -28,8 +31,8 @@ origin, so the centrifugal term dominates there). Its logarithmic derivative at 
     ℓ(E) = a_c u_E'(a_c) / u_E(a_c)      (dimensionless),                                              (2)
 
 defines, for a boundary-condition constant B (dimensionless), the interior R-function of the potential (Lane and
-Thomas, Rev. Mod. Phys. 30 (1958) 257, section IV, single channel; Descouvemont and Baye, Rep. Prog. Phys. 73 (2010)
-036301, Eq. (2.13), where the same quantity is computed with a Lagrange mesh, "the calculable R-matrix"):
+Thomas, Rev. Mod. Phys. 30 (1958) 257, single channel; Descouvemont and Baye, Rep. Prog. Phys. 73 (2010) 036301,
+where the same quantity is computed with a Lagrange mesh, "the calculable R-matrix"):
 
     R_pot(E; a_c, B) = u_E(a_c) / [a_c u_E'(a_c) − B u_E(a_c)] = 1 / [ℓ(E) − B].                           (3)
 
@@ -39,14 +42,15 @@ box [0, a_c] with the condition a_c u'(a_c) = B u(a_c), and residues
 
     R_pot ≈ γ_p² / (E_p − E),   γ_p² = (ħ²/2μa_c) u_p(a_c)² / ∫₀^{a_c} u_p² dr  (MeV),                      (4)
 
-so that R_pot = Σ_p γ_p²/(E_p − E) exactly (Lane and Thomas, section IV; the box eigenfunctions are complete on
-[0, a_c]). Equation (4) follows from the energy derivative of (2), dℓ/dE = −(2μ a_c/ħ²) ∫₀^{a_c} u_E² dr / u_E(a_c)²
+so that R_pot = Σ_p γ_p²/(E_p − E) exactly (the box eigenfunctions are complete on [0, a_c]). Equation (4) follows from the energy derivative of (2), dℓ/dE = −(2μ a_c/ħ²) ∫₀^{a_c} u_E² dr / u_E(a_c)²
 (the Wronskian identity), which is negative: R_pot decreases between its poles like any R-function. The deep bound
 states of a cluster potential, Pauli-forbidden ones included, are among the E_p (section 4).
 
-Numerics: the Numerov integration of `IntegrateInward` (`physics/HybridPotential.h`) run outward, on the same grid (the
-step closest to `step` that puts a_c on a node), started from u(0) = 0 and u(h) = h^{l+1}; the derivative at a_c by the
-same five-point difference. One implementation of V(r) (`RadialPotential`) serves both directions.
+Numerics: the Numerov recurrence of `IntegrateInward` (`physics/HybridPotential.h`, one function `NumerovNext` for
+both directions) run outward on the same grid (the step closest to `step` that puts a_c on a node), started from
+u(0) = 0 and u(h) = h^{l+1}, with the limit of g u at the origin where it is not zero (l = 1; l = 0 with a point
+charge); the derivative at a_c by the same five-point difference. One V(r) (`RadialPotential`) serves both directions.
+Accuracy O(h⁴): 7.5·10⁻⁷ relative for a 40-MeV well at Kh = 0.05 (section 7.2).
 
 ## 2. Where the background enters the engine's R-matrix
 
@@ -92,7 +96,11 @@ R⁰ = 1/(ℓ − B) depends on B, and the split R = R_L + R⁰ is not invariant
 of the sum is not the sum of the transforms. B is therefore a number of the background, B_bg, stated in the record,
 not the channel's boundary condition of the levels. Once B_bg is fixed, L̃⁰ + B_bg ≡ ℒ(E) is a function of E alone,
 and the levels on top see ℒ exactly as they see the exterior log-derivative without a background: the usual
-B-invariance of R-matrix theory holds for the level part with ℒ in place of L. In particular
+B-invariance of R-matrix theory holds for the level part with ℒ in place of L. Below threshold the same map acts on
+the decaying solution W̃: S̃ = B_bg + (S − B_bg)/(1 − R⁰(S − B_bg)) and W̃_d(a_c) = W̃(a_c)(1 − R⁰(S − B_bg)), which
+continue P̃, S̃ analytically (S̃ is continuous through E = 0, section 7.2); the ANC ↔ γ factor of a level below
+threshold uses W̃_d. At a bound state of the potential itself 1 − R⁰(S − B_bg) = 0: W̃_d vanishes, and a level placed
+there with Brune's parameters gets γ = 0 (section 3). In particular
 
 - **Brune's parameters** (Brune, Phys. Rev. C 66 (2002) 044611), the engine's default: the level matrix of
   `fill_level_matrix` reads S_c(E), S_c(E_λ), the chord between two levels and P_c(E); with the background these are
@@ -132,7 +140,12 @@ would count it twice. Two rules, each stated in the record:
    level (for instance a potential fitted to the non-resonant part of the phase shift). No subtraction; the level
    carries the whole resonance.
 
-Rule 1 is what the record does when it names `subtract`; rule 2 is the user's choice of depth. A pole that is not
+Rule 1 is what the record does when it names `subtract`; rule 2 is the user's choice of depth. Rule 1 is checked
+exactly (section 7.2): the potential's own p₃/₂ bound state, put on top of the p₃/₂ background as a level at its
+energy and ANC with its box pole subtracted, restores the potential's phase shifts to 10⁻⁴° at a_c = 4.0 and 5.5 fm,
+while its formal γ is 1.37 and 0.57 MeV^½: the observed parameters are radius-independent, the formal ones are not.
+Without the subtraction, a level at a bound state the background already holds gets γ = 0 in Brune's basis (W̃_d
+vanishes there), so this double counting is harmless; a level at another energy is not. A pole that is not
 subtracted and lies close to a fitted level makes two poles of nearly equal energy in the channel: the fit then trades
 widths between them and their observed parameters are not separately determined. The engine does not detect this.
 
@@ -148,8 +161,9 @@ solution inside a_c and hence ℓ(E) at the energies of the data (Levinson's the
 They are not subtracted (they are no fitted level) and they are not physical states of ⁷Be: nothing in the engine
 reads them as levels. The physical bound states (1p) are poles of R_pot at energies near −1.59 and −1.16 MeV (for a
 B_bg near S there); a project that fits them as levels must subtract them (rule 1) or leave the p wave without
-background. In this branch the background is refused in a partial wave that the project uses below threshold (section
-6), so the p wave of ⁷Be is not given one.
+background. For the potential VD the bound forbidden states lie at E_x = −33.0 (0s), −4.6 (1s), −2.1 and −1.0 MeV
+(0d, 5/2⁺ and 3/2⁺); in a box of a_c ≈ 4 fm the 0d states appear as poles of R_pot 1-4 MeV below threshold with
+θ² ≈ 0.3-0.9 (section 10.1): near threshold, not distant.
 
 ## 5. Capture
 
@@ -170,41 +184,372 @@ direct capture from those partial waves. This is the main limit for S(0) (sectio
 
 ## 6. Scope, parameters, validity
 
-- **Channels**: particle channels of a hybrid pair (a pair with a `potential` record), above threshold. The background
+- **Channels**: particle channels of a hybrid pair (a pair with a `potential` record); tested on single-channel elastic
+  partial waves (the entrance channel of a capture reaction is the next case). The background
   is per partial wave (l, and J where the potential depends on J), on the diagonal; with one spinning particle the
   channel spin is fixed by (l, J) and the background is diagonal in the channels (as the spin-orbit term,
-  `spin_orbit_potential.md` §2.2). A partial wave with a background is refused if the project evaluates it below
-  threshold (a level of the block below the pair's threshold, a closed channel, an external-capture final state): the
-  dressed Whittaker functions of section 4 are not built.
+  `spin_orbit_potential.md` §2.2). Below threshold the shift function and the ANC factor are dressed (section 2.2); an
+  external-capture final state in a background partial wave is refused (section 5).
 - **What is fixed and what is fitted**: the potential (depth per partial wave, range, R_C) and B_bg are fixed numbers of
   the record; the levels on top are fit parameters as usual. The engine has no potential parameter in the fit vector
   (decided 2026-11-10, `spin_orbit_potential.md` §6 Q7): a depth is fitted by a scan with refits (a profile), which is
   what section 8 does. The gradient of the levels is unchanged (the background changes channel functions, which the
   adjoint reads as constants of the parameters).
-- **J-dependent depths**: published cluster potentials for ³He + α use a depth per (l, J) (Dubovichenko, arXiv:1006.4944,
-  Table 3.1). The record therefore takes a depth per partial wave, which acts in both halves (interior and exterior),
-  so that one potential gives both.
+- **Partial-wave dependent potentials**: published cluster potentials for ³He + α use a depth (and some a Gaussian
+  range) per (l, J) (Dubovichenko, arXiv:1006.4944, Table 3.1; Tursunov et al., Tables I and II). The record takes
+  both per partial wave (`wave ... depth ... width ...`), acting in both halves, so that one potential gives both.
 - **Validity**: the identity (2.3) is exact for the pure potential problem. With levels, R_L + R⁰ is a model: the
   potential describes the non-resonant interior, the levels what the potential lacks. The a_c dependence that remains
   comes from the levels and from the missing interior capture; it is measured in section 8.
 
 ## 7. What is built
 
-### 7.1 Code
+### 7.1 Code (branch `feature/upgrade-9-potential-background`)
 
-- `physics/HybridPotential.h`: `InteriorSolution` (outward Numerov, the value and derivative at a_c),
-  `InteriorRFunction` (Eq. (3)), `InteriorBoxStates` (eigenvalues E_p, residues γ_p², node numbers, Eq. (4)),
-  `BackgroundR` (R⁰ with subtraction), `DressWaves` (Eq. (9)).
-- (engine and record: see the status line and HANDOFF)
+- `physics/HybridPotential.h`: `IntegrateOutward` (the inward integration's Numerov recurrence, now one function
+  `NumerovNext` for both directions; the regular start u(h) = h^{l+1} with the limit of g u at the origin for l = 1
+  and for a point charge), `InteriorLogDerivative`, `InteriorRFunction` (Eq. (3)), `InteriorBoxStates` (E_p, γ_p²,
+  node numbers, Eq. (4)), `BackgroundR` (R⁰ with the named box states subtracted), `DressWaves` (Eq. (9)),
+  `DressShift` and `ChannelBoundShift` (S̃ below threshold), `BackgroundWFactor` (the ANC factor below threshold),
+  `PartialWave` (a depth, a Gaussian width and a background per (l, J)), `ForPartialWave`, `BackgroundOf`,
+  `DependsOnJ`, `BelowThresholdPotential`.
+- The record: `wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] [background interior boundary <B> [subtract <n>]]`,
+  repeatable, in the `potential` record (`experiment/src/Schema.cpp`, `BuildPotentials.cpp`; refusals
+  `E_POTENTIAL_WAVE`). Absent: no change, the potential's key is the old one.
+- The engine, one place for the open channels: `CoulFunc::ChannelWaves`, the waves at a_c dressed by Eq. (9), read by
+  P, S (hence S′, S″), the hard-sphere phase and the two phases of `ECIntegral`; the integrands at r > a_c read the
+  undressed waves. Below threshold: `ShftFunc` (S̃) and `ParticleChannelValues` (the ANC factor). J enters the keys when
+  a `wave` names a J (`PPair::SpinOrbitTwoJ`). Refused: an external-capture final state in a background partial wave
+  (set-up), and the threshold formula of the scattering length for an s wave with a background
+  (`scatteringLengths.out` says "not computed"; a `scattering_length` datum stops the run).
+- The gradient: the background changes channel functions, which the adjoint reads as constants of the parameters; the
+  analytic gradient of the levels is therefore unchanged and correct (checked, 7.2). The potential's numbers are not fit
+  parameters (as for the hybrid potential, `spin_orbit_potential.md` §6 Q7): a depth is fitted by a scan.
 
-### 7.2 Tests
+### 7.2 Tests and their numbers
 
-(filled in with the numbers)
+`physics_potential_background` (ctest; `physics/tests/potential_background_test.cpp`, references
+`physics/tests/data/make_potential_background_reference.py`: scipy DOP853 and mpmath, not the engine):
+
+| check | against | result |
+|---|---|---|
+| zero potential, l = 0-3, a = 3, 5 fm, E = 0.5, 4, −2 MeV | Riccati-Bessel closed forms; R = tan(ka)/(ka) | 4.9·10⁻⁹ relative |
+| constant well −40 MeV over the interior, l = 0-3 | ĵ_l(Ka) | 7.5·10⁻⁷ (Numerov at Kh = 0.05) |
+| point-Coulomb interior, ³He + ⁴He, l = 0-3 | mpmath `coulombf` | 2.7·10⁻⁸ |
+| box states of the zero potential; residues of the deep Gaussian | closed form; (ħ²/2μa) u(a)²/∫u² | 7.9·10⁻⁶ |
+| **the identity**: U of a channel without levels from R_pot at a_c = 3, 4, 5, 6 fm plus the potential's exterior, l = 0-3, E = 0.5-4 MeV, B_bg = 0, −2 | e^{2iδ}, δ by DOP853 to 15 fm | **2.4·10⁻⁷** (Eq. (7) and through the dressed waves); with the Coulomb exterior instead it misses by ≥ 1.25·10⁻³ |
+| S̃ through threshold (s wave, background) | the dressed open S̃ at +1 keV | 1.7·10⁻³ over 1 keV |
+
+`tests/potential_background/check.sh` (the engine, ³He + ⁴He with the potential VD of section 10 in seven partial waves):
+phase shifts with the background and no levels equal scipy's to 6.8·10⁻⁶° at a_c = 3.5 fm (B_bg 0) and 5.0 fm (B_bg −1),
+and each other to 1.1·10⁻⁶°; without the background the s wave misses by 7.8°; the potential's own p₃/₂ bound state
+put on top as a 3/2⁻ level (its box pole subtracted, at its energy E_c.m. = −1.4549 MeV and ANC 4.0932 fm⁻¹ᐟ² from
+scipy) restores the potential to 9.3·10⁻⁵° (4.0 fm) and 3.1·10⁻⁵° (5.5 fm) with formal γ = 1.374 and 0.566 MeV^½, and
+without the subtraction the level gets γ = 0 (W̃_d(a_c) vanishes at a bound state the background already holds);
+`AZURE_GRAD_CHECK` 8.6·10⁻¹⁰; 1 and 3 threads identical; `scatteringLengths.out` refuses the s wave. Plus the record's
+cases in `experiment_build`. With no `wave` field nothing moves: `ctest -LE slow` and `tests/run_tests.sh` (HANDOFF).
 
 ## 8. The radius experiment
 
-(filled in)
+**Data.** EXFOR could not be reached from this machine (`pyazr.sources.nds`: HTTP 403 from the IAEA server for the
+search and for a direct fetch, 2026-11-20), so no measured data set was used. The experiment is synthetic: the
+"truth" is the potential VD (section 10) of the ³He + α s and d₅/₂ waves, its phase shifts at E_c.m. = 0.7-4.0 MeV in
+steps of 0.1 MeV (34 points per wave) the data, with errors of 0.5° and no noise. Its own a₀ = 30.95 fm. The fits
+(engine, Brune basis, MIGRAD) at a_c = 3.5-6.0 fm:
 
-## 9. Not done
+- (a) Coulomb exterior, one 1/2⁺ background pole, E_x and Γ free (start 8 MeV) -- the usual treatment;
+- (a8) the same with E_x fixed at 8 MeV;
+- (b) the s wave of a published potential in both halves, no level: VD (the truth), VDa, VDb, VM1a, VM2a;
+- (b+) (b) with VM1a plus a 1/2⁺ level below threshold, E_x on a grid (−3 to 1.55 MeV; the engine keeps a bound
+  level's energy fixed in a fit), its ANC free.
 
-(filled in)
+a₀ and r₀ from the Coulomb-modified effective-range function of the fitted phase shifts (section 10.4); for (a) the
+engine's threshold formula gives the same a₀ to 5·10⁻³ fm (a check of the two routes against each other). Run time:
+a fit 0.04-0.13 s; an evaluation with the background as without it (28 phase shifts in seven waves: 0.012 s against
+0.013 s for the run), with a subtracted pole 10 times slower (0.137 s: the box state is searched at every energy).
+
+**Table 8.1** -- s wave (1/2⁺), a₀ (fm) / r₀ (fm) / χ² (34 points):
+
+| a_c (fm) | 3.5 | 4.0 | 4.5 | 5.0 | 5.5 | 6.0 |
+|---|---|---|---|---|---|---|
+| (a) free pole: E_x (MeV) | 12.22 | 13.10 | 11.04 | 8.70 | 6.94 | 5.72 |
+| (a) free pole: Γ (MeV), θ² | 9.4, 0.79 | 19.7, 1.79 | 20.4, 2.32 | 16.2, 2.41 | 11.9, 2.30 | 8.6, 2.11 |
+| (a) a₀ / r₀ / χ² | 27.4 / 0.978 / 3.8 | 28.3 / 0.969 / 1.7 | 29.3 / 0.958 / 0.35 | 31.2 / 0.940 / 0.46 | 35.1 / 0.917 / 8.6 | 42.9 / 0.907 / 49 |
+| (a), data from 2.5 MeV (16 points) | 26.7 / 0.975 / 0.18 | 27.6 / 0.968 / 0.07 | 29.0 / 0.957 / 0.005 | 31.8 / 0.943 / 0.07 | 38.2 / 0.936 / 0.81 | 51.9 / 0.970 / 4.1 |
+| (a8) pole at 8 MeV: a₀ / χ² | 31.5 / 224 | 37.0 / 651 | 39.8 / 627 | 36.1 / 92 | 21.0 / 517 | 159 / 6.5·10⁵ |
+| (b) VD (truth) | 30.95 / 0.929 / 0 | = | = | = | = | = |
+| (b) VM2a | 29.42 / 0.896 / 20.3 | = | = | = | = | = |
+| (b) VM1a | 25.90 / 0.872 / 113 | = | = | = | = | = |
+| (b) VDa | 25.32 / 0.893 / 1037 | = | = | = | = | = |
+| (b) VDb | 24.23 / 0.920 / 810 | = | = | = | = | = |
+| (b+) VM1a + level, best E_x on the grid | 1.55: 80 / −1.19 / 39.9 | 1.55: 101 / −1.18 / 32.9 | 1.55: 129 / −1.09 / 26.2 | 1.5: 102 / −0.48 / 19.4 | 0.0: 38.0 / 0.80 / 12.6 | −3.0: 38.4 / 0.86 / 9.9 |
+| (b+) VM1a + level at E_x = 0.5 MeV | 29.8 / 50.3 | 31.2 / 42.2 | 32.9 / 33.4 | 35.8 / 22.3 | 40.9 / 12.7 | 47.9 / 16.2 |
+
+("=": the same to all digits shown: a channel without levels does not depend on a_c, section 2.3.)
+
+**Table 8.2** -- 5/2⁺ wave, the background pole (E_x, Γ, θ²; χ² of 34 points):
+
+| a_c (fm) | 3.5 | 4.0 | 4.5 | 5.0 | 5.5 | 6.0 |
+|---|---|---|---|---|---|---|
+| (a) E_x free | 17.6, 32.7 MeV, 2.99; 0.07 | 14.8, 24.6, 2.75; 0.05 | 12.8, 20.3, 2.72; 0.02 | 11.2, 17.0, 2.71; 0.002 | 9.7, 14.2, 2.68; 0.14 | 8.5, 11.7, 2.62; 1.0 |
+| (a) E_x = 12 MeV fixed | 11.0 MeV, 1.52; 1.6 | 13.6, 1.88; 1.7 | 16.9, 2.41; 0.51 | 21.0, 3.12; 1.6 | 25.9, 4.06; 34 | 32.1, 5.31; 203 |
+| VD's R_pot pole (B = 0), for comparison | 24.2, 1.39 | 16.7, 1.49 | 12.6, 1.57 | 10.1, 1.61 | 8.6, 1.63 | 7.6, 1.64 |
+| (b) VD background | χ² = 0 at every a_c, no pole | | | | | |
+
+![a₀ and χ² against a_c](figures/potential_background_radius_scan.png)
+
+*Figure 8.1.* Left: a₀ from the fitted s-wave phase shifts against a_c; dotted: the truth (30.95 fm). Right: χ² of the
+same fits (34 points, 0.5° errors; (b) VD is 0 and drawn at 10⁻⁶). Made by `work/u9-potential-background/scripts/
+figure.py` from `results/radius_scan.json` and `results/window.json`.
+
+**What the numbers say.**
+
+1. **(b) removes the radius dependence exactly**, for a partial wave the potential describes alone: χ² and a₀ are the
+   same at every a_c (to all digits printed), as the identity says. What replaces the radius as the model choice is the
+   *potential*: five published potentials that "reproduce the phase shifts" (Tursunov et al.) give a₀ = 24.2-31.0 fm
+   and χ² from 0 to 1037 against the same 34 points. The radius dependence is converted into a dependence on the
+   potential's shape; it does not disappear.
+2. **(a) with a free pole** fits acceptably (χ² ≤ 2) for a_c = 4.0-5.0 fm and gives a₀ = 28.3-31.2 fm there (truth
+   31.0); over 3.5-5.5 fm, 27.4-35.1. With the data starting at 2.5 MeV all of 3.5-5.5 fm fit (χ² ≤ 0.8 for 16 points)
+   and a₀ spans **26.7-38.2 fm** (51.9 at 6 fm with χ² = 4.1): the data above threshold do not fix a₀; the radius
+   does. A fixed pole at 8 MeV (a8) does not fit these data at any radius but 5 fm (χ² = 92).
+3. **(b+) a level on top of a wrong potential** does not restore the a_c independence: with a sub-threshold level on top
+   of VM1a, χ² falls from 113 to 10-40, but the χ² valley runs along the level's energy, and a₀ moves along it from
+   28 to 180 fm while χ² changes by 20-30 % (Table 8.1 last rows; at a_c ≤ 5 fm the best grid point sits at the
+   threshold, where a₀ is unbounded and r₀ turns negative). With the level at E_x = 0.5 MeV, a₀ varies with a_c from 29.8
+   to 47.9 fm, more than in (a). A level on top brings the radius dependence back, because the split between the level
+   and the background is again a_c-dependent.
+4. **The fitted background poles are the potential's box poles.** The free 1/2⁺ pole of (a) sits at E_x = 13.1, 11.0,
+   8.7 MeV for a_c = 4.0, 4.5, 5.0 fm, close to VD's R_pot pole (16.9, 11.6, 8.5 MeV at B = 0, section 10.1), and the
+   free 5/2⁺ pole at 14.8, 12.8, 11.2 MeV against 16.7, 12.6, 10.1 MeV; both have θ² = 1.8-3 and move by 2-3 MeV per
+   0.5 fm. They are what a finite R-matrix needs to represent the potential's interior, not levels.
+5. **Cost and failures.** The option costs no measurable time without subtraction and 10× per evaluation with it. A
+   level on top fitted with a free energy wandered to E_x ≈ −1.4·10⁵ MeV in three of six fits started at 13 MeV (VM1a)
+   and stayed at zero width in the others (Brune's transformation with the dressed S̃ gives a flat χ² for a level above
+   the data); a level below threshold had to be scanned by hand. The background has no free parameter in the engine;
+   fitting the depth means a scan with refits.
+
+## 9. Not done, and limits
+
+- **Measured data.** EXFOR was not reachable (HTTP 403); every result of section 8 is synthetic. The real test
+  (elastic cross sections, e.g. the SONIK data, and the capture S factor) is open.
+- **Capture.** The interior part of the direct capture (section 5) is not built, and an external-capture final state in
+  a background wave is refused. Hence no S(0) against a_c was computed: with the s- and d-wave backgrounds and no
+  interior capture, S(0) would miss the interior contribution that the background poles' γ widths carry today.
+- **The potential's numbers are not fit parameters**; a depth is a scan.
+- **A level's energy below threshold** is held fixed by the engine in a fit (as for any bound level); the (b+) fits
+  scanned it.
+- **`LineWindow`** (an unbound final state's line shape) reads the raw waves at a_c with the dressed P and S; a
+  background on such a final state's partial wave is not refused there. Not tested.
+- **The scattering-length threshold formula** (`ScatteringLength.cpp`) uses the point-Coulomb functions at a_c for
+  every pair, also for a hybrid pair *without* a background: for such a pair its a₀ is that of the R-matrix with a
+  Coulomb exterior, not of the hybrid model. Existing behaviour, not changed here (it would move the outputs of
+  `tests/hybrid_potential` and T3); refused only for the new background.
+- **Two spinning particles** in a background wave: as the spin-orbit term, only one spinning particle is supported
+  (the background is diagonal in the channels then); not checked against a coupled case.
+- **No web UI / Qt form, no pyazr keyword** beyond the record (pyazr edits it as any record), no Sphinx page: the
+  option is research.
+- The VD p₃/₂ depth of Tursunov et al. binds the 1p state at 1.455 MeV with the engine's atomic masses and e² = αħc,
+  not at the paper's 1.5866 MeV; scipy and the engine agree on 1.4549 MeV. The cause (masses, ħ²/2u = 20.7343 MeV fm²
+  of the paper, R_C, a transcription) was not found.
+
+## 10. The PI's questions on ³He + ⁴He (2026-11-20)
+
+All numbers of this section are computed with the branch's `physics/HybridPotential.h` (the box states of section 1,
+the outward integration to 15 fm for the phase shifts) through a driver outside the repository
+(`work/u9-potential-background/tools/potdrive.cpp`, `scripts/potentials.py`; the phase shifts agree with scipy's
+DOP853 to 2·10⁻⁷ rad, `physics_potential_background`). Potentials: the Gaussian set of Tursunov, Turakulov and
+Kadyrov, Phys. Rev. C 97 (2018) 035802 (arXiv:1707.05948v3, Tables I and II, read from the paper):
+V(r) = −V₀ exp(−α r²) + V_C(r), R_C = 3.095 fm, with
+
+| potential | s₁/₂: V₀ (MeV), α (fm⁻²) | other waves | remark |
+|---|---|---|---|
+| VD (Dubovichenko, Phys. At. Nucl. 73 (2010) 1526) | 67.5, 0.15747 | p₁/₂ 81.815179, p₃/₂ 83.589554, d₃/₂ 66.0, d₅/₂ 69.0, f₅/₂ 75.9, f₇/₂ 84.8; α = 0.15747 | deep: two forbidden s states, one forbidden p and d state |
+| VDa | 77.0, 0.180 | as VD | |
+| VDb | 130.0, 0.365 | as VD | narrow and deep |
+| VM1a | 50.0, 0.109 | as VD (s wave only differs) | the shallowest s wave of the set |
+| VM2a | 54.0, 0.120 | as VD | |
+
+All five reproduce the measured s-wave phase shifts to the paper's satisfaction (its section III.A); they differ at
+low energy, which is what a₀ measures. Masses here are the atomic masses of the projects (3.0160293 u, 4.0026032 u),
+not the paper's nuclear masses and ħ²/2u = 20.7343 MeV fm²: the phase shifts and a₀ below are of these potentials
+with the engine's masses, not a reproduction of the paper's numbers. No published *shallow* ³He + α potential
+without forbidden states was found and checked; VM1a (V₀ = 50 MeV) is the shallowest of the set, still with two
+forbidden s states (their box energies are in the table below).
+
+### 10.1 Poles of R_pot in the 1/2⁺, 3/2⁺ and 5/2⁺ partial waves
+
+The lowest pole above threshold of R_pot(E; a_c, B) (Eq. (3)), as E_x in ⁷Be (MeV; threshold 1.5866 MeV), with
+θ² = γ_p²/γ_W², γ_W² = ħ²/(μ a_c²) in parentheses:
+
+| J^π | potential | B | a_c = 3.5 | 4.0 | 4.2 | 4.5 | 5.0 | 5.5 | 6.0 fm |
+|---|---|---|---|---|---|---|---|---|---|
+| 1/2+ | VD | +0 | 26.2 (1.31) | 16.9 (1.43) | 14.4 (1.48) | 11.6 (1.55) | 8.5 (1.62) | 6.7 (1.66) | 5.6 (1.65) |
+| 1/2+ | VD | -1 | 28.7 (1.20) | 18.9 (1.28) | 16.3 (1.30) | 13.3 (1.33) | 10.0 (1.35) | 7.9 (1.34) | 6.6 (1.32) |
+| 1/2+ | VM1a | +0 | 31.6 (1.19) | 20.5 (1.29) | 17.5 (1.33) | 13.9 (1.39) | 9.9 (1.50) | 7.4 (1.58) | 5.9 (1.63) |
+| 1/2+ | VM1a | -1 | 33.9 (1.12) | 22.4 (1.19) | 19.2 (1.21) | 15.5 (1.25) | 11.2 (1.30) | 8.6 (1.33) | 6.9 (1.34) |
+| 1/2+ | VDb | +0 | 19.4 (1.61) | 13.3 (1.69) | 11.7 (1.71) | 9.8 (1.72) | 7.7 (1.72) | 6.3 (1.69) | 5.3 (1.66) |
+| 1/2+ | VDb | -1 | 22.3 (1.37) | 15.6 (1.39) | 13.8 (1.39) | 11.7 (1.38) | 9.2 (1.36) | 7.5 (1.33) | 6.3 (1.30) |
+| 3/2+ | VD | +0 | 25.7 (1.38) | 17.9 (1.47) | 15.8 (1.51) | 13.5 (1.55) | 10.8 (1.61) | 9.1 (1.65) | 7.9 (1.67) |
+| 3/2+ | VD | -2 | 30.6 (1.09) | 21.8 (1.10) | 19.4 (1.10) | 16.6 (1.09) | 13.4 (1.08) | 11.3 (1.06) | 9.7 (1.05) |
+| 5/2+ | VD | +0 | 24.2 (1.39) | 16.7 (1.49) | 14.8 (1.53) | 12.6 (1.57) | 10.1 (1.61) | 8.6 (1.63) | 7.6 (1.64) |
+| 5/2+ | VD | -2 | 29.2 (1.09) | 20.7 (1.09) | 18.4 (1.09) | 15.7 (1.08) | 12.7 (1.06) | 10.7 (1.04) | 9.3 (1.02) |
+
+(γ_W² = ħ²/(μ a_c²) with ħ²/μ = 24.303 MeV fm²: 1.38 MeV at 4.2 fm. The full list, deep poles included:
+`work/u9-potential-background/results/potentials.json`.)
+
+Below threshold every partial wave has the poles of its forbidden states: for VD at a_c = 4.2 fm, B = 0, the s wave
+at E_x = −33.0 MeV (0s, γ² = 0.008 MeV) and −6.4 MeV (1s, γ² = 1.00 MeV), the 3/2⁺ and 5/2⁺ waves at −2.3 and
+−3.4 MeV (0d, θ² = 0.57 and 0.52). (The bound forbidden states of the potential itself, in a 12-fm box: VD 1s at
+E_x = −4.60 MeV, 0d at −2.09 (5/2⁺) and −0.99 MeV (3/2⁺).)
+
+What the table says:
+1. The potential's interior R-function has a pole in each of these partial waves in the region where fits put the
+   1/2⁺ and 5/2⁺ background poles: at the radii people use (a_c ≈ 4.0-4.5 fm, B = 0) the 5/2⁺ pole of VD is at
+   E_x = 12.6-16.7 MeV and the 1/2⁺ pole at 11.6-16.9 MeV; the PI's 5/2⁺ at 12 MeV corresponds to a_c ≈ 4.5 fm, his
+   1/2⁺ at 8 MeV to a_c ≈ 5.0 fm (VD), 5.0-5.2 fm (VM1a) or 4.8 fm (VDb).
+2. They are broad: θ² = 1.3-1.7 with B = 0 (1.1-1.4 with B = −l), i.e. single-particle box states, as distant levels
+   are.
+3. They move fast with a_c: about −7 MeV per fm around 4.5 fm (1/2⁺ VD: 16.9, 11.6, 8.5 MeV at 4.0, 4.5, 5.0 fm),
+   roughly as a_c⁻², and by 1.5-4 MeV with B (0 → −l). A physical level does neither.
+
+### 10.2 Is there a resonance?
+
+The potential's own phase shift (direct integration to 15 fm, matched to the Coulomb functions), E_c.m. = 0.1-15 MeV:
+
+| | δ at 1, 4, 8, 12, 15 MeV (deg) | largest dδ/dE (deg/MeV) |
+|---|---|---|
+| 1/2⁺ VD | −7.8, −50.7, −85.4, −109.1, −123.0 | < 0 everywhere |
+| 1/2⁺ VM1a | −7.0, −51.3, −91.1, −117.8, −132.9 | < 0 everywhere |
+| 3/2⁺ VD | 179.9, 179.2, 179.6, 176.4, 172.3 | 0.3 (at 5.2 MeV) |
+| 5/2⁺ VD | 180.0, 182.5, 186.8, 184.1, 179.8 | 1.6 (at 4.5 MeV) |
+
+Criterion (real axis only; the engine's Coulomb functions are real-energy only, so no S-matrix pole was searched): a
+resonance makes δ rise through 90° (mod 180°) with a time delay 2ħ dδ/dE large compared with the transit time. The
+s-wave phase of every potential falls monotonically (a repulsive, hard-sphere-like phase from the two forbidden
+nodes; it passes −90° at E_c.m. = 7.9-9.9 MeV *falling*, which is not a resonance); the d-wave phases stay within 7°
+of 180° with dδ/dE ≤ 1.6°/MeV. **None of these potentials has a 1/2⁺ or 5/2⁺ resonance below E_c.m. = 15 MeV
+(E_x ≈ 16.6 MeV).** The R_pot poles of 10.1 are formal: the box eigenstates that represent the distant part of the
+interior (the background), with energies set by a_c and B.
+
+What this cannot decide: whether ⁷Be has a physical 1/2⁺ or 5/2⁺ level. A local two-cluster potential has no
+coupling to other partitions (the ⁶Li + p threshold lies at E_x ≈ 5.6 MeV) and no exchange. That a fit needs a pole at
+8 or 12 MeV is what an R-matrix with a_c ≈ 4-5 fm needs to reproduce a smooth background; it is not evidence of a
+level unless the pole keeps its observed energy and width when a_c and B change (10.3).
+
+### 10.3 The fitted 1/2⁺ and 5/2⁺ poles
+
+In the synthetic fits of section 8 (truth: VD), a free 1/2⁺ background pole lands at E_x = 13.1, 11.0, 8.7 MeV for
+a_c = 4.0, 4.5, 5.0 fm (θ² = 1.8-2.4) and a free 5/2⁺ pole at 14.8, 12.8, 11.2 MeV (θ² = 2.7); VD's R_pot poles (B = 0)
+are at 16.9, 11.6, 8.5 MeV (1/2⁺) and 16.7, 12.6, 10.1 MeV (5/2⁺). A pole fixed at 12 MeV (5/2⁺) fits at 3.5-5 fm
+(χ² ≤ 1.7) with a θ² that grows from 1.5 to 3.1; a 1/2⁺ pole fixed at 8 MeV fits only near a_c = 5 fm. With the
+potential background (b, VD) both partial waves are described with no pole at all (χ² = 0 at every a_c).
+
+What the numbers support: in a model whose s and d waves are a local potential without resonances, an R-matrix
+analysis at a_c ≈ 4-5 fm *needs* a broad 1/2⁺ pole at E_x ≈ 9-13 MeV and a 5/2⁺ pole at ≈ 11-15 MeV, with θ² > 1,
+moving by 2-3 MeV per 0.5 fm of a_c; and they coincide with the box poles of the potential's interior. The PI's 8 and
+12 MeV are where such formal poles sit for a_c ≈ 5 and 4.5 fm. What they cannot decide: whether ⁷Be also has a
+physical 1/2⁺ or 5/2⁺ level there. A physical level would show as a pole whose observed (Brune) energy and width stay
+put when a_c and B change, and in the data as a rise of the phase through 90°; the synthetic truth here has none by
+construction, so the test (refit the measured data at several a_c with the pole free and see whether E_x and Γ stay)
+must be made on measured data (section 9).
+
+### 10.4 The s-wave scattering length
+
+Convention: the Coulomb-modified effective-range function (Jackson and Blatt's form)
+
+    K(E) = C₀²(η) k cot δ₀ + 2 k η h(η) = −1/a₀ + r₀ k²/2 + O(k⁴),
+    C₀² = 2πη/(e^{2πη} − 1),   h(η) = Re ψ(iη) − ln η,   η = Z₁Z₂ α μc²/(ħc k),
+
+k (fm⁻¹) and E (MeV) in the c.m. frame, μ = m(³He) m(⁴He)/(m(³He) + m(⁴He)) = 1.71999 u = 1602.16 MeV with the atomic
+masses 3.0160293 u and 4.0026032 u (those of the projects; AME values as in `tests/scattering_length`), α = 1/137.035999084,
+ħc = 197.3269804 MeV fm. With this sign a₀ > 0 for ³He + α. K is fitted with a cubic in k² to δ₀ at E_c.m. = 0.08-0.6
+MeV (27 points; the engine's extrapolated phase shifts, or the potential's by direct integration); the windows
+0.08-0.4 (quadratic) and 0.15-0.6 MeV give the same a₀ to 0.01 fm. Check: for every fit of section 8 with a Coulomb
+exterior, the engine's threshold formula (`ScatteringLength.cpp`, Paneru et al. 2019 Eq. 7: no phase shifts) and this
+ERE agree to 5·10⁻³ fm (e.g. 29.315 and 29.315 fm at a_c = 4.5 fm); `tests/scattering_length` checks the same agreement
+at 4·10⁻⁵ on its own models. One implementation of the ERE: `scripts/potentials.py` (h(η) by mpmath's digamma) in the
+research directory, as `tests/scattering_length/ere.py` (h by its series) in the repository.
+
+**Table 10.4** -- a₀ and r₀ (fm):
+
+| case | a₀ | r₀ | remark |
+|---|---|---|---|
+| potential VD (Dubovichenko; Tursunov et al.) | 30.95 | 0.929 | direct integration; deep, two forbidden s states |
+| potential VDa | 25.32 | 0.893 | |
+| potential VDb | 24.23 | 0.920 | |
+| potential VM1a | 25.90 | 0.872 | shallowest of the set |
+| potential VM2a | 29.42 | 0.896 | |
+| R-matrix, free 1/2⁺ pole, synthetic VD data 0.7-4 MeV, a_c = 3.5 / 4.0 / 4.5 / 5.0 / 5.5 / 6.0 fm | 27.4 / 28.3 / 29.3 / 31.2 / 35.1 / 42.9 | 0.978 / 0.969 / 0.958 / 0.940 / 0.917 / 0.907 | χ² 3.8 / 1.7 / 0.35 / 0.46 / 8.6 / 49 (34 points) |
+| the same, data from 2.5 MeV | 26.7 / 27.6 / 29.0 / 31.8 / 38.2 / 51.9 | 0.975-0.970 | χ² 0.18 / 0.07 / 0.005 / 0.07 / 0.81 / 4.1 (16 points) |
+| the same, pole fixed at E_x = 8 MeV | 31.5 / 37.0 / 39.8 / 36.1 / 21.0 / 159 | 1.00-1.24 | χ² ≥ 92: no acceptable fit |
+| potential background (b), any a_c | = the potential's | | χ² 0 (VD) ... 1037 (VDa) |
+| (b+) VM1a background + sub-threshold 1/2⁺ level, a_c 3.5-6 fm | 28-180 along the χ² valley | −1.2 ... 0.9 | χ² 10-63: a₀ not determined |
+| Paneru et al. 2024, R-matrix of SONIK data (a = 4.2 fm) | 33.10 | | as stated in `tests/scattering_length/README.md` |
+| Poudel and Phillips, halo EFT, SONIK + A_y | 60(6) | 0.78(2) | 42(6)-68(7) by data set (their Table 4) |
+| Zhang, Nollett and Phillips 2020 (EFT, capture) | 50 +7/−6 | 0.97(3) | quoted by Poudel and Phillips |
+| Premarathna and Rupak 2020 (EFT) | 40 +5/−6 | 1.09 +0.09/−0.10 | quoted by Poudel and Phillips |
+| Higa, Rupak and Vaghani 2018 (EFT) | 21.6(3.4) | 1.2(1) | quoted by Poudel and Phillips |
+
+Whether a₀ conventions agree: Poudel and Phillips write the expansion with −1/a + r p²/2 (their K carries an overall
+factor 1/(2k_c^{2L+1})), the same a₀ as here as far as the page shows; not checked line by line for the other papers.
+
+What drives the spread (35 against 50 fm), from these numbers:
+1. **The data stop well above threshold.** The elastic data used in these analyses start at E_c.m. ≈ 0.4-1 MeV
+   (Poudel and Phillips use SONIK and Barnard truncated at 4.3 MeV lab, A_y data at three energies), where
+   C₀² ≈ 3·10⁻²-2·10⁻³ and the phase shift is a few degrees; a₀ is the intercept of an extrapolation in k². In the
+   synthetic test the same data, perfectly described (χ² < 1), give a₀ from 26.7 to 38.2 fm depending only on a_c; the
+   spread grows as the data start higher. a₀ and r₀ are correlated along the extrapolation: in Table 10.4 a larger a₀
+   goes with a smaller r₀ throughout (27.4 fm ↔ 0.978 fm, 42.9 fm ↔ 0.907 fm), and the EFT fits that give 50-60 fm
+   have r₀ = 0.78-0.97 fm, the R-matrix's 33 fm comes with the R-matrix's fixed radius and background pole.
+2. **The R-matrix's a₀ is set by the model of the background**: with one background pole a₀ rises with a_c (27 → 43 fm
+   over 3.5-6 fm); at the conventional a_c = 4.2 fm the synthetic case gives ≈ 28-29 fm, below its truth (31 fm). A
+   ~35 fm result at a_c ≈ 4.2 fm and a ~50 fm result from an expansion with free a₀ and r₀ are not distinguished by data
+   that start at 0.7 MeV in this test: 35 fm is inside the a_c range that fits (a_c ≈ 5.3-5.5 fm), 50 fm only at a_c ≈ 6 fm
+   (χ² 4 for data from 2.5 MeV, 49 from 0.7 MeV). So in this synthetic case the lower part of the low-energy data
+   (0.7-2.5 MeV) is what excludes the large values; with data that start higher, both are allowed.
+3. **The capture S factor** constrains the bound-state ANCs, and through the s-wave entrance phase only weakly a₀;
+   it was not used here (no capture model with the background, section 9).
+4. **Local potentials** that all reproduce the s-wave phase shifts above 1 MeV give 24-31 fm: a potential alone does
+   not decide a₀ either.
+
+What the numbers cannot decide: whether 35 and 50 fm are in conflict for the *measured* data. That needs the fit of the
+measured elastic (and capture) data at several a_c with the pole free, and a profile of χ² in a₀ (section 9). The
+synthetic test shows the mechanism and its size: a few fm per 0.5 fm of a_c, up to tens of fm when the data start
+above 2 MeV or a pole sits near threshold.
+
+
+## 11. Recommendation
+
+Keep it as an option on the side branch; do not merge yet. The identity holds to 10⁻⁷ and the level-on-top machinery
+(subtraction, dressed S and ANC below threshold, Brune) is consistent to 10⁻⁴°, so the code is right; but the physics
+answer is that the background moves the model dependence from a_c to the choice of potential, and that with levels on
+top the a_c dependence returns at the size it had. Before a merge it needs: (1) the interior direct capture of
+section 5, without which a capture project with a background is incomplete; (2) a test on measured elastic and capture
+data (EXFOR access); (3) a depth as a fit parameter or a documented scan tool; (4) the pyazr/GUI forms. Its most
+useful immediate use is diagnostic: R_pot's poles (section 10.1) tell whether a fitted background pole is a box state
+of the interior.
+
+## 12. References
+
+Read for this note (numbers quoted from them were read in the source named):
+- E. M. Tursunov, S. A. Turakulov, A. S. Kadyrov, arXiv:1707.05948v3 (2018), Tables I and II and section III.A: the
+  potentials VD, VDa, VDb, VM1a, VM2a, R_C = 3.095 fm, ħ²/2u = 20.7343 MeV fm². Published as Phys. Rev. C 97 (2018)
+  035802 (journal reference from a search result; the journal version was not opened).
+- S. B. Dubovichenko, arXiv:1006.4944 (in Russian), Table 3.1: 4He+3He depths with α = 0.15747 fm⁻², R_C = 3.095 fm
+  (the p-wave depths there, 81.92 and 83.83 MeV, differ from Tursunov's VD values used here); the potential VD as
+  published in Phys. At. Nucl. 73 (2010) 1526 (reference from Tursunov et al.; not opened).
+- M. Poudel and D. R. Phillips, arXiv:2110.01451: a₀ = 60(6) fm, r₀ = 0.78(2) fm (SONIK + A_y, NNLO), their Table 4
+  (42-68 fm by data set), and their section 9.5, which quotes Higa, Rupak and Vaghani, Eur. Phys. J. A 54 (2018) 89:
+  21.6 ± 3.4 fm, r₀ = 1.2 ± 0.1 fm; Zhang, Nollett and Phillips, J. Phys. G 47 (2020) 054002: 50 +7/−6 fm,
+  r₀ = 0.97 ± 0.03 fm; Premarathna and Rupak, Eur. Phys. J. A 56 (2020): 40 +5/−6 fm, r₀ = 1.09 +0.09/−0.10 fm. These
+  three are quoted from Poudel and Phillips, not from the original papers. The first author's name and the journal of
+  arXiv:2110.01451 were not read on the page (unverified).
+- Paneru et al., Phys. Rev. C 109 (2024) 015802 (SONIK, R-matrix with AZURE2): a₀ = 33.10 fm with a 1/2⁺ background
+  pole at E_x = 14.0 MeV and a = 4.2 fm, as the repository's `tests/scattering_length/README.md` states (Table V of the
+  paper); not reopened for this note.
+Cited for the formalism, not reopened for this note (standard results): A. M. Lane and R. G. Thomas, Rev. Mod. Phys. 30
+(1958) 257; P. Descouvemont and D. Baye, Rep. Prog. Phys. 73 (2010) 036301 (the calculable R-matrix); C. R. Brune,
+Phys. Rev. C 66 (2002) 044611 (the alternative parameters); B. Buck, H. Friedrich and C. Wheatley, Nucl. Phys. A 275
+(1977) 246 (deep local cluster potentials; year as commonly cited, 1976 in Dubovichenko's list). The potential-model
+backgrounds of Barker and of Johnson that the brief names were **not found and not verified**; they are not used.
