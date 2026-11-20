@@ -17,7 +17,9 @@ poles; the fitted levels sit on top of it. With both halves from one potential a
 matrix is that of the potential alone, whatever a_c is (section 2.3); with levels, a_c moves strength between the
 levels and the potential. The note states the formalism in AZURE2's conventions (sections 1-2), the rule against
 counting a state twice (section 3), what deep cluster potentials with Pauli-forbidden states do to it (section 4),
-capture (section 5) and the scope and parameters (section 6).
+capture (section 5) and the scope and parameters (section 6).  Section 13 (branch `feature/upgrade-9-potential-gui`) is what the potential gives by
+itself at low energy (its scattering length, effective range and bound states), the depth for a chosen scattering length
+or binding energy, and the Qt panel that shows and tunes a pair's potential.
 
 ## 1. The interior R-function of a potential
 
@@ -489,9 +491,9 @@ checked here before it was changed.
    δ = −atan2(F, G) on the returned set); `nuclear_potential(pair).waves` lists the `wave` fields;
    `Session.potential_box_states(pair, l, J, radius, boundary, e_min, e_max)` gives E_p, γ_p² and the node numbers;
    `Session.potential_bound_state(pair, l, J, energy, window)` the potential's eigenvalue and its ANC (both rows of
-   `Session.describe()["functions"]`, so the web page's Physics tab draws them). Not exposed: the potential's own
-   scattering length (it needs the phase shifts near threshold and an effective-range fit; the extrapolation records
-   and `tests/scattering_length/ere.py` do that). Test: `pyazr_potential_api`.
+   `Session.describe()["functions"]`, so the web page's Physics tab draws them). The potential's own scattering length
+   followed on `feature/upgrade-9-potential-gui` (section 13: `Session.potential_scattering_length`). Test:
+   `pyazr_potential_api`.
 4. **`describe`**: the text lists the waves (5.9) and the JSON block has `waves` (only for a potential that has them).
 5. **The NaN step of an LM fit** (the reported abort, on the evaluation project): its exact cause was not found here
    (the project is not used). Two places that give NaN at a pole of R⁰ are now defined: exactly on a pole the
@@ -701,8 +703,9 @@ figure.py` from `results/radius_scan.json` and `results/window.json`.
   `tests/hybrid_potential` and T3); refused only for the new background.
 - **Two spinning particles** in a background wave: as the spin-orbit term, only one spinning particle is supported
   (the background is diagonal in the channels then); not checked against a coupled case.
-- **No web UI / Qt form, no pyazr keyword** beyond the record (pyazr edits it as any record), no Sphinx page: the
-  option is research.
+- **No web UI form, no pyazr keyword** beyond the record (pyazr edits it as any record).  The Qt program has a panel
+  (section 13.3, `qt_gui.md` section 19) and the user guide a paragraph (`graphical_interface.rst`); the option stays
+  research.
 - The VD p₃/₂ depth of Tursunov et al. binds the 1p state at 1.455 MeV with the engine's atomic masses and e² = αħc,
   not at the paper's 1.5866 MeV; scipy and the engine agree on 1.4549 MeV. The cause (masses, ħ²/2u = 20.7343 MeV fm²
   of the paper, R_C, a transcription) was not found.
@@ -912,3 +915,88 @@ Cited for the formalism, not reopened for this note (standard results): A. M. La
 Phys. Rev. C 66 (2002) 044611 (the alternative parameters); B. Buck, H. Friedrich and C. Wheatley, Nucl. Phys. A 275
 (1977) 246 (deep local cluster potentials; year as commonly cited, 1976 in Dubovichenko's list). The potential-model
 backgrounds of Barker and of Johnson that the brief names were **not found and not verified**; they are not used.
+
+## 13. What the potential gives by itself, and tuning its depth (branch `feature/upgrade-9-potential-gui`)
+
+The PI (2026-11-20) asked for the potential in the Qt program "and a way of tuning it".  A depth is not a fit parameter
+(section 6); what a user tunes it to is a number of the potential alone: its scattering length, or the energy of a bound
+state.  `physics/PotentialTuning.h` computes them for the potential of one partial wave as the engine uses it (ForPartialWave:
+the wave's depth and width; the potential from 0 to r_m, point-Coulomb or free waves beyond, the Numerov grid of
+IntegrateOutward).
+
+### 13.1 The scattering length and effective range
+
+The phase shift of the potential alone, δ_l(E) (rad, relative to the point-Coulomb waves; to the free waves without
+charge), from the regular solution integrated out to r_m and matched there: u = cos δ F_l + sin δ G_l at ρ = k r_m,
+tan δ = (u'F − k u F')/(k u G' − u'G) (`PotentialPhaseShift`).  It is computed as the arctangent of that quotient: at
+E = 0.03 MeV the s-wave phase of ³He + α is 5·10⁻¹² rad, and an atan2 reduced by π keeps only the ulp of π (4·10⁻¹⁶)
+of it -- seen as steps in δ and a jump of 3·10⁻³ fm in a₀ between two depths 10⁻⁵ MeV apart before it was changed.
+
+The effective-range function, with k (fm⁻¹) and η = Z₁Z₂αμc²/(ħc k) in the c.m. frame (μ the reduced mass from the
+pair's atomic masses), the convention of section 10.4:
+
+    charged, l = 0:  K(E) = C₀²(η) k cot δ₀ + 2kη h(η) = −1/a₀ + r₀k²/2 + P k⁴ + ...,
+                     C₀² = 2πη/(e^{2πη} − 1),  h(η) = Re ψ(iη) − ln η;
+    neutral, any l:  K(E) = k^{2l+1} cot δ_l = −1/a_l + r_l k²/2 + ...   (a_l in fm^{2l+1}, r_l in fm^{1−2l}).
+
+h(η) (`CoulombH`) by ψ(z + 12) = ψ(z) + Σ 1/(z + n) and the asymptotic series of ψ to z⁻¹⁴ for η < 12, by the
+asymptotic series of h itself (all terms positive) for η ≥ 12: to 10⁻¹³ of mpmath's digamma at η = 0.05 ... 100.  The
+Coulomb-modified function for l > 0 is not built: a charged pair with l > 0 is refused with that reason.
+
+**Window and fit.**  K at 24 energies equally spaced in k² for k from k_hi/4 to k_hi = 0.5/R_N, R_N the range of the
+nuclear term (the Gaussian width r0, or R + 2a of a Woods-Saxon term), with η ≤ 30 at the lowest k (the lower end is
+raised for a heavy or highly charged pair; a window narrower than k_hi/1.5 is refused); a cubic in k² by least squares,
+a = −1/K(0), r = 2 dK/dk²(0).  For ³He + α with VD (r0 = 2.52 fm) that is E = 0.030-0.478 MeV.  **Accuracy**: the
+stated spread is the larger difference to a quadratic on the same points and to a cubic on the lower two thirds of the
+window; it is an upper bound in the tests (³He + α: a₀ = 30.953065 fm, spread 4.6·10⁻⁴ fm; the independent reference
+30.953078 fm differs by 1.3·10⁻⁵ fm).  With the Numerov step 0.0275 fm the phase shifts are good to about 10⁻⁷
+relative (section 7.2); a and r are limited by the extrapolation, not by them.
+
+**Bound states** (`PotentialBoundStates`): by Sturm's theorem the eigenvalues E < 0 of the potential with its own
+exterior are the nodes of the zero-energy regular solution on (0, r_m), plus one when its log-derivative at r_m lies
+below that of the zero-energy decaying solution, S_l(0) (`zero_energy_shift`; −l without charge) -- r u'/u falls and S(E)
+rises with E between the poles of r u'/u.  Forbidden states of a cluster potential are counted: VD's s wave has 2, p3/2
+2, d5/2 1, f7/2 0.
+
+**Test** (`physics_potential_tuning`, against `physics/tests/data/make_potential_tuning_reference.py`: scipy's DOP853
+from 10⁻⁴ fm, mpmath's Coulomb functions and digamma, numpy's quartic fit on 40 energies of another window, 0.05-0.4 MeV
+for ³He + α): h(η) to 10⁻¹²; δ of ³He + α (l = 0, 1) and of a made-up n + ⁴He Gaussian (V₀ = 40 MeV, r0 = 2 fm; l = 0,
+1) to 10⁻⁶ rad (the smallest, 3.7·10⁻⁹ rad, to 3·10⁻⁷ relative); a and r:
+
+| | engine | reference | spread stated |
+|---|---|---|---|
+| ³He + α VD, s wave: a₀ (fm), r₀ (fm) | 30.953065, 0.929219 | 30.953078, 0.929216 | 4.6·10⁻⁴, 2.3·10⁻⁴ |
+| n + ⁴He, l = 0: a (fm), r (fm) | 3.5204757, 1.6435119 | 3.5204761, 1.6434962 | 2.6·10⁻⁵, 6.3·10⁻⁴ |
+| n + ⁴He, l = 1: a (fm³), r (fm⁻¹) | −6.2151146, −0.3134118 | −6.2151155, −0.3134010 | 5.1·10⁻⁵, 4.1·10⁻⁴ |
+
+and the bound states of nine waves (³He + α s at 30, 67.5, 110 MeV, p3/2, d5/2, f7/2; n + ⁴He at 5, 20, 40 MeV: 0-3
+states) as scipy's Sturm count at E = −0.01 MeV out to 400 fm.  The 30.95 fm and 0.929 fm of section 10.4 (a driver
+outside the repository) are reproduced.  Shown to fail without the 2kη h(η) term (a₀ 30.92, r₀ −0.46) and with the
+atan2 reduction (at the depth 13.2 found, a₀ = 40.0006 fm instead of 40).
+
+### 13.2 The depth for a scattering length, or for a bound state
+
+Between the depths V_n and V_{n+1} at which the n-th and (n+1)-th states are bound at threshold (a branch: n bound
+states), a_l falls monotonically from +∞ through 0 to −∞; a target a is reached at exactly one depth of each branch.
+`DepthForScatteringLength` keeps the branch of the present depth (its number of bound states, Pauli-forbidden ones
+included): from the present depth in steps of 0.5 % towards the target (deeper when a_l is above it), refusing when
+the bound-state count changes or the depth leaves (0, 4 V₀], then bisection to 10⁻¹⁰ relative.  The answer names the
+branch (the number of bound states) and the nodes of the zero-energy solution.  Test: a₀ = 40 fm for VD's s wave at
+65.2851799 MeV (scipy's brentq on its own a₀: 65.28518406 MeV), two bound states kept.
+
+The depth for a bound state is the set-up's `DepthBindingAt` (section 5.3: within ±30 % of the present depth, the
+nearest root), at the radius of the bound-state rule (the channel radius, or r_m when beyond it); the facade adds the
+eigenvalue there (`NearestEigenvalue`), the potential's own ANC (`PotentialBoundStateANC`) and the node count of the
+state.  Test: VD's p3/2 at −1.4548867432 MeV gives back the written 83.589554 MeV (83.589552) and the ANC 4.093160
+fm⁻¹ᐟ² (scipy 4.0931604450).
+
+### 13.3 Where they are
+
+- pyazr: `Session.potential_scattering_length(pair, l, J)` → a, r, their spreads, the window, the bound states (a row
+  of `describe()["functions"]`); `AZUREAPI::GetPotentialEffectiveRange`.  The arguments of the three potential calls of
+  the session are one function, `PotentialWaveOf` (`api/include/PotentialWave.h`).
+- The Qt program: the Potential panel of the Particle Pairs tab and the Levels tab's check of the partial waves
+  (`qt_gui.md` section 19), through the facade (`api/front/src/FrontPotential.cpp`: the record as edited is built by the
+  engine's reader on a copy of the project; the box states and a₀ equal the session's bit for bit, api_front (h)).
+- Not built: the Coulomb-modified function for l > 0; a depth as a fit parameter (section 6: a scan with refits); the
+  depth of a Woods-Saxon radius or a Gaussian width (only the depth is tuned).

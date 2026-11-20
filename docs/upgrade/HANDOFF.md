@@ -4,6 +4,31 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-21 (potential-gui) — the potential in the Qt program, its own a0, and the partial waves without a level
+
+Branch `feature/upgrade-9-potential-gui` from 7e1002da.  The PI: "We can add it to the GUI and also the possibility of
+switching it on or off and selecting external only and external + internal mode which shows also which poles are
+created and a way of tuning it? Also I would like an utility in the level tab to add these blank levels so casual
+users will not neglect some missing waves."
+1. **physics/PotentialTuning.h**: the potential's own phase shift, Coulomb-modified (l = 0) or neutral (any l)
+   effective-range expansion (window k = 0.125-0.5/R_N, a cubic in k², the spread of two other fits stated), Sturm's
+   bound-state count, the depth for a chosen a in the branch of the present bound-state count.  pyazr
+   `Session.potential_scattering_length` (+ describe row); `AZUREAPI::GetPotentialEffectiveRange`; the three potential
+   calls share `PotentialWaveOf` (api/include/PotentialWave.h).  potential_background.md section 13.
+2. **Facade** (api/front/src/FrontPotential.cpp): a record switched off as `#off ` comment lines and on again byte for
+   byte (`Project::SetRecordOn`, `RecordsOff`); the `wave` field split/written; the pair's record; a wave's box states,
+   set-up checks, a, r, bound states and levels from the record as edited; the depths for a and for a binding energy;
+   the partial waves an active level or includeAllJPi keeps (`PartialWaveStates`, `PartialWavesWithoutLevel`).
+3. **Qt**: the Potential panel, first tab under the Particle Pairs table (gui/src/PotentialPanel.cpp); the Levels tab's
+   "Partial waves..." check (gui/src/LevelsPartialWaves.cpp) with "switch includeAllJPi on" and "add blank levels".
+   Behaviour change of the window: when includeAllJPi is switched on in the window and the file has no
+   `maxOrbitalMomentum`, the save writes the tab's maximum l as `maxOrbitalMomentum` (so the key reaches every J^pi the
+   tab lists); `commitTabs` is split, `commitLevels` its first half.  qt_gui.md section 19; graphical_interface.rst.
+4. A fix of a test: `pyazr_potential_api` was skipped under ctest (pyazr not on the path); it now runs.
+Not done: the Coulomb-modified expansion for l > 0 (refused with the reason); tuning of a width or radius; a web-UI
+form; pyazr's version not bumped (dev series; James decides at the merge).
+Run: see the final report of the branch (build 0 warnings, ctest, run_tests.sh).
+
 ## 2026-11-20 (potential-capture, follow-up 4) — an independent review's findings
 
 Each finding was checked before it was changed; details and numbers in `potential_background.md` section 5.10.
