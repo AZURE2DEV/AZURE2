@@ -457,6 +457,21 @@ session (10⁻³) and its half-width is the linear error to 5 %; the charge and 
 degenerate in one cross section (joint error of the charge twice its error alone) and come back within their joint
 errors; a value the engine refuses raises with the engine's reason.
 
+Found in use (the joint E1 + elastic l = 1 phase fits of the owner's archive, `12C+a_onefile/11-19-26_hpot_test`,
+entry "JOINT E1 + TISCHHAUSER l=1 PHASE FITS", 2026-11-20):
+
+- The start of a depth matters. A depth that leaves the potential's resonance far from the data's fails in one of
+  two ways: the engine's fit is invalid at every trial ("no trial gave a finite objective"), or a phase-shift
+  point sits across the ±90° fold and its residual of about 180° holds the depth where it is. Start from the depth
+  at which the potential alone puts the phase through 90° at the measured crossing.
+- Two starts per trial (the project's values and the best vector) do not always reach the lowest minimum of the
+  levels: in 7 of 20 of those fits a restart from a neighbouring fit's parameters went lower (by 0.1 to 59 in χ²).
+  A result is to be checked by a restart from another start, as with any fit.
+- The interval search asked the profile again at the ends of its bracket, and a second fit at the same value could
+  end elsewhere; the root finder then stopped with "f(a) and f(b) must have different signs". Every profile value
+  is now kept and used once (check (6) of `pyazr_record_fit`). An interval is only as good as the profile fits
+  behind it: where they are not reproducible (the item above), neither is the interval.
+
 ### 10.3 Proposed, not built: the interior charge as an engine parameter
 
 A parameter kind owned by the potential record, on the pattern of the isospin shift (compound side, its own prior,

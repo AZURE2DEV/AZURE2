@@ -18,6 +18,9 @@ On tests/interior_capture/models/direct.azr (alpha + 12C, the potential model's 
       linear error is half the profile interval to 10 % (the fits leave scatter in the rows; the differences of
       the Jacobian must be far above it); each trial fits from the project's values and from the best vector so
       far and keeps the lower, and starts=("best",) alone gives the same charge here (one minimum);
+  (6) the interval search keeps every profile value it has computed: with a profile that answers differently when
+      asked twice at the same value (a second fit ending elsewhere), the crossing is still found (the root finder
+      used to refuse the bracket), and a bound before the crossing gives None;
   (4) a start the engine refuses (a zero depth) raises with the engine's reason; the project file is unchanged
       and no trial file is left.
 Needs the compiled engine and scipy; skips cleanly without them.
@@ -126,6 +129,19 @@ try:
           abs(r5.values[0] - 0.02) < 1e-4 and abs(norm - 1.0) < 1e-3 and r5.errors is not None and lo5 is not None and up5 is not None
           and abs(r5.errors[0] / (0.5 * (up5 - lo5)) - 1.0) < 0.10,
           f"{r5.values!r} norm {norm!r} errors {r5.errors!r} interval {lo5!r} {up5!r} after {len(r5.evaluations)} trials")
+
+    from pyazr.record_fit import _crossing
+    asked = {}
+
+    def twice(v):  # the true rise the first time a value is asked, -1 (no rise) every time after
+        asked[v] = asked.get(v, 0) + 1
+        return (v - 1.0) ** 2 - 1.0 if asked[v] == 1 else -1.0
+
+    up = _crossing(twice, 1.0, 0.3, -1.0, xtol=1e-9)
+    down = _crossing(twice, 1.0, -0.3, -1.0, xtol=1e-9)
+    check("(6) a profile that changes when asked twice: crossings at 2 and 0 (1e-6), no value asked twice, None at a bound",
+          up is not None and down is not None and abs(up - 2.0) < 1e-6 and abs(down) < 1e-6 and max(asked.values()) == 1
+          and _crossing(twice, 1.0, 0.3, -1.0, upper=1.5) is None, f"{up!r} {down!r} {max(asked.values())}")
 
     zero = Setting("a12C", "central", "woods_saxon depth {:.12g} MeV radius 3.55 fm diffuseness 0.6 fm", start=0.0, step=1.0)
     message = ""

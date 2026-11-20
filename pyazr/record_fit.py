@@ -70,6 +70,34 @@ class RecordFitResult:
     project: Optional[str] = None
 
 
+def _crossing(rise, centre, stride, at_centre, lower=None, upper=None, xtol=1e-6):
+    """The value nearest ``centre`` at which ``rise`` changes from <= 0 to > 0, walking in steps of ``stride``;
+    None when a bound or 60 steps come first.
+
+    Every value of ``rise`` is kept and used again.  ``rise`` is a profile fit, and a second fit at the same
+    value can end elsewhere (its start follows the best vector found so far): asked twice, the end of a bracket
+    could change sign, and the root finder then refused the bracket ("f(a) and f(b) must have different signs").
+    ``at_centre`` is the value at ``centre`` itself, known without a fit."""
+    from scipy import optimize
+    seen = {float(centre): float(at_centre)}
+
+    def kept(v):
+        v = float(v)
+        if v not in seen:
+            seen[v] = float(rise(v))
+        return seen[v]
+
+    inside = float(centre)
+    for k in range(1, 61):
+        outside = float(centre + stride * k)
+        if (lower is not None and outside < lower) or (upper is not None and outside > upper):
+            return None
+        if kept(outside) > 0.0:
+            return float(optimize.brentq(kept, inside, outside, xtol=xtol, maxiter=60))
+        inside = outside
+    return None
+
+
 def fit_record_settings(project, settings, *, method="migrad", session=None, starts=("project", "best"),
                         tolerance=1e-3, max_evaluations=400,
                         intervals=False, delta=1.0, write=None, progress=None):
@@ -240,20 +268,9 @@ def fit_record_settings(project, settings, *, method="migrad", session=None, sta
                 return minimise(others(i), fixed, 200)[1] - floor - delta
 
             for i, s in enumerate(settings):
-                sides = []
-                for sign in (-1.0, 1.0):
-                    inside, crossing = centre[i], None
-                    for k in range(1, 61):
-                        outside = centre[i] + sign * steps[i] * 0.5 * k
-                        if (s.lower is not None and outside < s.lower) or (s.upper is not None and outside > s.upper):
-                            break
-                        if rise(i, outside) > 0.0:
-                            crossing = optimize.brentq(lambda v: rise(i, v), inside, outside,
-                                                       xtol=1e-3 * tolerance * steps[i], maxiter=60)
-                            break
-                        inside = outside
-                    sides.append(None if crossing is None else float(crossing))
-                found.append(tuple(sides))
+                found.append(tuple(_crossing(lambda v, i=i: rise(i, v), centre[i], sign * 0.5 * steps[i], -delta,
+                                             s.lower, s.upper, 1e-3 * tolerance * steps[i])
+                                   for sign in (-1.0, 1.0)))
         written = None
         if write is not None:
             written = os.path.abspath(write)
