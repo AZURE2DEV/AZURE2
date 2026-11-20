@@ -149,6 +149,14 @@ class ECIntegral {
   static double WWIntegrand(double, void *);
   /// Coulomb functions of this pair.
   CoulFunc *coulfunction() const { return params_.coulFunc.get(); };
+  /// exp(-i phi) of the entrance channel at the channel radius: from the waves, as always; for a pair whose potential
+  /// also acts inside the channel radius the primed phase (CoulFunc::HardSpherePhase), which goes with the primed
+  /// penetrability in the channel term and makes the other term the wave of the potential's own scattering
+  /// (docs/upgrade/interior_potential.md section 3.2).
+  complex EntrancePhase(const CoulWaves &coul, int l, double radius, double energy) const {
+    if (coulfunction()->Interior()) return coulfunction()->HardSpherePhase(l, params_.twoJi, radius, energy);
+    return CoulombHardSpherePhase(coul);
+  }
   /// Whittaker functions of this pair.
   WhitFunc *whitfunction() const { return params_.whitFunc.get(); };
   /// The pair this integral belongs to.

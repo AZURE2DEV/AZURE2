@@ -82,6 +82,9 @@ struct HybridPotential {
   double matching_radius_fm = 15.0;   ///< r_m (fm): beyond it the solution is the point-Coulomb one
   double step_fm = 0.0275;            ///< Numerov step (fm), adjusted so that a_c is a node
   std::optional<SpinOrbitTerm> spin_orbit;  ///< none: a central potential
+  /// The boundary constant b of the potential's interior R-function R_pot = 1/(f - b) (interior_potential.md); none:
+  /// the potential acts outside the channel radius only.
+  std::optional<double> interior_boundary;
 };
 bool operator==(const HybridPotential &a, const HybridPotential &b);
 inline bool operator!=(const HybridPotential &a, const HybridPotential &b) { return !(a == b); }
@@ -113,7 +116,8 @@ double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, 
 /*!
  * Every value the radial solution depends on, as numbers, for keys of tables and memos that must not mix
  * potentials: {0} without a potential, else {1, shape, V0, R, a, r0, R_C, r_m, step}, followed by {V_so, R_so, a_so,
- * acts_on (0 light, 1 heavy)} when the potential has a spin-orbit term.
+ * acts_on (0 light, 1 heavy)} when the potential has a spin-orbit term, and by {b} when it has an interior boundary
+ * constant (so the length tells the four cases apart).
  */
 std::vector<double> PotentialKey(const std::optional<HybridPotential> &p);
 

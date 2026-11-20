@@ -100,6 +100,8 @@ class ShftFunc {
   std::optional<azure2::physics::HybridPotential> potential_;
   /// The pair (PPair::SpinOrbitFactor gives <2 l.i> of a two_j key).
   const PPair *pair_;
+  /// S' of an interior potential from the decaying solution's S at binding energy `binding` (>= 0, MeV).
+  double InteriorShift(int l, int two_j, double binding, double S) const;
   /// Does the table cover the bound state at this energy (eta_b, rho_b of l)?
   bool BoundTableOk(int l, double energy) const;
   static const CoulombTable *SharedTable(const PPair *pair, bool neutral);

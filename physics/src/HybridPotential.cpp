@@ -34,7 +34,7 @@ bool operator==(const SpinOrbitTerm &a, const SpinOrbitTerm &b) {
 bool operator==(const HybridPotential &a, const HybridPotential &b) {
   return a.coulomb_radius_fm == b.coulomb_radius_fm && a.central_depth_MeV == b.central_depth_MeV &&
          a.central == b.central && a.matching_radius_fm == b.matching_radius_fm && a.step_fm == b.step_fm &&
-         a.spin_orbit == b.spin_orbit;
+         a.spin_orbit == b.spin_orbit && a.interior_boundary == b.interior_boundary;
 }
 
 double TwoLDotI(int l, int two_j, int two_i) {
@@ -121,6 +121,7 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
   if (p->spin_orbit)
     key.insert(key.end(), {p->spin_orbit->depth_MeV, p->spin_orbit->form.radius_fm, p->spin_orbit->form.diffuseness_fm,
                            p->spin_orbit->acts_on == SpinOrbitParticle::Heavy ? 1.0 : 0.0});
+  if (p->interior_boundary) key.push_back(*p->interior_boundary);
   return key;
 }
 

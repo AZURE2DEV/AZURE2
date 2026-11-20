@@ -327,7 +327,9 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
     out << "potential " << (r != p.built.potentialRecords.end() ? r->second.first + " (line " + std::to_string(r->second.second) + ")" : "?")
         << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
         << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
-        << SpinOrbitText(s) << "\n";
+        << SpinOrbitText(s)
+        << (s.interior_boundary ? "; acts inside the channel radius too, R_pot with boundary constant " + Fmt(*s.interior_boundary) : std::string())
+        << "\n";
   }
   return out.str();
 }
@@ -422,6 +424,7 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
           .Key("radius_fm").Number(s.spin_orbit->form.radius_fm).Key("diffuseness_fm").Number(s.spin_orbit->form.diffuseness_fm)
           .Key("on").String(s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light")
           .Key("operator").String("2l.s").EndObject();
+    if (s.interior_boundary) j.Key("interior_boundary").Number(*s.interior_boundary);
     j.EndObject();
   }
   j.EndArray().EndObject();

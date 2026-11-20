@@ -838,6 +838,20 @@ int main() {
       ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(pot + Set(so, "spin_orbit",
                                                                  "    spin_orbit woods_saxon depth 0 MeV radius 3.5 fm diffuseness 0.65 fm on light operator 2l.s"))));
     }
+    // the interior R-function of a potential (interior_boundary, docs/upgrade/interior_potential.md): the constant as
+    // written, carried by the potential value; refused on a pair with two spinning particles
+    {
+      const BuiltProject s = BuildText(potentials(pot + "    interior_boundary -1.5\n"));
+      for (const Diagnostic &d : s.diagnostics) std::printf("        %s: %s\n", d.code.c_str(), d.message.c_str());
+      const bool built = s.Ok() && s.diagnostics.empty() && s.potentials.pairs.count(7) && s.potentials.pairs.at(7).interior_boundary;
+      check("p12C with interior_boundary builds", built);
+      if (built)
+        check("interior_boundary -1.5: the setting and the potential value carry it",
+              *s.potentials.pairs.at(7).interior_boundary == -1.5 && s.potentials.pairs.at(7).Potential().interior_boundary == -1.5);
+      check("a record without interior_boundary has none",
+            !b.potentials.pairs.at(7).interior_boundary && !b.potentials.pairs.at(7).Potential().interior_boundary);
+      ExpectOne("E_POT_INTERIOR_TWO_SPINS", BuildText(potentials(gauss + "    interior_boundary 0\n")));
+    }
     // the refusals shared with pyazr and the API (SpinOrbitChecks.h)
     {
       using azure2::physics::SpinOrbitParticle;

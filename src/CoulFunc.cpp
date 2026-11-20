@@ -60,6 +60,7 @@ bool CoulFunc::TableLookup(int l, double radius, double energy) {
 std::complex<double> CoulFunc::HardSpherePhase(int l, int two_j, double radius, double energy) {
   // The table holds pairs without a potential only, whose functions do not depend on two_j.
   if (table_ && TableLookup(l, radius, energy)) return std::complex<double>(std::cos(tPhi_), -std::sin(tPhi_));
+  if (Interior()) return InteriorFunctions(l, two_j, radius, energy).exp_minus_i_phi;
   return CoulombHardSpherePhase(this->operator()(l, two_j, radius, energy));
 }
 
@@ -198,6 +199,7 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
 
 double CoulFunc::Penetrability(int l, int two_j, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tP_;
+  if (Interior()) return InteriorFunctions(l, two_j, radius, energy).P;
   struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
   return azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
@@ -215,6 +217,7 @@ double CoulFunc::PEShift(int l, int two_j, double radius, double energy) {
 double CoulFunc::PEShiftExact(int l, int two_j, double radius, double energy) {
   // physics/ChannelFunctions: S with the overflow guard just above a charged threshold (eta >~ 110; 11B+alpha
   // within ~1 keV, where a band of bare cross sections of 1e26-1e37 b once came from the unguarded formula).
+  if (Interior()) return InteriorFunctions(l, two_j, radius, energy).S;
   struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
   return azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
@@ -258,6 +261,24 @@ double CoulFunc::PEShift_d2E(int l, int two_j, double radius, double energy) {
   const double h = 1.0e-2;
   return azure2::physics::second_derivative([&](double e) { return PEShift(l, two_j, radius, e); }, energy, h, 1.0e-3,
                                             energy < 4.0 * h, azure2::physics::Side::Above);
+}
+
+const azure2::physics::ChannelTriple &CoulFunc::InteriorFunctions(int l, int two_j, double radius, double energy) {
+  if (l == iL_ && two_j == iTwoJ_ && radius == iR_ && energy == iE_) return iTriple_;
+  const struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
+  azure2::physics::ChannelTriple outer;
+  outer.P = azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
+  outer.S = azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
+  outer.exp_minus_i_phi = CoulombHardSpherePhase(coul);
+  const double f = azure2::physics::RegularSolution(*potential_, z1(), z2(), redmass() * uconv, l,
+                                                    pair_->SpinOrbitFactor(l, two_j), radius, energy)
+                       .log_derivative;
+  iTriple_ = azure2::physics::InteriorChannelFunctions(outer, f, *potential_->interior_boundary);
+  iL_ = l;
+  iTwoJ_ = two_j;
+  iR_ = radius;
+  iE_ = energy;
+  return iTriple_;
 }
 
 CoulWaves CoulFunc::PlainWaves(int l, double radius, double energy) const {

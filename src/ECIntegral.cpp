@@ -430,7 +430,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
       return complex(0.0, 0.0);
     }
     struct CoulWaves coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
-    const complex hsp = CoulombHardSpherePhase(coul);
+    const complex hsp = EntrancePhase(coul, theInitialLValue, chanRad, outEnergy);
     const double flux = Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
     auto overlap = [&](complex fw, complex gw) {
       if (isChannelCapture)
@@ -449,13 +449,13 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     struct CoulWaves
         coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     if (isChannelCapture) {
-      complex chanExpHSP = CoulombHardSpherePhase(coul);
+      complex chanExpHSP = EntrancePhase(coul, theInitialLValue, chanRad, outEnergy);
       overlapIntegral = complex(0.0, -0.5) *
           sqrt(coulfunction()->Penetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy)) *
           Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc) *
           chanExpHSP * (GW() + complex(0.0, 1.0) * FW());
     } else {
-      const complex hsp = CoulombHardSpherePhase(coul);
+      const complex hsp = EntrancePhase(coul, theInitialLValue, chanRad, outEnergy);
       overlapIntegral = (std::real(hsp) * FW() + std::imag(hsp) * GW()) *
           Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
     }

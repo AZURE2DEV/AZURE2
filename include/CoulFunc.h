@@ -129,6 +129,9 @@ class CoulFunc {
   const std::optional<azure2::physics::HybridPotential> &HybridPotential() const { return potential_; }
   /// Whether P, S and the phase come from the universal Coulomb table.
   bool UsesTable() const { return table_ != nullptr; }
+  /// Does the pair's potential also act inside the channel radius (HybridPotential::interior_boundary)?  Then P, S
+  /// and the phase are the primed functions of docs/upgrade/interior_potential.md Eqs. (4), (5).
+  bool Interior() const { return potential_ && potential_->interior_boundary; }
 
   /// The external-capture integrals ask for F, G at the radii the adaptive quadrature chooses, the same radii for
   /// every term of one entrance l and energy.  With a memo (the caller's, used by one thread at a time), operator()
@@ -143,6 +146,13 @@ class CoulFunc {
   CoulWaves computeHybrid(int l, int two_j, double radius, double energy);
   /// The point-Coulomb functions (physics/coulomb, CoulombWavesAt).
   CoulWaves PlainWaves(int l, double radius, double energy) const;
+  /// S', P' and exp(-i phi') of an interior potential at (l, two_j, radius, energy > 0): the outer functions of the
+  /// waves and the regular solution's logarithmic derivative (physics/ RegularSolution, InteriorChannelFunctions).
+  /// A one-deep memo: a point asks for the three in turn.
+  const azure2::physics::ChannelTriple &InteriorFunctions(int l, int two_j, double radius, double energy);
+  int iL_ = -1, iTwoJ_ = 0;
+  double iR_ = 0.0, iE_ = 0.0;
+  azure2::physics::ChannelTriple iTriple_;
 
   CoulRadialMemo *radialMemo_ = nullptr;
   int z1_;

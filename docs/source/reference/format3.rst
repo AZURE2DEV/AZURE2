@@ -678,6 +678,10 @@ Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pa
      - ``woods_saxon depth <number> <energy unit> radius <number> <length unit> diffuseness <number> <length unit> on light|heavy operator 2l.s``
      - optional
      - a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none
+   * - ``interior_boundary``
+     - ``<number>``
+     - optional
+     - the potential also acts inside the channel radius: its R-function R_pot = 1/(f - b) with this boundary constant b is added to the levels' (interior_potential.md; Koonin, Tombrello and Fox use 0); absent: the potential acts outside the channel radius only
    * - ``matching_radius``
      - ``<number> <length unit>``
      - optional (default ``15 fm``)
@@ -2360,6 +2364,9 @@ Diagnostic codes
    * - ``E_POTENTIAL_PAIR_KIND``
      - error
      - a potential record on a photon or beta pair (a potential belongs to a particle pair)
+   * - ``E_POT_INTERIOR_TWO_SPINS``
+     - error
+     - interior_boundary on a potential of a pair whose two particles both have spin (the interior R-function is then not diagonal in the channels; not implemented)
    * - ``E_CHANNEL_RADIUS_TWICE``
      - error
      - two channel_radius records for one selection of channels (pair, l, s, J)

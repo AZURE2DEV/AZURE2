@@ -108,6 +108,16 @@ void BuildPotentials(Context &c) {
         continue;
       }
     }
+    if (const Value *b = r.Get("interior_boundary")) {
+      if (info && info->twoJLight != 0 && info->twoJHeavy != 0) {
+        c.Error(codes::kPotInteriorTwoSpins, r, "interior_boundary",
+                "pair " + std::to_string(key) + " (" + PairLabel(*info) + ") has two particles with spin: the interior R-function of "
+                    "its potential would couple the channel spins of one (l, J), which is not implemented "
+                    "(docs/upgrade/interior_potential.md section 7)");
+        continue;
+      }
+      s.interior_boundary = b->number.value;
+    }
     s.coulomb_radius_fm = InBase(*coulomb);
     // r_m and the step: the table's defaults (HybridPotentialSetting's, the solver's) when absent, written to the log
     if (const Value *m = r.Get("matching_radius"))

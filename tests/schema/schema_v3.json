@@ -2022,6 +2022,13 @@
      ],
      "doc": "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"
     },
+    "interior_boundary": {
+     "title": "Interior boundary constant",
+     "type": "number",
+     "grammar": "<number>",
+     "required": false,
+     "doc": "the potential also acts inside the channel radius: its R-function R_pot = 1/(f - b) with this boundary constant b is added to the levels' (interior_potential.md; Koonin, Tombrello and Fox use 0); absent: the potential acts outside the channel radius only"
+    },
     "matching_radius": {
      "title": "Matching radius",
      "type": "number_with_unit",
@@ -4549,6 +4556,10 @@
   "E_POTENTIAL_PAIR_KIND": {
    "severity": "error",
    "meaning": "a potential record on a photon or beta pair (a potential belongs to a particle pair)"
+  },
+  "E_POT_INTERIOR_TWO_SPINS": {
+   "severity": "error",
+   "meaning": "interior_boundary on a potential of a pair whose two particles both have spin (the interior R-function is then not diagonal in the channels; not implemented)"
   },
   "E_CHANNEL_RADIUS_TWICE": {
    "severity": "error",

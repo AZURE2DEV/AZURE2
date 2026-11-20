@@ -562,6 +562,10 @@ RecordKind PotentialKind() {
               Req("central", "Central term", Structured(f.central), "the central nuclear term V_N(r)"),
               Opt("spin_orbit", "Spin-orbit term", Structured(f.spinOrbit),
                   "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"),
+              Opt("interior_boundary", "Interior boundary constant", Num(),
+                  "the potential also acts inside the channel radius: its R-function R_pot = 1/(f - b) with this boundary "
+                  "constant b is added to the levels' (interior_potential.md; Koonin, Tombrello and Fox use 0); absent: the "
+                  "potential acts outside the channel radius only"),
               Rare(Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
                                  "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the "
                                  "pair"),
