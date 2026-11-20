@@ -866,6 +866,15 @@ int main() {
       check("a record without interior_boundary has none",
             !b.potentials.pairs.at(7).interior_boundary && !b.potentials.pairs.at(7).Potential().interior_boundary);
       ExpectOne("E_POT_INTERIOR_TWO_SPINS", BuildText(potentials(gauss + "    interior_boundary 0\n")));
+      // the interior charges of the capture from the potential's interior (section 6.3): carried with the constant,
+      // refused without it
+      {
+        const BuiltProject q = BuildText(potentials(pot + "    interior_boundary 0\n    interior_charge_e1 0.012\n    interior_charge_e2 -0.3\n"));
+        check("interior_charge_e1 and _e2 with interior_boundary: the setting and the potential value carry them",
+              q.Ok() && q.diagnostics.empty() && q.potentials.pairs.count(7) && q.potentials.pairs.at(7).interior_charge_e1 == 0.012 &&
+                  q.potentials.pairs.at(7).Potential().interior_charge_e1 == 0.012 && q.potentials.pairs.at(7).Potential().interior_charge_e2 == -0.3);
+        ExpectOne("E_POT_INTERIOR_CHARGE", BuildText(potentials(pot + "    interior_charge_e1 0.012\n")));
+      }
       // records of single l: the pair's record stays for the other l; the settings of each l; the refusals
       const std::string l1 = "potential p12C_p\n    pair p+12C\n    l 1 3\n    coulomb_radius 3.55 fm\n    central woods_saxon depth 45 MeV radius 3.55 fm diffuseness 0.6 fm\n    interior_boundary 0\n";
       const BuiltProject m = BuildText(potentials(pot + l1));

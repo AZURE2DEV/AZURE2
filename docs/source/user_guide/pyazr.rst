@@ -1351,7 +1351,9 @@ a pair without a record has none, and there is no default record:
 ``central`` is ``woods_saxon depth radius diffuseness`` or ``gaussian depth
 width``; the depth is positive for an attractive well and negative for a
 repulsive one. ``interior_boundary <b>`` makes the potential act inside the channel
-radius too (its R-function with boundary constant ``b`` joins the levels'), and
+radius too (its R-function with boundary constant ``b`` joins the levels'; capture
+then includes the potential's interior, with ``interior_charge_e1 <q>`` and
+``interior_charge_e2 <q>`` as additional charges inside the radius), and
 ``l <l> ...`` restricts a record to those orbital angular momenta
 (:ref:`theory-hybrid-potential`); ``nuclear_potential(pair, l=...)`` shows the
 record of one ``l`` and its ``interior_boundary``. The pair is named by its

@@ -85,6 +85,10 @@ struct HybridPotential {
   /// The boundary constant b of the potential's interior R-function R_pot = 1/(f - b) (interior_potential.md); none:
   /// the potential acts outside the channel radius only.
   std::optional<double> interior_boundary;
+  /// An additional effective charge (units of e) of the E1 and the E2 operator inside the channel radius, for the
+  /// capture from the potential's interior (interior_potential.md section 6.3); read only with interior_boundary.
+  double interior_charge_e1 = 0.0;
+  double interior_charge_e2 = 0.0;
 };
 bool operator==(const HybridPotential &a, const HybridPotential &b);
 inline bool operator!=(const HybridPotential &a, const HybridPotential &b) { return !(a == b); }
@@ -116,8 +120,8 @@ double RadialPotential(const HybridPotential &p, int z1, int z2, double mu_MeV, 
 /*!
  * Every value the radial solution depends on, as numbers, for keys of tables and memos that must not mix
  * potentials: {0} without a potential, else {1, shape, V0, R, a, r0, R_C, r_m, step}, followed by {V_so, R_so, a_so,
- * acts_on (0 light, 1 heavy)} when the potential has a spin-orbit term, and by {b} when it has an interior boundary
- * constant (so the length tells the four cases apart).
+ * acts_on (0 light, 1 heavy)} when the potential has a spin-orbit term, and by {b, q_E1, q_E2} when it has an interior
+ * boundary constant (so the length tells the four cases apart).
  */
 std::vector<double> PotentialKey(const std::optional<HybridPotential> &p);
 
@@ -183,6 +187,23 @@ struct RegularValue {
  */
 RegularValue RegularSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                              double E_MeV);
+
+/// The regular solution on its Numerov grid inside the channel radius, for radial integrals over the interior.
+struct RegularWave {
+  std::vector<double> u;        ///< u(r_i)/u(a) at r_i = i step_fm, i = 0 .. n; u.back() = 1 at r = a
+  double step_fm = 0.0;
+  double log_derivative = 0.0;  ///< as RegularValue
+  double norm_fm = 0.0;         ///< as RegularValue
+};
+
+/// RegularSolution with the wave kept.  intervals > 0 sets the number of grid intervals in [0, a] (two waves of one
+/// integral must share the grid); 0 takes the potential's step as RegularSolution does.
+RegularWave RegularWaveOnGrid(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                              double E_MeV, int intervals = 0);
+
+/// int_0^a [u_a(r)/u_a(a)] [u_b(r)/u_b(a)] weight(r) dr (fm times the weight's unit) by Simpson's rule on the common
+/// grid of the two waves, O(step^4); weight is not called at r = 0.  Throws if the grids differ.
+double InteriorOverlap(const RegularWave &a, const RegularWave &b, const std::function<double(double r_fm)> &weight);
 
 /// S, P and exp(-i phi) of a channel, as the level and collision matrices read them.
 struct ChannelTriple {

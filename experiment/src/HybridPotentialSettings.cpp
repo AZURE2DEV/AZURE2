@@ -17,6 +17,8 @@ physics::HybridPotential HybridPotentialSetting::Potential() const {
     p.spin_orbit = physics::WoodsSaxonSpinOrbit(spin_orbit->depth_MeV, spin_orbit->form.radius_fm,
                                                 spin_orbit->form.diffuseness_fm, spin_orbit->acts_on);
   p.interior_boundary = interior_boundary;
+  p.interior_charge_e1 = interior_charge_e1;
+  p.interior_charge_e2 = interior_charge_e2;
   return p;
 }
 

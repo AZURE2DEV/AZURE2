@@ -15,12 +15,17 @@
 //  4. One level and R_pot: U from R = R_pot + gamma^2/(E_lambda - E) directly against the level-matrix form with the
 //     primed functions, to 1e-12 (an identity).
 //  5. Limits: f = infinity returns the outer functions; P' = 0 at a pole of R_pot; P' >= 0.
+//  6. The wave on its grid (RegularWaveOnGrid, InteriorOverlap; note section 6): in a flat well without Coulomb, l = 0,
+//     u = sin(K r), the overlap of the waves of two energies against the closed form to 1e-5 (1e-7 at a quarter of the
+//     step); the overlap of a wave
+//     with itself is the norm of RegularSolution, which is the wave's own f and norm bit for bit; two grids are refused.
 #include <cmath>
 #include <complex>
 #include <cstdio>
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -210,6 +215,37 @@ void Limits() {
         "exp(-i phi') changes sign through a pole of R_pot (with P'^1/2 the amplitude is continuous)");
 }
 
+void Wave() {
+  // neutral particles in a Woods-Saxon that is flat to 1e-39 of its depth over [0, 5 fm]: u = sin(K r)
+  const HybridPotential p = WoodsSaxonPotential(30.0, 50.0, 0.5);
+  const double mu = 3000.0, a = 5.0, k2 = 2.0 * mu / (kHbarC_MeV_fm * kHbarC_MeV_fm);
+  const RegularWave u1 = RegularWaveOnGrid(p, 0, 0, mu, 0, 0.0, a, 1.0), u2 = RegularWaveOnGrid(p, 0, 0, mu, 0, 0.0, a, -4.0);
+  const double K1 = std::sqrt(k2 * 31.0), K2 = std::sqrt(k2 * 26.0);
+  const double exact = (std::sin((K1 - K2) * a) / (2.0 * (K1 - K2)) - std::sin((K1 + K2) * a) / (2.0 * (K1 + K2))) /
+                       (std::sin(K1 * a) * std::sin(K2 * a));
+  const double got = InteriorOverlap(u1, u2, [](double) { return 1.0; });
+  const int n = static_cast<int>(u1.u.size()) - 1;
+  const double fine = InteriorOverlap(RegularWaveOnGrid(p, 0, 0, mu, 0, 0.0, a, 1.0, 4 * n),
+                                      RegularWaveOnGrid(p, 0, 0, mu, 0, 0.0, a, -4.0, 4 * n), [](double) { return 1.0; });
+  std::printf("overlap of two flat-well waves: %.3e off at the default step, %.3e at a quarter of it\n", got / exact - 1.0,
+              fine / exact - 1.0);
+  Check(std::fabs(got / exact - 1.0) < 1e-5 && std::fabs(fine / exact - 1.0) < 1e-7,
+        "the overlap of two waves of a flat well against the closed form (1e-5; 1e-7 at a quarter of the step)");
+  const RegularValue v = RegularSolution(p, 0, 0, mu, 0, 0.0, a, 1.0);
+  Check(v.log_derivative == u1.log_derivative && v.norm_fm == u1.norm_fm && u1.u.back() == 1.0 && u1.u.front() == 0.0,
+        "RegularSolution is the wave's f and norm");
+  Check(std::fabs(InteriorOverlap(u1, u1, [](double) { return 1.0; }) / v.norm_fm - 1.0) < 1e-14, "the overlap of a wave with itself is its norm");
+  const RegularWave coarse = RegularWaveOnGrid(p, 0, 0, mu, 0, 0.0, a, 1.0, 100);
+  Check(coarse.u.size() == 101 && std::fabs(coarse.log_derivative / u1.log_derivative - 1.0) < 1e-4, "a given number of intervals");
+  bool threw = false;
+  try {
+    InteriorOverlap(u1, coarse, [](double) { return 1.0; });
+  } catch (const std::invalid_argument &) {
+    threw = true;
+  }
+  Check(threw, "two waves on different grids are refused");
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -221,6 +257,7 @@ int main(int argc, char **argv) {
   StepOrder(argv[1]);
   OneLevel();
   Limits();
+  Wave();
   if (failures) {
     std::printf("%d failure(s)\n", failures);
     return 1;

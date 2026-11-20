@@ -569,6 +569,12 @@ RecordKind PotentialKind() {
                   "the potential also acts inside the channel radius: its R-function R_pot = 1/(f - b) with this boundary "
                   "constant b is added to the levels' (interior_potential.md; Koonin, Tombrello and Fox use 0); absent: the "
                   "potential acts outside the channel radius only"),
+              Opt("interior_charge_e1", "Interior E1 charge", Num(),
+                  "with interior_boundary: an additional effective charge q (units of e) of the E1 operator inside the "
+                  "channel radius, q r added to the pair's own operator in the capture from the potential's interior "
+                  "(interior_potential.md section 6.3); the record of the entrance channel's l; absent: 0"),
+              Opt("interior_charge_e2", "Interior E2 charge", Num(),
+                  "as interior_charge_e1 for the E2 operator (q r^2); absent: 0"),
               Rare(Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
                                  "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the "
                                  "pair"),

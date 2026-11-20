@@ -599,6 +599,7 @@ ReactionRate::ReactionRate(const CompoundSystem *compound, const LevelState &sta
   {
     WarnLargeRadiativeWidths(*compound_, inputs_, *observed, configure);
     WarnLevelDoublesPotential(*compound_, inputs_, *observed, configure);
+    WarnInteriorCaptureFinal(*compound_, *observed, configure);
   }
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound_->CalcShiftFunctions(configure, state_);
 }

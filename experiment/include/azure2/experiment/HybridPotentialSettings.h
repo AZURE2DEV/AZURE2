@@ -32,6 +32,10 @@ struct HybridPotentialSetting {
   /// The boundary constant b of the potential's interior R-function (a format-3 record's interior_boundary;
   /// docs/upgrade/interior_potential.md); none: the potential acts outside the channel radius only.
   std::optional<double> interior_boundary;
+  /// Additional effective charges (units of e) of the E1 and E2 operators inside the channel radius (a record's
+  /// interior_charge_e1, interior_charge_e2; interior_potential.md section 6.3); read only with interior_boundary.
+  double interior_charge_e1 = 0.0;
+  double interior_charge_e2 = 0.0;
   /// The potential of this setting; throws std::invalid_argument when a parameter of its shape, R_C, r_m, the
   /// step or of the spin-orbit term is not positive.
   physics::HybridPotential Potential() const;

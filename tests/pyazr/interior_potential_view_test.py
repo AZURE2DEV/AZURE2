@@ -7,7 +7,9 @@ On tests/upgrade/interior_bound (alpha + 12C, one record with interior_boundary 
       record of single l);
   (2) Project.set(a12C, interior_boundary="-1") gives -1.0 in a new session;
   (3) a second record with `l 1`, a negative depth and no interior_boundary: nuclear_potential(1, l=1) is that record
-      (V0 < 0, interior_boundary None), l=0 and the pair's own view stay the first record.
+      (V0 < 0, interior_boundary None), l=0 and the pair's own view stay the first record;
+  (4) Project.set(a12C, interior_charge_e1="0.012") gives interior_charge {"E1": 0.012, "E2": 0.0} in a new session
+      (0 and 0 before).
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/interior_potential_view_test.py
@@ -71,6 +73,15 @@ try:
           l1.V0 == -5.0 and l1.interior_boundary is None and l1.own, repr(l1))
     check("(3) l=0 and the pair's view: the first record", l0.V0 == 45.891 and l0.interior_boundary == 0.0 and own.V0 == 45.891,
           f"{l0!r} {own!r}")
+
+    charged = Project.open(base)
+    charged.set("a12C", interior_charge_e1="0.012")
+    f4 = os.path.join(work, "charged.azr")
+    charged.save(f4)
+    p4 = Session(f4, cwd=work, extrapolations=True).nuclear_potential(1)
+    check("(4) Project.set(a12C, interior_charge_e1=0.012), a new session: E1 0.012, E2 0; 0 and 0 before",
+          p4.interior_charge == {"E1": 0.012, "E2": 0.0} and p.interior_charge == {"E1": 0.0, "E2": 0.0},
+          f"{p4.interior_charge!r} {p.interior_charge!r}")
 finally:
     shutil.rmtree(work, ignore_errors=True)
 

@@ -4,10 +4,12 @@
 #include "CoulFunc.h"
 #include "WhitFunc.h"
 #include "Config.h"
+#include "azure2/physics/HybridPotential.h"
 #include <gsl/gsl_integration.h>
 
 #include <map>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 class EffectiveCharge;
@@ -174,6 +176,28 @@ class ECIntegral {
    * Returns false if R would have to exceed 50000 fm.
    */
   bool IntegrateUnbound(double chanrad, double finalEnergy);
+  /*!
+   * The capture from the potential's interior (docs/upgrade/interior_potential.md section 6), for a pathway whose
+   * entrance and final channel both have a potential with an interior boundary constant and whose final state is
+   * bound: the radial integrals over 0 .. a of [u_i(r)/u_i(a)] w_f(r), w_f = W(a) [(S_f - b_f)/(f_f - b_f)] u_f(r)/u_f(a)
+   * the final state's potential part (W in the scaled units of FW/GW), `withOperator` with the operator of the
+   * exterior integrand and `plain` with r^L alone (the interior charge's term).  f and b are the entrance channel's.
+   */
+  struct InteriorTerm {
+    bool on = false;
+    double f = 0.0, b = 0.0;
+    double withOperator = 0.0, plain = 0.0;
+  };
+  InteriorTerm Interior(int li, int lf, double chanRad, double outEnergy);
+  /// The final state's wave of Interior, kept between energies: its key and (S_f - b_f)/(f_f - b_f) times u_f/u_f(a).
+  struct FinalWaveKey {
+    int lf, twoJf, intervals;
+    double binding;
+    bool operator<(const FinalWaveKey &o) const {
+      return std::tie(lf, twoJf, intervals, binding) < std::tie(o.lf, o.twoJf, o.intervals, o.binding);
+    }
+  };
+  std::map<FinalWaveKey, azure2::physics::RegularWave> finalWaves_;
   Params params_;
   /// The run's scratch of this thread (ECScratch).
   ECScratch &scratch_;

@@ -1,8 +1,8 @@
 # The interior R-function of a hybrid potential
 
 **Status (2026-11-20): built on `feature/upgrade-6-interior-potential`** — steps 1 to 4 of §4 and the bound levels;
-§8 lists what was built and where it differs from the design below. §6 (capture from the potential's interior) is
-a design of the same day, not built. The text of §1 to §7 is the design note as
+§8 lists what was built and where it differs from the design below. §6 (capture from the potential's interior):
+steps 1 to 3 of §6.5 are built (§9); unbound final states, the rate mode's check and the fit parameters are not. The text of §1 to §7 is the design note as
 reviewed ("no engine code is changed by it" was true of the note).
 
 A design note for review; no engine code is changed by it. Asked for by the owner (R. J. deBoer, 2026-11-19) after a
@@ -188,9 +188,9 @@ U_pot, computed once per record at set-up over the project's energy range.
 
 ## 6. Second step: capture from the potential's interior
 
-**Status (2026-11-20): design, asked for by the owner on that day; nothing of this section is built.** Code references
-are to `78587e70`. The formulas with levels (§6.2) are derived here and not yet checked numerically; §6.6 lists the
-checks that decide them.
+**Status (2026-11-20): design, asked for by the owner on that day; steps 1 to 3 of §6.5 were built the same day
+(§9, which also lists the differences).** Code references are to `78587e70`. The formulas with levels (§6.2) were
+derived here; the checks of §6.6 have since confirmed them (§9).
 
 ### 6.1 Why
 
@@ -366,3 +366,46 @@ at 80 points; the potential's l = 1 resonance at 2.3988 MeV, 412 keV (f = S; the
 
 **Still open.** Capture from the potential's interior (§6); the potential's parameters as fit parameters; the
 physics suite of the owner's E1 fits (§5, last but one item); the signed surface amplitude above.
+
+## 9. Capture from the interior, as built (2026-11-20)
+
+The owner's "build it" (2026-11-20) without answers to §6.7: built with the proposals, each a small change to undo —
+an additive interior charge inside a_c; the cross term of §6.2 left out; no interior capture and a warning for a
+final channel without `interior_boundary` of its own l; steps 1 to 3 before step 4 and the fit parameters. They are
+listed in `FOR_THE_OWNER.md` §8.
+
+| design (§6) | built |
+|---|---|
+| `RegularSolution` returns u; `InteriorOverlap` | `RegularWaveOnGrid` (u/u(a) on the Numerov grid, f, the norm; `RegularSolution` is its two numbers, bit for bit) and `InteriorOverlap` (`physics/HybridPotential`) |
+| the interior term in `ECIntegral::CalculateDirect`, both entrance branches, bound final states | `ECIntegral::Interior` and the three places of `CalculateDirect` (non-resonant, channel term above and below threshold); the final state's wave is kept per (l_f, J_f, binding) |
+| `interior_charge E1 <q>` | **`interior_charge_e1 <q>`, `interior_charge_e2 <q>`** (two words, a number each); in `PotentialKey` after b, so every cache and the amplitude file's signature separate the cases |
+| `E_POT_INTERIOR_CHARGE` | built (the word without `interior_boundary`); other multipolarities have no word |
+| `W_POT_INTERIOR_FINAL`, `E_POT_INTERIOR_UNBOUND_FINAL` | one set-up warning for both cases (`WarnInteriorCaptureFinal`, `src/CompoundSystemChecks.cpp`); an unbound final state is **warned about, not refused**: it keeps the capture it had (√(P′/P) and the exterior integral) |
+| `ECTable` interpolates the sum | **not interpolated**: a term whose entrance channel has `interior_boundary` is integrated at every energy (`ECTable::Integral`). The table divides by √P′ or e^{−iφ′}, which vanish or change sign at a pole of R_pot (f = b), and the terms carry the potential's resonances (1/(f − L)): measured 1 % off on the 412 keV wide 1⁻ resonance and of the order of the value near f = b. **This was also wrong at `78587e70`** for the exterior term of such a channel (its primed √P and phase), with the tables on, which is the default |
+| the rate mode | untested (step 4) |
+
+**Checks** (§6.6).
+
+- 1, 2, 4 and the closed branch: `upgrade_interior_capture` against `tests/upgrade/interior_capture/reference.csv`
+  (`make_reference.py`: scipy DOP853, mpmath). Each engine term with the interior over the same term with the final
+  channel's potential without its boundary constant, 162 ratios at a = 4.0, 5.35, 6.5 fm, b = 0 and −1.5, final
+  state on and off the potential's bound state: worst 2.7 × 10⁻⁵ at the default step, 9 × 10⁻⁷ at 0.01 fm. The
+  script asserts the identity behind (8) (one level on R_pot, the potential's part of ψ(a) from U) to 10⁻¹⁰. The
+  non-resonant term for the potential's bound state is the same at the three radii to 1.2 × 10⁻⁵ (exact form:
+  1.7 × 10⁻⁵).
+- 3: M1 between two l = 1 states of the potential, no level: the whole amplitude is 5.7 × 10⁻⁷ of its exterior part.
+- 5: linear in q exactly; q equal to the pair's own E1 charge number doubles the interior part to 1.6 × 10⁻¹³.
+- The whole engine (`interior_capture`, `tests/interior_capture`): the cross section of the potential model's
+  direct capture at 51 energies across the 1⁻ resonance is the same at a = 4.0, 5.35 and 6.5 fm to 2.3 × 10⁻⁴ (the
+  direct integrals' tolerance is 10⁻⁴); without the final state's interior the radii differ by a factor 7000.
+  `interior_charge_e1 0.01` raises it by up to a factor 140: the pair's own E1 charge number is −9.7 × 10⁻⁴.
+- 6 (`interior_boundary` absent: every reference bit for bit) and 7 (the ¹²C(α,γ) trial): the gate and the owner's
+  runs, recorded where they are made.
+
+**For the ¹²C(α,γ) trial.** The interior term needs a final state with an ANC in the α + ¹²C channel (the ground
+state as a 0⁺ level, as external capture always did) and a potential record with `interior_boundary` that covers
+l = 0 as well as l = 1; a project without that final state has no computed capture at all.
+
+**Still open.** Unbound final states and the rate mode (step 4); q and the potential's parameters as fit
+parameters; the cross term of §6.2; the theory page's worked example.
+

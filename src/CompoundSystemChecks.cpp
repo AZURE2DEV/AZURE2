@@ -380,3 +380,35 @@ int WarnLevelDoublesPotential(const CompoundSystem &compound, const LevelInputs 
   }
   return flagged;
 }
+
+int WarnInteriorCaptureFinal(const CompoundSystem &compound, const ObservedLevelTable &table, const Config &configure) {
+  auto actsInside = [](const PPair *pair, int l) { return pair->GetHybridPotential(l) && pair->GetHybridPotential(l)->interior_boundary; };
+  int flagged = 0;
+  for (int j = 1; j <= compound.NumJGroups(); j++) {
+    const JGroup *group = compound.GetJGroup(j);
+    for (int la = 1; la <= group->NumLevels(); la++) {
+      if (!group->GetLevel(la)->IsECLevel()) continue;
+      for (int ch = 1; ch <= group->NumChannels(); ch++) {
+        const AChannel *channel = group->GetChannel(ch);
+        if (channel->GetRadType() != 'P' || table.Level(j, la).gamma[ch - 1] == 0.0) continue;
+        const PPair *pair = compound.GetPair(channel->GetPairNum());
+        bool anyInside = false;
+        for (int l = 0; l <= 12 && !anyInside; l++) anyInside = actsInside(pair, l);
+        if (!anyInside) continue;
+        const bool unbound = table.Level(j, la).E > pair->GetSepE() + pair->GetExE();
+        if (!unbound && actsInside(pair, channel->GetL())) continue;
+        std::ostringstream msg;
+        msg << std::setprecision(6) << "**WARNING: the external-capture final state at E_x = " << table.Level(j, la).E << " MeV (J = "
+            << group->GetJ() << ", l = " << channel->GetL() << " of pair " << channel->GetPairNum() << ") gets no capture from the "
+            << "potential's interior: " << (unbound ? "it is unbound (not built for an unbound final state)."
+                                                    : "the pair's potential has no interior_boundary for this l.")
+            << std::endl
+            << "  Its capture is the levels' internal widths and the integral outside the channel radius only." << std::endl;
+        configure.outStream << msg.str();
+        flagged++;
+        break;
+      }
+    }
+  }
+  return flagged;
+}

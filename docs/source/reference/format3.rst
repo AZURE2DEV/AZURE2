@@ -686,6 +686,14 @@ Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pa
      - ``<number>``
      - optional
      - the potential also acts inside the channel radius: its R-function R_pot = 1/(f - b) with this boundary constant b is added to the levels' (interior_potential.md; Koonin, Tombrello and Fox use 0); absent: the potential acts outside the channel radius only
+   * - ``interior_charge_e1``
+     - ``<number>``
+     - optional
+     - with interior_boundary: an additional effective charge q (units of e) of the E1 operator inside the channel radius, q r added to the pair's own operator in the capture from the potential's interior (interior_potential.md section 6.3); the record of the entrance channel's l; absent: 0
+   * - ``interior_charge_e2``
+     - ``<number>``
+     - optional
+     - as interior_charge_e1 for the E2 operator (q r^2); absent: 0
    * - ``matching_radius``
      - ``<number> <length unit>``
      - optional (default ``15 fm``)
@@ -2374,6 +2382,9 @@ Diagnostic codes
    * - ``E_POT_INTERIOR_TWO_SPINS``
      - error
      - interior_boundary on a potential of a pair whose two particles both have spin (the interior R-function is then not diagonal in the channels; not implemented)
+   * - ``E_POT_INTERIOR_CHARGE``
+     - error
+     - interior_charge_e1 or interior_charge_e2 on a potential record without interior_boundary
    * - ``E_CHANNEL_RADIUS_TWICE``
      - error
      - two channel_radius records for one selection of channels (pair, l, s, J)

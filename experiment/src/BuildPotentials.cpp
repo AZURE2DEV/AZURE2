@@ -148,6 +148,19 @@ void BuildPotentials(Context &c) {
       }
       s.interior_boundary = b->number.value;
     }
+    bool chargeRefused = false;
+    for (const char *word : {"interior_charge_e1", "interior_charge_e2"})
+      if (const Value *q = r.Get(word)) {
+        if (!s.interior_boundary) {
+          c.Error(codes::kPotInteriorCharge, r, word,
+                  std::string(word) + " without interior_boundary: the charge acts in the capture from the potential's "
+                      "interior, which this record does not have (docs/upgrade/interior_potential.md section 6.3)");
+          chargeRefused = true;
+          break;
+        }
+        (std::string(word) == "interior_charge_e1" ? s.interior_charge_e1 : s.interior_charge_e2) = q->number.value;
+      }
+    if (chargeRefused) continue;
     s.coulomb_radius_fm = InBase(*coulomb);
     // r_m and the step: the table's defaults (HybridPotentialSetting's, the solver's) when absent, written to the log
     if (const Value *m = r.Get("matching_radius"))

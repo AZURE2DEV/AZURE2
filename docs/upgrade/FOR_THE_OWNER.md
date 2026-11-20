@@ -441,6 +441,18 @@ estimate from the 65 commits read, not a measurement).
     `build.yml`, with the readline packages (CMake has no such option any more).
   The CI itself is red on this branch (section 10, the first item).
 
+- **Capture from a potential's interior** (`interior_potential.md` §6.7, built 2026-11-20 on
+  `feature/upgrade-6-interior-potential` with these proposals, each a small change to overrule):
+  - the interior charge (`interior_charge_e1`, `_e2`) is **added** to the pair's own operator and acts **inside the
+    channel radius only**; the alternative is one factor on the whole potential capture, inside and outside;
+  - the matrix element between the level part of the final state and the potential part of the entrance wave is
+    **left out** (zero when the final state is a state of the potential); the alternative is a parameter per final
+    state;
+  - a final state whose channel has no `interior_boundary` of its own l gets **no interior capture and a warning**;
+    the alternative is to refuse the project;
+  - **order**: the ¹²C(α,γ) trial with a fixed interior charge first; then the interior charge and the potential's
+    parameters as fit parameters; unbound final states and the rate mode after that.
+
 ## 9. Known defects and limits
 
 Each checked against the start commit of this page, by a run (R) or by reading the code (C):

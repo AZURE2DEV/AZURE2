@@ -129,9 +129,35 @@ resonances of each such potential (:math:`f = S`; above threshold only zeros nar
 found, and a level with a width in the channel that lies within one width of one, the larger of the level's observed
 particle width and the state's, draws a warning; the calculation proceeds.
 
+**Capture from the potential's interior.**  The interior wave function is a sum over the levels and over the
+states of the potential, and the part the potential's states carry is closed:
+:math:`\chi_c(r) = [u_c(r)/u_c(a_c)]\,R_{pot,c}\,(a_c\psi_c' - b_c\psi_c)` for a channel wave :math:`\psi_c` at the
+surface.  The two terms of the external capture therefore continue inside the radius, when the entrance and the
+final channel both have ``interior_boundary`` and the final state is bound:
+
+* the non-resonant term's standing wave :math:`v(r)` continues as :math:`v(a_c)\,u(r)/u(a_c)`: without levels the
+  term is the direct capture of the potential model, over the whole radial range;
+* a level's channel wave :math:`O_c(r)/O_c(a_c)` continues as :math:`[(L_c - b_c)/(f_c - b_c)]\,u(r)/u(a_c)`
+  (:math:`L = S` below threshold); the remainder of the level's surface amplitude is its own interior, the level's
+  internal photon width;
+* the bound final state :math:`C\,W(r)` continues as
+  :math:`C\,W(a_c)\,[(S_f - b_f)/(f_f - b_f)]\,u_f(r)/u_f(a_c)`, the term already in its norm above.  At a bound
+  state of the potential the factor is 1 and the final state is the potential's wave function.
+
+The operator inside is the one outside.  ``interior_charge_e1 <q>`` (and ``interior_charge_e2``) on the record of
+the entrance channel's :math:`l` adds :math:`q\,r^L` (:math:`q` in units of :math:`e`) inside the radius: for an
+:math:`N = Z` pair the E1 operator of the relative motion nearly vanishes (:sup:`12`\ C + α:
+:math:`Z_1 m_2/M - Z_2 m_1/M \approx -10^{-3}`) and the strength is the interior's (Koonin, Tombrello and Fox fit an
+effective dipole strength).  Left out: the matrix element between the *level* part of the final state and the
+potential part of the entrance wave; it vanishes when the final state is a state of the potential.  A final state
+whose channel has no ``interior_boundary`` of its own :math:`l`, or that is unbound, gets no interior capture and a
+warning at set-up.  These terms are integrated at every energy rather than interpolated from the energy tables of
+the external capture: they carry the potential's resonances, and at a pole of :math:`R_{pot}` the tables' divisors
+vanish or change sign.
+
 Limits: a pair whose two particles both have spin is refused (``E_POT_INTERIOR_TWO_SPINS``; :math:`R_{pot}` would
-couple the channel spins); the direct capture from the potential's interior (the radial integral below :math:`a_c`)
-is not included; the potential's parameters are not fit parameters.  A potential may be given per orbital angular
+couple the channel spins); no capture from the interior into an unbound final state; the potential's parameters and
+the interior charge are not fit parameters.  A potential may be given per orbital angular
 momentum with the record's ``l`` list.  The design note is ``docs/upgrade/interior_potential.md``.
 
 Checks
@@ -141,7 +167,12 @@ The interior R-function is checked by ``physics_interior_potential`` (:math:`f`,
 :sup:`12`\ C + α, l = 0 to 2, against scipy's DOP853 with mpmath's Coulomb functions, 2·10\ :sup:`-6`) and
 ``upgrade_interior_bound`` (the bound-level factor; the norm identity to 1.3·10\ :sup:`-5`; the single-particle ANC at
 three bound states of the potential to 2.3·10\ :sup:`-5`; the phase without levels against the regular solution
-matched at 14 fm, 2.3·10\ :sup:`-8` rad; the warning).
+matched at 14 fm, 2.3·10\ :sup:`-8` rad; the warning).  The capture from the interior is checked by
+``upgrade_interior_capture`` (each term with the interior over the same term from outside alone, at three channel
+radii and two boundary constants, above and below threshold, against scipy and mpmath: 2.7·10\ :sup:`-5`, and
+9·10\ :sup:`-7` with the step at 0.01 fm; M1 between two states of one potential cancels to 6·10\ :sup:`-7`; the
+interior charge) and ``interior_capture`` (the whole engine: the potential model's direct capture cross section is
+the same at channel radii 4.0, 5.35 and 6.5 fm to 2.3·10\ :sup:`-4`, the tolerance of the direct integrals).
 
 The term is checked against answers independent of the engine (``physics_spin_orbit``,
 ``tests/spin_orbit_potential``, ``tests/pyazr/spin_orbit_potential_test.py``): the angular factor against an

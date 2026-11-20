@@ -120,9 +120,14 @@ complex ECTable::Integral(const PPair *finalPair, double radius, const Config &c
   // directly: its integral grows like (k_i - k_f)^-2 towards the photon threshold E = levelEnergy and is zero below
   // it, which a Lagrange stencil in ln(E_out) cannot follow.
   const bool unboundFinal = levelEnergy > threshold;
-  if (!unboundFinal && row && row->P > 0.0)
+  // An entrance channel whose potential also acts inside the channel radius (docs/upgrade/interior_potential.md) is
+  // integrated directly as well: its terms carry the potential's own resonances, 1/(f - L), and at a pole of its
+  // R-function (f = b) sqrt(P') is zero and exp(-i phi') changes sign, so neither divisor below leaves a function the
+  // stencil can follow (a 400 keV wide resonance of the potential: 1 % off; near f = b: of the order of the value).
+  const bool interior = coul.Interior(li);
+  if (!unboundFinal && !interior && row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
-  else if (unboundFinal || !(outEnergy > 0.0) ||
+  else if (unboundFinal || interior || !(outEnergy > 0.0) ||
            !Reduction(radius, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
     ++counts.direct;
     return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,

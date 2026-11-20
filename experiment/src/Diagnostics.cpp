@@ -118,6 +118,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kPotentialPairKind, E, "a potential record on a photon or beta pair (a potential belongs to a particle pair)"},
       {kPotentialL, E, "the l list of a potential record: a value that is not an integer >= 0, an l that another record of the pair names, or l together with spin_orbit"},
       {kPotInteriorTwoSpins, E, "interior_boundary on a potential of a pair whose two particles both have spin (the interior R-function is then not diagonal in the channels; not implemented)"},
+      {kPotInteriorCharge, E, "interior_charge_e1 or interior_charge_e2 on a potential record without interior_boundary"},
       {kChannelRadiusTwice, E, "two channel_radius records for one selection of channels (pair, l, s, J)"},
       {kChannelRadiusPairKind, E, "a channel_radius record on a photon or beta pair (a radius belongs to a particle channel)"},
       {kChannelRadiusThm, E, "a channel_radius record on the entrance pair of a THM data set (the vertex is built at the pair's radius)"},

@@ -99,7 +99,7 @@ void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, doub
     nfIntegral = newNFIntegral(l, twoJ, levelEnergy);
     WhitFunc newWhitFunc(pair);
     conversion = toAmplitude / newWhitFunc(l, twoJ, radius, fabs(finalEnergy));
-    // A potential that also acts inside the radius (interior_potential.md section 6): the surface amplitude is
+    // A potential that also acts inside the radius (interior_potential.md section 8): the surface amplitude is
     // gamma |1/D| (the sign stays the ANC's, as in the level conversion), and the norm integral becomes
     // (hbar^2 / 2 mu a) dS'/dE = (N_f + the potential wave's interior part) / D^2.
     const BoundInteriorFactor interior = BoundInterior(*pair, l, twoJ, radius, fabs(finalEnergy));

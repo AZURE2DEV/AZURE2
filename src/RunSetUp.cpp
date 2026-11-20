@@ -155,6 +155,7 @@ int SetUpObjective(ProgramRun &run) {
   {
     WarnLargeRadiativeWidths(*run.compound.get(), run.inputs, *observed, run.configure);
     WarnLevelDoublesPotential(*run.compound.get(), run.inputs, *observed, run.configure);
+    WarnInteriorCaptureFinal(*run.compound.get(), *observed, run.configure);
   }
 
   // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not

@@ -329,6 +329,45 @@ complex ECIntegral::operator()(int theInitialLValue, int theFinalLValue,
   return integral;
 }
 
+ECIntegral::InteriorTerm ECIntegral::Interior(int li, int lf, double chanRad, double outEnergy) {
+  namespace phys = azure2::physics;
+  InteriorTerm t;
+  const std::optional<phys::HybridPotential> &pi = pair()->GetHybridPotential(li), &pf = pair()->GetHybridPotential(lf);
+  if (!pi || !pi->interior_boundary || !pf || !pf->interior_boundary) return t;
+  const int z1 = pair()->GetZ(1), z2 = pair()->GetZ(2);
+  const double mu = pair()->GetRedMass() * uconv;
+  const phys::RegularWave ui =
+      phys::RegularWaveOnGrid(*pi, z1, z2, mu, li, pair()->SpinOrbitFactor(li, params_.twoJi), chanRad, outEnergy);
+  const int intervals = static_cast<int>(ui.u.size()) - 1;
+  const FinalWaveKey key{lf, params_.twoJf, intervals, params_.bindingEnergy};
+  auto it = finalWaves_.find(key);
+  if (it == finalWaves_.end()) {
+    const double twoLDotI = pair()->SpinOrbitFactor(lf, params_.twoJf), bf = *pf->interior_boundary;
+    phys::RegularWave uf =
+        phys::RegularWaveOnGrid(*pf, z1, z2, mu, lf, twoLDotI, chanRad, -params_.bindingEnergy, intervals);
+    const double Sf = phys::HybridBoundShift(*pf, z1, z2, mu, lf, twoLDotI, chanRad, params_.bindingEnergy);
+    const double share = (Sf - bf) / (uf.log_derivative - bf);  // the potential's part of the final state at a
+    for (double &v : uf.u) v *= share;
+    it = finalWaves_.emplace(key, std::move(uf)).first;
+  }
+  // W(a) in the units of the exterior integrand (fgEvaluate).
+  double sOut;
+  const double mOut = whitfunction()->ScaledMemo(lf, params_.twoJf, chanRad, params_.bindingEnergy, sOut);
+  const double exponent = sOut - params_.log10RefOut;
+  const double whitA = (exponent < -280.0) ? 0.0 : mOut * pow(10.0, exponent);
+  const int L = params_.multLValue;
+  t.plain = whitA * phys::InteriorOverlap(ui, it->second, [&](double r) { return pow(r, L); });
+  t.withOperator = params_.useChargeFunction
+                       ? whitA * phys::InteriorOverlap(ui, it->second, [&](double r) {
+                           return params_.effectiveCharge->operator()(r) * pow(r, L);
+                         })
+                       : t.plain;
+  t.f = ui.log_derivative;
+  t.b = *pi->interior_boundary;
+  t.on = true;
+  return t;
+}
+
 complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
                                     double theInitialSValue, double theFinalSValue,
                                     double theInitialJValue, double theFinalJValue,
@@ -422,6 +461,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   params_.useChargeFunction = !params_.useLongWavelengthApprox && radType == 'E';
 
   complex overlapIntegral(0., 0.);
+  complex overlapCharge(0., 0.);  // the interior integral with r^L alone, for the potential's interior charge
   complex overlapF(0., 0.), overlapG(0., 0.);  // StandingParts
   if (unboundFinal) {
     // The expressions of the open bound branch below, with the complex integrals of the outgoing final-state wave.
@@ -448,28 +488,40 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     Integrate(chanRad);
     struct CoulWaves
         coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
+    // The potential's interior (interior_potential.md section 6.2): the channel term's outgoing wave continues inside
+    // as O(a) (L - b)/(f - b) u/u(a), the other term's standing wave as its own value at a times u/u(a).
+    const InteriorTerm inside = Interior(theInitialLValue, theFinalLValue, chanRad, outEnergy);
     if (isChannelCapture) {
       complex chanExpHSP = EntrancePhase(coul, theInitialLValue, chanRad, outEnergy);
-      overlapIntegral = complex(0.0, -0.5) *
+      const complex front = complex(0.0, -0.5) *
           sqrt(coulfunction()->Penetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy)) *
-          Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc) *
-          chanExpHSP * (GW() + complex(0.0, 1.0) * FW());
+          Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc) * chanExpHSP;
+      overlapIntegral = front * (GW() + complex(0.0, 1.0) * FW());
+      if (inside.on) {
+        const complex Lc(coulfunction()->OuterShift(theInitialLValue, params_.twoJi, chanRad, outEnergy),
+                         coulfunction()->OuterPenetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy));
+        const complex atSurface = front * complex(coul.G, coul.F) * (Lc - inside.b) / (inside.f - inside.b);
+        overlapIntegral += atSurface * inside.withOperator;
+        overlapCharge = atSurface * inside.plain;
+      }
     } else {
       const complex hsp = EntrancePhase(coul, theInitialLValue, chanRad, outEnergy);
-      overlapIntegral = (std::real(hsp) * FW() + std::imag(hsp) * GW()) *
-          Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
+      const double flux = Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
+      overlapIntegral = (std::real(hsp) * FW() + std::imag(hsp) * GW()) * flux;
+      if (inside.on) {
+        const double atSurface = (std::real(hsp) * coul.F + std::imag(hsp) * coul.G) * flux;
+        overlapIntegral += atSurface * inside.withOperator;
+        overlapCharge = atSurface * inside.plain;
+      }
     }
     // FW_/GW_ were integrated with the bound-state Whittaker rescaled by
     // 10^-log10RefOut; restore it.  When the reference is far enough below the
     // double range the contribution really is negligible, so it becomes zero
     // rather than a denormal or an infinity.
     if (params_.log10RefOut != 0.0) {
-      if (params_.log10RefOut < -290.0)
-        overlapIntegral = complex(0.0, 0.0);
-      else if (params_.log10RefOut > 290.0)
-        overlapIntegral *= pow(10.0, 290.0);
-      else
-        overlapIntegral *= pow(10.0, params_.log10RefOut);
+      const double scale = params_.log10RefOut < -290.0 ? 0.0 : pow(10.0, std::min(params_.log10RefOut, 290.0));
+      overlapIntegral = scale == 0.0 ? complex(0.0, 0.0) : overlapIntegral * scale;
+      overlapCharge = scale == 0.0 ? complex(0.0, 0.0) : overlapCharge * scale;
     }
   } else {
     Integrate(chanRad);
@@ -482,16 +534,26 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     // genuinely negligible result becomes zero instead of a NaN.
     double sWhit;
     double mWhit = whitfunction()->Scaled(theInitialLValue, params_.twoJi, chanRad, fabs(outEnergy), sWhit);
+    // The closed entrance channel's wave W_i(r)/W_i(a) continues inside as (S - b)/(f - b) u/u(a) (section 6.2).
+    const InteriorTerm inside = Interior(theInitialLValue, theFinalLValue, chanRad, outEnergy);
+    double insideShare = 0.0;
+    if (inside.on)
+      insideShare = (azure2::physics::HybridBoundShift(*pair()->GetHybridPotential(theInitialLValue), pair()->GetZ(1),
+                                                       pair()->GetZ(2), redMass * uconv, theInitialLValue,
+                                                       pair()->SpinOrbitFactor(theInitialLValue, params_.twoJi), chanRad,
+                                                       fabs(outEnergy)) -
+                     inside.b) /
+                    (inside.f - inside.b);
+    auto unscaled = [&](double value) {  // value * 10^log10RefOut, zero when that is below the double range
+      if (value == 0.0) return 0.0;
+      const double log10Value = log10(fabs(value)) + params_.log10RefOut;
+      return log10Value > -290.0 ? (value < 0.0 ? -1.0 : 1.0) * pow(10.0, log10Value) : 0.0;
+    };
     double ratio = 0.0;
-    if (mWhit != 0.0) {
-      double log10Ratio = log10(fabs(GW() / mWhit)) + params_.log10RefOut;
-      if (log10Ratio > -290.0) {
-        double sign = ((GW() / mWhit) < 0.0) ? -1.0 : 1.0;
-        ratio = sign * pow(10.0, log10Ratio);
-      }
-    }
-    overlapIntegral = complex(0.0, -0.5) * ratio *
-        sqrt(redMass * uconv * chanRad) / hbarc;
+    if (mWhit != 0.0) ratio = unscaled(GW() / mWhit + insideShare * inside.withOperator);
+    const double front = sqrt(redMass * uconv * chanRad) / hbarc;
+    overlapIntegral = complex(0.0, -0.5) * ratio * front;
+    overlapCharge = complex(0.0, -0.5) * unscaled(insideShare * inside.plain) * front;
   }
 
 
@@ -510,12 +572,19 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   }
 
   complex ecAmplitude(0.0, 0.0);
+  complex chargeAmplitude(0.0, 0.0);  // the amplitude of the potential's interior charge q (section 6.3): q r^L inside a
   if (radType == 'E') {
-    ecAmplitude = complex(0.0, -1.0) *
-        effectiveCharge * sqrt((8. * (2. * theLMult + 1.) * (theLMult + 1.)) / theLMult) / DoubleFactorial(2 * theLMult + 1) *
-        pow(complex(0., 1.0), theInitialLValue + theLMult - theFinalLValue) *
-        AngCoeff::ClebGord(theInitialLValue, theLMult, theFinalLValue, 0, 0, 0) * sqrt(2. * theInitialLValue + 1.) * sqrt(2. * theFinalJValue + 1.) *
-        AngCoeff::Racah(theLMult, theFinalLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
+    const std::optional<azure2::physics::HybridPotential> &entrance = pair()->GetHybridPotential(theInitialLValue);
+    const double q = !entrance ? 0.0 : theLMult == 1 ? entrance->interior_charge_e1 : theLMult == 2 ? entrance->interior_charge_e2 : 0.0;
+    auto electric = [&](double charge) {
+      return complex(0.0, -1.0) *
+          charge * sqrt((8. * (2. * theLMult + 1.) * (theLMult + 1.)) / theLMult) / DoubleFactorial(2 * theLMult + 1) *
+          pow(complex(0., 1.0), theInitialLValue + theLMult - theFinalLValue) *
+          AngCoeff::ClebGord(theInitialLValue, theLMult, theFinalLValue, 0, 0, 0) * sqrt(2. * theInitialLValue + 1.) * sqrt(2. * theFinalJValue + 1.) *
+          AngCoeff::Racah(theLMult, theFinalLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
+    };
+    ecAmplitude = electric(effectiveCharge);
+    if (q != 0.0) chargeAmplitude = electric(sqrt(fstruc * hbarc) * q);
   } else {
     // <(l s_f)J_f||L||(l s_i)J_i> is diagonal in the channel spin: L acts on the orbital part only, so the
     // orbital term exists for s_f = s_i alone.  Before 2026-10-26 it was also added on the spin-flip pathways
@@ -550,5 +619,5 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
 
   partF_ = ecAmplitude * overlapF;
   partG_ = ecAmplitude * overlapG;
-  return ecAmplitude * overlapIntegral;
+  return ecAmplitude * overlapIntegral + chargeAmplitude * overlapCharge;
 }

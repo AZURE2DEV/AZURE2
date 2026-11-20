@@ -353,6 +353,8 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
         << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
         << SpinOrbitText(s)
         << (s.interior_boundary ? "; acts inside the channel radius too, R_pot with boundary constant " + Fmt(*s.interior_boundary) : std::string())
+        << (s.interior_charge_e1 != 0.0 ? "; interior E1 charge " + Fmt(s.interior_charge_e1) + " e" : std::string())
+        << (s.interior_charge_e2 != 0.0 ? "; interior E2 charge " + Fmt(s.interior_charge_e2) + " e" : std::string())
         << "\n";
   }
   return out.str();
@@ -449,6 +451,8 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
           .Key("on").String(s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light")
           .Key("operator").String("2l.s").EndObject();
     if (s.interior_boundary) j.Key("interior_boundary").Number(*s.interior_boundary);
+    if (s.interior_charge_e1 != 0.0) j.Key("interior_charge_e1").Number(s.interior_charge_e1);
+    if (s.interior_charge_e2 != 0.0) j.Key("interior_charge_e2").Number(s.interior_charge_e2);
     j.EndObject();
   }
   j.EndArray().EndObject();

@@ -452,6 +452,7 @@ class NuclearPotential:
     matching_radius: Optional[float] = None
     step: Optional[float] = None
     interior_boundary: Optional[float] = None
+    interior_charge: Optional[dict] = None
     l: Optional[int] = None
 
     @property
@@ -475,6 +476,9 @@ class NuclearPotential:
             who += f" l={self.l}"
         if self.interior_boundary is not None:
             shape += f" interior b={self.interior_boundary:g}"
+            for mult, q in (self.interior_charge or {}).items():
+                if q:
+                    shape += f" q_{mult}={q:g}"
         return (f"NuclearPotential({who}, {shape} R_C={self.coulomb_radius:g}"
                 f"{'' if self.own or self.pair == 0 else ', inherited'})")
 

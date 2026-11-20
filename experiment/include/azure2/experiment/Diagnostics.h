@@ -195,6 +195,7 @@ constexpr const char *kSoNeedsJ = "E_SO_NEEDS_J";
 constexpr const char *kSoNoTerm = "E_SO_NO_TERM";
 // The interior R-function of a potential (a potential record's interior_boundary; interior_potential.md)
 constexpr const char *kPotInteriorTwoSpins = "E_POT_INTERIOR_TWO_SPINS";
+constexpr const char *kPotInteriorCharge = "E_POT_INTERIOR_CHARGE";
 constexpr const char *kPotentialL = "E_POTENTIAL_L";
 // Warnings
 constexpr const char *kNotMeasurable = "W_NOT_MEASURABLE";

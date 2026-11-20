@@ -34,7 +34,8 @@ bool operator==(const SpinOrbitTerm &a, const SpinOrbitTerm &b) {
 bool operator==(const HybridPotential &a, const HybridPotential &b) {
   return a.coulomb_radius_fm == b.coulomb_radius_fm && a.central_depth_MeV == b.central_depth_MeV &&
          a.central == b.central && a.matching_radius_fm == b.matching_radius_fm && a.step_fm == b.step_fm &&
-         a.spin_orbit == b.spin_orbit && a.interior_boundary == b.interior_boundary;
+         a.spin_orbit == b.spin_orbit && a.interior_boundary == b.interior_boundary &&
+         a.interior_charge_e1 == b.interior_charge_e1 && a.interior_charge_e2 == b.interior_charge_e2;
 }
 
 double TwoLDotI(int l, int two_j, int two_i) {
@@ -121,7 +122,7 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
   if (p->spin_orbit)
     key.insert(key.end(), {p->spin_orbit->depth_MeV, p->spin_orbit->form.radius_fm, p->spin_orbit->form.diffuseness_fm,
                            p->spin_orbit->acts_on == SpinOrbitParticle::Heavy ? 1.0 : 0.0});
-  if (p->interior_boundary) key.push_back(*p->interior_boundary);
+  if (p->interior_boundary) key.insert(key.end(), {*p->interior_boundary, p->interior_charge_e1, p->interior_charge_e2});
   return key;
 }
 
@@ -221,9 +222,24 @@ double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV,
   return s0 + (S(bindingMin) - s0) * (B_MeV / bindingMin);
 }
 
-RegularValue RegularSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
-                             double E_MeV) {
-  const int n_a = std::max(4, static_cast<int>(std::lround(a_fm / p.step_fm)));
+namespace {
+// Simpson's rule over nodes 0 .. n of step dr; an odd number of intervals takes the first three by the 3/8 rule.
+template <class F>
+double SimpsonOnNodes(int n, double dr, F value) {
+  double sum = 0.0;
+  int first = 0;
+  if (n % 2) {
+    sum += 3.0 * dr / 8.0 * (value(0) + 3.0 * value(1) + 3.0 * value(2) + value(3));
+    first = 3;
+  }
+  for (int i = first; i + 2 <= n; i += 2) sum += dr / 3.0 * (value(i) + 4.0 * value(i + 1) + value(i + 2));
+  return sum;
+}
+}  // namespace
+
+RegularWave RegularWaveOnGrid(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                              double E_MeV, int intervals) {
+  const int n_a = intervals > 0 ? std::max(4, intervals) : std::max(4, static_cast<int>(std::lround(a_fm / p.step_fm)));
   const double dr = a_fm / n_a, dr2 = dr * dr;
   const int npts = n_a + 3;  // nodes 0 .. n_a + 2: the difference at a reads two nodes beyond it
   const double k2 = 2.0 * mu_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm);
@@ -249,21 +265,33 @@ RegularValue RegularSolution(const HybridPotential &p, int z1, int z2, double mu
       for (int j = 0; j <= i; ++j) u[j] /= kRescale;
   }
 
-  RegularValue v;
+  RegularWave v;
   const double ua = u[n_a];
   const double du = (u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr);
   v.log_derivative = a_fm * du / ua;
-  // int_0^a u^2 dr: Simpson's rule on the nodes; an odd number of intervals takes the first three by the 3/8 rule.
-  auto sq = [&](int i) { return u[i] * u[i]; };
-  double sum = 0.0;
-  int first = 0;
-  if (n_a % 2) {
-    sum += 3.0 * dr / 8.0 * (sq(0) + 3.0 * sq(1) + 3.0 * sq(2) + sq(3));
-    first = 3;
-  }
-  for (int i = first; i + 2 <= n_a; i += 2) sum += dr / 3.0 * (sq(i) + 4.0 * sq(i + 1) + sq(i + 2));
-  v.norm_fm = sum / (ua * ua);
+  // int_0^a u^2 dr: Simpson's rule on the nodes.
+  v.norm_fm = SimpsonOnNodes(n_a, dr, [&](int i) { return u[i] * u[i]; }) / (ua * ua);
+  v.step_fm = dr;
+  v.u.resize(n_a + 1);
+  for (int i = 0; i <= n_a; ++i) v.u[i] = u[i] / ua;
   return v;
+}
+
+RegularValue RegularSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                             double E_MeV) {
+  const RegularWave w = RegularWaveOnGrid(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
+  RegularValue v;
+  v.log_derivative = w.log_derivative;
+  v.norm_fm = w.norm_fm;
+  return v;
+}
+
+double InteriorOverlap(const RegularWave &a, const RegularWave &b, const std::function<double(double r_fm)> &weight) {
+  if (a.u.size() != b.u.size() || a.u.size() < 5 || a.step_fm != b.step_fm)
+    throw std::invalid_argument("InteriorOverlap: the two waves are not on one grid");
+  const int n = static_cast<int>(a.u.size()) - 1;
+  // Node 0 contributes nothing: both waves vanish there at least as r (and the weight may be singular at r = 0).
+  return SimpsonOnNodes(n, a.step_fm, [&](int i) { return i == 0 ? 0.0 : a.u[i] * b.u[i] * weight(i * a.step_fm); });
 }
 
 ChannelTriple InteriorChannelFunctions(const ChannelTriple &outer, double f, double b) {

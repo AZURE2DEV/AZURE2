@@ -22,5 +22,6 @@ py::tuple SessionPotentialView(const Config &config, int pair, int l) {
                  s.spin_orbit->acts_on == azure2::physics::SpinOrbitParticle::Heavy ? 1.0 : 0.0};
   return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own, s.coulomb_radius_fm, spinOrbit,
                         s.matching_radius_fm, s.step_fm,
-                        s.interior_boundary ? py::object(py::float_(*s.interior_boundary)) : py::object(py::none()));
+                        s.interior_boundary ? py::object(py::float_(*s.interior_boundary)) : py::object(py::none()),
+                        py::make_tuple(s.interior_charge_e1, s.interior_charge_e2));
 }

@@ -28,10 +28,13 @@ class _HybridPotentials:
         l (a ``potential`` record with an ``l`` list) and gives the pair's
         record when it has none of that l.  ``interior_boundary`` is the
         boundary constant b of a potential that also acts inside the channel
-        radius (the record's ``interior_boundary``), ``None`` without one.
+        radius (the record's ``interior_boundary``), ``None`` without one;
+        ``interior_charge`` its additional E1 and E2 charges inside the radius
+        (``{"E1": q, "E2": q}``, units of e; the record's
+        ``interior_charge_e1`` and ``interior_charge_e2``).
         """
         pair = self._check_potential_pair(pair)
-        enabled, type_, V0, R, a, r0, own, rc, so, rm, step, interior = self._engine.get_potential(
+        enabled, type_, V0, R, a, r0, own, rc, so, rm, step, interior, charge = self._engine.get_potential(
             pair, -1 if l is None else int(l))
         spin_orbit = None
         if len(so):
@@ -42,6 +45,7 @@ class _HybridPotentials:
                                 r0=float(r0), own=bool(own), coulomb_radius=float(rc),
                                 spin_orbit=spin_orbit, matching_radius=float(rm), step=float(step),
                                 interior_boundary=None if interior is None else float(interior),
+                                interior_charge={"E1": float(charge[0]), "E2": float(charge[1])},
                                 l=None if l is None else int(l))
 
     @engine_call
