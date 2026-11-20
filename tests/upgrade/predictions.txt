@@ -481,6 +481,8 @@ data xs_90: dsdo_cm(1->1)
 data xs_140: dsdo_cm(1->1)
 data ay_60: ay(1->1)
 data ay_120: ay(1->1)
+== tests/interior_capture/models/direct.azr
+extrapolation x1: sigma(1->2)
 == tests/isospin_levels/models/bad_T.azr
 project: <levels> cannot be set up
 exit 1
@@ -1341,3 +1343,5 @@ extrapolation x6: phase(1->1; J=2; l=2; s=0)
 extrapolation x7: phase(1->1; J=4; l=4; s=0)
 extrapolation x8: dsdo_cm(1->1)
 extrapolation x9: sigma(4->1)
+== tests/upgrade/interior_bound/interior_bound.azr
+extrapolation x2: phase(1->1; J=1; l=1; s=0)
