@@ -57,3 +57,11 @@ add_executable(gui_overview_test gui_overview_test.cpp)
 target_link_libraries(gui_overview_test PRIVATE AZURESetupLib)
 add_test(NAME gui_overview COMMAND gui_overview_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:AZURE2> ${AZURE2_QT_SHOTS}/u8-overview)
 set_tests_properties(gui_overview PROPERTIES LABELS gui TIMEOUT 1200 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+
+# The Potential panel of the Pairs tab and the Levels tab's check of the partial waves (docs/upgrade/qt_gui.md section
+# 19): each mode, off/on byte for byte, the poles against the facade, the tuning against scipy, the check's two
+# remedies; screenshots AZURE2_QT_SHOTS/u9-potential.
+add_executable(gui_potential_test gui_potential_test.cpp)
+target_link_libraries(gui_potential_test PRIVATE AZURESetupLib)
+add_test(NAME gui_potential COMMAND gui_potential_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/u9-potential)
+set_tests_properties(gui_potential PROPERTIES LABELS gui TIMEOUT 900 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")

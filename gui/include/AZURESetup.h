@@ -48,6 +48,8 @@ QT_END_NAMESPACE
  * validity, the running job with its progress and a Stop button), the View menu's look (System, Light, Dark), the
  * window's state and the recent files kept in QSettings, an .azr dropped on the window opened.
  */
+class PotentialPanel;
+
 class AZURESetup : public QMainWindow {
   Q_OBJECT
 
@@ -62,6 +64,14 @@ class AZURESetup : public QMainWindow {
   bool writeProjectFile(const QString &filename, QString &why);
   /// Write what the tabs hold into the project (the levels when they were edited, the text sections).
   bool commitTabs(QString &why);
+  /// The Pairs and Levels tabs' part of commitTabs: the <levels> rows when they were edited, includeAllJPi and
+  /// maxOrbitalMomentum when changed (the Potential panel asks for it before the engine reads the pairs).
+  bool commitLevels(QString &why);
+  /// The l up to which includeAllJPi's groups go as the engine will read the project after commitLevels:
+  /// maxOrbitalMomentum when it is (or will be) written, else -1 (the largest l of the <levels> rows).
+  int keyMaxOrbitalMomentum() const;
+  /// The Potential panel of the Pairs tab.
+  PotentialPanel *potentialPanel() const { return potentialPanel_; }
   /// Grab the window once per tab into dir/tab<n>_<name>.png (AZURE2_QT_SHOTS, the tests).
   void saveTabScreenshots(const QString &dir);
   /// Start a run of the Calculate tab's command (after saving); false with the reason when it cannot start.
@@ -164,6 +174,7 @@ class AZURESetup : public QMainWindow {
   bool loadingLevels_ = false;
   bool loadedIncludeAllJPi_ = false;  ///< <config> includeAllJPi as read (the Levels tab's box)
   int loadedMaxL_ = 0;                ///< the Levels tab's maximum l as read
+  bool includeAllJPiSwitchedOn_ = false;  ///< includeAllJPi switched on in this window since the project was read
   bool running_ = false;
   QThread runThread_;
   RunWorker *worker_ = nullptr;
@@ -182,6 +193,7 @@ class AZURESetup : public QMainWindow {
   SectionsTab *segmentsTab;
   SectionsTab *effectsTab;
   SectionsTab *potentialTab;
+  PotentialPanel *potentialPanel_ = nullptr;
   ThmTab *thmTab;
   FittingTab *fittingTab;
   RunTab *runTab;

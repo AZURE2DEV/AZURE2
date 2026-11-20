@@ -57,6 +57,16 @@ bool ProjectHolder::renameRecord(const QString &section, const QString &from, co
   return true;
 }
 
+bool ProjectHolder::setRecordOn(const QString &section, const QString &name, bool on, QString &why) {
+  std::string w;
+  if (!project_.SetRecordOn(section.toStdString(), name.toStdString(), on, w)) {
+    why = QString::fromStdString(w);
+    return false;
+  }
+  emit sectionEdited(section);
+  return true;
+}
+
 QString ProjectHolder::configValue(const QString &name, const QString &absent) const {
   return QString::fromStdString(project_.ConfigValue(name.toStdString(), absent.toStdString()));
 }

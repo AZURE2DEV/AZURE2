@@ -37,6 +37,8 @@ class ProjectHolder : public QObject {
   bool setRecord(const QString &section, const azure2::front::Record &record, QString &why);
   bool removeRecord(const QString &section, const QString &name, QString &why);
   bool renameRecord(const QString &section, const QString &from, const QString &to, QString &why);
+  /// Switch a record off (kept in the file as comments) or on again (Project::SetRecordOn), then sectionEdited.
+  bool setRecordOn(const QString &section, const QString &name, bool on, QString &why);
 
   QString configValue(const QString &name, const QString &absent = QString()) const;
   bool setConfig(const QString &name, const QString &value, QString &why, bool remove = false);

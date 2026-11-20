@@ -17,7 +17,8 @@ set(AZURESETUP_SOURCES
     PairsModel.cpp PairsTab.cpp AddPairDialog.cpp PairKeyCombo.cpp MassTable.cpp MassCheckDialog.cpp
     LevelsModel.cpp LevelsTab.cpp LevelsFile.cpp ChannelsModel.cpp ChannelDetails.cpp AddLevelDialog.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp
-    LevelsTabEdits.cpp LevelsTabNavigation.cpp LevelsUndo.cpp LevelsViews.cpp
+    LevelsTabEdits.cpp LevelsTabNavigation.cpp LevelsUndo.cpp LevelsViews.cpp LevelsPartialWaves.cpp
+    PotentialPanel.cpp
     ChooseFileButton.cpp RichTextDelegate.cpp InfoDialog.cpp InTabDocs.cpp AboutAZURE2Dialog.cpp
     AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp
     PhysicsTab.cpp PhysicsSessionPages.cpp PhysicsForms.cpp PhysicsWorker.cpp HeatmapWidget.cpp

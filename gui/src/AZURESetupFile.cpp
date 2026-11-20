@@ -102,6 +102,7 @@ bool AZURESetup::loadLevels(QString &why) {
   const QString maxL = holder_->configValue("maxOrbitalMomentum");
   if (!maxL.isEmpty()) levelsTab->setMaxL(maxL.toInt());
   loadedMaxL_ = levelsTab->maxL();
+  includeAllJPiSwitchedOn_ = false;
   loadingLevels_ = false;
   levelsDirty_ = false;
   return ok;
@@ -118,7 +119,7 @@ void AZURESetup::projectOpened() {
   diagnostics->validate();
 }
 
-bool AZURESetup::commitTabs(QString &why) {
+bool AZURESetup::commitLevels(QString &why) {
   if (levelsDirty_) {
     std::string reason;
     if (!holder_->project().SetLevels(levelsTab->levelRows(), reason)) {
@@ -129,13 +130,30 @@ bool AZURESetup::commitTabs(QString &why) {
   }
   // the Levels tab's hard-sphere settings: written only when changed
   if (levelsTab->includeAllJPi() != loadedIncludeAllJPi_) {
+    includeAllJPiSwitchedOn_ = levelsTab->includeAllJPi();
     if (!holder_->setConfig("includeAllJPi", levelsTab->includeAllJPi() ? "1" : "0", why)) return false;
     loadedIncludeAllJPi_ = levelsTab->includeAllJPi();
   }
-  if (levelsTab->maxL() != loadedMaxL_) {
+  // maxOrbitalMomentum: when the tab's maximum l changed, and when includeAllJPi was switched on here and the file
+  // names none, so that the engine's hard-sphere groups reach the l the Levels tab lists (its "missing" J^pi) and not
+  // only the largest l of the levels' channels (CompoundSystem::Fill)
+  if (levelsTab->maxL() != loadedMaxL_ ||
+      (levelsTab->includeAllJPi() && holder_->configValue("maxOrbitalMomentum").isEmpty() && includeAllJPiSwitchedOn_)) {
     if (!holder_->setConfig("maxOrbitalMomentum", QString::number(levelsTab->maxL()), why)) return false;
     loadedMaxL_ = levelsTab->maxL();
   }
+  return true;
+}
+
+int AZURESetup::keyMaxOrbitalMomentum() const {
+  const QString written = holder_->configValue("maxOrbitalMomentum");
+  const bool switching = levelsTab->includeAllJPi() && (includeAllJPiSwitchedOn_ || !loadedIncludeAllJPi_);
+  if (levelsTab->maxL() != loadedMaxL_ || (switching && written.isEmpty())) return levelsTab->maxL();
+  return written.isEmpty() ? -1 : written.toInt();
+}
+
+bool AZURESetup::commitTabs(QString &why) {
+  if (!commitLevels(why)) return false;
   thmTab->applyText();
   if (!fittingTab->apply(why)) return false;
   if (mcmcTab) mcmcTab->apply();

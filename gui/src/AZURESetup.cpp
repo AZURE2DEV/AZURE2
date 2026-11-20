@@ -43,6 +43,7 @@
 #include "FittingTab.h"
 #include "LevelsTab.h"
 #include "PairsTab.h"
+#include "PotentialPanel.h"
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
 #include "MCMCTab.h"
@@ -108,6 +109,37 @@ AZURESetup::AZURESetup() {
       new RecordsPanel(holder_, "channelRadii",
                        tr("A channel's own radius (<channelRadii>): a record per pair and, optionally, l, s and J; every "
                           "channel it does not name keeps its pair's radius (the column a of the pairs).")));
+  {
+    // the Potential panel (docs/upgrade/qt_gui.md section 19): the selected pair's potential, wave by wave
+    PotentialPanel::Hooks hooks;
+    hooks.commitLevels = [this](QString &why) { return commitLevels(why); };
+    hooks.levelRows = [this]() { return levelsTab->levelRows(); };
+    hooks.includeAllJPi = [this]() { return levelsTab->includeAllJPi(); };
+    hooks.maxOrbitalMomentum = [this]() { return keyMaxOrbitalMomentum(); };
+    hooks.maxL = [this]() { return levelsTab->maxL(); };
+    levelsTab->setMaxOrbitalMomentumSource([this]() { return keyMaxOrbitalMomentum(); });
+    potentialPanel_ = new PotentialPanel(holder_, hooks);
+    pairsTab->addExtraPanel(tr("Potential"), potentialPanel_, true);
+    auto showPair = [this]() {
+      const QModelIndexList rows = pairsTab->getPairsView()->selectionModel()->selectedRows();
+      const QList<PairsData> pairs = pairsTab->getPairsModel()->getPairs();
+      const int row = rows.isEmpty() ? -1 : rows.first().row();
+      if (row < 0 || row >= pairs.size() || pairs[row].pairType != 0) {
+        potentialPanel_->setPair(0, QString());
+        return;
+      }
+      const QString label = QString(pairsTab->getPairsModel()->getPairLabel(pairs[row])).remove(QRegularExpression("<[^>]*>"));
+      if (row + 1 != potentialPanel_->pair()) potentialPanel_->setPair(row + 1, label);
+    };
+    connect(pairsTab->getPairsView()->selectionModel(), &QItemSelectionModel::selectionChanged, this, showPair);
+    for (QAbstractItemModel *m : {static_cast<QAbstractItemModel *>(levelsTab->getLevelsModel()),
+                                  static_cast<QAbstractItemModel *>(levelsTab->getChannelsModel())}) {
+      connect(m, &QAbstractItemModel::dataChanged, potentialPanel_, &PotentialPanel::levelsChanged);
+      connect(m, &QAbstractItemModel::rowsInserted, potentialPanel_, &PotentialPanel::levelsChanged);
+      connect(m, &QAbstractItemModel::rowsRemoved, potentialPanel_, &PotentialPanel::levelsChanged);
+    }
+    connect(levelsTab, &LevelsTab::limitsChanged, potentialPanel_, &PotentialPanel::levelsChanged);
+  }
   levelsTab->addExtraPanel(
       tr("Gamma Decays"),
       new RecordsPanel(holder_, "gammaDecays",

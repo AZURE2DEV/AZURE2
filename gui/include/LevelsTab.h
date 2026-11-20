@@ -2,6 +2,7 @@
 #define LEVELSTAB_H
 
 #include <QWidget>
+#include <functional>
 #include <QMap>
 #include <QSet>
 #include <QStringList>
@@ -30,6 +31,7 @@
 #include "LevelsViews.h"
 
 class InfoDialog;
+#include "PartialWavesDialog.h"
 class ProjectHolder;
 class QUndoStack;
 class QComboBox;
@@ -91,6 +93,17 @@ class LevelsTab : public QWidget {
   void setMaxL(int l) { maxLSpin->setValue(l); }
   /*! The J^pi the pairs allow up to the maximum orbital momentum that no active level carries. */
   QStringList missingSpinParities(QStringList *links = nullptr);
+  /*! The same as the engine's rule gives it (front::PartialWavesWithoutLevel on levelRows(), up to maxL()), with the
+   *  l includeAllJPi's groups reach (keyMaxL, -1 none) (LevelsPartialWaves.cpp). */
+  std::vector<azure2::front::MissingPartialWave> partialWavesWithoutLevel(int *keyMaxL = nullptr);
+  /*! Add a blank level of each J^pi: every width 0, energy and widths fixed, 10 MeV above the highest level and threshold
+   *  (one undo step); returns how many were added. */
+  int addBlankLevels(const std::vector<azure2::front::MissingPartialWave> &waves);
+  /*! The l up to which includeAllJPi's groups go as the engine will read the project (AZURESetup::keyMaxOrbitalMomentum). */
+  void setMaxOrbitalMomentumSource(std::function<int()> source) { maxOrbitalMomentumSource_ = std::move(source); }
+  /*! The check of the partial waves (its dialog, made on first use). */
+  PartialWavesDialog *partialWavesDialog() const { return partialWaves_; }
+  QPushButton *partialWavesButton() const { return partialWavesButton_; }
   ChannelsModel *getChannelsModel() { return channelsModel; }
   /*! The <levels> row the tab writes for channel `ch` of `level` (LevelsFile.cpp), with level ID `id`. */
   azure2::front::LevelRow channelRow(const ChannelsData &ch, const LevelsData &level, const PairsData &pair,
@@ -162,6 +175,8 @@ class LevelsTab : public QWidget {
   /*! The add bar set to a J^pi (a link of the missing-J^pi text: "jpi:<2J>:<pi>"). */
   void fillAddBar(const QString &link);
   void addBackgroundPole();
+  /*! The check of the partial waves without a level (PartialWavesDialog). */
+  void showPartialWaves();
   void showLevelsMenu(const QPoint &pos);
   void showChannelsMenu(const QPoint &pos);
   void undoLater();
@@ -174,6 +189,8 @@ class LevelsTab : public QWidget {
  signals:
   void readNewPair(PairsData, int, bool);
   void readExistingPair(PairsData, int, bool);
+  /*! The maximum l or includeAllJPi changed. */
+  void limitsChanged();
 
  private:
   QTabWidget *extras = nullptr;
@@ -211,6 +228,9 @@ class LevelsTab : public QWidget {
   QSpinBox *maxNumMultSpin;
   QCheckBox *includeAllJPiCheck;
   QLabel *missingJPiLabel;
+  QPushButton *partialWavesButton_ = nullptr;
+  QPointer<PartialWavesDialog> partialWaves_;
+  std::function<int()> maxOrbitalMomentumSource_;
   QPushButton *addLevelButton;
   QPushButton *removeLevelButton;
   QPushButton *iaeaQueryButton;
