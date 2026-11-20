@@ -70,7 +70,8 @@ class RecordFitResult:
     project: Optional[str] = None
 
 
-def fit_record_settings(project, settings, *, method="migrad", session=None, tolerance=1e-3, max_evaluations=400,
+def fit_record_settings(project, settings, *, method="migrad", session=None, starts=("project", "best"),
+                        tolerance=1e-3, max_evaluations=400,
                         intervals=False, delta=1.0, write=None, progress=None):
     """Minimise the fitted objective of the project ``project`` (a path) over ``settings`` (:class:`Setting`).
 
@@ -80,6 +81,11 @@ def fit_record_settings(project, settings, *, method="migrad", session=None, tol
     session : keyword arguments of :class:`pyazr.Session` for every trial (``use_brune``, ``ignore_externals``, ...);
         the default is the session's own defaults except ``ignore_externals=False``: a setting of a potential
         usually acts through the computed capture.
+    starts : where each trial's fit starts: ``"project"`` (the project's own values) and/or ``"best"`` (the fitted
+        vector of the lowest trial so far).  With both, the default, each trial runs both fits and keeps the lower:
+        a fit with several minima otherwise follows the path of the trials (seen on 12C(a,g): 143 from the warm
+        start alone against 114 from the project's values).  ``("best",)`` halves the cost where the fit has one
+        minimum.
     tolerance : the outer minimiser (Gauss-Newton on the objective's least-squares rows after each trial's fit,
         ``scipy.optimize.least_squares``) stops when the settings, in units of their steps, move by less than this.
     max_evaluations : the limit of Gauss-Newton steps of the minimisation (each takes one trial and two more per
@@ -100,6 +106,9 @@ def fit_record_settings(project, settings, *, method="migrad", session=None, tol
     from .project import Project
 
     settings = list(settings)
+    starts = tuple(starts)
+    if not starts or any(k not in ("project", "best") for k in starts):
+        raise ValueError('fit_record_settings: starts is "project" and/or "best".')
     if not settings:
         raise ValueError("fit_record_settings: no settings.")
     path = os.path.abspath(project)
@@ -130,13 +139,18 @@ def fit_record_settings(project, settings, *, method="migrad", session=None, tol
                 S = Session(trial_path, cwd=directory, **options)
                 x = np.asarray(S.parameters.x0, float)
                 if len(S.parameters.free.names):
-                    x0 = best["x"] if best["x"] is not None and len(best["x"]) == len(S.parameters.free.names) else None
-                    fit = S.fit_with_engine(method, x0=x0)
-                    x = fit.x
-                    if fit.outcome == "converged" and math.isfinite(fit.objective):
-                        objective = fit.objective
-                    else:
-                        outcome = f"fit {fit.outcome}"
+                    warm = best["x"] if best["x"] is not None and len(best["x"]) == len(S.parameters.free.names) else None
+                    vectors = [None] if "project" in starts or warm is None else []
+                    if "best" in starts and warm is not None:
+                        vectors.append(warm)
+                    ended = []
+                    for x0 in vectors:
+                        candidate = S.fit_with_engine(method, x0=x0)
+                        ended.append(candidate.outcome)
+                        if candidate.outcome == "converged" and math.isfinite(candidate.objective) and candidate.objective < objective:
+                            objective, fit, x = candidate.objective, candidate, candidate.x
+                    if fit is None:
+                        outcome = "fit " + ", ".join(ended)
                 else:
                     objective = float(S.evaluate().objective)
                     if not math.isfinite(objective):

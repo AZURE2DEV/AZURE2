@@ -16,7 +16,8 @@ On tests/interior_capture/models/direct.azr (alpha + 12C, the potential model's 
   (5) with a free parameter of the project's own (the data set's norm, prior 1 +- 5 %), so that every trial runs
       the engine's fit: from 0.016 the charge comes back to 0.02 within 1e-4 with the norm at 1 (1e-3), and the
       linear error is half the profile interval to 10 % (the fits leave scatter in the rows; the differences of
-      the Jacobian must be far above it);
+      the Jacobian must be far above it); each trial fits from the project's values and from the best vector so
+      far and keeps the lower, and starts=("best",) alone gives the same charge here (one minimum);
   (4) a start the engine refuses (a zero depth) raises with the engine's reason; the project file is unchanged
       and no trial file is left.
 Needs the compiled engine and scipy; skips cleanly without them.
@@ -116,6 +117,10 @@ try:
         f.write(open(project).read().replace("    norm           1 fixed\n", "    norm           1 fit prior 1 5%\n"))
     r5 = fit_record_settings(fitted, [Setting("a12C", "interior_charge_e1", "{:.12g}", start=0.016, step=0.002)], intervals=True)
     lo5, up5 = r5.intervals[0]
+    warm_only = fit_record_settings(fitted, [Setting("a12C", "interior_charge_e1", "{:.12g}", start=0.016, step=0.002)],
+                                    starts=("best",))
+    check("(5) starts=('best',), half the fits: the same charge (1e-5)",
+          abs(warm_only.values[0] - r5.values[0]) < 1e-5, f"{warm_only.values!r} {r5.values!r}")
     norm = float(r5.fit.x[0]) if r5.fit is not None and len(r5.fit.x) == 1 else float("nan")
     check("(5) with the data set's norm fitted in every trial: 0.02 (1e-4), norm 1 (1e-3), linear error = half the interval (10 %)",
           abs(r5.values[0] - 0.02) < 1e-4 and abs(norm - 1.0) < 1e-3 and r5.errors is not None and lo5 is not None and up5 is not None
