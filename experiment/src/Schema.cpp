@@ -287,7 +287,10 @@ Forms MakeForms() {
                                                             "from the background (a state a level of the project represents); left out: none"),
                       OptionalKw("capture", Words({"interior"}), "the interior direct capture of the background: the potential's interior wave, "
                                                                 "driven by the channel's full wave at a_c, captured into the potential's bound state "
-                                                                "inside a_c (potential_background.md section 5); left out: none")},
+                                                                "inside a_c (potential_background.md section 5); left out: none"),
+                      OptionalKw("only", Words({"bound_state"}), "the depth and width of this wave give the bound-state shape of the "
+                                                                 "interior capture only; the wave's channel functions are the point-Coulomb "
+                                                                 "ones (potential_background.md section 5.9); left out: they act on both")},
                      "what one partial wave of the pair has of its own (docs/upgrade/potential_background.md)")}};
   return f;
 }

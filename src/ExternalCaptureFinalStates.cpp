@@ -29,6 +29,7 @@
 #include "PPair.h"
 #include "NFIntegral.h"
 #include "ProjectSetup.h"
+#include "ShftFunc.h"
 #include "WhitFunc.h"
 #include "azure2/experiment/FinalStates.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -149,6 +150,23 @@ void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double r
     else
       m << "No depth within 30 % of it binds the wave at E_f.";
     throw std::runtime_error(m.str());
+  }
+  if (azure2::physics::BoundStateOnly(*pot, l, twoJ)) {
+    // `only bound_state` (potential_background.md section 5.9): the wave's exterior is the point-Coulomb Whittaker
+    // function times the level's ANC; inside a_c the potential's shape, continued in value at a_c.  The potential's
+    // own ANC is that of its normalised eigenstate with its own exterior; the jump of the log-derivative at a_c is
+    // the mismatch between the potential's interior and the point-Coulomb exterior.
+    const double ancPot = azure2::physics::PotentialBoundStateANC(q, z1, z2, mu, l, ldoti, radius, ev.E_MeV);
+    const double ell = azure2::physics::InteriorLogDerivative(q, z1, z2, mu, l, ldoti, radius, finalEnergy);
+    const double S = ShftFunc(pair, radius)(l, twoJ, levelEnergy);
+    configure.outStream << "NOTE: interior capture into the final state of photon pair " << exitPairKey << " (" << wave
+                        << ", only bound_state, E_f = " << finalEnergy << " MeV): the potential's eigenvalue " << ev.E_MeV
+                        << " MeV (" << (ev.E_MeV - finalEnergy) * 1e3 << " keV from E_f); its own ANC " << ancPot
+                        << " fm^-1/2, the level's ANC as written " << writtenAnc << " fm^-1/2; at a_c the interior shape's "
+                        << "a u'/u = " << ell << " against the point-Coulomb exterior's a W'/W = " << S
+                        << " (the interior bound wave is the potential's shape, continued in value from the Whittaker "
+                        << "function times the level's ANC)." << std::endl;
+    return;
   }
   // the potential's own ANC at the level's energy
   const double interior = azure2::physics::InteriorNormIntegral(q, z1, z2, mu, l, ldoti, radius, finalEnergy);

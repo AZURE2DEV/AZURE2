@@ -56,7 +56,7 @@ std::string DefaultNote(const ValidatedRecord &r, const std::string &field) {
   return "potential " + r.name + ": " + field + " not given, " + (f ? f->defaultText : std::string("?")) + " (the default)";
 }
 
-/// The `wave` fields of the record (l, J, depth, background interior boundary subtract capture) into s.waves; false after an
+/// The `wave` fields of the record (l, J, depth, width, background interior boundary subtract capture, only) into s.waves; false after an
 /// error (reported).
 bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) {
   for (const Value *w : r.GetAll("wave")) {
@@ -72,6 +72,14 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
       pw.width_fm = InBase(*wd);
     }
     const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract"), *cap = w->Get("capture");
+    if (w->Get("only")) {
+      if (bg) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": only bound_state and background exclude "
+                                                    "each other (the background acts on the wave's channel functions)");
+        return false;
+      }
+      pw.bound_state_only = true;
+    }
     if (bg) {
       if (!b) {
         c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) +
@@ -94,6 +102,17 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
         return false;
       }
     s.waves.push_back(pw);
+  }
+  // `only bound_state` serves the interior capture: without a wave that asks for it the field would do nothing
+  bool bound = false, capture = false;
+  for (const physics::PartialWave &w : s.waves) {
+    bound = bound || w.bound_state_only;
+    capture = capture || (w.background && w.background->capture);
+  }
+  if (bound && !capture) {
+    c.Error(codes::kPotentialWave, r, "wave", "only bound_state gives the bound-state shape of the interior capture; no wave "
+                                              "of this potential has capture interior");
+    return false;
   }
   return true;
 }

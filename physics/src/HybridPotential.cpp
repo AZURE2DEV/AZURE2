@@ -52,7 +52,7 @@ bool operator==(const InteriorBackground &a, const InteriorBackground &b) {
 
 bool operator==(const PartialWave &a, const PartialWave &b) {
   return a.l == b.l && a.two_j == b.two_j && a.depth_MeV == b.depth_MeV && a.width_fm == b.width_fm &&
-         a.background == b.background;
+         a.background == b.background && a.bound_state_only == b.bound_state_only;
 }
 
 double TwoLDotI(int l, int two_j, int two_i) {
@@ -149,6 +149,8 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
       // interior capture: a mark only when asked, so that the key of a background without it is the one before it existed
       if (w.background->capture) key.insert(key.end(), {-2.0, 1.0});
     }
+    // bound state only: a mark only when set, so that every other key stays as it was
+    if (w.bound_state_only) key.insert(key.end(), {-3.0, 1.0});
   }
   return key;
 }
@@ -280,6 +282,11 @@ HybridPotential BelowThresholdPotential(const HybridPotential &p, int l, int two
                              "refused, the background's decaying solution (ANC and capture final state) is not built "
                              "(docs/upgrade/potential_background.md section 6)");
   return ForPartialWave(p, l, two_j);
+}
+
+bool BoundStateOnly(const HybridPotential &p, int l, int two_j) {
+  const PartialWave *w = FindWave(p, l, two_j);
+  return w && w->bound_state_only;
 }
 
 const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_j) {
@@ -582,6 +589,25 @@ DepthAtEnergy DepthBindingAt(const HybridPotential &p, int z1, int z2, double mu
     f0 = f1;
   }
   return best;
+}
+
+double PotentialBoundStateANC(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                              double E_MeV) {
+  if (!(E_MeV < 0.0)) throw std::invalid_argument("PotentialBoundStateANC: E must be below threshold");
+  const double B = -E_MeV;
+  const double interior = InteriorNormIntegral(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
+  const DecayingValue wa = DecayingSolution(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, B);
+  const double kappa = std::sqrt(2.0 * mu_MeV * B) / kHbarC_MeV_fm;
+  const double h = 0.02;
+  int n = static_cast<int>(std::ceil(25.0 / kappa / h));
+  if (n % 2) ++n;
+  std::vector<double> f(n + 1);
+  for (int i = 0; i <= n; ++i) {
+    const DecayingValue w = DecayingSolution(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm + i * h, B);
+    f[i] = std::exp(2.0 * (w.log_W - wa.log_W));  // (W~(r)/W~(a))^2
+  }
+  const double exterior = SimpsonNodes(f, n, h);
+  return 1.0 / (std::exp(wa.log_W) * std::sqrt(interior + exterior));
 }
 
 double InteriorNormIntegral(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,

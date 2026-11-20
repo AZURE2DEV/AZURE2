@@ -193,7 +193,8 @@ CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
   // Otherwise computed at every call: there is no process-wide memo (docs/upgrade/coulomb.md section 3).
   struct CoulWaves newResult;
 
-  if (potential_) {
+  // A wave whose potential gives a bound-state shape only (`only bound_state`): the point-Coulomb waves.
+  if (potential_ && !azure2::physics::BoundStateOnly(*potential_, l, two_j)) {
     newResult = computeHybrid(l, two_j, radius, energy);
   } else {
     newResult = PlainWaves(l, radius, energy);

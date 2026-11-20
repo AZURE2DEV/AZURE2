@@ -777,6 +777,15 @@ int main() {
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 capture interior\n")));
       check("wave l 0 subtract 2 has no interior capture", w.Ok() && w.potentials.pairs.count(7) &&
                                                                !w.potentials.pairs.at(7).waves[0].background->capture);
+      const BuiltProject bw = BuildText(potentials(pot + "    wave l 0 background interior boundary 0 capture interior\n"
+                                                         "    wave l 1 J 3/2 depth 83.6 MeV only bound_state\n"));
+      check("only bound_state reaches the wave", bw.Ok() && bw.potentials.pairs.count(7) &&
+                                                     bw.potentials.pairs.at(7).waves.size() == 2 &&
+                                                     bw.potentials.pairs.at(7).waves[1].bound_state_only &&
+                                                     !bw.potentials.pairs.at(7).waves[0].bound_state_only);
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 1 depth 83.6 MeV only bound_state\n")));
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 background interior boundary 0 capture interior "
+                                                               "only bound_state\n")));
       const BuiltProject cw = BuildText(potentials(pot + "    wave l 0 background interior boundary 0 capture interior\n"));
       check("capture interior reaches the background", cw.Ok() && cw.potentials.pairs.count(7) &&
                                                            cw.potentials.pairs.at(7).waves.size() == 1 &&

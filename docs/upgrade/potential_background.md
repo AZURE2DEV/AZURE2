@@ -291,7 +291,8 @@ the analytic gradient needs no change; checked with `AZURE_GRAD_CHECK` (5.7).
     wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] background interior boundary <B> [subtract <n>] capture interior
 
 on each entrance partial wave whose background is to capture; the final partial wave (l_f, J_f) needs no field (its
-depth, if it has its own, is a `wave` without background). Absent: nothing changes (the potential's key, every output,
+depth, if it has its own, is a `wave` without background; with `only bound_state` that depth gives the bound-state
+shape alone and the wave's channel functions stay point-Coulomb, section 5.9). Absent: nothing changes (the potential's key, every output,
 the tests; 5.7). `capture` without `background` is refused (`E_POTENTIAL_WAVE`).
 
 ### 5.6 Cost
@@ -402,6 +403,68 @@ the poles) is identical between B_bg = 0 and −0.05 to all printed digits (11) 
 divide by zero and the dressed waves would be infinite; a computed energy does not land there in practice (the nearest
 tested, 10⁻¹¹ MeV away, is smooth), and it is not guarded.
 
+### 5.9 A potential for the bound-state shape only (`only bound_state`)
+
+**Why.** The rule of 5.3 takes the final state's interior shape from the potential of its partial wave, so that wave
+needs a depth that binds the level. A `wave` depth also changes the wave's channel functions beyond a_c (the hybrid
+exterior): in a project whose final-state waves also carry ordinary fitted levels and background poles in the elastic
+channel, giving them the binding depth changed their elastic description (a test on an evaluation project: the
+elastic χ² rose by about a factor four with the model otherwise the same). The two roles of a wave's potential are
+separated by an opt-in qualifier (announced to the PI by the director as a refinement of point 2 of the approval of
+2026-11-20; no objection).
+
+**The record.**
+
+    wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] only bound_state
+
+(key `only`, value `bound_state`). Refused (`E_POTENTIAL_WAVE`) together with `background` on the same wave (a
+background acts on the channel functions), and when no wave of the same potential has `capture interior` (it would
+then do nothing). Absent: nothing changes (the key enters the potential's key only when set; every existing output is
+the same bit for bit).
+
+**What it does (decided).**
+
+- The wave's channel functions are the point-Coulomb ones, exactly as if the pair had no potential in that wave: the
+  waves F, G at a_c (`CoulFunc`), the shift function below threshold (`ShftFunc`) and the decaying solution W
+  (`WhitFunc`, so also the ANC ↔ γ conversion of its levels and N_f of external capture). Its levels, its elastic
+  phase shifts and anything else the channel enters are those of the model without a potential in the wave.
+- External capture into a final state of such a wave: beyond a_c the point-Coulomb Whittaker function times the
+  level's (fitted) ANC, as for a pair without a potential. Inside a_c the potential's eigenfunction of that wave
+  (`ForPartialWave`: its depth and width), normalised so that its value at a_c continues the exterior's. The value is
+  continuous at a_c, the derivative is not: the interior is the potential's, the exterior is Whittaker's, and they
+  match only where the potential is negligible beyond a_c. The set-up note gives both log-derivatives at a_c.
+- The bound-state rule of 5.3 holds with the potential's own eigenvalue (the potential from 0 to ∞, its own exterior):
+  within 1 keV of the level's energy, else the run is refused with the depth that would bind. The note's "own ANC" is
+  that of the potential's normalised eigenstate with its own exterior (`PotentialBoundStateANC`), next to the level's
+  ANC as written.
+- The entrance waves (with `background interior ... capture interior`) are unchanged.
+
+**What this costs in consistency.** With the potential in the final wave (5.3) the final state is, at the potential's
+ANC, exactly the potential's normalised bound state; with `only bound_state` it is the potential's interior joined to
+the Whittaker tail at a_c with a kink, so the identity of 5.7 holds only as far as the p-wave potential beyond a_c is
+negligible. Measured on the model of 5.7 (VD, p waves `only bound_state` against the potential in them, same ANCs):
+
+| a_c (fm) | 4.0 | 4.87 | 5.5 | 7.0 | 8.0 |
+|---|---|---|---|---|---|
+| largest \|Δσ/σ\| of either state, 0.02-9 MeV | 0.18 | 0.068 | 0.025 | 1.0·10⁻³ | 7.5·10⁻⁵ |
+| total σ at 20 keV, ratio | 0.9975 | 1.0024 | 1.0015 | 1.0001 | 1.0000 |
+| total σ at 3 MeV, ratio | 1.0218 | 1.0159 | 1.0075 | 1.0005 | 1.0000 |
+
+At 4.0 fm the interior shape's a u'/u at a_c is −1.256 (3/2⁻) and −1.109 (1/2⁻) against −2.215 and −2.076 of the
+point-Coulomb exterior. Near threshold (S(0)) the difference is a few 10⁻³; it grows with energy.
+
+**Tests** (`tests/potential_capture/check.sh` section 7, synthetic models only): (a) with the p waves `only bound_state`
+and two p-wave levels with widths on top of the bound ones, the p-wave phase shifts (26 values, 0.1-9 MeV) and the
+p-wave levels of `parameters.out` are identical, to every printed digit, to those of the same levels with no
+potential (both without the Coulomb table, so that one Coulomb routine serves both); without the qualifier they differ
+(the check bites); (b) the capture equals that with the potential in the p waves to 7.5·10⁻⁵ at a_c = 8 fm and
+differs by 6.8·10⁻² at 4.87 fm; (c) a depth off the level is refused with the binding depth 83.58955202 MeV, and the
+note gives the potential's own ANC 4.09316 fm⁻¹ᐟ² (scipy: 4.0931604450) and the two log-derivatives; (d)
+`--validate` accepts the record, `--describe` shows it (the waves of a potential are now listed, one line each, only
+for a potential that has them), and pyazr opens and saves the project byte for byte. `--convert` takes old formats
+only (a format-3 file is refused as "already format 3"), so there is nothing to convert. `experiment_build` has the
+field's cases (reaches the wave; refused without a capture interior and with a background).
+
 ## 6. Scope, parameters, validity
 
 - **Channels**: particle channels of a hybrid pair (a pair with a `potential` record); tested on single-channel elastic
@@ -447,7 +510,9 @@ tested, 10⁻¹¹ MeV away, is smooth), and it is not guarded.
 - Interior capture (branch `feature/upgrade-9-potential-capture`, section 5): `physics/HybridPotential.h`
   `InteriorCaptureIntegral` (Eq. (C4)), `SubtractedBoxStates` (shared with `BackgroundR`), `NearestEigenvalue`,
   `DepthBindingAt`, `BoundMatching`, `InteriorNormIntegral`, `HasInteriorCapture`, `InteriorCaptureOf`; the field
-  `capture interior` of `wave` (`InteriorBackground::capture`, in the potential's key only when set); the engine:
+  `capture interior` of `wave` (`InteriorBackground::capture`, in the potential's key only when set); `only
+  bound_state` of `wave` (`PartialWave::bound_state_only`, `BoundStateOnly`, `PotentialBoundStateANC`; read by
+  `CoulFunc`, `ShftFunc`, `WhitFunc`; section 5.9); the engine:
   `ECIntegral::AddInteriorCapture` (Eq. (C5)) and the set-up rule of the final state
   (`CheckInteriorCaptureFinalState`, `ExternalCaptureFinalStates.cpp`). Tests: `physics_potential_capture`,
   `tests/potential_capture/check.sh`, cases of `experiment_build`. The potential's numbers are not fit

@@ -14,7 +14,10 @@
 #      would bind it; the set-up note prints the potential's own ANC;
 #   5. the analytic gradient of models/fit_level.azr.in (a 1/2+ level on top of the s-wave background, its particle and
 #      gamma widths and the ground state's ANC free, capture data) equals finite differences (AZURE_GRAD_CHECK);
-#   6. 1 and 3 threads: identical outputs.
+#   6. 1 and 3 threads: identical outputs;
+#   7. `only bound_state` on the p waves: their elastic channel functions are those without a potential (identical),
+#      the capture equals the one with the potential in the p waves where it is negligible beyond a_c (8 fm), the
+#      bound-state rule and note, and the record through --validate, --describe and pyazr.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -159,6 +162,87 @@ if [ -n "$(ls "$WORK/t1/output")" ] && diff -r "$WORK/t1/output" "$WORK/t3/outpu
   ok "capture_a40: every output file identical at 1 and 3 threads"
 else
   bad "capture_a40: outputs differ between 1 and 3 threads"
+fi
+
+# ---- 7. `only bound_state` (potential_background.md section 5.9): the p waves' potential gives the bound-state shape
+#         of the interior capture only, their channel functions are the point-Coulomb ones
+#   7a. elastic: models/bound_only.azr.in (p waves `only bound_state`, a 3/2- and a 1/2- level with widths on top of the
+#       bound ones, p-wave phase shifts) against the same levels with no potential at all, both without the Coulomb
+#       table (one Coulomb routine): the p-wave phase shifts and the p-wave levels of parameters.out are identical
+mkdir -p "$WORK/models"
+cp "$HERE/models/bound_only.azr.in" "$WORK/models/bso.azr"
+edited "$WORK/models/bso.azr" "$WORK/models/bso_nopot.azr" awk '/^<potentials>/ { skip = 1 } !skip { print } /^<\/potentials>/ { skip = 0 }'
+run bso "$WORK/models/bso.azr" extrapolate 2 -- --no-coulomb-table
+run bso_nopot "$WORK/models/bso_nopot.azr" extrapolate 2 -- --no-coulomb-table
+pw() { awk 'NF >= 4 { print $1, $4 }' "$WORK/$1/output/AZUREOut_aa=1_R=1.extrap"; }
+plev() { awk '/^J = / { p = ($3 ~ /-$/) } p' "$WORK/$1/output/parameters.out"; }
+if [ -s "$WORK/bso/output/AZUREOut_aa=1_R=1.extrap" ] && [ "$(pw bso)" = "$(pw bso_nopot)" ] &&
+   [ -n "$(plev bso)" ] && [ "$(plev bso)" = "$(plev bso_nopot)" ]; then
+  ok "only bound_state: p-wave phase shifts ($(pw bso | wc -l) values, 0.1-9 MeV) and p-wave levels identical to the model without a potential"
+else
+  bad "only bound_state: the p-wave channel functions differ from those without a potential"; tail -3 "$WORK/bso/run.log"
+fi
+# the check bites: with the potential acting in the p waves (no `only`) their phase shifts differ
+edited "$WORK/models/bso.azr" "$WORK/models/bso_full.azr" sed 's/ only bound_state$//'
+run bso_full "$WORK/models/bso_full.azr" extrapolate 2 -- --no-coulomb-table
+if [ -s "$WORK/bso_full/output/AZUREOut_aa=1_R=1.extrap" ] && [ "$(pw bso_full)" != "$(pw bso_nopot)" ]; then
+  ok "without only bound_state the p-wave phase shifts differ from those without a potential (the check bites)"
+else
+  bad "with the potential in the p waves their phase shifts should differ"
+fi
+#   7b. capture: p waves `only bound_state` against the potential in them (section 1's models): equal where the p-wave
+#       potential beyond a_c is negligible (a_c = 8 fm, V(8 fm) = 3 keV), different where it is not (4.87 fm)
+for a in 4.87 8.0; do
+  edited "$HERE/models/capture_a40.azr.in" "$WORK/models/f$a.azr" awk -v a="$a" '
+    /^<levels>/ { inl = 1 } /^<\/levels>/ { inl = 0 } inl && NF >= 31 && $27 == 0 { $28 = a } { print }'
+  edited "$WORK/models/f$a.azr" "$WORK/models/b$a.azr" sed 's/^\(    wave            l 1 J .* MeV\)$/\1 only bound_state/'
+  run "f$a" "$WORK/models/f$a.azr" extrapolate 2
+  run "b$a" "$WORK/models/b$a.azr" extrapolate 2
+done
+if res="$(python3 -I "$HERE/compare.py" --spread "$WORK/f8.0" "$WORK/b8.0" --tol 2e-4 2>&1)" &&
+   res2="$(python3 -I "$HERE/compare.py" --spread "$WORK/f4.87" "$WORK/b4.87" --at-least 1e-2 2>&1)"; then
+  ok "capture, only bound_state against the potential in the p waves: a_c = 8 fm $res; 4.87 fm $res2"
+else
+  bad "capture, only bound_state against the potential in the p waves: 8 fm ${res:-}; 4.87 fm ${res2:-}"
+fi
+#   7c. the bound-state rule with only bound_state: a depth off the level is refused with the binding depth; the note
+#       gives the potential's own ANC (its own exterior: 4.0931604450 fm^-1/2 by make_reference.py) and the jump of
+#       the log-derivative at a_c
+edited "$WORK/models/bso.azr" "$WORK/models/bso_off.azr" sed 's/l 1 J 3\/2 depth 83.589554 MeV/l 1 J 3\/2 depth 83.65 MeV/'
+if run bso_off "$WORK/models/bso_off.azr" extrapolate 1; then
+  bad "only bound_state: a depth off the level should be refused"
+elif depth="$(grep -o 'The depth that binds it at E_f is [0-9.]* MeV' "$WORK/bso_off/run.log")" &&
+     awk -v d="$(awk '{ print $(NF - 1) }' <<< "$depth")" 'BEGIN { exit !(d ~ /^[0-9.]+$/ && (d - 83.589554) ^ 2 < 1e-8) }'; then
+  ok "only bound_state, depth 83.65 MeV: refused, ${depth%%$'\n'*}"
+else
+  bad "only bound_state, depth 83.65 MeV: refused without the right depth"; tail -3 "$WORK/bso_off/run.log"
+fi
+note="$(grep 'only bound_state, E_f' "$WORK/bso/run.log" || true)"
+anc="$(sed -n 's/.*its own ANC \([0-9.]*\) fm.*/\1/p' <<< "$note")"
+anc="${anc%%$'\n'*}"
+if awk -v c="$anc" 'BEGIN { exit !(c ~ /^[0-9.]+$/ && (c - 4.0931604450) ^ 2 < 1e-8) }' && grep -q "a W'/W = " <<< "$note"; then
+  ok "only bound_state note: own ANC $anc fm^-1/2 (make_reference.py 4.0931604450), with the log-derivative jump at a_c"
+else
+  bad "only bound_state note: '${note:-none}'"
+fi
+#   7d. the record: validate, describe, and pyazr's unedited round trip keep the qualifier
+if "$AZURE2_BIN" --validate "$WORK/models/bso.azr" > "$WORK/v.log" 2>&1 &&
+   "$AZURE2_BIN" --describe "$WORK/models/bso.azr" > "$WORK/d.log" 2>&1 &&
+   [ "$(grep -c 'only bound_state (point-Coulomb' "$WORK/d.log")" = 2 ]; then
+  ok "only bound_state: --validate accepts it, --describe shows both p waves"
+else
+  bad "only bound_state: --validate or --describe"; tail -3 "$WORK/v.log" "$WORK/d.log"
+fi
+if python3 -c "import pyazr" 2> /dev/null; then
+  cp "$WORK/models/bso.azr" "$WORK/rt.azr"
+  if (cd "$WORK" && python3 -c "import pyazr; pyazr.Project.open('rt.azr').save('rt2.azr')") 2> "$WORK/rt.log" &&
+     cmp -s "$WORK/models/bso.azr" "$WORK/rt2.azr"; then
+    ok "only bound_state: pyazr opens and saves the project byte for byte"
+  else
+    bad "only bound_state: pyazr round trip"; tail -3 "$WORK/rt.log"
+  fi
+else
+  echo "  skip  pyazr round trip (pyazr not importable)"
 fi
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"

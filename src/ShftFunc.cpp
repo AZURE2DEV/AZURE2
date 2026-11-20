@@ -25,7 +25,9 @@
  */
 double ShftFunc::ZeroEnergyLimit(int l, int two_j) const {
   const WhitFunc &w = *params_.whitFunc;
-  if (potential_)  // the zero-energy decaying solution of the radial equation with the potential
+  // the zero-energy decaying solution of the radial equation with the potential (not for a wave whose potential gives
+  // a bound-state shape only: the point-Coulomb one)
+  if (potential_ && !azure2::physics::BoundStateOnly(*potential_, l, two_j))
     return azure2::physics::ChannelBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, two_j, pair_->SpinOrbitFactor(l, two_j), radius(), 0.0);
   const double c = w.z1() * w.z2() * fstruc * w.redmass() * uconv / hbarc;
   return azure2::physics::zero_energy_shift(c, radius(), l);  // K_n without GSL (coulomb.md section 1.4)
@@ -59,7 +61,7 @@ double ShftFunc::operator()(int l, int two_j, double energy) {
   params_.bindingEnergy = binding;
   params_.lValue = l;
   params_.twoJ = two_j;
-  if (potential_) {
+  if (potential_ && !azure2::physics::BoundStateOnly(*potential_, l, two_j)) {
     const WhitFunc &w = *params_.whitFunc;
     return azure2::physics::ChannelBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, two_j, pair_->SpinOrbitFactor(l, two_j), radius(), binding);
   }

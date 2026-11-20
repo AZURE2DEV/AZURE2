@@ -96,6 +96,10 @@ struct PartialWave {
   std::optional<double> depth_MeV;         ///< V0 of this partial wave (MeV, > 0 attractive); none: the central depth
   std::optional<double> width_fm;          ///< the Gaussian r0 of this partial wave (fm); none: the central one
   std::optional<InteriorBackground> background;  ///< none: no background (the channel functions of the exterior alone)
+  /// `only bound_state` (potential_background.md section 5.9): the depth and width of this entry give the bound-state
+  /// shape of the interior capture only; the channel functions of the wave are the point-Coulomb ones, as if the pair
+  /// had no potential in it (BoundStateOnly).  false: the potential acts on the wave's channel functions.
+  bool bound_state_only = false;
 };
 bool operator==(const PartialWave &a, const PartialWave &b);
 
@@ -204,6 +208,9 @@ HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j);
 HybridPotential BelowThresholdPotential(const HybridPotential &p, int l, int two_j);
 /// The background of the channel (l, 2J), or nullptr.
 const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_j);
+/// Is the potential of the channel (l, 2J) for the bound-state shape only (PartialWave::bound_state_only)?  Then its
+/// channel functions (waves, shift function, decaying solution) are the point-Coulomb ones.
+bool BoundStateOnly(const HybridPotential &p, int l, int two_j);
 
 /// The regular solution of the radial equation at the channel radius: u(a) and du/dr(a) (fm^-1), times exp(-log_scale).
 struct InteriorValue {
@@ -329,6 +336,14 @@ struct DepthAtEnergy {
 };
 DepthAtEnergy DepthBindingAt(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                              double E_MeV);
+/*!
+ * The ANC (fm^-1/2) of the potential's own bound state at E < 0 (an eigenvalue of p, NearestEigenvalue), normalised
+ * on [0, inf): 1 / (|W~(a)| (int_0^a (u/u(a))^2 dr + int_a^inf (W~/W~(a))^2 dr)^1/2), u the regular solution and W~ the
+ * decaying solution of p (unit ANC; DecayingSolution).  The exterior integral by Simpson's rule in steps of 0.02 fm to
+ * a + 25/kappa (W~^2 below e^-50 of its value at a).  Independent of the channel radius a when E is an eigenvalue.
+ */
+double PotentialBoundStateANC(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                              double E_MeV);
 /// int_0^a (u(r)/u(a))^2 dr (fm) of the regular solution at E (Simpson on the grid of IntegrateOutward).
 double InteriorNormIntegral(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
                             double E_MeV);

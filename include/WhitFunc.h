@@ -88,7 +88,7 @@ class WhitFunc {
    * The function returns the value of the Whittaker function.
    */
   double operator()(int l, int two_j, double radius, double energy) const {
-    if (potential_) {
+    if (Distorts(l, two_j)) {
       const azure2::physics::DecayingValue d = Distorted(l, two_j, radius, energy);
       return d.sign * std::exp(d.log_W);
     }
@@ -116,7 +116,7 @@ class WhitFunc {
    */
   double Scaled(int l, int two_j, double radius, double energy, double &log10Scale) const {
     log10Scale = 0.0;
-    if (potential_) return DistortedScaled(l, two_j, radius, energy, log10Scale);
+    if (Distorts(l, two_j)) return DistortedScaled(l, two_j, radius, energy, log10Scale);
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
     namespace co = azure2::physics::coulomb;
@@ -132,7 +132,7 @@ class WhitFunc {
    * every entrance energy (docs/upgrade/coulomb.md, step 3b (ii)).  Without a memo, Scaled.
    */
   double ScaledMemo(int l, int two_j, double radius, double energy, double &log10Scale) const {
-    if (!memo_ || potential_) return Scaled(l, two_j, radius, energy, log10Scale);  // the memo key has no potential
+    if (!memo_ || Distorts(l, two_j)) return Scaled(l, two_j, radius, energy, log10Scale);  // the memo key has no potential
     log10Scale = 0.0;
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
@@ -165,6 +165,11 @@ class WhitFunc {
   /// non-relativistic, the hybrid model refuses relativistic=1), equal to W beyond the matching radius.  Without the
   /// interior background: the ANC factor at a_c applies it (ParticleChannelValues), external capture refuses a final
   /// state in a background wave (ECFinalStateFactors).
+  /// Does the pair's potential act on the decaying solution of (l, 2J)?  Not for a wave whose potential gives a
+  /// bound-state shape only (`only bound_state`, physics/ BoundStateOnly): its W is the point-Coulomb Whittaker function.
+  bool Distorts(int l, int two_j) const {
+    return potential_ && !azure2::physics::BoundStateOnly(*potential_, l, two_j);
+  }
   azure2::physics::DecayingValue Distorted(int l, int two_j, double radius, double energy) const {
     return azure2::physics::DecayingSolution(azure2::physics::ForPartialWave(*potential_, l, two_j), z1_, z2_,
                                              redmass_ * uconv, l, pair_->SpinOrbitFactor(l, two_j), radius, energy);

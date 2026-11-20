@@ -4,6 +4,28 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-capture, follow-up 3) — `only bound_state`: a wave's potential for the bound-state shape alone
+
+From a test on an evaluation project: `capture interior` needs a binding depth in the final-state waves, and that depth
+also changed those waves' channel functions beyond a_c (their elastic χ² rose about fourfold). New opt-in qualifier on
+the `wave` field: `wave l <l> [J <J>] depth <V> MeV only bound_state`. Decided (potential_background.md section 5.9):
+the wave's channel functions are the point-Coulomb ones (waves, shift function, decaying solution W, so the levels'
+ANC/γ and N_f too), exactly as with no potential in the wave; for a capture final state the exterior stays the
+Whittaker function times the fitted ANC and the interior is the potential's eigenfunction continued in value at a_c
+(the derivative jumps; the note prints both log-derivatives); the 1 keV rule uses the potential's own eigenvalue and the
+printed own ANC its own exterior (`PotentialBoundStateANC`); the entrance waves are unchanged. Refused with
+`background` on the same wave and when no wave of the potential has `capture interior`. `--describe` now lists a
+potential's waves (only for a potential that has them). Absent: every output bit-identical (the potential's key gets a
+mark only when set).
+Tests (`tests/potential_capture/check.sh` section 7; synthetic): p-wave phase shifts and p levels identical to the
+model without a potential (and different without the qualifier); capture equal to the potential-in-the-p-waves result
+to 7.5·10⁻⁵ at a_c = 8 fm, 6.8·10⁻² apart at 4.87 fm (table in 5.9: 0.18 at 4.0 fm, 1·10⁻³ at 7 fm; total σ at 20 keV
+within 0.25 %); refusal with the binding depth and the own ANC 4.09316 fm⁻¹ᐟ² (scipy 4.0931604450); --validate,
+--describe, pyazr round trip. `experiment_build` cases. Not done: an edit of the qualifier through pyazr's Project API
+beyond the unedited round trip; GUI/web forms.
+Run: build 0 warnings; `ctest -LE slow -j4` 399/400 (rmfit_enginepin, this machine; potential_capture with section 7
+passes); `tests/run_tests.sh` (4 threads) passed 187, failed 0.
+
 ## 2026-11-20 (potential-capture, follow-up 2) — a non-finite parameter is a failed evaluation, not an abort
 
 Reported from a fit with a potential background: an LM step produced a non-finite parameter, the channel functions got

@@ -37,3 +37,9 @@ level away from the potential's eigenvalue, the gradient check and the thread ch
 The models are kept as `.azr.in` (copied by `check.sh` into its scratch directory) so that `tests/upgrade/
 predictions_test.py`, which lists every `.azr` under `tests/`, and its committed table are not touched by this research
 branch; renaming them to `.azr` needs `predictions_test.py --write` (lines added for these two projects only).
+
+**`models/bound_only.azr.in`**: the model above with the p waves `only bound_state` (their potential gives the
+bound-state shape of the interior capture only; potential_background.md section 5.9) and two p-wave levels with
+widths (3/2⁻ at E_x = 8 MeV, Γ = 1 MeV; 1/2⁻ at 9 MeV, Γ = 2 MeV) and p-wave phase-shift extrapolations: `check.sh`
+section 7 compares it with the same levels without any potential (identical p waves), with the potential in the p
+waves (capture equal where that potential is negligible beyond a_c), the binding rule, and the record's round trips.

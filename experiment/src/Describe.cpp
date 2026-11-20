@@ -328,6 +328,22 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
         << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
         << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
         << SpinOrbitText(s) << "\n";
+    // the `wave` fields, one line each (none for a potential without them: its text is as before)
+    for (const physics::PartialWave &w : s.waves) {
+      out << "  wave l " << w.l;
+      if (w.two_j >= 0) out << " J " << w.two_j << "/2";
+      out << ":";
+      if (w.depth_MeV) out << " depth " << Fmt(*w.depth_MeV) << " MeV;";
+      if (w.width_fm) out << " width " << Fmt(*w.width_fm) << " fm;";
+      if (w.background) {
+        out << " background interior, B_bg " << Fmt(w.background->boundary);
+        for (int n : w.background->subtract_nodes) out << ", subtract " << n;
+        if (w.background->capture) out << ", capture interior";
+        out << ";";
+      }
+      if (w.bound_state_only) out << " only bound_state (point-Coulomb channel functions; the bound-state shape of interior capture);";
+      out << "\n";
+    }
   }
   return out.str();
 }
