@@ -358,6 +358,50 @@ reach the interior part through factors the adjoint already has), the Jacobian p
 **Nothing moves without the field.** `capture` is part of the potential's key only when set; the code path
 (`AddInteriorCapture`) returns at once for a wave without it. `ctest -LE slow` and `tests/run_tests.sh`: HANDOFF (2026-11-20, potential-capture).
 
+### 5.8 The energy table through a pole of R_pot (a defect of the parent branch, fixed)
+
+Reported on another project (2026-11-20): with a background in the s and d entrance waves and no level with a width
+there, the ³He(α,γ) capture at a_c = 4.87 fm agreed between B_bg = 0 and B_bg ≈ S(E_pole) up to E_cm ≈ 5 MeV and
+differed erratically above (ratios 0.93 ... 166), while it must not depend on B_bg; with `--no-ec-table` the two
+agreed. The cause is the external-capture energy table (`ECTable`), not the integrals: it tabulates the integral
+divided by a factor of the entrance channel at a_c, √P for the hard-sphere term and e^{−iφ} for channel capture, and
+interpolates the quotient in ln E. With a background those factors were the dressed ones. At a pole of R⁰ (a box state
+of the potential: for VD at a_c = 4.87 fm the s wave at E_cm = 7.591 MeV with B_bg = 0 and 7.673 MeV with −0.05; at 5.5
+fm the s, d5/2, d3/2 waves at 5.14, 7.02, 7.53 MeV with B_bg = 0, by scipy) H̃ = H − R⁰(ρH' − B_bg H) passes through
+infinity: P̃ = ρ/|H̃|² → 0 and φ̃ jumps by π, and the hard-sphere integral (cos φ̃ FW − sin φ̃ GW) changes sign with it.
+The quotient diverged and changed sign there, R⁰ ∝ 1/(E − E_p) bent it over several per cent of E around the pole, and
+the 8-point Lagrange stencil returned numbers off by up to a factor 50. The physical amplitudes are smooth through the
+pole: the amplitude carries e^{−iφ̃} times the integral (invariant under φ̃ → φ̃ + π), and channel capture √P̃ e^{−iφ̃} =
+√ρ/H̃, which passes smoothly through zero.
+
+**Fix** (`ECTable.cpp`, `Reduction`): for an entrance wave with a background the factor is built from the undressed
+waves, smooth and never zero, times the dressed phase only where the integral flips with it: e^{+iφ̃}√P (P of the
+undressed waves) for the hard-sphere term, e^{−iφ} of the undressed waves for channel capture; the channel table's
+dressed P̃ and phase are not used for such a wave. The dressing itself is applied exactly at the requested energy (the
+factor is evaluated there and multiplies the interpolated quotient). A wave without a background takes the old
+factors: nothing else moves. The signature of `intEC.dat` gets a mark for a pair whose potential has a background, so a
+file written by the old table is recomputed; no other signature changes.
+
+**Numbers** (`tests/potential_capture`'s model, E_cm = 0.02-9 MeV, B_bg = 0 against s −0.05, d −0.27; a_c = 4.87 fm):
+
+| | before (parent's table) | after |
+|---|---|---|
+| with `capture interior`, σ(B_bg ≠ 0)/σ(B_bg = 0), table on | 1.000000 to 6.0 MeV, then 1.094 (6.5), 0.327 (6.75), 0.148, 0.722, 0.048 (7.5), 0.019 (7.75), 0.168, 0.134, 0.101, 3.15, 3.43 (9 MeV) | 1 to 2·10⁻⁶ |
+| the same without `capture interior` | 1.036 (6.5), 0.603, 0.416, 0.875, 0.103, 0.048 (7.75), 0.292, 0.216, 0.166, 2.73, 3.39 | identical (0) |
+| table on against `--no-ec-table` | off by the same factors above 6 MeV (B_bg = 0 too) | 2.1·10⁻⁶ (capture), 3.1·10⁻⁶ (without) |
+| `--no-ec-table`, B_bg ≠ 0 against 0 | identical | identical |
+
+Over the grid a_c = 3.5, 4.0, 4.87, 5.5 fm × the two B_bg × table on/off with `capture interior`, every σ agrees with
+every other to 2.1·10⁻⁶ and with the independent reference (`make_reference.py`, extended to 9 MeV) to 1.6·10⁻⁶; close to the poles (E within 10⁻¹¹ to 10⁻⁴ MeV of 7.591485 and
+7.673467 MeV at 4.87 fm) the capture is smooth and B_bg- and table-independent to 8·10⁻⁷.
+
+**The elastic channel functions are not affected**: they are evaluated at each energy, never interpolated. The s-wave
+phase shift at a_c = 4.87 fm through both poles (E = 7.5914 ... 7.5915 and 7.6734 ... 7.6735 MeV, down to 10⁻¹¹ MeV from
+the poles) is identical between B_bg = 0 and −0.05 to all printed digits (11) and smooth (−82.4557° at the first pole,
+−83.0458° at the second; −85.35° at 8 MeV, the potential's). Exactly at a pole, to the last bit, 1/(ℓ − B_bg) would
+divide by zero and the dressed waves would be infinite; a computed energy does not land there in practice (the nearest
+tested, 10⁻¹¹ MeV away, is smooth), and it is not guarded.
+
 ## 6. Scope, parameters, validity
 
 - **Channels**: particle channels of a hybrid pair (a pair with a `potential` record); tested on single-channel elastic

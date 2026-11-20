@@ -249,6 +249,13 @@ set_tests_properties(upgrade_plan_runtime PROPERTIES TIMEOUT 1800)
 add_test(NAME upgrade_node_check COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/node_check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(upgrade_node_check PROPERTIES TIMEOUT 1800)
 
+# The interior direct capture of a potential background against an independent potential-model calculation, at four
+# channel radii, two background boundary conditions and with the external-capture energy table on and off, E_cm =
+# 0.02-9 MeV through the poles of the interior R-function (tests/potential_capture/check.sh,
+# docs/upgrade/potential_background.md section 5).
+add_test(NAME potential_capture COMMAND bash ${CMAKE_SOURCE_DIR}/tests/potential_capture/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(potential_capture PROPERTIES TIMEOUT 1200 PROCESSORS 3)
+
 # A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
 # 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
 add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)

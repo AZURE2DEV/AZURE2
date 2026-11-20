@@ -19,14 +19,20 @@ paper's B = 1.5866 MeV and C = 4.34 fm⁻¹ᐟ².
 **Reference** (`data/reference.csv`, `make_reference.py`): the direct capture cross section of the same potential,
 computed without the engine: scipy DOP853 for the scattering waves (0 to 15 fm, matched to mpmath's Coulomb functions)
 and the bound states (shooting, mpmath's Whittaker function beyond 30 fm), the overlap integrals from 0 to infinity,
-and the standard E1 formula (the paper's Eq. (8), checked term by term in the script's docstring). About 15 minutes.
+and the standard E1 formula (the paper's Eq. (8), checked term by term in the script's docstring). About 15 minutes
+to 3 MeV and 45 more to 9 MeV (`python3 -I make_reference.py 3.5 4.0 ... 9.0` appends the rows' values; the file
+holds both runs).
 
 **`models/fit_level.azr.in`**: the same with a 1/2⁺ level at E_x = 3 MeV on top of the s-wave background (its particle
 and γ widths free) and the ground state's ANC free, fitted to made-up capture points (`data/gs_pseudo.dat`; not data,
 only a χ² away from its minimum for the gradient check).
 
-`check.sh` runs the identity at a_c = 3.5, 4.0, 4.87, 5.5 fm, the same without `capture interior`, the refusal of a
-final level away from the potential's eigenvalue, the gradient check and the thread check.
+`check.sh` (also the ctest `potential_capture`) runs the identity at a_c = 3.5, 4.0, 4.87, 5.5 fm for E_cm = 0.02-9
+MeV, through the poles of the interior R-function (s wave at 7.59 MeV for 4.87 fm; s, d5/2, d3/2 at 5.14, 7.02, 7.53
+MeV for 5.5 fm), the same without `capture interior`, a nonzero B_bg (s −0.05, d3/2 −0.27, d5/2 −0.25) and the energy
+table off (`--no-ec-table`), which must all agree (the table divided by the dressed √P̃ and e^{−iφ̃} before
+2026-11-20 and was off by up to a factor 28 there: `potential_background.md` section 5.8), the refusal of a final
+level away from the potential's eigenvalue, the gradient check and the thread check. About 4.5 minutes.
 
 The models are kept as `.azr.in` (copied by `check.sh` into its scratch directory) so that `tests/upgrade/
 predictions_test.py`, which lists every `.azr` under `tests/`, and its committed table are not touched by this research

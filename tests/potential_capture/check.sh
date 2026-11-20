@@ -4,11 +4,12 @@
 # here).  models/capture_a40.azr.in: 3He(alpha,gamma)7Be with the Gaussian potential VD of Tursunov et al. in both halves,
 # the entrance s1/2, d3/2, d5/2 waves with `background interior ... capture interior`, the p3/2 and p1/2 bound states
 # as the final states at the potential's own energies and ANCs, levels without widths, E1:
-#   1. the capture cross sections into both states at E_cm = 0.02-3 MeV equal the direct potential-model calculation
+#   1. the capture cross sections into both states at E_cm = 0.02-9 MeV equal the direct potential-model calculation
 #      of make_reference.py (scipy and mpmath, 0 to infinity, not the engine; data/reference.csv) at a_c = 3.5, 4.0,
 #      4.87 and 5.5 fm;
 #   2. and each other's (a_c independence);
 #   3. without `capture interior` the same model depends on a_c and misses the reference (the test can fail);
+#  3b. through the poles of R_pot (to 9 MeV) the capture does not depend on B_bg or on the energy table;
 #   4. a final level away from the potential's eigenvalue (the p3/2 depth changed) is refused, with the depth that
 #      would bind it; the set-up note prints the potential's own ANC;
 #   5. the analytic gradient of models/fit_level.azr.in (a 1/2+ level on top of the s-wave background, its particle and
@@ -88,6 +89,38 @@ if res="$(python3 -I "$HERE/compare.py" "$HERE/data/reference.csv" "$WORK/a35_no
   ok "without capture interior (a_c = 3.5 fm) the reference is missed: $res"
 else
   bad "without capture interior the reference should be missed: $res"
+fi
+
+# ---- 3b. the energy table through the poles of R_pot (0.02-9 MeV; R_pot has an s-wave pole at E_cm = 7.59 MeV for
+#          a_c = 4.87 fm, B_bg = 0, and s, d5/2, d3/2 poles at 5.14, 7.02, 7.53 MeV for 5.5 fm, B_bg = 0): B_bg = 0 and
+#          B_bg = -0.05 (s), -0.27 (d3/2), -0.25 (d5/2) give the same capture, with the energy table and without it
+#          (--no-ec-table), with and without the interior capture.  Before 2026-11-20 the table divided by the dressed
+#          sqrt(P~) and exp(-i phi~), which vanish or jump at the poles: B_bg = 0 against B_bg != 0 differed by up to a
+#          factor 50 above 6 MeV.
+bnonzero() {
+  edited "$1" "$2" awk '
+    /wave            l 0 J 1\/2 / { sub(/boundary 0.0/, "boundary -0.05") }
+    /wave            l 2 J 3\/2 / { sub(/boundary 0.0/, "boundary -0.27") }
+    /wave            l 2 J 5\/2 / { sub(/boundary 0.0/, "boundary -0.25") } { print }'
+}
+for m in a487 a55 a487_nocap a55_nocap; do bnonzero "$WORK/models/$m.azr" "$WORK/models/${m}_b.azr"; done
+run a487_b "$WORK/models/a487_b.azr" extrapolate 2
+run a55_b "$WORK/models/a55_b.azr" extrapolate 2
+run a487_b_notab "$WORK/models/a487_b.azr" extrapolate 2 -- --no-ec-table
+run a487_nocap "$WORK/models/a487_nocap.azr" extrapolate 2
+run a487_nocap_b "$WORK/models/a487_nocap_b.azr" extrapolate 2
+run a55_nocap_b "$WORK/models/a55_nocap_b.azr" extrapolate 2
+run a55_nocap_notab "$WORK/models/a55_nocap.azr" extrapolate 2 -- --no-ec-table
+if res="$(python3 -I "$HERE/compare.py" "$HERE/data/reference.csv" "$WORK/a487_b" "$WORK/a55_b" "$WORK/a487_b_notab" --tol 1e-5 2>&1)"; then
+  ok "B_bg != 0 (4.87 and 5.5 fm; 4.87 fm without the energy table) = the potential model's: $res"
+else
+  bad "B_bg != 0 against make_reference.py: $res"
+fi
+if res="$(python3 -I "$HERE/compare.py" --spread "$WORK/a487_nocap" "$WORK/a487_nocap_b" --tol 1e-5 2>&1)" &&
+   res2="$(python3 -I "$HERE/compare.py" --spread "$WORK/a55_nocap" "$WORK/a55_nocap_b" "$WORK/a55_nocap_notab" --tol 1e-5 2>&1)"; then
+  ok "without capture interior, B_bg = 0 and != 0 (and table off at 5.5 fm) agree: 4.87 fm $res; 5.5 fm $res2"
+else
+  bad "without capture interior, B_bg = 0 against != 0 or table on against off: $res ${res2:-}"
 fi
 
 # ---- 4. the bound-state rule: with the p3/2 depth 83.65 MeV (written 83.589554) the potential binds 3/2- about 15 keV

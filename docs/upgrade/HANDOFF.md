@@ -4,6 +4,23 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-capture, follow-up) — the external-capture energy table through a pole of the interior R-function
+
+A defect reported on another project, present on the parent branch: with a background in the entrance waves the
+capture depended on B_bg above E_cm ≈ 6 MeV (factors up to 50; a_c = 4.87 fm), but not with `--no-ec-table`. Cause:
+`ECTable` tabulated the integral divided by the *dressed* √P̃ (hard-sphere term) or e^{−iφ̃} (channel capture), which
+vanish or jump by π at a pole of R⁰ (a box state of the potential, here the s wave at E_cm = 7.59 MeV), so the
+interpolated quotient was wrong over several per cent of E around it. Fix: for a wave with a background the factor is
+made of the undressed waves (e^{+iφ̃}√P and e^{−iφ}), smooth through the pole; the dressing is applied exactly at the
+energy; `intEC.dat`'s signature gets a mark for a pair with a background. Nothing changes for a wave without one.
+After: 4 radii × 2 B_bg × table on/off agree to 2.1·10⁻⁶ from 0.02 to 9 MeV, and with the independent reference;
+the elastic channel functions were never affected (evaluated, not interpolated: phase shifts B_bg-independent to 11
+digits within 10⁻¹¹ MeV of the poles). `tests/potential_capture/check.sh` now runs to 9 MeV with the B_bg and
+table-off cases and is a ctest (`potential_capture`). Details: `docs/upgrade/potential_background.md` section 5.8.
+Run: build 0 warnings; `ctest -LE slow -j4` 398/399 (rmfit_enginepin, this machine); `tests/run_tests.sh` (4
+threads) passed 187, failed 0; the check with the old reduction restored in a scratch rebuild fails 4 of its items (off
+by up to a factor 28 at 7.5 MeV), with the fix it passes.
+
 ## 2026-11-20 (potential-capture, research branch `feature/upgrade-9-potential-capture`) — the interior direct capture of a potential background
 
 Side branch (from `feature/upgrade-9-potential-background` at `61bdb6a8`), for the PI; not merged, not pushed. Design,

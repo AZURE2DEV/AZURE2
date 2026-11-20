@@ -5,6 +5,7 @@
 #include "ECIntegral.h"
 #include "CoulFunc.h"
 #include "Config.h"
+#include "Kinematics.h"
 #include "PPair.h"
 #include <algorithm>
 #include <atomic>
@@ -64,9 +65,27 @@ std::vector<double> TermKey(const PPair *pair, double radius, const Config &conf
  * penetration), its hard-sphere phase factor for channel capture (the integral
  * carries it, and it turns with energy).  Both are exact and cheap (the
  * Coulomb table answers them at the channel radius).
+ *
+ * A partial wave with an interior background (docs/upgrade/potential_background.md section 5.8): its dressed P~ and
+ * phi~ come from H~ = H - R0 (rho H' - B H), and at a pole of R0 (a box state of the potential, at real energies in
+ * the range of the data) H~ passes through infinity: P~ -> 0 and phi~ jumps by pi.  The integrals carry the same
+ * jump (the hard-sphere term reads cos phi~ and sin phi~), so the dressed factors above made the tabulated quotient
+ * diverge and change sign there, and the interpolation across it gave numbers off by up to two orders of magnitude.
+ * For such a wave the factor is built from the undressed waves, which are smooth and never vanish, times the dressed
+ * phase only where the integral flips with it: exp(+i phi~) sqrt(P) for the hard-sphere term (the integral times
+ * exp(-i phi~) is smooth through the pole), exp(-i phi) of the undressed waves for channel capture (its integral holds
+ * sqrt(P~) exp(-i phi~) = sqrt(rho)/H~, smooth through the pole).  A wave without a background: unchanged.
  */
-bool Reduction(double radius, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture, complex &n) {
-  if (isChannelCapture)
+bool Reduction(const PPair *pair, double radius, CoulFunc &coul, int li, int twoJi, double outEnergy, bool isChannelCapture,
+               bool background, complex &n) {
+  if (background) {
+    const CoulWaves plain = coul(li, twoJi, radius, outEnergy);  // the undressed waves at a_c
+    if (isChannelCapture)
+      n = CoulombHardSpherePhase(plain);
+    else
+      n = std::conj(coul.HardSpherePhase(li, twoJi, radius, outEnergy)) *
+          sqrt(azure2::physics::penetrability(PhysicsWaves(plain), Kinematics::Channel(pair).Rho(radius, outEnergy)));
+  } else if (isChannelCapture)
     n = coul.HardSpherePhase(li, twoJi, radius, outEnergy);
   else
     n = complex(sqrt(coul.Penetrability(li, twoJi, radius, outEnergy)), 0.0);
@@ -120,10 +139,12 @@ complex ECTable::Integral(const PPair *finalPair, double radius, const Config &c
   // directly: its integral grows like (k_i - k_f)^-2 towards the photon threshold E = levelEnergy and is zero below
   // it, which a Lagrange stencil in ln(E_out) cannot follow.
   const bool unboundFinal = levelEnergy > threshold;
-  if (!unboundFinal && row && row->P > 0.0)
+  // a background on the entrance wave: the reduction of the undressed waves (Reduction), never the channel table's
+  const bool background = coul.HybridPotential() && azure2::physics::BackgroundOf(*coul.HybridPotential(), li, twoJi);
+  if (!unboundFinal && !background && row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
   else if (unboundFinal || !(outEnergy > 0.0) ||
-           !Reduction(radius, coul, li, twoJi, outEnergy, isChannelCapture, reduction)) {
+           !Reduction(finalPair, radius, coul, li, twoJi, outEnergy, isChannelCapture, background, reduction)) {
     ++counts.direct;
     return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);
@@ -171,7 +192,7 @@ complex ECTable::Integral(const PPair *finalPair, double radius, const Config &c
     const double nodeOut = exp((double)(first + s) * h);
     try {
       complex n;
-      if (Reduction(radius, coul, li, twoJi, nodeOut, isChannelCapture, n)) {
+      if (Reduction(finalPair, radius, coul, li, twoJi, nodeOut, isChannelCapture, background, n)) {
         complex v = Converged(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, nodeOut + threshold,
                               levelEnergy, isChannelCapture) / n;
         node.ok = std::isfinite(v.real()) && std::isfinite(v.imag());
