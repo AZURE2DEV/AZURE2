@@ -4,6 +4,28 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-capture, follow-up 2) — a non-finite parameter is a failed evaluation, not an abort
+
+Reported from a fit with a potential background: an LM step produced a non-finite parameter, the channel functions got
+eta = rho = NaN, the Coulomb functions threw, the hybrid pair's "fallback to standard Coulomb" threw again, and the
+program ended with an uncaught std::runtime_error. Reproduced here on a synthetic model
+(`tests/potential_background/models/fit_level.azr`, a NaN start value read from a parameter file): `fit --use-lm` and
+MIGRAD both abort, **and so does the same model without a potential** -- the defect is general, not of the background.
+Cause: nothing stopped a non-finite parameter vector before the evaluation (a parameter file's "nan" was read by
+strtod and applied; an LM step x + dx with dx = NaN passes the clamp std::min/max). Fix: `AZURECalc::FiniteVector`;
+`operator()` returns the χ² ceiling (1e100) the minimizers already get for a non-finite χ², `Chi2Value` NaN (LM: not a
+decrease), `ResidualJacobian` and `ResidualsOnly` false (the fitters' failure path), all before evaluating; LM treats
+a non-finite step as a failed solve (more damping); a parameter file with a non-finite value is refused when read
+(exit 1, naming the line; `command_line.rst`). No state added; finite vectors are evaluated exactly as before. Test:
+`nonfinite_step` (ctest, `tests/reference/nonfinite_step_test.cpp`): both models, NaN/±∞ in the level energy and width
+→ ceiling, NaN, false, false, no exception; the file refusal. With the guard disabled in a scratch rebuild it fails
+(the NaN and +∞ cases throw the reported "Coulomb functions failed ... eta = nan, rho = nan"; −∞ and a non-finite
+width were even evaluated to a finite χ², 90.15). Not done: a real LM run that produces a NaN step (no synthetic
+model was found that does; the LM branch is covered through `Chi2Value`, which now returns NaN for such a step).
+Run: build 0 warnings; `ctest -LE slow -j4` 399/400 (rmfit_enginepin, this machine; `nonfinite_step` and
+`potential_capture` pass); `tests/run_tests.sh` (4 threads) passed 187, failed 0; the CLI with a "nan" start value
+now ends with "ERROR: ... the value of energy_1 is nan, not a finite number" (exit 1) instead of an abort.
+
 ## 2026-11-20 (potential-capture, follow-up) — the external-capture energy table through a pole of the interior R-function
 
 A defect reported on another project, present on the parent branch: with a background in the entrance waves the

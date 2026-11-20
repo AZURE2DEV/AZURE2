@@ -99,6 +99,8 @@ The options of the commands:
    * - ``--parameter-file``
      - ``=FILE``: start from the parameters of FILE (a ``param.sav``),
        applied by name; without it, from the ``<levels>`` of the project.
+       A value that is not a finite number (``nan``, ``inf``) is refused
+       (exit 1, naming the line); a non-finite error column is allowed.
        A file none of whose names is a parameter of the run is refused
        (``E_PARAMETER_FILE_NO_MATCH``, exit 1: nothing of it would be
        applied); a file with names the project has no parameter for, or

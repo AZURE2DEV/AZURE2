@@ -22,6 +22,8 @@
 #include <string>
 #include <vector>
 #include "Config.h"
+#include <limits>
+
 #include "CompoundSystem.h"
 #include "WorkingCopy.h"
 #include "Segment.h"
@@ -34,10 +36,18 @@ constexpr double kChi2Ceiling = 1.0e100;
 
 }  // namespace
 
+bool AZURECalc::FiniteVector(const vector_r &p) {
+  for (double v : p)
+    if (!std::isfinite(v)) return false;
+  return true;
+}
+
 double AZURECalc::operator()(const vector_r &p) const {
   AZUREProfile::ScopedReport profileReport(configure().profile, "evaluation");
   AZUREProfile::Timer profileTimer(configure().profile, AZUREProfile::kEvaluation);
   if (callCounter_) callCounter_->fetch_add(1, std::memory_order_relaxed);  // CountCallsInto
+  // A step to a non-finite parameter is not evaluated: it looks very bad, as a non-finite chi-squared does (below).
+  if (!FiniteVector(p)) return kChi2Ceiling;
   bool isFit = data()->IsFit();
   // A stopped fit (FitControl::stop): every later evaluation returns 0 at once, so the minimizer ends within the
   // sweep it is running; the fit keeps the best point it saw (docs/upgrade/fit.md section 3).
@@ -186,6 +196,8 @@ double AZURECalc::Chi2OnWith(const Config &config, LevelState &ls, WorkingCopy *
 }
 
 double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
+  // A non-finite parameter is not evaluated (FiniteVector): NaN, which every caller rejects as a failed step.
+  if (!FiniteVector(p)) return std::numeric_limits<double>::quiet_NaN();
   // Side-effect-free chi-squared (mirrors the chi-squared math of operator()).
   // Pooled working copies keep their applied energy shifts and mapping between
   // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the

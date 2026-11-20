@@ -97,7 +97,7 @@ bool AZUREParams::ReadUserParameters(const std::string &filename) {
  * invalid writes "nan" in the error column, so its own .sav could not be read
  * back (2026-10-19, A=4 session).  A non-finite error now leaves that
  * parameter's step size as it was; a line without a readable value is skipped
- * with a warning.
+ * with a warning; a non-finite value refuses the file (false).
  */
 bool AZUREParams::ApplyUserParameterFile(const std::string &filename, const std::string &pathToOpen, std::ostream &out, bool segmentEntries,
                                          const std::vector<std::string> &otherRunNames) {
@@ -137,6 +137,13 @@ bool AZUREParams::ApplyUserParameterFile(const std::string &filename, const std:
     if (name == "#parametrization" || name == "parametrization") {
       basisTag_ = (int)value;
       continue;
+    }
+    // A value that is not finite ("nan", "inf"; a diverged fit's file) is no parameter value: the run is refused,
+    // as it would have aborted in its first evaluation (2026-11-20).  A non-finite error is allowed (below).
+    if (!std::isfinite(value)) {
+      out << "ERROR: " << filename << " line " << lineNumber << ": the value of " << name << " is " << valueToken
+          << ", not a finite number.  Give it a finite value (the project's, or one of an earlier fit)." << std::endl;
+      return false;
     }
     if (!number(errorToken, error)) error = std::nan("");
     names.push_back(name);
