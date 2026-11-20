@@ -1,7 +1,8 @@
 # The interior R-function of a hybrid potential
 
 **Status (2026-11-20): built on `feature/upgrade-6-interior-potential`** — steps 1 to 4 of §4 and the bound levels;
-§8 lists what was built and where it differs from the design below. The text of §1 to §7 is the design note as
+§8 lists what was built and where it differs from the design below. §6 (capture from the potential's interior) is
+a design of the same day, not built. The text of §1 to §7 is the design note as
 reviewed ("no engine code is changed by it" was true of the note).
 
 A design note for review; no engine code is changed by it. Asked for by the owner (R. J. deBoer, 2026-11-19) after a
@@ -187,10 +188,133 @@ U_pot, computed once per record at set-up over the project's energy range.
 
 ## 6. Second step: capture from the potential's interior
 
-KTF add a capture R-function from the potential: the direct E1 matrix element of the potential's scattering wave over
-the **whole** radial range, scaled by an effective dipole strength. The counterpart here is the external-capture
-integral run from 0 instead of a_c with the regular solution inside, and an effective-charge factor as a parameter.
-Not designed in this note.
+**Status (2026-11-20): design, asked for by the owner on that day; nothing of this section is built.** Code references
+are to `78587e70`. The formulas with levels (§6.2) are derived here and not yet checked numerically; §6.6 lists the
+checks that decide them.
+
+### 6.1 Why
+
+With `interior_boundary` the broad states and the background come from the potential, but the capture still has only
+the levels' internal photon widths and the integral **outside** a_c. The owner's ¹²C(α,γ) E1 test (Dyer and Barnes,
+`12C+a_onefile/11-19-26_hpot_test/rpot`, 2026-11-20): χ² 24.9 without the potential; 2073 to 3805 with R_pot standing
+in for the 9.585 MeV level, missed at every point (4 to 12 % of the points within 1σ). The potential makes the 1⁻
+resonance in the elastic channel and nothing gives it a γ width. KTF and Langanke–Koonin take that width from the E1
+matrix element of the potential's wave over the whole radial range, with an effective dipole strength.
+
+### 6.2 The physics
+
+R of Eq. (2) is a sum over the explicit levels and over the (infinitely many) eigenstates of the potential with the
+boundary constant b_c. The interior wave function is the same sum, and the part carried by the potential's states is
+closed: with ψ_c the channel's radial wave at the surface and u_c the regular solution of §2.1,
+
+  χ_c(r) = [u_c(r) / u_c(a_c)] · R_pot,c · (a_c ψ′_c − b_c ψ_c),        r < a_c,        (7)
+
+because Σ_n φ_n(r) φ_n(a)/(E_n − E) is the Green function of the potential with that boundary condition. The surface
+value splits the same way: ψ_c(a) = χ_c(a) + (the levels' part). Outside, ψ_c = I_c δ_cc₀ − U_cc₀ O_c, and U is the
+no-level term plus the level term of Eq. (3). The two terms of today's external capture
+(`ECIntegral::CalculateDirect`, `src/ECIntegral.cpp:332`) each get an interior piece:
+
+- **The non-resonant term.** Without levels ψ is the potential's own scattering wave, and (7) is its continuation:
+  the standing wave v(r) = cos φ′ F(r) − sin φ′ G(r) of today's term (the primed phase is already used,
+  `EntrancePhase`) continues inside as v(a) u_c(r)/u_c(a). The term becomes the integral from 0 to ∞ of the
+  potential's wave: direct capture of the potential model.
+- **The channel term of a level.** The level's outgoing wave O_c(r)/O_c(a) outside has the interior part
+
+    [(L_c − b_c) / (f_c − b_c)] · u_c(r)/u_c(a_c),        (8)
+
+  complex above threshold; below threshold L = S and it is real (the entrance factor of the closed-channel branch).
+  The wave is **not** continuous at a_c: the remainder, (f − L)/(f − b), is the level's own interior, which is the
+  level's internal photon width, a parameter as today.
+- **The final state.** A bound final state is C W(r) outside. Its potential part inside is, by the same argument,
+
+    w_f(r) = C W(a) · [(S_f − b_f) / (f_f − b_f)] · u_f(r)/u_f(a),        (9)
+
+  the term whose square is already in the final state's norm (§8, the second term of dS′/dE). At a bound state of
+  the potential (f_f = S_f) the factor is 1 and the final state is the potential's wave function, KTF's case.
+  A final channel whose l has no `interior_boundary` has no interior wave in this model: the interior term is zero.
+
+The interior radial integral of a pathway is then
+
+  ∫₀^{a} w_f(r) · 𝒪_L(r) · [u_i(r)/u_i(a)] dr        (10)
+
+with the same operator 𝒪_L as outside (r^L, or the charge function and the convection term without the
+long-wavelength approximation), added to the FW/GW combination with the coefficient v(a) (non-resonant term) or
+(8) × O_i(a) (channel term). Everything after the radial integral (angular factors, the ANC conversion, the level
+matrix, Brune's transformation of the photon widths) is unchanged.
+
+**What the model leaves out**, and says so: the matrix element between the *level* part of the final state and the
+*potential* part of the entrance wave. (The other cross term, level part of the entrance wave with the whole final
+state, is the level's internal photon width.) It vanishes when the final state is a state of the potential.
+
+### 6.3 The dipole strength
+
+For N = Z pairs the E1 operator of the relative motion nearly vanishes (¹²C + α: Z₁m₂/M − Z₂m₁/M ≈ 10⁻³), so the
+kinematic operator inside gives the potential's resonance almost no γ width; the real strength is isospin mixing in
+the interior. KTF fit an effective dipole strength. Proposed: one number per potential record and multipolarity,
+
+```
+    interior_charge  E1 0.012                  # new, optional; units of e
+```
+
+an **additional** effective charge q acting inside a_c only: the interior integrand gains q r^L (long-wavelength form;
+k_γ r < 0.3 inside the radius, the neglected terms are below 1 %). Absent or 0: the pair's own operator, continuous
+through a_c. The record is the entrance channel's (the one of l_i). It enters the amplitude linearly.
+
+### 6.4 Design
+
+- `physics/HybridPotential`: `RegularSolution` returns u on its Numerov grid (today: f and the norm only);
+  `InteriorOverlap(u_i, u_f, weight)` does (10) on that grid (Simpson). u_f is made once per final state, u_i once per
+  (channel, energy): the outward integration that f already needs.
+- `ECIntegral::CalculateDirect`: the interior term in the open and the closed entrance branch, for a bound final
+  state. The effective-charge function is evaluated at r < a (it is regular at 0). `ECTable` interpolates the sum as
+  it does today's; the rate mode's fixed grid (`ECRateGridKey`) keeps the outside part and adds the interior number.
+- `PotentialKey` gains q; the potential's interior and b are already in it, so every cache separates the cases.
+- `--ignore-externals` switches the interior term off with the external one (both are computed capture).
+- No change in `ExternalCaptureFinalStates.cpp` (its factors are those of (9)), none in `src/AMatrixFunc.cpp` or
+  `src/WorkingCopy.cpp` (the size rule).
+
+| code (proposed) | when |
+|---|---|
+| `W_POT_INTERIOR_FINAL` | capture from a channel with `interior_boundary` into a final channel without one: no interior capture for this final state |
+| `E_POT_INTERIOR_UNBOUND_FINAL` | an unbound final state (`linewindow`) with `interior_boundary` in either channel, until step 4 |
+| `E_POT_INTERIOR_CHARGE` | `interior_charge` without `interior_boundary`, or a multipolarity other than E1, E2 |
+
+### 6.5 Steps
+
+1. `physics/`: u on the grid, `InteriorOverlap`, unit tests against `physics/tests/make_interior_capture_reference.py`
+   (scipy; not the engine's code).
+2. The engine: the interior term for bound final states, both entrance branches; checks 1 to 4 of §6.6.
+3. `interior_charge` (schema, reader, pyazr view, the diagnostics); check 5; the ¹²C(α,γ) trial of §6.6.
+4. Unbound final states (the outgoing final wave with the factor (L_f − b_f)/(f_f − b_f)), the rate mode.
+5. The theory page (`hybrid_potential.rst`), the user guide, `FOR_THE_OWNER.md`.
+
+q as a **fit parameter** belongs with the potential's depth, radius and diffuseness (§7, question 5): step 3 reads a
+fixed number.
+
+### 6.6 Tests with independent answers
+
+1. No levels, the KTF potential, a final state at a bound state of the l = 0 potential: the capture amplitude equals
+   the potential-model integral ∫₀^∞ of an independent script, and is the same for a_c = 4.0, 5.35 and 6.5 fm.
+2. The same with a final state off the potential's bound state: the factor of (9) against the script.
+3. M1 with l_i = l_f in one potential, no levels: the wave functions are orthogonal, the amplitude over 0 to ∞ is
+   zero (today's external part alone is not).
+4. One level on top (the case of §2.5, check 3): the capture amplitude built from (7) directly, with ψ(a) and ψ′(a)
+   from U, against the engine's two terms with (8). This is the check of (8).
+5. `interior_charge`: the amplitude is linear in q; q = 0 reproduces step 2 bit for bit.
+6. `interior_boundary` absent: every existing reference unchanged, bit for bit.
+7. The trial: the owner's ¹²C(α,γ) E1 runs (R_pot + 7.12 MeV level + background pole) with q scanned; reported per
+   point. This says whether the model can describe the data; it is not a test of the code.
+
+### 6.7 Questions
+
+1. **`interior_charge`**: as proposed (additive, inside a_c only, per record and multipolarity), or a factor on the
+   whole potential capture, inside and outside (KTF's "effective dipole strength")? The first keeps the outside
+   operator the one the masses fix.
+2. **The cross term left out** (§6.2): accept, or a second parameter per final state? Proposed: accept; it is zero in
+   KTF's case.
+3. **The final state without a potential of its own l.** Zero interior capture and a warning (proposed), or refuse?
+4. **Order.** Steps 1 to 3 make the ¹²C(α,γ) trial possible; q as a fit parameter then decides whether fits can use
+   it. Do the fit parameters (potential and q) come before step 4?
 
 ## 7. Questions
 
