@@ -142,6 +142,14 @@ class Project {
   /// lines (comments above it included) change places with its neighbour's, every other line stays.  False with
   /// `why` at either end or for a name the section has not.
   bool MoveRecord(const std::string &section, const std::string &name, int delta, std::string &why);
+  /// The records of `section` switched off (SetRecordOn), each as Records() gives a record (its fields as written; line
+  /// = the line of its header in the file).  Not seen by the engine, Records() or Validate().
+  std::vector<Record> RecordsOff(const std::string &section) const;
+  /// Switch record `name` of `section` off or on.  Off: each of its lines (the comments above it, the header, the fields)
+  /// is prefixed with RecordOffMark(), so that the engine reads them as comments and the record does nothing; on: the
+  /// mark is taken away again, which gives back the lines byte for byte.  No other line moves.  False with `why` for a
+  /// record that is not there (on, or off), or when an active record of that name exists (on).
+  bool SetRecordOn(const std::string &section, const std::string &name, bool on, std::string &why);
 
   /// AZURE2 --validate of the text as it stands (data files are read relative to Directory()).
   Validation Validate() const;
@@ -154,6 +162,8 @@ class Project {
 /// The table of project format 3 as JSON (AZURE2 --schema): sections, record kinds and their fields with titles,
 /// docs, types, closed choices and units, quantities, units, diagnostic codes.
 std::string SchemaJson();
+/// The mark a record switched off carries at the start of each of its lines ("#off "): a comment of format 3.
+const std::string &RecordOffMark();
 
 // ---- The shape of a value: what a form offers to edit it (docs/upgrade/qt_gui.md section 11) ----
 
@@ -925,6 +935,8 @@ struct PhysicsPole {
   std::vector<Width> widths;
 };
 
+struct PotentialPole;  // the Potential panel's (below)
+
 /// The engine's session of a saved project (docs/upgrade/physics_tab.md section 7.2).  Opening one sets up the
 /// levels and the data (or the extrapolations) as AZURE2 calculate would: seconds for a project with external capture
 /// (its integrals are read from intEC.dat when current).  Every call after that takes milliseconds per energy.
@@ -982,6 +994,15 @@ class PhysicsSession {
   ///  lineshape:  NC2 per exit pair and level, zeta and eta_sb per exit pair, E_sF, eta_0;
   ///  distortion: R, R_model, M2, M2_PW, E_sF, k_sF, eta_sF, theta_cm, x, q, lmax.
   /// False with `why` (the engine's words) for an experiment that is not there or has no such part.
+  /// The box states of pair `pair`'s potential in (l, 2J) through the session (AZUREAPI::GetPotentialBoxStates, pyazr's
+  /// Session.potential_box_states): `energy`, `gamma2` and `nodes` of each PotentialPole (the rest left 0).  False with
+  /// the engine's words.  The Potential panel computes them from the record (PotentialWaveOf); this is the session's.
+  bool PotentialBoxStates(int pair, int l, int twoJ, double radius, double boundary, double eMin, double eMax,
+                          std::vector<PotentialPole> &out, std::string &why);
+  /// The potential's own a and r in (l, 2J) through the session (AZUREAPI::GetPotentialEffectiveRange, pyazr's
+  /// Session.potential_scattering_length); false with its reason.
+  bool PotentialScatteringLength(int pair, int l, int twoJ, double &a, double &r, std::string &why);
+
   bool ThmVertex(const std::string &experiment, const std::vector<double> &energies, PhysicsCurves &out,
                  std::string &why);
   bool ThmLineshape(const std::string &experiment, const std::vector<double> &energies, PhysicsCurves &out,
@@ -1107,6 +1128,133 @@ struct AllowedChannelInfo {
 bool AllowedChannels(const std::vector<LevelRow> &pairRows, int twoJ, int parity, int lMax, int multipolarityMax,
                      int multipolaritiesMax, const std::vector<int> &pairKeys, std::vector<AllowedChannelInfo> &out,
                      std::string &why);
+
+// ---- The Potential panel of the Pairs tab and the Levels tab's partial waves (docs/upgrade/qt_gui.md section 19) ----
+
+/// One `wave` field of a `potential` record in its meaning, split by the engine's parser (ParseFieldValue); every
+/// number and spin keeps the text it was written with, so PotentialWaveText of an unchanged wave is the text read.
+struct PotentialWave {
+  int l = 0;
+  std::string J;            ///< "" every J of l; else the spin as written ("1/2")
+  int twoJ = -1;            ///< 2J, -1 without J
+  std::string depth, width; ///< the wave's own V0 and Gaussian r0 as written ("" the central one's)
+  std::string depthUnit = "MeV", widthUnit = "fm";
+  bool background = false;  ///< `background interior`: the external + internal mode
+  std::string boundary;     ///< B_bg as written ("" none)
+  std::string subtract;     ///< the node number of the subtracted box state as written ("" none)
+  bool capture = false;     ///< `capture interior`
+  bool boundStateOnly = false;  ///< `only bound_state`: point-Coulomb channel functions in this wave
+};
+/// The value `text` of a `wave` field split by the engine's parser; false with its words.
+bool ParsePotentialWave(const std::string &text, PotentialWave &out, std::string &why);
+/// The text of a `wave` field, written by the record writer from the parts (FieldValueText).
+std::string PotentialWaveText(const PotentialWave &wave);
+
+/// The potential record of a pair: the active one the engine's build gives the pair, else a record switched off whose
+/// pair is the pair.  `found` false: the pair has none.
+struct PairPotential {
+  bool found = false;
+  bool on = true;  ///< false: switched off (Project::RecordsOff)
+  Record record;
+};
+PairPotential PotentialOfPair(const Project &project, int pairKey);
+
+/// A box state of a wave's potential: a pole of its interior R-function at the channel radius (physics/
+/// InteriorBoxStates, as Session.potential_box_states).
+struct PotentialPole {
+  int nodes = 0;            ///< what `subtract` names
+  double energy = 0;        ///< E_p (MeV, c.m. of the pair)
+  double excitation = 0;    ///< E_x = E_p + the pair's threshold (MeV)
+  double gamma2 = 0;        ///< gamma_p^2 (MeV)
+  double wignerRatio = 0;   ///< gamma_p^2 / gamma_W^2, gamma_W^2 = 3 hbar^2/(2 mu a^2) (physics::wigner_limit)
+  bool subtracted = false;  ///< named by the wave's `subtract`
+};
+/// A level of <levels> in the J^pi of a wave with a channel of the pair and l: what the panel shows beside the poles.
+struct PotentialLevel {
+  double J = 0;
+  int parity = 1;
+  double excitation = 0;   ///< E_x (MeV)
+  double energy = 0;       ///< E_c = E_x - threshold (MeV)
+  bool active = true;
+  double s = 0;            ///< channel spin
+  std::string kind;        ///< ChannelAtLevel's: "open" (value Gamma, eV), "closed" (ANC, fm^-1/2), "amplitude", ...
+  double value = 0;        ///< the channel's value as written
+};
+/// What one partial wave of a pair's potential is and gives, at the channel radius.
+struct PotentialWaveReport {
+  int l = 0, twoJ = -1;
+  int parity = 1;           ///< of the J^pi the wave forms (pi1 pi2 (-1)^l)
+  double radius = 0;        ///< a_c (fm): the pair's, or a <channelRadii> record's
+  std::string radiusNote;   ///< where it comes from, or that its channel spins have different ones (the first is used)
+  double threshold = 0;     ///< E_x of the pair's threshold (MeV)
+  double depth = 0, width = 0;  ///< the wave's V0 (MeV) and Gaussian r0 (fm; 0 for a Woods-Saxon term)
+  bool background = false;
+  double boundary = 0;
+  std::vector<PotentialPole> poles;  ///< E_p in [eMin, eMax], ascending
+  std::string subtractError;         ///< the set-up's refusal of `subtract` (SubtractedBoxStates), "" when none
+  std::string radiusError;           ///< the set-up's refusal of a background beyond the matching radius, "" when none
+  // the potential alone
+  int boundStates = 0;      ///< bound states of the potential in the wave (forbidden ones included)
+  int zeroEnergyNodes = 0;  ///< nodes of its zero-energy solution inside r_m
+  bool effectiveRange = false;  ///< a and r below were computed (else `effectiveRangeWhy`)
+  std::string effectiveRangeWhy;
+  double a = 0, r = 0, aSpread = 0, rSpread = 0, eLow = 0, eHigh = 0;  ///< physics/ PotentialEffectiveRange
+  std::vector<PotentialLevel> levels;  ///< the project's levels of this J^pi with a channel (pair, l)
+};
+/// The wave (l, twoJ; -1 none) of pair `pairKey` with the potential of `record` (as a form holds it, applied or not;
+/// on or off), set into a copy of `project` built by the engine's reader, the pair as the engine makes it from its
+/// <levels> row: the box states in [eMin, eMax] (MeV, c.m.) at the channel radius with the wave's boundary B_bg (0
+/// without a background), the set-up's checks of the wave, and the potential's own bound states, a and r.  False with
+/// `why` when the copy does not build (the engine's words) or the wave cannot be asked (a J the potential needs).
+bool PotentialWaveOf(const Project &project, const Record &record, int pairKey, int l, int twoJ, double eMin, double eMax,
+                     PotentialWaveReport &out, std::string &why);
+
+/// A depth found for a wave: the tuning's answer.
+struct PotentialDepth {
+  bool found = false;
+  std::string why;          ///< the engine's words when not found
+  double depth = 0;         ///< V0 (MeV)
+  double a = 0, r = 0;      ///< the wave's a and r at that depth (scattering-length tuning)
+  int boundStates = 0;      ///< bound states at that depth (the branch kept)
+  int nodes = 0;            ///< nodes of the zero-energy solution (scattering length) or of the bound state (binding)
+  double energy = 0, anc = 0;  ///< binding: the eigenvalue (MeV, c.m.) and the potential's own ANC (fm^-1/2) there
+};
+/// The depth of the wave for a scattering length `a` (fm^(2l+1)) in the branch of the record's depth
+/// (physics/ DepthForScatteringLength).
+bool PotentialDepthForScatteringLength(const Project &project, const Record &record, int pairKey, int l, int twoJ,
+                                       double a, PotentialDepth &out, std::string &why);
+/// The depth of the wave nearest the record's within +-30 % that binds it at `energy` (MeV, c.m., < 0: the level's
+/// E_x minus the threshold; physics/ DepthBindingAt, the depth the set-up's refusal of `capture interior` prints), the
+/// eigenvalue and the potential's own ANC there (PotentialBoundStateANC).
+bool PotentialDepthForBinding(const Project &project, const Record &record, int pairKey, int l, int twoJ, double energy,
+                              PotentialDepth &out, std::string &why);
+
+/// Is the partial wave (pair, l, J^pi) in the calculation?  The engine makes a J^pi group only for the J^pi of an active
+/// level (CompoundSystem::Fill), and with <config> includeAllJPi=1 also for every J^pi a particle channel with l up to
+/// maxOrbitalMomentum (absent: the largest l of a particle channel of <levels>) makes (AddHardSphereGroups); a J^pi
+/// without a group is left out, its potential, background and hard-sphere phase with it.
+struct PartialWaveState {
+  int twoJ = 0, parity = 1;
+  bool level = false;   ///< an active level of this J^pi has the channel (pair, l)
+  bool key = false;     ///< includeAllJPi would add the J^pi (the key on or not)
+  bool included = false;  ///< level, or key with includeAllJPi on
+};
+/// The J^pi of the wave (pair `pairKey`, l, 2J; -1: every J of l) as the rows `rows` (every row of <levels>, as the
+/// Levels tab writes them) and the two keys make them.
+std::vector<PartialWaveState> PartialWaveStates(const std::vector<LevelRow> &rows, bool includeAllJPi,
+                                                int maxOrbitalMomentum, int pairKey, int l, int twoJ);
+/// A J^pi that the particle pairs of `rows` form with l <= lMax and that no active level carries.
+struct MissingPartialWave {
+  int twoJ = 0, parity = 1;
+  int nucleusZ = 0, nucleusA = 0;  ///< the compound nucleus (Z1 + Z2, A1 + A2 of a pair that forms it)
+  int pairKey = 0;                 ///< a particle pair that forms it, with its lowest l
+  int l = 0;
+  bool key = false;                ///< includeAllJPi adds it (its lowest l <= the key's maximum l)
+};
+/// Every J^pi without an active level, nucleus by nucleus, in the order of J then parity; `keyMaxL` the largest l the
+/// key's groups take (maxOrbitalMomentum, or else the largest l of a particle channel of the rows; -1 for none).
+std::vector<MissingPartialWave> PartialWavesWithoutLevel(const std::vector<LevelRow> &rows, int lMax,
+                                                         int maxOrbitalMomentum, int &keyMaxL);
 
 }  // namespace front
 }  // namespace azure2

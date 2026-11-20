@@ -10,7 +10,11 @@
 //  (f) physics: the rows of the physics table and one evaluated; a session of T1: poles, channel functions against
 //      the row, the 1/2+ block's phase shift against the program's extrapolation, |U| = 1, |det A^-1| least at the
 //      level; T2's THM vertex;
-//  (g) what the Qt Physics tab draws (PhysicsCalls, PhysicsPlots, Block's T_abs, LastParameterFile).
+//  (g) what the Qt Physics tab draws (PhysicsCalls, PhysicsPlots, Block's T_abs, LastParameterFile);
+//  (h) the Potential panel and the partial waves (qt_gui.md section 19; PotentialChecks): a record switched off and on
+//      byte for byte, the waves split and written back, the pair's record found on and off, the box states and a, r
+//      of the record equal to the session's (AZUREAPI) bit for bit, the set-up's refusal of a subtract, the depths for
+//      a0 = 40 fm and for the p3/2 bound state against scipy, the partial waves an active level or includeAllJPi keep.
 // Each check prints PASS or FAIL; exit 1 on a failure.
 #include "azure2/front/Engine.h"
 
@@ -750,6 +754,142 @@ void OverviewChecks(const fs::path &source, const std::string &binary) {
   }
 }
 
+void PotentialChecks(const fs::path &source) {
+  const fs::path dir = "front_test_work/potential";
+  const fs::path file = CopyProject(source / "tests/potential_background/models/bound_level_a40.azr", dir);
+  front::Project p;
+  std::string why;
+  Check(front::Project::Open(file.string(), p, why), "potential: bound_level_a40 opened (" + why + ")");
+  const std::string original = p.Text();
+  // off and on
+  bool ok = p.SetRecordOn("potentials", "he3he4", false, why) && p.Records("potentials").empty() &&
+            p.RecordsOff("potentials").size() == 1 && p.RecordsOff("potentials")[0].name == "he3he4" && p.Text() != original;
+  Check(ok, "potential: switched off, the record is a comment kept in the file (" + why + ")");
+  {
+    const front::Record off = p.RecordsOff("potentials").empty() ? front::Record() : p.RecordsOff("potentials")[0];
+    Check(off.fields.size() == 12 && off.Value("central") == "gaussian depth 67.5 MeV width 2.5200031651 fm",
+          "potential: the record switched off read with its fields (" + std::to_string(off.fields.size()) + ")");
+    const front::PairPotential pp = front::PotentialOfPair(p, 1);
+    Check(pp.found && !pp.on && pp.record.name == "he3he4", "potential: the pair's record found while off");
+  }
+  Check(p.Validate().ok, "potential: the project with the record off is valid");
+  ok = !p.SetRecordOn("potentials", "he3he4", false, why);
+  Check(ok, "potential: off twice refused: " + why);
+  why.clear();
+  ok = p.SetRecordOn("potentials", "he3he4", true, why) && p.Text() == original;
+  Check(ok, "potential: switched on again, the text byte for byte (" + why + ")");
+  ok = !p.SetRecordOn("potentials", "he3he4", true, why);
+  Check(ok, "potential: on twice refused: " + why);
+  why.clear();
+  // the waves: split and written back to the same text; the meaning of each part
+  const front::PairPotential pp = front::PotentialOfPair(p, 1);
+  Check(pp.found && pp.on && pp.record.name == "he3he4", "potential: the pair's record found (on)");
+  int waves = 0, same = 0;
+  for (const front::Field &f : pp.record.fields) {
+    if (f.key != "wave") continue;
+    front::PotentialWave w;
+    waves++;
+    if (front::ParsePotentialWave(f.value, w, why) && front::PotentialWaveText(w) == f.value) same++;
+  }
+  Check(waves == 7 && same == 7, "potential: 7 waves written back as read (" + std::to_string(same) + ")");
+  {
+    front::PotentialWave w;
+    front::ParsePotentialWave("l 1 J 3/2 depth 83.589554 MeV width 2.5200031651 fm background interior boundary 0.0 subtract 1", w, why);
+    Check(w.l == 1 && w.twoJ == 3 && w.depth == "83.589554" && w.background && w.boundary == "0.0" && w.subtract == "1" &&
+              !w.capture && !w.boundStateOnly,
+          "potential: a wave's parts");
+    w.background = false;
+    Check(front::PotentialWaveText(w) == "l 1 J 3/2 depth 83.589554 MeV width 2.5200031651 fm",
+          "potential: external only drops boundary and subtract with the background: '" + front::PotentialWaveText(w) + "'");
+    w.background = true;
+    w.boundary = "-1";
+    w.subtract.clear();
+    w.capture = true;
+    Check(front::PotentialWaveText(w) ==
+              "l 1 J 3/2 depth 83.589554 MeV width 2.5200031651 fm background interior boundary -1 capture interior",
+          "potential: external + internal with capture: '" + front::PotentialWaveText(w) + "'");
+  }
+  // the record's waves against the session (AZUREAPI) on the saved file
+  front::PhysicsSession s;
+  ok = front::PhysicsSession::Open(file.string(), "", true, s, why);
+  Check(ok, "potential: the session (" + why + ")");
+  front::PotentialWaveReport w1, w0;
+  ok = front::PotentialWaveOf(p, pp.record, 1, 1, 3, -60.0, 30.0, w1, why);
+  Check(ok, "potential: the p3/2 wave (" + why + ")");
+  std::vector<front::PotentialPole> api;
+  s.PotentialBoxStates(1, 1, 3, 4.0, 0.0, -60.0, 30.0, api, why);
+  bool equal = api.size() == w1.poles.size() && !api.empty();
+  for (std::size_t i = 0; equal && i < api.size(); i++)
+    equal = api[i].nodes == w1.poles[i].nodes && api[i].energy == w1.poles[i].energy && api[i].gamma2 == w1.poles[i].gamma2;
+  int marked = 0;
+  for (const front::PotentialPole &q : w1.poles) marked += q.subtracted && q.nodes == 1 ? 1 : 0;
+  Check(equal && marked == 1 && w1.radius == 4.0 && w1.background && w1.subtractError.empty(),
+        "potential: p3/2 box states equal to the session's bit for bit (" + std::to_string(api.size()) +
+            "), node 1 marked subtracted, a_c 4 fm");
+  Check(w1.levels.size() == 1 && w1.levels[0].kind == "closed" && std::fabs(w1.levels[0].value - 4.09315411993) < 1e-12 &&
+            std::fabs(w1.levels[0].energy + 1.45488673894) < 1e-9,
+        "potential: the 3/2- level beside the poles: its ANC and E_c");
+  Check(w1.boundStates == 2 && !w1.effectiveRange, "potential: p3/2 two bound states; a, r refused (charged, l = 1): " +
+                                                       w1.effectiveRangeWhy);
+  ok = front::PotentialWaveOf(p, pp.record, 1, 0, 1, -60.0, 30.0, w0, why);
+  Check(ok, "potential: the s wave (" + why + ")");
+  double a = 0, r = 0;
+  s.PotentialScatteringLength(1, 0, 1, a, r, why);
+  Check(w0.effectiveRange && w0.a == a && w0.r == r && std::fabs(w0.a - 30.953078) < 1e-3 && w0.boundStates == 2,
+        "potential: s-wave a0 " + std::to_string(w0.a) + " fm equal to the session's and to scipy's 30.953078");
+  // the set-up's refusal of a subtract the box has not, from the engine's words
+  {
+    front::Record bad = pp.record;
+    for (front::Field &f : bad.fields)
+      if (f.key == "wave" && f.value.find("subtract 1") != std::string::npos) f.value.replace(f.value.find("subtract 1"), 10, "subtract 9");
+    front::PotentialWaveReport wb;
+    ok = front::PotentialWaveOf(p, bad, 1, 1, 3, -60.0, 30.0, wb, why) && wb.subtractError.find("does not have") != std::string::npos;
+    Check(ok, "potential: subtract 9 refused as the set-up refuses it: " + wb.subtractError);
+    front::Record capture = pp.record;
+    for (front::Field &f : capture.fields)
+      if (f.key == "wave" && f.value.rfind("l 3 J 7/2", 0) == 0) f.value = "l 3 J 7/2 depth 84.8 MeV capture interior";
+    ok = !front::PotentialWaveOf(p, capture, 1, 0, 1, -60.0, 30.0, wb, why) && why.find("E_POTENTIAL_WAVE") != std::string::npos;
+    Check(ok, "potential: capture without a background refused with the validator's words: " + why);
+  }
+  // the tuning
+  {
+    front::PotentialDepth d;
+    ok = front::PotentialDepthForScatteringLength(p, pp.record, 1, 0, 1, 40.0, d, why) && d.found &&
+         std::fabs(d.depth / 65.28518406 - 1) < 1e-6 && std::fabs(d.a - 40.0) < 1e-5 && d.boundStates == 2;
+    Check(ok,
+          "potential: the depth for a0 = 40 fm " + std::to_string(d.depth) + " MeV (scipy's brentq 65.28518406), two bound "
+          "states kept, " + std::to_string(d.nodes) + " nodes " + d.why);
+    ok = front::PotentialDepthForBinding(p, pp.record, 1, 1, 3, -1.4548867432, d, why) && d.found &&
+         std::fabs(d.depth / 83.589554 - 1) < 1e-6 && std::fabs(d.anc - 4.0931604450) < 2e-4 && d.nodes == 1;
+    Check(ok,
+          "potential: the depth binding p3/2 at -1.4548867 MeV is the written 83.589554 MeV (" + std::to_string(d.depth) +
+              "), ANC " + std::to_string(d.anc) + " (scipy 4.0931604450), one node");
+  }
+  // the partial waves: the rows without the 1/2+ level, with and without includeAllJPi
+  {
+    std::vector<front::LevelRow> rows;
+    for (const front::LevelRow &row : p.Levels())
+      if (!(row.tokens.size() > 2 && row.tokens[0] == "0.5" && row.tokens[1] == "1")) rows.push_back(row);
+    Check(rows.size() + 1 == p.Levels().size(), "potential: the rows without the 1/2+ level");
+    const std::vector<front::PartialWaveState> off = front::PartialWaveStates(rows, false, -1, 1, 0, 1);
+    const std::vector<front::PartialWaveState> on = front::PartialWaveStates(rows, true, -1, 1, 0, 1);
+    const std::vector<front::PartialWaveState> d = front::PartialWaveStates(rows, false, -1, 1, 2, -1);
+    Check(off.size() == 1 && !off[0].level && off[0].key && !off[0].included && on.size() == 1 && on[0].included,
+          "potential: the s wave without a level is left out, kept by includeAllJPi");
+    Check(d.size() == 2 && d[0].twoJ == 3 && d[1].twoJ == 5 && d[0].included && d[1].included && d[0].parity == 1,
+          "potential: the d waves 3/2+ and 5/2+ carried by their levels");
+    int keyMaxL = 0;
+    const std::vector<front::MissingPartialWave> missing = front::PartialWavesWithoutLevel(rows, 4, -1, keyMaxL);
+    std::string list;
+    for (const front::MissingPartialWave &m : missing) list += std::to_string(m.twoJ) + "/2" + (m.parity > 0 ? "+" : "-") + (m.key ? "k " : " ");
+    // up to l = 4: 1/2+ (l 0), 7/2+ (l 4), 9/2+ (l 4); the key's l is 3 (the rows'), so only 1/2+ is covered
+    Check(keyMaxL == 3 && list == "1/2+k 7/2+ 9/2+ ", "potential: the J^pi without a level up to l = 4: " + list +
+                                                          "(key's l " + std::to_string(keyMaxL) + ")");
+    front::PartialWavesWithoutLevel(rows, 4, 4, keyMaxL);
+    Check(keyMaxL == 4, "potential: maxOrbitalMomentum sets the key's l");
+  }
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) {
     std::cerr << "usage: front_test <source dir> <AZURE2 binary>" << std::endl;
@@ -1280,6 +1420,7 @@ int main(int argc, char **argv) {
   PolishChecks(source);
 
   OverviewChecks(source, binary);
+  PotentialChecks(source);
 
   std::cout << (failures ? "FAILED: " + std::to_string(failures) : std::string("all passed")) << std::endl;
   return failures ? 1 : 0;
