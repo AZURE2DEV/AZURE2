@@ -169,7 +169,7 @@ SESSION_FUNCTIONS = {
          dict(_ARG, name="J", kind="real", doc="the channel's total J: required when the potential depends on J, "
               "ignored when it does not", domain="a multiple of 1/2 >= 0, or None", example=0.5),
          dict(_ARG, name="r", kind="real", unit="fm^(1-2l)", doc="the effective range asked; None: the depth alone",
-              domain="finite, or None")],
+              domain="finite, or None", example=0.93)],
         [_r("found", "", "a solution on the branch (bool)", "scalar"),
          _r("why", "", "the reason when none", "text"),
          _r("depth", "MeV", "V0 (None when not found)", "scalar"),
