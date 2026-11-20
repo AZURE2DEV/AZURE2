@@ -4,6 +4,45 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-20 (potential-capture, research branch `feature/upgrade-9-potential-capture`) — the interior direct capture of a potential background
+
+Side branch (from `feature/upgrade-9-potential-background` at `61bdb6a8`), for the PI; not merged, not pushed. Design,
+the PI's approval of its two rules (2026-11-20, "Ok to both") and results: `docs/upgrade/potential_background.md`
+section 5 (5.7 the numbers).
+
+**What was built.** `wave ... background interior boundary <B> [subtract <n>] capture interior` (new key `capture` of
+the `wave` field; `E_POTENTIAL_WAVE` without a background). Model: the potential's box poles are levels with fixed
+particle and γ amplitudes; the interior wave they carry is the potential's interior response driven by the surface term
+D = ρu' − B_bg u of the channel's full wave at a_c (the dressing keeps D), g_E(r) = R_pot φ_E(r) − Σ_subtracted γ_p²
+φ_p(r)/(E_p − E); with no levels this is the potential's scattering wave, continuous in value and derivative. Fitted
+levels keep their γ widths. The final state inside a_c: the potential's bound state of the final (l, J) at the level's
+energy, normalised to continue W̃ × ANC; the potential must bind within 1 keV of the level's energy, else the set-up
+refuses and prints the depth that would; the set-up prints the potential's own ANC next to the written one.
+`physics/HybridPotential.h`: `InteriorCaptureIntegral`, `SubtractedBoxStates` (shared with `BackgroundR`),
+`NearestEigenvalue`, `DepthBindingAt`, `BoundMatching`, `InteriorNormIntegral`; `IntegrateOutward` now reads a grid
+routine with the same arithmetic. Engine: `ECIntegral::AddInteriorCapture` (adds K D W̃_f(a) to FW, GW; open and
+closed entrance channel), `CheckInteriorCaptureFinalState` (`ExternalCaptureFinalStates.cpp`). Gradient: no change
+needed (the integrals are constants of the level parameters; `AZURE_GRAD_CHECK` 2.7e-10).
+
+**Tests.** `physics_potential_capture` (ctest: the kernel against closed forms of the zero potential, 3e-9, with a
+subtracted pole 1.2e-6; the eigenvalue of VD p3/2 against scipy, 5e-7 MeV; the depth that binds). `tests/potential_capture/
+check.sh`: 3He(α,γ)7Be with VD as a pure potential model in the engine = `make_reference.py` (scipy/mpmath, 0 to ∞,
+not the engine) to 6.7e-7 at a_c = 3.5, 4.0, 4.87, 5.5 fm, radii agreeing to 5.6e-7; without `capture interior` the
+same model misses by 9-45 % and depends on a_c (the test can fail); the refusal; the gradient; threads.
+`experiment_build`: the field's cases. S34(0) of the model 0.483 keV b (engine masses: VD binds p3/2 at 1.455 MeV);
+with the paper's constants the reference reproduces its B = 1.5866 MeV, C = 4.34 fm⁻¹ᐟ² and its Fig. 6(a) VD curve.
+
+**Run.** Build `work/b-u9-potential-capture`, 0 warnings. `ctest -LE slow -j3`: 396/398 on the first engine build
+(upgrade_predictions: it lists every `.azr` under `tests/`, so the new models are kept as `.azr.in`, and it passes;
+rmfit_enginepin: this machine, no installed `.so`, as on the parent branch); after the last changes the affected tests
+(physics_potential_*, experiment_build, experiment_schema, pyazr_schema, repo_consistency, upgrade_predictions) and
+`tests/potential_capture/check.sh` pass. RUN_TESTS_PLACEHOLDER
+
+**Open.** Levels on top with measured capture data (how much a_c dependence they bring back); M1/E2 against an
+independent calculation (the code takes them, untested); the closed-entrance branch (built, untested); an unbound
+final state and a final state in a background wave stay refused; the VD depth does not bind 7Be at 1.5866 MeV with the
+projects' masses (84.13 MeV would).
+
 ## 2026-11-20 (potential-background, research branch `feature/upgrade-9-potential-background`) — the interior R-function of a potential as an R-matrix background
 
 Side branch for the PI (not to be merged without his word). Design note and results: `docs/upgrade/potential_background.md`

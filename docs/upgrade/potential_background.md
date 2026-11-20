@@ -1,11 +1,13 @@
 # The interior of a potential as the background of an R-matrix channel
 
-**Status (2026-11-20): research, side branch `feature/upgrade-9-potential-background`; not for merge without the
-PI's word.** Built and tested in the engine as an option that is off unless a `potential` record has a `wave ...
-background interior` field; no Sphinx page (the option is not for users yet; the field is listed, generated, in
-`reference/format3.rst`). Sections 1-6 are the design; 7 what is built and its tests; 8 the radius experiment
-(synthetic: EXFOR was not reachable); 9 what is not done; 10 the PI's questions on ³He + ⁴He (R_pot poles, resonances,
-the scattering length); 11 the recommendation; 12 the references and what was verified.
+**Status (2026-11-20): research, side branches `feature/upgrade-9-potential-background` and
+`feature/upgrade-9-potential-capture` (the interior direct capture, section 5); not for merge without the PI's word.**
+Built and tested in the engine as an option that is off unless a `potential` record has a `wave ... background
+interior` field (and, for the capture, `capture interior` on it); no Sphinx page (the option is not for users yet; the
+fields are listed, generated, in `reference/format3.rst`). Sections 1-6 are the design (5: capture, with its tests in
+5.7); 7 what is built and its tests; 8 the radius experiment (synthetic: EXFOR was not reachable); 9 what is not done;
+10 the PI's questions on ³He + ⁴He (R_pot poles, resonances, the scattering length); 11 the recommendation; 12 the
+references and what was verified.
 
 A channel of a pair with a `potential` record takes its exterior functions (P, S, φ) from the radial equation with a
 nuclear potential acting between the channel radius a_c and the matching radius r_m (`hybrid_potential.rst`). This
@@ -174,13 +176,187 @@ from the pair. With the background (8), φ → φ̃ makes the first term the ext
 wave (cos φ̃ F − sin φ̃ G is that wave beyond a_c, up to normalization), and P̃, φ̃ in the second make the level part
 consistent with (7). So the *exterior* capture is consistent with the background with no further change.
 
-What is missing is the *interior* part of the direct capture of the potential's scattering wave, ∫₀^{a_c} u_f r^L u_E dr,
-with u_f the bound state inside a_c. Without the background it is carried by the γ-widths of background poles; with
-the background those poles are gone. A consistent direct-capture background would add that integral with the
-potential's interior solution u_E normalized as in (9) and the potential's bound state normalized to the fitted ANC;
-it needs the final state's interior wave function, which an R-matrix level does not have. **Not done in this branch**:
-the background acts on the elastic channel functions only, and a capture project with a background has no interior
-direct capture from those partial waves. This is the main limit for S(0) (section 9).
+What was missing is the *interior* part of the direct capture of the potential's scattering wave, ∫₀^{a_c} u_f r^L u_E
+dr, with u_f the bound state inside a_c. Without the background it is carried by the γ-widths of background poles;
+with the background those poles are gone. Sections 5.1-5.6 are the design of the branch
+`feature/upgrade-9-potential-capture`, which adds it as an option (`capture interior`); 5.7 its tests and numbers.
+
+**The PI's approval (2026-11-20).** The two design points of 5.2 and 5.3 were put to the PI by the director as (1)
+"box poles as levels with fixed particle and gamma amplitudes, interior wave driven by the full wave's surface term,
+fitted levels keep their gamma widths, a subtracted box pole gives no capture" and (2) "bound-state shape from the
+potential, normalisation from the fitted ANC, the potential must bind at the level's energy (refuse otherwise and print
+the depth that would; no silent depth change), print the potential's own ANC next to the fitted one". His answer, 2026-11-20:
+"Ok to both". The derivation below arrives at the same rules.
+
+### 5.1 The surface term is the same for every wave the levels see
+
+For a wave u of the channel with the values u(a), u'(a) at the channel radius, let
+
+    D_u = ρ u'(ρ) − B_bg u   at ρ = k a_c   (the dimensionless surface term; u' = du/dρ).                (C1)
+
+The dressing (9) leaves D unchanged: ρũ' − B_bg ũ = ρu' − B_bg R⁰ D_u − B_bg u + B_bg R⁰ D_u = D_u. With the levels on
+top, the R-matrix relation of the channel at a_c is u(a) = (R_L + R⁰) D_u for the full wave, and the dressed waves
+carry the level part alone: ũ(a) = u(a) − R⁰ D_u = R_L D_u. So the background's share of the full wave at a_c is
+R⁰ D_u, with D_u computed from the actual (undressed) exterior wave or from the dressed one alike.
+
+### 5.2 The entrance wave inside a_c (the model)
+
+R_pot is a sum over the box states of the potential, R_pot = Σ_p γ_p²/(E_p − E) (Eq. (4)): in R-matrix terms each box
+state is a level whose reduced width γ_p and interior wave function u_p (the box eigenfunction, ∫₀^{a} u_p² = 1) are
+fixed by the potential, so its γ-ray amplitude into a final state is fixed too: the overlap of u_p with the final
+state's interior wave. Driven by the surface term D of the full wave, these levels give the interior wave (Lane and
+Thomas, the expansion of the interior solution in the box states; the sum is the potential's interior Green's function
+at r' = a)
+
+    u_bg(r) = D Σ_p γ_p² [u_p(r)/u_p(a)] / (E_p − E) = D g_E(r),
+    g_E(r) = R_pot(E) φ_E(r) − Σ_{p∈P} γ_p² φ_p(r)/(E_p − E),   φ = u/u(a),                                  (C2)
+
+where the first form of g_E is the closed sum (the regular solution at E, normalised at a, times R_pot: it solves the
+radial equation and gives D at a_c) and P are the subtracted box states of rule 1 (section 3), whose capture belongs
+to the fitted level that replaces them. g_E(a) = R⁰, so u_bg(a) = R⁰ D, the background's share of 5.1. **The model**:
+inside a_c the entrance channel's wave is u_bg plus the fitted levels' interior wave functions; the latter are not
+known (an R-matrix level has none) and their capture stays where it is today, in the levels' fitted γ-ray widths
+(internal capture). The interior direct capture of the background is then the overlap of u_bg with the final state,
+for both terms of the external capture:
+
+- the hard-sphere term: its exterior wave X = cos φ̃ F − sin φ̃ G has X̃(a) = 0 (tan φ̃ = F̃(a)/G̃(a)), so the levels do
+  not see it and X(a) = R⁰ D_X: inside a_c it continues as D_X g_E(r). Without subtraction this is X(a) φ_E(r), the
+  potential's own regular solution: ρX'/X = 1/R⁰ + B_bg = ℓ(E) at a_c, so value and derivative are continuous, and
+  with no levels the wave from 0 to ∞ is the potential's scattering wave (the identity of 5.7);
+- the channel-capture term: its exterior is the outgoing wave H⁺ times the level-matrix factor; inside a_c the same
+  factor times D_H g_E(r). With levels on top, the potential's interior is thus fed by the full wave, the incoming
+  dressed part and the level-matrix-fed outgoing part, not normalised to the potential's phase shift alone.
+
+Assumptions and what they cost: (i) the fitted levels' interior functions are not orthogonalised to the box states of
+the potential; the interference between a level's own capture (its γ_γ) and the background's is the R-matrix's usual
+one, through the signs and the level matrix. (ii) The split level/background depends on a_c and B_bg, as for the
+elastic channel (section 2.2); only with no levels (or levels with zero widths) is the result a_c independent. (iii)
+A subtracted box state's capture is set to zero in the background; the level that replaces it brings its own γ_γ.
+
+### 5.3 The bound final state inside a_c (the rule)
+
+The final state's exterior in the engine is W̃_f(r) times its ANC C (the hybrid pair's decaying solution, unit ANC,
+`WhitFunc`), with C = γ_f N_f^{−1/2} (2μa/ħ²)^{1/2}/W̃_f(a) from the level's fitted γ_f (Brune) or its written ANC.
+Inside a_c it is taken as
+
+    u_f(r) = C W̃_f(a) φ_f(r),   φ_f = u_{E_f}/u_{E_f}(a)  the regular solution of the final partial wave's potential   (C3)
+
+(the `wave` depth of (l_f, J_f), or the central one) at the level's energy E_f. Rule: **the potential must bind the
+final partial wave at the level's energy**, its eigenvalue nearest E_f (`NearestEigenvalue`: the zero of the
+Wronskian of the regular and decaying solutions at a_c) within 1 keV of E_f; otherwise the run is refused at set-up and
+the message gives the depth (±30 % of the written one) that binds at E_f (`DepthBindingAt`). No depth is changed by the
+engine. Within the tolerance, φ_f is integrated at E_f (its log-derivative then differs from the exterior's by the
+small mismatch, which the set-up prints with the potential's eigenvalue). The normalisation is the level's: C W̃_f(a) at
+a_c, so the shape inside comes from the potential and the size from the fit; the set-up note prints the potential's
+own ANC, C_pot = [W̃_f(a)² (∫₀^{a} φ_f² dr + N_f)]^{−1/2} (N_f = ∫_a^∞ W̃_f²/W̃_f(a)² dr, the engine's), next to the
+level's ANC as written, so that a level whose fitted ANC differs from the potential's is visible (then the interior is
+the potential's shape scaled to another norm: the model is not a normalised two-body state; the internal capture of
+the final level is not changed). Refused: an unbound final state (no interior outgoing wave is built), and as before a
+final state in a background partial wave (its decaying solution with the background is not built).
+
+### 5.4 The integral and where it enters
+
+With the weight w(r) of the multipole (r^L, times the finite-wavelength charge function when the long-wavelength
+approximation is off; r^0 for M1), the kernel (`physics/` `InteriorCaptureIntegral`)
+
+    K(E) = ∫₀^{a} φ_f(r) w(r) g_E(r) dr   (fm^{L+1})                                                       (C4)
+
+on the Numerov grid of `IntegrateOutward` (both waves on one grid, a on a node), Simpson's rule (3/8 on the last three
+intervals when their number is odd), O(h⁴). The engine's radial integrals of the exterior, FW = ∫_a^∞ F W̃_f w dr and
+GW, get the interior parts
+
+    FW += K D_F W̃_f(a),   GW += K D_G W̃_f(a)   (D of the undressed F, G at a; for a closed entrance channel GW +=
+    K W̃_i(a)(S_i − B_bg) W̃_f(a)),                                                                            (C5)
+
+in the scale the integrals carry (the Whittaker decades of `ECIntegral`). Both external-capture terms are linear in FW
+and GW (cos φ̃ FW − sin φ̃ GW and GW + i FW), so (C5) gives each its interior of 5.2, and the factors applied after
+(the effective charge, the angular coefficients, γ_f N_f^{−1/2} K_c, the level-matrix factor) apply to it unchanged.
+One place: `ECIntegral::AddInteriorCapture`, called after the exterior integration in the open and the closed branch;
+the energy tables (`ECTable`) and the reaction-rate grid tabulate or sum the same integrals.
+
+**Operators.** E1 and E2 with the engine's effective charge (Z₁(m₂/M)^L + Z₂(−m₁/M)^L in the long-wavelength form, the
+charge function otherwise): the same weight as the exterior. M1 (r^0, the orbital and spin factors applied after) comes
+with the same code: the interior overlap of the background's wave with the bound state; it is not zero when the two
+partial waves have different potentials. Tested: E1 only (5.7). Not covered: an unbound final state, a final state in a
+background wave (both refused), two spinning particles in the pair (as for the background), M1 and E2 against an
+independent calculation.
+
+**Gradient.** K depends on the energies and the potential only. The interior part enters the same integrals the
+exterior does, which the amplitudes multiply by γ_f N_f^{−1/2} (the final state's fitted ANC) and, for channel capture,
+by the level-matrix factor: the adjoint already differentiates those factors and reads the integrals as constants. So
+the analytic gradient needs no change; checked with `AZURE_GRAD_CHECK` (5.7).
+
+### 5.5 The record
+
+    wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] background interior boundary <B> [subtract <n>] capture interior
+
+on each entrance partial wave whose background is to capture; the final partial wave (l_f, J_f) needs no field (its
+depth, if it has its own, is a `wave` without background). Absent: nothing changes (the potential's key, every output,
+the tests; 5.7). `capture` without `background` is refused (`E_POTENTIAL_WAVE`).
+
+### 5.6 Cost
+
+Per external-capture integral two outward Numerov integrations over [0, a] (about 150 nodes each) and one Simpson sum,
+plus, with a subtracted pole, the box-state search of the background (as for the elastic channel, section 8). The
+energy tables evaluate the integral at their nodes only.
+
+### 5.7 Tests and results
+
+**The identity (the heart).** `tests/potential_capture/check.sh`: 3He(α,γ)7Be as a pure potential model in the engine
+(the Gaussian potential VD of Tursunov et al., section 10, in both halves; the s1/2, d3/2, d5/2 entrance waves with
+`background interior boundary 0 capture interior`; the potential's own p3/2 and p1/2 bound states as the final
+states, at the potential's energies and ANCs; the entrance J^π groups with one zero-width level each at 40 MeV; E1,
+long-wavelength operator) against a direct potential-model calculation that does not use the engine
+(`make_reference.py`: scipy DOP853 for the scattering and bound waves, mpmath's Coulomb and Whittaker functions, the
+overlap integrals from 0 to ∞, the E1 formula of Tursunov et al. Eq. (8), which the script's formula equals term by
+term). With the engine's masses the VD p3/2 depth binds at B = 1.4548867432 MeV with C = 4.0931604450 fm⁻¹ᐟ², the p1/2
+at 1.0371757516 MeV, C = 3.5000439504 fm⁻¹ᐟ²; the project's threshold is put at the former (7Be(3/2⁻) at E_x = 0, the
+1/2⁻ at 0.4177109916 MeV). σ into each state at E_cm = 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1, 1.5, 2, 2.5, 3 MeV:
+
+| a_c (fm) | 3.5 | 4.0 | 4.87 | 5.5 |
+|---|---|---|---|---|
+| with `capture interior`: largest \|σ/σ_ref − 1\| (24 values) | 1.3·10⁻⁷ | 6.7·10⁻⁷ | 8.5·10⁻⁸ | 1.3·10⁻⁷ |
+| without it (the exterior alone): largest \|σ/σ_ref − 1\| | 0.112 | 0.089 | 0.228 | 0.445 |
+| without it, σ(3/2⁻)/σ_ref at 20 keV and 3 MeV | 1.068, 1.106 | 1.064, 1.039 | 0.996, 0.772 | 0.917, 0.555 |
+
+The four radii agree with each other to 5.6·10⁻⁷ (the largest values come from the energy tables' interpolation at
+4.0 fm; the rest are 10⁻⁷). Without the interior part the result depends on a_c by 15 % at 20 keV and by a factor 2 at 3
+MeV, and the interior part enters with either sign (it adds at 5.5 fm, subtracts at 3.5 fm): the test can fail, and the
+interior capture is not a small correction in this model. The set-up note gives the potential's eigenvalues 0.48 and
+0.43 eV from the levels' energies (Numerov against DOP853) and the potential's own ANCs 4.09316 and 3.50004 fm⁻¹ᐟ², equal
+to the written ones (an independent check of the ANC formula of 5.3).
+
+**S34(0) of the model.** S(E) = E σ e^{2πη} of the reference: 0.4759, 0.4654, 0.4483 keV b at 20, 50, 100 keV (sum of
+both states); a quadratic through these three gives S(0) = 0.483 keV b (0.339 into 3/2⁻, 0.144 into 1/2⁻; a cubic
+through four points 0.4831). The engine gives the same to the digits above. This is the S factor of VD with the
+projects' masses, which bind the p3/2 state at 1.455 MeV, not at 7Be's 1.5866 MeV (section 9): it is not the paper's
+model. With the paper's constants (`make_reference.py --paper`: ħ²/2u = 20.7343 MeV fm², nuclear masses
+4.001506179127 u and 3.0149322473 u) the same script gives B = 1.58661 and 1.16083 MeV and C = 4.345 and 3.715 fm⁻¹ᐟ²,
+the paper's 1.5866 and 1.16082 MeV and 4.34 and 3.71 fm⁻¹ᐟ² (its section III.A), and S = 0.508, 0.354, 0.275, 0.256,
+0.261, 0.298 keV b at 0.02, 0.5, 1.0, 1.5, 2.0, 3.0 MeV (E1), S(0) = 0.516 keV b by the same quadratic. The paper
+gives no number for S(0) of VD; its Fig. 6(a) (the VD curve, read from the figure, about ±0.01 keV b) runs from about
+0.51 keV b at the lowest energy through 0.28 at 1 MeV and 0.26 at 1.5-2 MeV to 0.33 at 3 MeV, where its E2 resonance
+(about 0.03 keV b in its Fig. 4) adds to the E1 shown here: the reference agrees with the paper's model to the
+precision a figure can be read. That comparison checks the reference; the engine is checked against the reference.
+
+**Kernel against closed forms** (`physics_potential_capture`, ctest): for the zero potential (free waves, the l = 1
+regular solution below threshold in closed form), K of Eq. (C4) to 3·10⁻⁹ at a = 4.0 fm (even number of intervals) and
+4.87 fm (odd: the 3/8 rule), B = 0 and −1; with the lowest box pole subtracted, against the closed-form pole term, to
+1.2·10⁻⁶. The bound-state rule on VD p3/2: the eigenvalue from the Wronskian at a_c = 3.5, 4.0, 5.5 fm is scipy's to
+5·10⁻⁷ MeV; `DepthBindingAt` returns the written depth at that energy to 2.4·10⁻⁸ relative, and 84.129571 MeV binds the
+p3/2 wave at 1.5866 MeV with the projects' masses.
+
+**The refusal.** With the p3/2 depth 83.65 MeV in place of 83.589554 the potential binds 3/2⁻ 14.6 keV below the
+level: the run stops at set-up ("ERROR: ... binds that wave at −1.46952706 MeV, −14.64 keV away (tolerance 1 keV). The
+depth that binds it at E_f is 83.58955202 MeV ..."), the written depth to 2·10⁻⁸.
+
+**Gradient.** `tests/potential_capture/models/fit_level.azr.in` (a 1/2⁺ level at E_x = 3 MeV on top of the s-wave background, its particle and γ
+widths and the ground state's ANC free, nine made-up capture points): `AZURE_GRAD_CHECK` gives the analytic gradient
+equal to central differences to 2.7·10⁻¹⁰ relative on the three parameters (the level-matrix feed and the ANC both
+reach the interior part through factors the adjoint already has), the Jacobian path to 3·10⁻¹⁵.
+
+**Nothing moves without the field.** `capture` is part of the potential's key only when set; the code path
+(`AddInteriorCapture`) returns at once for a wave without it. `ctest -LE slow` and `tests/run_tests.sh`: HANDOFF (2026-11-20, potential-capture).
 
 ## 6. Scope, parameters, validity
 
@@ -223,7 +399,14 @@ direct capture from those partial waves. This is the main limit for S(0) (sectio
   (set-up), and the threshold formula of the scattering length for an s wave with a background
   (`scatteringLengths.out` says "not computed"; a `scattering_length` datum stops the run).
 - The gradient: the background changes channel functions, which the adjoint reads as constants of the parameters; the
-  analytic gradient of the levels is therefore unchanged and correct (checked, 7.2). The potential's numbers are not fit
+  analytic gradient of the levels is therefore unchanged and correct (checked, 7.2).
+- Interior capture (branch `feature/upgrade-9-potential-capture`, section 5): `physics/HybridPotential.h`
+  `InteriorCaptureIntegral` (Eq. (C4)), `SubtractedBoxStates` (shared with `BackgroundR`), `NearestEigenvalue`,
+  `DepthBindingAt`, `BoundMatching`, `InteriorNormIntegral`, `HasInteriorCapture`, `InteriorCaptureOf`; the field
+  `capture interior` of `wave` (`InteriorBackground::capture`, in the potential's key only when set); the engine:
+  `ECIntegral::AddInteriorCapture` (Eq. (C5)) and the set-up rule of the final state
+  (`CheckInteriorCaptureFinalState`, `ExternalCaptureFinalStates.cpp`). Tests: `physics_potential_capture`,
+  `tests/potential_capture/check.sh`, cases of `experiment_build`. The potential's numbers are not fit
   parameters (as for the hybrid potential, `spin_orbit_potential.md` §6 Q7): a depth is fitted by a scan.
 
 ### 7.2 Tests and their numbers
@@ -333,9 +516,11 @@ figure.py` from `results/radius_scan.json` and `results/window.json`.
 
 - **Measured data.** EXFOR was not reachable (HTTP 403); every result of section 8 is synthetic. The real test
   (elastic cross sections, e.g. the SONIK data, and the capture S factor) is open.
-- **Capture.** The interior part of the direct capture (section 5) is not built, and an external-capture final state in
-  a background wave is refused. Hence no S(0) against a_c was computed: with the s- and d-wave backgrounds and no
-  interior capture, S(0) would miss the interior contribution that the background poles' γ widths carry today.
+- **Capture.** The interior direct capture is built on `feature/upgrade-9-potential-capture` (section 5) and checked on
+  the pure potential model (5.7). Not done: a capture fit of measured data with levels on top (how much a_c dependence
+  the levels bring back, as 8 measured for the elastic channel), M1 and E2 against an independent calculation, an
+  unbound final state and a final state in a background wave (both refused), a closed entrance channel with interior
+  capture (built, Eq. (C5), not tested).
 - **The potential's numbers are not fit parameters**; a depth is a scan.
 - **A level's energy below threshold** is held fixed by the engine in a fit (as for any bound level); the (b+) fits
   scanned it.
@@ -525,7 +710,8 @@ Keep it as an option on the side branch; do not merge yet. The identity holds to
 (subtraction, dressed S and ANC below threshold, Brune) is consistent to 10⁻⁴°, so the code is right; but the physics
 answer is that the background moves the model dependence from a_c to the choice of potential, and that with levels on
 top the a_c dependence returns at the size it had. Before a merge it needs: (1) the interior direct capture of
-section 5, without which a capture project with a background is incomplete; (2) a test on measured elastic and capture
+section 5 (built on `feature/upgrade-9-potential-capture`: the pure potential model's capture to 7·10⁻⁷ at four radii,
+5.7; to be tested with levels on top and measured data); (2) a test on measured elastic and capture
 data (EXFOR access); (3) a depth as a fit parameter or a documented scan tool; (4) the pyazr/GUI forms. Its most
 useful immediate use is diagnostic: R_pot's poles (section 10.1) tell whether a fitted background pole is a box state
 of the interior.
@@ -535,7 +721,11 @@ of the interior.
 Read for this note (numbers quoted from them were read in the source named):
 - E. M. Tursunov, S. A. Turakulov, A. S. Kadyrov, arXiv:1707.05948v3 (2018), Tables I and II and section III.A: the
   potentials VD, VDa, VDb, VM1a, VM2a, R_C = 3.095 fm, ħ²/2u = 20.7343 MeV fm². Published as Phys. Rev. C 97 (2018)
-  035802 (journal reference from a search result; the journal version was not opened).
+  035802 (journal reference from a search result; the journal version was not opened). For section 5 (read again,
+  2026-11-20, the arXiv PDF): Eqs. (8) and (10) (the E1 cross section and reduced matrix element, which
+  `tests/potential_capture/make_reference.py` follows), section III.A (masses 4.001506179127 u and 3.0149322473 u,
+  VD binds 1.5866 and 1.16082 MeV with C(3/2⁻) = 4.34 and C(1/2⁻) = 3.71 fm⁻¹ᐟ²), Fig. 6(a) (the S factor of VD, read
+  from the figure only; the paper gives no table of S(0) for VD).
 - S. B. Dubovichenko, arXiv:1006.4944 (in Russian), Table 3.1: 4He+3He depths with α = 0.15747 fm⁻², R_C = 3.095 fm
   (the p-wave depths there, 81.92 and 83.83 MeV, differ from Tursunov's VD values used here); the potential VD as
   published in Phys. At. Nucl. 73 (2010) 1526 (reference from Tursunov et al.; not opened).

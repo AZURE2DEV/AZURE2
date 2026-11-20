@@ -10,7 +10,10 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <sstream>
+#include <string>
 
 #include "AChannel.h"
 #include "GSLException.h"
@@ -97,6 +100,67 @@ void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, doub
     WhitFunc newWhitFunc(pair);
     conversion = toAmplitude / newWhitFunc(l, twoJ, radius, fabs(finalEnergy));
   }
+}
+
+/*!
+ * The bound final state of external capture inside a_c, for a pair whose potential has a background with interior
+ * capture (docs/upgrade/potential_background.md section 5.3, the rule approved on 2026-11-20): its shape is the
+ * potential's own bound state in the final partial wave (l, 2J) at the level's energy E_f, its normalisation the
+ * level's (the exterior W~ x ANC continued at a_c).  The potential must bind there: its eigenvalue nearest E_f must lie
+ * within kInteriorCaptureEigenTolerance_MeV of E_f, else the run is refused with the depth that would bind at E_f (no
+ * depth is changed).  An unbound final state is refused.  Prints the potential's eigenvalue and its own ANC, C_pot =
+ * 1 / (|W~(a)| (int_0^a phi^2 + N_f)^1/2) with phi the interior regular solution normalised at a and N_f = int_a^inf
+ * W~^2 / W~(a)^2 (nfIntegral), next to the level's ANC as written in <levels> (`writtenAnc`; NaN when the row holds
+ * a width or an amplitude).
+ */
+constexpr double kInteriorCaptureEigenTolerance_MeV = 1e-3;
+
+void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double radius, int l, int twoJ, double levelEnergy,
+                                    double nfIntegral, double writtenAnc, const Config &configure) {
+  const std::optional<azure2::physics::HybridPotential> &pot = pair->GetHybridPotential();
+  if (!pot || !azure2::physics::HasInteriorCapture(*pot)) return;
+  const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
+  const std::string wave = "l = " + std::to_string(l) + (twoJ >= 0 ? ", 2J = " + std::to_string(twoJ) : std::string()) +
+                           " of pair " + std::to_string(pair->GetPairKey());
+  if (!(finalEnergy < 0.0))
+    throw std::runtime_error("external capture with interior capture (potential_background.md section 5): the final state "
+                             "of photon pair " + std::to_string(exitPairKey) + " in the partial wave " + wave +
+                             " is not bound (E_f = " + std::to_string(finalEnergy) + " MeV): its interior wave is not built");
+  const azure2::physics::HybridPotential q = azure2::physics::ForPartialWave(*pot, l, twoJ);
+  const double mu = pair->GetRedMass() * uconv, ldoti = pair->SpinOrbitFactor(l, twoJ);
+  const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
+  const azure2::physics::PotentialEigenvalue ev =
+      azure2::physics::NearestEigenvalue(q, z1, z2, mu, l, ldoti, radius, finalEnergy, std::min(2.0, -finalEnergy));
+  if (!ev.found || std::fabs(ev.E_MeV - finalEnergy) > kInteriorCaptureEigenTolerance_MeV) {
+    const azure2::physics::DepthAtEnergy d = azure2::physics::DepthBindingAt(q, z1, z2, mu, l, ldoti, radius, finalEnergy);
+    std::ostringstream m;
+    m.precision(10);
+    m << "external capture with interior capture (potential_background.md section 5.3): the final state of photon pair "
+      << exitPairKey << " lies at E_f = " << finalEnergy << " MeV (c.m.) in the partial wave " << wave
+      << ", but the potential (depth " << q.central_depth_MeV << " MeV) ";
+    if (ev.found)
+      m << "binds that wave at " << ev.E_MeV << " MeV, " << (ev.E_MeV - finalEnergy) * 1e3 << " keV away";
+    else
+      m << "has no bound state within 2 MeV of it";
+    m << " (tolerance " << kInteriorCaptureEigenTolerance_MeV * 1e3 << " keV).  ";
+    if (d.found)
+      m << "The depth that binds it at E_f is " << d.depth_MeV << " MeV: write it as the `wave` depth of that partial wave, "
+        << "or move the level to the potential's eigenvalue.";
+    else
+      m << "No depth within 30 % of it binds the wave at E_f.";
+    throw std::runtime_error(m.str());
+  }
+  // the potential's own ANC at the level's energy
+  const double interior = azure2::physics::InteriorNormIntegral(q, z1, z2, mu, l, ldoti, radius, finalEnergy);
+  WhitFunc w(pair);
+  const double wa = std::fabs(w(l, twoJ, radius, -finalEnergy));
+  const double ancPot = 1.0 / (wa * std::sqrt(interior + nfIntegral));
+  configure.outStream << "NOTE: interior capture into the final state of photon pair " << exitPairKey << " (" << wave
+                      << ", E_f = " << finalEnergy << " MeV): the potential's eigenvalue " << ev.E_MeV << " MeV ("
+                      << (ev.E_MeV - finalEnergy) * 1e3 << " keV from E_f); its own ANC " << ancPot
+                      << " fm^-1/2, the level's ANC as written " << writtenAnc
+                      << " fm^-1/2 (the interior bound wave is the potential's shape, normalised to the level's ANC)."
+                      << std::endl;
 }
 
 /*!
@@ -195,6 +259,17 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
         if (!NoteUnboundFinalState(configure, exitPair, theFinalPair, unboundNoted)) return -1;
         ECFinalStateFactors(theFinalPair, finalRadius, this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
                             exitPair->GetHeavyExE(), configure, nfIntegralValue, ecConvert);
+        double writtenAnc = std::numeric_limits<double>::quiet_NaN();
+        for (const azure2::experiment::LevelRowSlot &slot : tables.rowSlots)
+          if (slot.group == jGroupNum && slot.level == levelNum && slot.channel == ch) writtenAnc = slot.value;
+        try {
+          CheckInteriorCaptureFinalState(exitPair->GetPairKey(), theFinalPair, finalRadius, this->Group(jGroupNum)->GetChannel(ch)->GetL(),
+                                         theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE(), nfIntegralValue,
+                                         writtenAnc, configure);
+        } catch (const std::runtime_error &e) {
+          configure.outStream << "ERROR: " << e.what() << std::endl;
+          return -1;
+        }
       }
       this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
       this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);

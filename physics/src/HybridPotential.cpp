@@ -47,7 +47,7 @@ bool operator==(const HybridPotential &a, const HybridPotential &b) {
 }
 
 bool operator==(const InteriorBackground &a, const InteriorBackground &b) {
-  return a.boundary == b.boundary && a.subtract_nodes == b.subtract_nodes;
+  return a.boundary == b.boundary && a.subtract_nodes == b.subtract_nodes && a.capture == b.capture;
 }
 
 bool operator==(const PartialWave &a, const PartialWave &b) {
@@ -146,6 +146,8 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
     if (w.background) {
       key.insert(key.end(), {w.background->boundary, (double)w.background->subtract_nodes.size()});
       for (int n : w.background->subtract_nodes) key.push_back((double)n);
+      // interior capture: a mark only when asked, so that the key of a background without it is the one before it existed
+      if (w.background->capture) key.insert(key.end(), {-2.0, 1.0});
     }
   }
   return key;
@@ -285,9 +287,20 @@ const InteriorBackground *BackgroundOf(const HybridPotential &p, int l, int two_
   return (w && w->background) ? &*w->background : nullptr;
 }
 
-InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
-                               double a_fm, double E_MeV, int *nodes) {
+namespace {
+
+/// The regular solution on the grid of IntegrateInward (a on node n_a, two nodes beyond it), divided by exp(log_scale).
+struct OutwardGrid {
+  int n_a = 0;
+  double dr = 0.0;
+  std::vector<std::complex<double>> u;
+  double log_scale = 0.0;
+};
+
+OutwardGrid IntegrateOutwardGrid(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                                 double a_fm, double E_MeV) {
   if (!(a_fm > 0.0) || !(p.step_fm > 0.0)) throw std::invalid_argument("IntegrateOutward: a and the step must be positive");
+  OutwardGrid out;
   // The grid of IntegrateInward: a on node n_a; two nodes beyond it for the five-point difference.
   const int n_a = std::max(2, static_cast<int>(std::lround(a_fm / p.step_fm)));
   const double dr = a_fm / n_a;
@@ -296,7 +309,8 @@ InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double 
   const double k2 = 2.0 * mu_MeV / (kHbarC_MeV_fm * kHbarC_MeV_fm);
   std::vector<double> g(npts, 0.0);
   for (int i = 1; i < npts; ++i) g[i] = k2 * (E_MeV - RadialPotential(p, z1, z2, mu_MeV, l, two_l_dot_i, i * dr));
-  std::vector<std::complex<double>> u(npts);
+  std::vector<std::complex<double>> &u = out.u;
+  u.resize(npts);
   u[0] = 0.0;
   u[1] = std::pow(dr, l + 1);
   // (1 + dr2/12 g) u at the origin, the limit of g u there (u = c r^(l+1), c = u(h)/h^(l+1)): l = 1, g u -> -l(l+1) c
@@ -305,7 +319,6 @@ InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double 
   double origin = 0.0;
   if (l == 1) origin = -(dr2 / 12.0) * 2.0 * u[1].real() / dr2;
   if (l == 0 && !(p.coulomb_radius_fm > 0.0)) origin = -(dr2 / 12.0) * k2 * z1 * z2 * kCoulombE2_MeV_fm * u[1].real() / dr;
-  InteriorValue v;
   const double kRescale = 1e250;
   for (int i = 1; i + 1 < npts; ++i) {
     if (i == 1)
@@ -314,9 +327,50 @@ InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double 
       u[i + 1] = NumerovNext(g[i + 1], g[i], g[i - 1], u[i], u[i - 1], dr2);
     if (std::abs(u[i + 1].real()) > kRescale) {
       for (int j = 0; j <= i + 1; ++j) u[j] /= kRescale;
-      v.log_scale += std::log(kRescale);
+      out.log_scale += std::log(kRescale);
     }
   }
+  out.n_a = n_a;
+  out.dr = dr;
+  return out;
+}
+
+/// Simpson's rule over the nodes 0 .. n of step h (the 3/8 rule on the last three intervals when n is odd).
+double SimpsonNodes(const std::vector<double> &f, int n, double h) {
+  if (n < 2) throw std::invalid_argument("SimpsonNodes: fewer than two intervals");
+  double s = 0.0;
+  int m = n;
+  if (n % 2) {
+    if (n < 3) throw std::invalid_argument("SimpsonNodes: one interval");
+    m = n - 3;
+    s += 3.0 * h / 8.0 * (f[m] + 3.0 * f[m + 1] + 3.0 * f[m + 2] + f[m + 3]);
+  }
+  if (m > 0) {
+    double t = f[0] + f[m];
+    for (int i = 1; i < m; ++i) t += (i % 2 ? 4.0 : 2.0) * f[i];
+    s += h / 3.0 * t;
+  }
+  return s;
+}
+
+/// The regular solution's values at the nodes 0 .. n_a divided by its value at a.
+std::vector<double> NormalisedAtA(const OutwardGrid &g) {
+  std::vector<double> phi(g.n_a + 1);
+  const double ua = g.u[g.n_a].real();
+  for (int i = 0; i <= g.n_a; ++i) phi[i] = g.u[i].real() / ua;
+  return phi;
+}
+
+}  // namespace
+
+InteriorValue IntegrateOutward(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                               double a_fm, double E_MeV, int *nodes) {
+  const OutwardGrid grid = IntegrateOutwardGrid(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
+  const std::vector<std::complex<double>> &u = grid.u;
+  const int n_a = grid.n_a;
+  const double dr = grid.dr;
+  InteriorValue v;
+  v.log_scale = grid.log_scale;
   v.u = u[n_a].real();
   v.du_dr = ((u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr)).real();
   if (nodes) {
@@ -393,10 +447,10 @@ std::vector<BoxState> InteriorBoxStates(const HybridPotential &p, int z1, int z2
   return states;
 }
 
-double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
-                   double E_MeV, const InteriorBackground &bg) {
-  double R = InteriorRFunction(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, bg.boundary);
-  if (bg.subtract_nodes.empty()) return R;
+std::vector<BoxState> SubtractedBoxStates(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                                          double a_fm, const InteriorBackground &bg) {
+  std::vector<BoxState> named;
+  if (bg.subtract_nodes.empty()) return named;
   const int highest = *std::max_element(bg.subtract_nodes.begin(), bg.subtract_nodes.end());
   // The box states up to the highest named: scan upward in windows until it is found.
   std::vector<BoxState> states;
@@ -409,9 +463,133 @@ double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int 
     for (const BoxState &b : states)
       if (b.nodes == n) s = &b;
     if (!s) throw std::runtime_error("BackgroundR: no box state with " + std::to_string(n) + " nodes below 200 MeV");
-    R -= s->gamma2_MeV / (s->E_MeV - E_MeV);
+    named.push_back(*s);
   }
+  return named;
+}
+
+double BackgroundR(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                   double E_MeV, const InteriorBackground &bg) {
+  double R = InteriorRFunction(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV, bg.boundary);
+  if (bg.subtract_nodes.empty()) return R;
+  for (const BoxState &s : SubtractedBoxStates(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, bg)) R -= s.gamma2_MeV / (s.E_MeV - E_MeV);
   return R;
+}
+
+bool HasInteriorCapture(const HybridPotential &p) {
+  for (const PartialWave &w : p.waves)
+    if (w.background && w.background->capture) return true;
+  return false;
+}
+
+const InteriorBackground *InteriorCaptureOf(const HybridPotential &p, int l, int two_j) {
+  const InteriorBackground *bg = BackgroundOf(p, l, two_j);
+  return (bg && bg->capture) ? bg : nullptr;
+}
+
+double InteriorCaptureIntegral(const HybridPotential &pi, int li, double two_l_dot_i_i, double E_MeV,
+                               const InteriorBackground &bg, const HybridPotential &pf, int lf, double two_l_dot_i_f,
+                               double Ef_MeV, int z1, int z2, double mu_MeV, double a_fm,
+                               const std::function<double(double r_fm)> &weight) {
+  // The entrance and final waves on one grid: the step of IntegrateOutward is set by a and step_fm alone.
+  if (pi.step_fm != pf.step_fm) throw std::invalid_argument("InteriorCaptureIntegral: the two potentials have different steps");
+  const OutwardGrid gi = IntegrateOutwardGrid(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, E_MeV);
+  const OutwardGrid gf = IntegrateOutwardGrid(pf, z1, z2, mu_MeV, lf, two_l_dot_i_f, a_fm, Ef_MeV);
+  const int n = gi.n_a;
+  const double h = gi.dr;
+  // R_pot(E) as InteriorRFunction forms it (the same grid and difference): g_E(a) = R0, the background of the dressed waves
+  const InteriorValue vi = IntegrateOutward(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, E_MeV);
+  const double Rpot = vi.u / (a_fm * vi.du_dr - bg.boundary * vi.u);
+  std::vector<double> g = NormalisedAtA(gi);
+  for (double &x : g) x *= Rpot;
+  for (const BoxState &s : SubtractedBoxStates(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, bg)) {
+    const std::vector<double> phi = NormalisedAtA(IntegrateOutwardGrid(pi, z1, z2, mu_MeV, li, two_l_dot_i_i, a_fm, s.E_MeV));
+    const double c = s.gamma2_MeV / (s.E_MeV - E_MeV);
+    for (int i = 0; i <= n; ++i) g[i] -= c * phi[i];
+  }
+  const std::vector<double> phif = NormalisedAtA(gf);
+  std::vector<double> f(n + 1);
+  for (int i = 0; i <= n; ++i) f[i] = i == 0 ? 0.0 : phif[i] * weight(i * h) * g[i];
+  return SimpsonNodes(f, n, h);
+}
+
+double BoundMatching(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                     double E_MeV) {
+  const InteriorValue u = IntegrateOutward(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
+  const DecayingValue w = DecayingSolution(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, -E_MeV);
+  return w.sign * (w.rho_dlog * u.u - a_fm * u.du_dr);
+}
+
+PotentialEigenvalue NearestEigenvalue(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                                      double a_fm, double E_MeV, double window_MeV) {
+  PotentialEigenvalue best;
+  if (!(E_MeV < 0.0) || !(window_MeV > 0.0)) throw std::invalid_argument("NearestEigenvalue: E < 0 and a positive window");
+  const double lo = E_MeV - window_MeV, hi = std::min(E_MeV + window_MeV, -1e-6);
+  const int n = 100;
+  const double step = (hi - lo) / n;
+  auto f = [&](double e) { return BoundMatching(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, e); };
+  double e0 = lo, f0 = f(e0);
+  for (int k = 1; k <= n; ++k) {
+    const double e1 = lo + k * step, f1 = f(e1);
+    if ((f0 < 0.0) != (f1 < 0.0)) {
+      double a = e0, b = e1, fa = f0;
+      while (b - a > 1e-10) {
+        const double m = 0.5 * (a + b), fm = f(m);
+        if ((fm < 0.0) == (fa < 0.0)) {
+          a = m;
+          fa = fm;
+        } else {
+          b = m;
+        }
+      }
+      const double root = 0.5 * (a + b);
+      if (!best.found || std::fabs(root - E_MeV) < std::fabs(best.E_MeV - E_MeV)) best = {true, root};
+    }
+    e0 = e1;
+    f0 = f1;
+  }
+  return best;
+}
+
+DepthAtEnergy DepthBindingAt(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                             double E_MeV) {
+  DepthAtEnergy best;
+  const double v0 = p.central_depth_MeV;
+  auto f = [&](double v) {
+    HybridPotential q = p;
+    q.central_depth_MeV = v;
+    return BoundMatching(q, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
+  };
+  const int n = 120;  // 0.25 % steps over +-30 %
+  double x0 = 0.7 * v0, f0 = f(x0);
+  for (int k = 1; k <= 2 * n; ++k) {
+    const double x1 = 0.7 * v0 + k * (0.6 * v0 / (2 * n)), f1 = f(x1);
+    if ((f0 < 0.0) != (f1 < 0.0)) {
+      double a = x0, b = x1, fa = f0;
+      while (b - a > 1e-9 * v0) {
+        const double m = 0.5 * (a + b), fm = f(m);
+        if ((fm < 0.0) == (fa < 0.0)) {
+          a = m;
+          fa = fm;
+        } else {
+          b = m;
+        }
+      }
+      const double root = 0.5 * (a + b);
+      if (!best.found || std::fabs(root - v0) < std::fabs(best.depth_MeV - v0)) best = {true, root};
+    }
+    x0 = x1;
+    f0 = f1;
+  }
+  return best;
+}
+
+double InteriorNormIntegral(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                            double E_MeV) {
+  const OutwardGrid grid = IntegrateOutwardGrid(p, z1, z2, mu_MeV, l, two_l_dot_i, a_fm, E_MeV);
+  std::vector<double> phi = NormalisedAtA(grid);
+  for (double &x : phi) x *= x;
+  return SimpsonNodes(phi, grid.n_a, grid.dr);
 }
 
 double DressShift(double S, double R0, double B) { return B + (S - B) / (1.0 - R0 * (S - B)); }

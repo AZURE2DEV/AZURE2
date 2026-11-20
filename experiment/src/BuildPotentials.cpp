@@ -56,7 +56,7 @@ std::string DefaultNote(const ValidatedRecord &r, const std::string &field) {
   return "potential " + r.name + ": " + field + " not given, " + (f ? f->defaultText : std::string("?")) + " (the default)";
 }
 
-/// The `wave` fields of the record (l, J, depth, background interior boundary subtract) into s.waves; false after an
+/// The `wave` fields of the record (l, J, depth, background interior boundary subtract capture) into s.waves; false after an
 /// error (reported).
 bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) {
   for (const Value *w : r.GetAll("wave")) {
@@ -71,7 +71,7 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
       }
       pw.width_fm = InBase(*wd);
     }
-    const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract");
+    const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract"), *cap = w->Get("capture");
     if (bg) {
       if (!b) {
         c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) +
@@ -82,9 +82,10 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
       physics::InteriorBackground ib;
       ib.boundary = b->number.value;
       if (sub) ib.subtract_nodes.push_back((int)sub->integer);
+      ib.capture = cap != nullptr;
       pw.background = ib;
-    } else if (b || sub) {
-      c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": boundary and subtract belong to a background");
+    } else if (b || sub || cap) {
+      c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": boundary, subtract and capture belong to a background");
       return false;
     }
     for (const physics::PartialWave &o : s.waves)

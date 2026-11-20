@@ -1,0 +1,60 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+1.5 -1 0 1 1 1 1 2 1 1 0 4.093160445 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.4548867432 1.4548867432 0 0 0.0 0 4.0 0 0 0
+
+0.5 -1 0.4177109916 1 1 1 1 2 2 1 1 3.5000439504 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.4548867432 1.4548867432 0 0 0.0 0 4.0 0 0 0
+
+0.5 1 40 1 1 1 1 0 3 1 1 0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.4548867432 1.4548867432 0 0 0.0 0 4.0 0 0 0
+0.5 1 40 1 1 2 3 2 3 1 1 0 1 1 1.5 -1 0 0 7.0169292 0 4 1.4548867432 0 0 0 0.0 10 0 0 0 1
+0.5 1 40 1 1 3 1 2 3 1 1 0 1 1 0.5 -1 0.4177109916 0 7.0169292 0 4 1.4548867432 0 0 0 0.0 10 0 0 0 1
+
+1.5 1 40 1 1 1 1 4 4 1 1 0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.4548867432 1.4548867432 0 0 0.0 0 4.0 0 0 0
+1.5 1 40 1 1 2 3 2 4 1 1 0 1 1 1.5 -1 0 0 7.0169292 0 4 1.4548867432 0 0 0 0.0 10 0 0 0 1
+1.5 1 40 1 1 3 1 2 4 1 1 0 1 1 0.5 -1 0.4177109916 0 7.0169292 0 4 1.4548867432 0 0 0 0.0 10 0 0 0 1
+
+2.5 1 40 1 1 1 1 4 5 1 1 0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.4548867432 1.4548867432 0 0 0.0 0 4.0 0 0 0
+2.5 1 40 1 1 2 3 2 5 1 1 0 1 1 1.5 -1 0 0 7.0169292 0 4 1.4548867432 0 0 0 0.0 10 0 0 0 1
+
+0.5 1 3.0 1 1 1 1 0 6 1 0 200000 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.4548867432 1.4548867432 0 0 0.0 0 4.0 0 0 0
+0.5 1 3.0 1 1 2 3 2 6 1 0 0.05 1 1 1.5 -1 0 0 7.0169292 0 4 1.4548867432 0 0 0 0.0 10 0 0 0 1
+
+</levels>
+<data>
+dataset gs_pseudo
+    reaction       4He(h,g)7Be
+    quantity       sigma
+    unit           b
+    file           data/gs_pseudo.dat
+    columns        E_cm[MeV] _ value error
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
+<potentials>
+potential he3he4
+    pair            h+4He
+    coulomb_radius  3.095 fm
+    central         gaussian depth 67.5 MeV width 2.5200031651 fm
+    wave            l 0 J 1/2 depth 67.5 MeV background interior boundary 0.0 capture interior
+    wave            l 1 J 1/2 depth 81.815179 MeV
+    wave            l 1 J 3/2 depth 83.589554 MeV
+    wave            l 2 J 3/2 depth 66.0 MeV background interior boundary 0.0 capture interior
+    wave            l 2 J 5/2 depth 69.0 MeV background interior boundary 0.0 capture interior
+    matching_radius 15 fm
+    step            0.0275 fm
+</potentials>

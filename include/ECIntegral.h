@@ -166,6 +166,9 @@ class ECIntegral {
    * Returns false if R would have to exceed 50000 fm.
    */
   bool IntegrateUnbound(double chanrad, double finalEnergy);
+  /// The interior direct capture of a background partial wave with `capture interior`, added to FW_ and GW_ (nothing
+  /// otherwise); ECIntegral.cpp.
+  void AddInteriorCapture(double chanrad);
   Params params_;
   /// The run's scratch of this thread (ECScratch).
   ECScratch &scratch_;

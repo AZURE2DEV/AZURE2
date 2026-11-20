@@ -82,6 +82,10 @@ double TwoLDotI(int l, int two_j, int two_i);
 struct InteriorBackground {
   double boundary = 0.0;               ///< B_bg (dimensionless): the boundary condition the background is defined with
   std::vector<int> subtract_nodes;     ///< node numbers of the box states whose poles are subtracted (rule 1, section 3)
+  /// The interior direct capture of the background (potential_background.md section 5): the potential's interior wave,
+  /// driven by the surface term of the channel's full wave at a, captured into the potential's bound state inside a
+  /// (InteriorCaptureIntegral).  false: the background acts on the channel functions only.
+  bool capture = false;
 };
 bool operator==(const InteriorBackground &a, const InteriorBackground &b);
 
@@ -269,6 +273,65 @@ double ChannelBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV
 /// wave without background.  The ANC <-> gamma factor of a level below threshold reads it.
 double BackgroundWFactor(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, int two_j, double two_l_dot_i,
                          double a_fm, double E_MeV, double S_dressed);
+
+/// The box states of bg.subtract_nodes (InteriorBoxStates, searched upward in windows of 25 MeV up to 200 MeV), in the
+/// order named; p as for IntegrateOutward.  Throws std::runtime_error when a named state is not found below 200 MeV.
+std::vector<BoxState> SubtractedBoxStates(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                                          double a_fm, const InteriorBackground &bg);
+
+/// Does some partial wave of p have a background with interior capture (InteriorBackground::capture)?
+bool HasInteriorCapture(const HybridPotential &p);
+/// The background of the channel (l, 2J) when it asks for interior capture, else nullptr.
+const InteriorBackground *InteriorCaptureOf(const HybridPotential &p, int l, int two_j);
+
+/*!
+ * The interior direct-capture kernel of a background partial wave (potential_background.md section 5.2, Eq. (C5)):
+ *
+ *   K(E) = int_0^a phi_f(r) w(r) g_E(r) dr   (fm, times the unit of w),
+ *   g_E(r) = R_pot(E) phi_E(r) - sum_{p in subtract} gamma_p^2 phi_p(r) / (E_p - E),
+ *
+ * with phi_E = u_E/u_E(a) the regular solution of the entrance partial wave's potential `pi` (ForPartialWave) at the
+ * channel energy E (MeV, c.m., any sign), R_pot = 1/(l(E) - B_bg) (Eq. (3)), the subtracted box states p of bg with
+ * phi_p their regular solutions at E_p normalised at a, and phi_f = u_f/u_f(a) the regular solution of the final
+ * partial wave's potential `pf` at E_f < 0.  The interior wave of the entrance channel carried by the background is
+ * g_E(r) D, D = (rho u' - B_bg u)(a) of the channel's full exterior wave (g_E(a) = R0, the background); the bound
+ * state inside a is phi_f(r) times its exterior value at a.  w(r) is the multipole's radial weight (r^L, times the
+ * finite-wavelength charge function).  Both regular solutions on the grid of IntegrateOutward (a on a node); the
+ * integral by Simpson's rule (the 3/8 rule on the last three intervals when their number is odd): O(h^4).
+ */
+double InteriorCaptureIntegral(const HybridPotential &pi, int li, double two_l_dot_i_i, double E_MeV,
+                               const InteriorBackground &bg, const HybridPotential &pf, int lf, double two_l_dot_i_f,
+                               double Ef_MeV, int z1, int z2, double mu_MeV, double a_fm,
+                               const std::function<double(double r_fm)> &weight);
+
+/*!
+ * The matching function of a bound state at the channel radius, continuous in E and in the depth: f(E) = sign W~(a)
+ * (S u(a) - a u'(a)), u the regular solution (IntegrateOutward, scaled), S = rho W~'/W~ of the decaying solution of the
+ * same potential (DecayingSolution).  f = 0 at an eigenvalue of the potential (Wronskian of u and W~ at a).
+ */
+double BoundMatching(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                     double E_MeV);
+
+/// An eigenvalue of the potential below threshold (BoundMatching = 0), searched near E (MeV < 0).
+struct PotentialEigenvalue {
+  bool found = false;
+  double E_MeV = 0.0;  ///< the eigenvalue nearest to the requested energy within the window (MeV, c.m.)
+};
+/// The eigenvalue of p nearest to E_MeV < 0 in [E_MeV - window, min(E_MeV + window, -1e-6)] (scan in steps of
+/// window/100, bisection to 1e-10 MeV).
+PotentialEigenvalue NearestEigenvalue(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i,
+                                      double a_fm, double E_MeV, double window_MeV);
+/// The central depth V0 (MeV) nearest to p.central_depth_MeV within +-30 % for which p binds at E_MeV < 0
+/// (BoundMatching(E) = 0; scan in steps of 0.25 %, bisection to 1e-9 relative); found = false when none.
+struct DepthAtEnergy {
+  bool found = false;
+  double depth_MeV = 0.0;
+};
+DepthAtEnergy DepthBindingAt(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                             double E_MeV);
+/// int_0^a (u(r)/u(a))^2 dr (fm) of the regular solution at E (Simpson on the grid of IntegrateOutward).
+double InteriorNormIntegral(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double two_l_dot_i, double a_fm,
+                            double E_MeV);
 
 /// Waves at the channel radius: F, G and their rho-derivatives.
 struct WavesAtRadius {

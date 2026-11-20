@@ -774,6 +774,14 @@ int main() {
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 background interior\n")));
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 boundary 0\n")));
       ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 width 2 fm\n")));
+      ExpectOne("E_POTENTIAL_WAVE", BuildText(potentials(pot + "    wave l 0 capture interior\n")));
+      check("wave l 0 subtract 2 has no interior capture", w.Ok() && w.potentials.pairs.count(7) &&
+                                                               !w.potentials.pairs.at(7).waves[0].background->capture);
+      const BuiltProject cw = BuildText(potentials(pot + "    wave l 0 background interior boundary 0 capture interior\n"));
+      check("capture interior reaches the background", cw.Ok() && cw.potentials.pairs.count(7) &&
+                                                           cw.potentials.pairs.at(7).waves.size() == 1 &&
+                                                           cw.potentials.pairs.at(7).waves[0].background &&
+                                                           cw.potentials.pairs.at(7).waves[0].background->capture);
       const BuiltProject gw = BuildText(potentials(gauss + "    wave l 0 depth 50 MeV width 3.03 fm\n"));
       check("a Gaussian width per wave", gw.Ok() && gw.potentials.pairs.count(1) && gw.potentials.pairs.at(1).waves.size() == 1 &&
                                              gw.potentials.pairs.at(1).waves[0].width_fm &&

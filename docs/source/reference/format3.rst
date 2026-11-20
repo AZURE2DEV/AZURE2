@@ -679,7 +679,7 @@ Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pa
      - optional
      - a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none
    * - ``wave``
-     - ``l <integer >= 0> [J <J>] [depth <number> <energy unit>] [width <number> <length unit>] [background interior] [boundary <number>] [subtract <integer >= 0>]``
+     - ``l <integer >= 0> [J <J>] [depth <number> <energy unit>] [width <number> <length unit>] [background interior] [boundary <number>] [subtract <integer >= 0>] [capture interior]``
      - optional; repeatable
      - a depth of its own and/or the interior background for the partial wave l (J) of the pair (docs/upgrade/potential_background.md); absent: neither
    * - ``matching_radius``
@@ -2366,7 +2366,7 @@ Diagnostic codes
      - a potential record on a photon or beta pair (a potential belongs to a particle pair)
    * - ``E_POTENTIAL_WAVE``
      - error
-     - a wave field of a potential record: background without boundary, boundary or subtract without background, a width with a Woods-Saxon term, or one (l, J) twice
+     - a wave field of a potential record: background without boundary, boundary, subtract or capture without background, a width with a Woods-Saxon term, or one (l, J) twice
    * - ``E_CHANNEL_RADIUS_TWICE``
      - error
      - two channel_radius records for one selection of channels (pair, l, s, J)

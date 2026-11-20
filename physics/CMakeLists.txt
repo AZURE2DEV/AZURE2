@@ -222,6 +222,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME physics_potential_background COMMAND physics_potential_background_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/potential_background.csv)
 
+# The interior direct capture of a background partial wave: the kernel against closed forms of the zero potential
+# (with and without a subtracted box pole), the bound-state rule on the 3He + 4He Gaussian potential against scipy
+# (tests/potential_capture/make_reference.py; docs/upgrade/potential_background.md section 5).
+add_executable(physics_potential_capture_test tests/potential_capture_test.cpp)
+target_link_libraries(physics_potential_capture_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_potential_capture_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_potential_capture COMMAND physics_potential_capture_test)
+
 # The spin-orbit term: its angular factor against an m-scheme, the radial term, a delta-shell closed form, and the
 # channel functions against an independent integration (tests/data/spin_orbit.csv, make_spin_orbit_reference.py).
 add_executable(physics_spin_orbit_test tests/spin_orbit_test.cpp)

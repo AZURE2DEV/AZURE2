@@ -284,7 +284,10 @@ Forms MakeForms() {
                                                                    "channel's diagonal R-matrix element (potential_background.md); left out: none"),
                       OptionalKw("boundary", Num(), "B_bg of the background (dimensionless); required with background"),
                       OptionalKw("subtract", IntAtLeast(0), "the node number of a box state of the potential whose pole is subtracted "
-                                                            "from the background (a state a level of the project represents); left out: none")},
+                                                            "from the background (a state a level of the project represents); left out: none"),
+                      OptionalKw("capture", Words({"interior"}), "the interior direct capture of the background: the potential's interior wave, "
+                                                                "driven by the channel's full wave at a_c, captured into the potential's bound state "
+                                                                "inside a_c (potential_background.md section 5); left out: none")},
                      "what one partial wave of the pair has of its own (docs/upgrade/potential_background.md)")}};
   return f;
 }
