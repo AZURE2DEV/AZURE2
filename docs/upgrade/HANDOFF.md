@@ -20,7 +20,8 @@ Update this file at the end of every work session: what changed, what is next, w
    references are missed by 30 % and 14 %. Not checked: M1's spin term (g factors 0 in the model), E2 without the
    long-wavelength approximation. Nothing is refused: the engine computes them and they are now tested.
 No engine source changed in this round (tests, scripts, the note).
-Run: FOLLOWUP5_RUN
+Run on 4e1f93bb: build 0 warnings; `ctest -LE slow -j4` 400/401 (rmfit_enginepin, this machine: no installed `.so`);
+`tests/run_tests.sh` (4 threads) passed 187, failed 0; `tests/potential_capture/check.sh` all eleven sections pass.
 
 ## 2026-11-20 (potential-capture, follow-up 4) — an independent review's findings
 
