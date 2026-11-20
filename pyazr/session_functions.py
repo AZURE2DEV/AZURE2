@@ -1,6 +1,6 @@
 """The session's diagnostic calls described as rows (``Session.describe()["functions"]``): :meth:`Session.channel_functions`,
-:meth:`Session.potential_box_states`, :meth:`Session.potential_bound_state`, :meth:`Session.jpi_block` and the five THM
-calls of :mod:`pyazr.session_thm`.
+:meth:`Session.potential_box_states`, :meth:`Session.potential_bound_state`,
+:meth:`Session.potential_scattering_length`, :meth:`Session.jpi_block` and the five THM calls of :mod:`pyazr.session_thm`.
 
 Each row has the shape of a row of the physics table (``pyazr.kinds()["physics"]``): ``name``, ``summary``, ``doc``,
 ``axis`` (the argument a plot puts on its horizontal axis, None for none), ``at_x`` (the answer depends on the fit
@@ -133,6 +133,25 @@ SESSION_FUNCTIONS = {
         [_r("found", "", "an eigenvalue in the window (bool)", "scalar"),
          _r("E", "MeV", "the eigenvalue (c.m.)", "scalar"), _r("anc", "fm^-1/2", "the ANC of the normalised state",
                                                                "scalar")],
+        at_x=False),
+    "potential_scattering_length": _row(
+        "potential_scattering_length", "The scattering length and effective range of a pair's potential alone in one "
+        "partial wave.",
+        "The effective-range expansion of the potential's own phase shifts near threshold: Coulomb-modified for a "
+        "charged pair (l = 0 only), k^(2l+1) cot delta for a neutral one, a cubic in k^2 fitted on a window set by "
+        "the potential's range (docs/upgrade/potential_background.md section 13.1).",
+        [dict(_ARG, name="pair", kind="pair", doc="particle pair key of <levels> (a pair with a potential)",
+              domain="a particle pair of the project"),
+         dict(_ARG, name="l", kind="integer", doc="orbital angular momentum (0 for a charged pair)",
+              domain="integer >= 0", lower=0.0, default=0, example=0),
+         dict(_ARG, name="J", kind="real", doc="the channel's total J: required when the potential depends on J, "
+              "ignored when it does not", domain="a multiple of 1/2 >= 0, or None", example=0.5)],
+        [_r("a", "fm^(2l+1)", "scattering length", "scalar"), _r("r", "fm^(1-2l)", "effective range", "scalar"),
+         _r("a_spread", "fm^(2l+1)", "difference of a to two other fits", "scalar"),
+         _r("r_spread", "fm^(1-2l)", "difference of r to two other fits", "scalar"),
+         _r("e_window", "MeV", "the window (low, high), c.m.", "list"),
+         _r("points", "", "energies fitted", "scalar"),
+         _r("bound_states", "", "bound states of the potential in the wave", "scalar")],
         at_x=False),
     "jpi_block": _row(
         "jpi_block", "One J^pi group on excitation energies: channel functions, U, T, phase shifts, |A| and det A^-1.",

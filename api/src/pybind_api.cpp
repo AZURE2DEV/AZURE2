@@ -591,6 +591,25 @@ class Session {
     out["anc"] = v[2];
     return out;
   }
+  py::dict potential_scattering_length(int pair, int l, int two_j) {
+    azure2::physics::EffectiveRange e;
+    {
+      EngineCallScope engine;
+      e = api_->GetPotentialEffectiveRange(pair, l, two_j);
+    }
+    py::dict out;
+    out["ok"] = e.ok;
+    out["why"] = e.why;
+    out["a"] = e.a;
+    out["r"] = e.r;
+    out["a_spread"] = e.aSpread;
+    out["r_spread"] = e.rSpread;
+    out["e_low"] = e.eLow;
+    out["e_high"] = e.eHigh;
+    out["points"] = e.points;
+    out["bound_states"] = e.boundStates;
+    return out;
+  }
   py::array_t<double> coulomb_functions(const py::array_t<double, py::array::forcecast> &request) {
     vector_r v = to_vector(request), out;
     {
@@ -898,6 +917,10 @@ PYBIND11_MODULE(_azure2, m) {
            py::arg("two_j"), py::arg("energy"), py::arg("window"),
            "The bound state of a pair's potential in (l, 2J) nearest an energy: {found, E (MeV c.m.), anc (fm^-1/2)} "
            "(AZUREAPI::GetPotentialBoundState).")
+      .def("potential_scattering_length", &Session::potential_scattering_length, PrecisionGuard(), py::arg("pair"),
+           py::arg("l"), py::arg("two_j"),
+           "The scattering length and effective range of a pair's potential alone in (l, 2J): {ok, why, a, r, "
+           "a_spread, r_spread, e_low, e_high (MeV c.m.), points, bound_states} (AZUREAPI::GetPotentialEffectiveRange).")
       .def("jpi_block", &Session::jpi_block, PrecisionGuard(), py::arg("params"), py::arg("jgroup"),
            py::arg("excitation"),
            "One J^pi group (1-based) at every parameter value `params` on excitation energies E_x (MeV): its channel "

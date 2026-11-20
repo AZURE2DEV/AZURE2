@@ -34,6 +34,7 @@ add_library(azure2_physics STATIC
   src/LevelParameters.cpp
   src/ObservableCoupling.cpp
   src/Pathways.cpp
+  src/PotentialTuning.cpp
   src/Recoupling.cpp
   src/ResonanceQuantities.cpp
   src/SpinObservable.cpp
@@ -231,6 +232,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_potential_capture_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_potential_capture COMMAND physics_potential_capture_test)
+
+# What a potential gives by itself at low energy: its phase shift, the effective-range expansion of it (a, r), its
+# bound states and the depth for a chosen scattering length, against scipy, mpmath and numpy
+# (tests/data/potential_tuning.csv, make_potential_tuning_reference.py; docs/upgrade/potential_background.md section 13).
+add_executable(physics_potential_tuning_test tests/potential_tuning_test.cpp)
+target_link_libraries(physics_potential_tuning_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_potential_tuning_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_potential_tuning COMMAND physics_potential_tuning_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/potential_tuning.csv)
 
 # The spin-orbit term: its angular factor against an m-scheme, the radial term, a delta-shell closed form, and the
 # channel functions against an independent integration (tests/data/spin_orbit.csv, make_spin_orbit_reference.py).

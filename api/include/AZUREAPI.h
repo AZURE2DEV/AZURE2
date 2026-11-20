@@ -2,6 +2,7 @@
 #define AZUREAPI_H
 
 #include "azure2/physics/HybridPotential.h"
+#include "azure2/physics/PotentialTuning.h"
 #include "AZUREMain.h"
 #include "CompoundSystemSetUp.h"
 
@@ -479,6 +480,14 @@ class AZUREAPI {
    * exterior)} (physics/ NearestEigenvalue, PotentialBoundStateANC).  The same throws as GetPotentialBoxStates.
    */
   std::vector<double> GetPotentialBoundState(int pairKey, int l, int twoJ, double energy, double window) const;
+  /*!
+   * The scattering length and effective range of the potential of pair `pairKey` alone in (l, 2J), from the
+   * effective-range expansion of its own phase shifts near threshold (physics/ PotentialEffectiveRange: the
+   * Coulomb-modified expansion for a charged pair, l = 0 only; k^(2l+1) cot delta for a neutral one), with the window,
+   * the spread of the extrapolation and the number of bound states (potential_background.md section 13.1).  The same
+   * throws as GetPotentialBoxStates; a refused expansion has ok = false and its reason.
+   */
+  azure2::physics::EffectiveRange GetPotentialEffectiveRange(int pairKey, int l, int twoJ) const;
 
   /*!
    * External-capture integrals on a requested energy grid.

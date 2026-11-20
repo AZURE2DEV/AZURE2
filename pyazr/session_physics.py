@@ -138,6 +138,40 @@ class SessionPhysics:
         return {"found": bool(out["found"]), "E": float(out["E"]), "anc": float(out["anc"])}
 
     @engine_call
+    def potential_scattering_length(self, pair, l=0, J=None):
+        """The scattering length and effective range of a pair's potential alone in one partial wave.
+
+        The effective-range expansion of the potential's own phase shifts near threshold (the potential from 0 to the
+        matching radius, point-Coulomb or free waves beyond): for a charged pair and l = 0 the Coulomb-modified
+        function K = C0^2(eta) k cot(delta) + 2 k eta h(eta) = -1/a + r k^2/2 + ..., for a neutral pair
+        K = k^(2l+1) cot(delta), fitted with a cubic in k^2 on 24 energies of a window set by the potential's range
+        (``docs/upgrade/potential_background.md`` section 13.1).  What a depth gives, before any level is put on top.
+
+        Parameters
+        ----------
+        pair, l, J : as :meth:`potential_box_states`.
+
+        Returns
+        -------
+        dict: ``a`` (fm^(2l+1); fm for l = 0), ``r`` (fm^(1-2l)), ``a_spread``, ``r_spread`` (the differences to two
+        other fits: the accuracy of the extrapolation), ``e_window`` ((low, high) MeV, c.m.), ``points``,
+        ``bound_states`` (the potential's bound states in the wave, forbidden ones included).
+
+        Raises ``ValueError`` as :meth:`potential_box_states`, and for a charged pair with l > 0 (the Coulomb-modified
+        expansion of l > 0 is not built) or a window the Coulomb barrier leaves empty.
+        """
+        pair, l = session_checks.channel_request(self.pairs, pair, l)
+        try:
+            out = self._engine.potential_scattering_length(pair, l, -1 if J is None else round(2 * J))
+        except Exception as e:
+            raise ValueError(str(e)) from None
+        if not out["ok"]:
+            raise ValueError(f"potential_scattering_length: {out['why']}")
+        return {"a": float(out["a"]), "r": float(out["r"]), "a_spread": float(out["a_spread"]),
+                "r_spread": float(out["r_spread"]), "e_window": (float(out["e_low"]), float(out["e_high"])),
+                "points": int(out["points"]), "bound_states": int(out["bound_states"])}
+
+    @engine_call
     def jpi_block(self, jgroup, e_x, params=None):
         """One J^pi group of this session on excitation energies: channel functions, U, T, phase shifts, |A|, det A^-1.
 

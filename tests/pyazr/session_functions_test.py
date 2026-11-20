@@ -100,7 +100,9 @@ with warnings.catch_warnings():
     with pyazr.Session(POT, extrapolations=True) as s:
         answers["potential_box_states"] = [s.potential_box_states(1, l=0, J=0.5, e_min=-50.0, e_max=30.0)]
         answers["potential_bound_state"] = [s.potential_bound_state(1, l=1, J=1.5, energy=-1.5)]
-check("nine rows", sorted(described) == sorted(["channel_functions", "potential_box_states", "potential_bound_state",
+        answers["potential_scattering_length"] = [s.potential_scattering_length(1, l=0, J=0.5)]
+check("ten rows", sorted(described) == sorted(["channel_functions", "potential_box_states", "potential_bound_state",
+                                                  "potential_scattering_length",
                                                   "jpi_block", "thm_experiments", "thm_background", "thm_lineshape",
                                                   "thm_vertex", "thm_distortion"]),
       str(sorted(described)))

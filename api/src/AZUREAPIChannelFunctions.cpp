@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "CoulFunc.h"
 #include "PPair.h"
+#include "PotentialWave.h"
 #include "azure2/experiment/SpinOrbitChecks.h"
 #include "azure2/physics/HybridPotential.h"
 
@@ -111,34 +112,31 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   return out;
 }
 
+PotentialWaveArgs PotentialWaveOf(const PPair &pair, int l, int requestedTwoJ, const char *call) {
+  const std::string key = std::to_string(pair.GetPairKey());
+  PotentialWaveArgs a;
+  a.pair = &pair;
+  if (!pair.GetHybridPotential())
+    throw std::invalid_argument(std::string(call) + ": pair " + key + " has no potential record");
+  if (l < 0) throw std::invalid_argument(std::string(call) + ": l must be >= 0");
+  const bool dependsOnJ = azure2::physics::DependsOnJ(*pair.GetHybridPotential());
+  if (dependsOnJ && requestedTwoJ < 0)
+    throw std::invalid_argument(std::string(call) + ": the potential of pair " + key +
+                                " depends on J (a spin-orbit term or a wave with its own J): give J");
+  a.twoJ = dependsOnJ ? pair.SpinOrbitTwoJ(requestedTwoJ / 2.0) : azure2::physics::kNoSpinOrbit;
+  a.ldoti = pair.SpinOrbitFactor(l, a.twoJ);  // throws for a J that l and the spin cannot make
+  a.potential = azure2::physics::ForPartialWave(*pair.GetHybridPotential(), l, a.twoJ);
+  a.mu = pair.GetRedMass() * uconv;
+  return a;
+}
+
 namespace {
 
-/// The pair, its potential's partial wave (l, 2J) and its arguments, for the two calls below; throws
-/// std::invalid_argument with the reason (no pair, no potential, a J the wave needs or cannot have).
-struct PotentialWaveArgs {
-  const PPair *pair = nullptr;
-  azure2::physics::HybridPotential potential;
-  int twoJ = azure2::physics::kNoSpinOrbit;
-  double ldoti = 0.0, mu = 0.0;
-};
-
+/// PotentialWaveOf for the pair of key `pairKey` of the model; throws std::invalid_argument for no such pair.
 PotentialWaveArgs WaveArgs(const CompoundSystem *compound, int pairKey, int l, int requestedTwoJ, const char *call) {
   if (!compound || !compound->IsPairKey(pairKey))
     throw std::invalid_argument(std::string(call) + ": no pair " + std::to_string(pairKey) + " in this model");
-  PotentialWaveArgs a;
-  a.pair = compound->GetPair(compound->GetPairNumFromKey(pairKey));
-  if (!a.pair->GetHybridPotential())
-    throw std::invalid_argument(std::string(call) + ": pair " + std::to_string(pairKey) + " has no potential record");
-  if (l < 0) throw std::invalid_argument(std::string(call) + ": l must be >= 0");
-  const bool dependsOnJ = azure2::physics::DependsOnJ(*a.pair->GetHybridPotential());
-  if (dependsOnJ && requestedTwoJ < 0)
-    throw std::invalid_argument(std::string(call) + ": the potential of pair " + std::to_string(pairKey) +
-                                " depends on J (a spin-orbit term or a wave with its own J): give J");
-  a.twoJ = dependsOnJ ? a.pair->SpinOrbitTwoJ(requestedTwoJ / 2.0) : azure2::physics::kNoSpinOrbit;
-  a.ldoti = a.pair->SpinOrbitFactor(l, a.twoJ);  // throws for a J that l and the spin cannot make
-  a.potential = azure2::physics::ForPartialWave(*a.pair->GetHybridPotential(), l, a.twoJ);
-  a.mu = a.pair->GetRedMass() * uconv;
-  return a;
+  return PotentialWaveOf(*compound->GetPair(compound->GetPairNumFromKey(pairKey)), l, requestedTwoJ, call);
 }
 
 }  // namespace
@@ -164,4 +162,9 @@ std::vector<double> AZUREAPI::GetPotentialBoundState(int pairKey, int l, int two
   const double anc = azure2::physics::PotentialBoundStateANC(a.potential, a.pair->GetZ(1), a.pair->GetZ(2), a.mu, l,
                                                              a.ldoti, a_fm, ev.E_MeV);
   return {1.0, ev.E_MeV, anc};
+}
+
+azure2::physics::EffectiveRange AZUREAPI::GetPotentialEffectiveRange(int pairKey, int l, int twoJ) const {
+  const PotentialWaveArgs a = WaveArgs(compound_.get(), pairKey, l, twoJ, "potential_scattering_length");
+  return azure2::physics::PotentialEffectiveRange(a.potential, a.pair->GetZ(1), a.pair->GetZ(2), a.mu, l, a.ldoti);
 }

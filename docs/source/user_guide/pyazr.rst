@@ -1089,8 +1089,15 @@ wave with an interior background returns the dressed functions together (``P = r
 -atan2(F, G)`` of the returned F, G); ``s.potential_box_states(pair, l, J, radius, boundary, e_min, e_max)`` gives
 the box states of the potential (energies ``E`` MeV c.m., residues ``gamma2`` MeV, ``nodes``: the poles of its interior
 R-function and what ``subtract`` names); ``s.potential_bound_state(pair, l, J, energy, window)`` the potential's
-eigenvalue nearest ``energy`` (MeV, < 0) and the ANC of its normalised state (fm^-1/2).  Both are rows of
-``s.describe()["functions"]``.
+eigenvalue nearest ``energy`` (MeV, < 0) and the ANC of its normalised state (fm^-1/2);
+``s.potential_scattering_length(pair, l, J)`` the scattering length ``a`` and effective range ``r`` of the potential
+alone in that wave (fm for l = 0), from the effective-range expansion of its own phase shifts near threshold
+(Coulomb-modified, :math:`K = C_0^2(\eta)\,k\cot\delta_0 + 2k\eta\,h(\eta) = -1/a + r k^2/2 + \dots`, for a charged
+pair and l = 0 only; :math:`k^{2l+1}\cot\delta_l` for a neutral pair), with the energy window it was fitted on
+(``e_window``, MeV c.m.: 24 energies with :math:`k` from :math:`0.125/R_N` to :math:`0.5/R_N`, :math:`R_N` the
+Gaussian width or :math:`R + 2a` of a Woods-Saxon term), the spread of the extrapolation (``a_spread``, ``r_spread``:
+the differences to two other fits; about :math:`10^{-5}` of ``a`` for ³He + α) and the potential's bound states in the
+wave (``bound_states``, Pauli-forbidden ones included).  All three are rows of ``s.describe()["functions"]``.
 
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the

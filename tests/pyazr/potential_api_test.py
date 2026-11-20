@@ -10,7 +10,10 @@ an interior background on every partial wave, a_c = 3.5 fm):
       undressed ones (the same model without its backgrounds);
   (d) potential_bound_state(1, l=1, J=3/2) finds the p3/2 state at -1.4548867 MeV with ANC 4.09316 fm^-1/2
       (tests/potential_capture/make_reference.py, scipy and mpmath: -1.4548867432 MeV, 4.0931604450);
-  (e) potential_box_states(1, l=0, J=1/2) numbers its states 0, 1, 2, ... ascending, with positive residues.
+  (e) potential_box_states(1, l=0, J=1/2) numbers its states 0, 1, 2, ... ascending, with positive residues;
+  (f) potential_scattering_length(1, l=0, J=1/2) gives the s-wave a0 and r0 of VD (two bound s states) as
+      physics/tests/data/make_potential_tuning_reference.py (scipy, mpmath, numpy: a0 30.953078 fm, r0 0.929216 fm) to
+      3e-5 and 1e-3, and refuses the charged p wave (the Coulomb-modified expansion of l > 0 is not built).
 """
 import math
 import os
@@ -27,6 +30,8 @@ def check(name, ok, detail=""):
         failures.append(name)
 
 
+# pyazr from this checkout (ctest sets no PYTHONPATH; before 2026-11-21 the test was skipped under ctest for that)
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
 try:
     import numpy as np
     import pyazr
@@ -74,6 +79,21 @@ with warnings.catch_warnings():
         check("(e) box states numbered 0, 1, ... ascending, positive residues",
               len(n) >= 3 and list(n) == list(range(len(n))) and np.all(np.diff(bs["E"]) > 0) and np.all(bs["gamma2"] > 0),
               str(bs))
+        sl = s.potential_scattering_length(1, l=0, J=0.5)
+        ref = {}
+        with open(os.path.join(ROOT, "physics", "tests", "data", "potential_tuning.csv")) as f:
+            for line in f:
+                kind, system, l, x, value = line.strip().split(",")
+                if system == "he3" and l == "0" and x == "67.5" and kind in ("a", "r"):
+                    ref[kind] = float(value)
+        check("(f) a0 and r0 of the potential's s wave as scipy's, two bound s states",
+              abs(sl["a"] / ref["a"] - 1) < 3e-5 and abs(sl["r"] / ref["r"] - 1) < 1e-3 and sl["bound_states"] == 2
+              and sl["e_window"][0] < sl["e_window"][1], f"{sl} vs {ref}")
+        try:
+            s.potential_scattering_length(1, l=1, J=1.5)
+            check("(f) the charged p wave refused", False, "no error")
+        except ValueError as e:
+            check("(f) the charged p wave refused", "l = 0 only" in str(e), str(e))
 
 # (c) continued: without the backgrounds the functions are the undressed ones, and differ
 try:
