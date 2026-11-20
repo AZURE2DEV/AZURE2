@@ -470,10 +470,7 @@ bool Project::MoveRecord(const std::string &section, const std::string &name, in
   return true;
 }
 
-const std::string &RecordOffMark() {
-  static const std::string mark = "#off ";
-  return mark;
-}
+std::string RecordOffMark() { return "#off "; }
 
 namespace {
 
@@ -486,7 +483,7 @@ struct OffRun {
 
 std::vector<OffRun> OffRuns(const io::Document &doc, const io::Document::Section &s) {
   std::vector<OffRun> runs;
-  const std::string &mark = RecordOffMark();
+  const std::string mark = RecordOffMark();
   for (std::size_t i = s.open + 1; i < s.close; i++) {
     const std::string &line = doc.Line(i);
     if (line.compare(0, mark.size(), mark) != 0) continue;

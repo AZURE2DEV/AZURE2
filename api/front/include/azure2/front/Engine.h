@@ -163,7 +163,7 @@ class Project {
 /// docs, types, closed choices and units, quantities, units, diagnostic codes.
 std::string SchemaJson();
 /// The mark a record switched off carries at the start of each of its lines ("#off "): a comment of format 3.
-const std::string &RecordOffMark();
+std::string RecordOffMark();
 
 // ---- The shape of a value: what a form offers to edit it (docs/upgrade/qt_gui.md section 11) ----
 
