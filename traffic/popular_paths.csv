@@ -629,3 +629,13 @@ date,path,count,uniques
 2026-11-19,/AZURE2DEV/AZURE2/tree/main/examples,2,2
 2026-11-19,/AZURE2DEV/AZURE2/tree/main/tests/13N,2,1
 2026-11-19,/AZURE2DEV/AZURE2/tree/thm,2,1
+2026-11-20,/AZURE2DEV/AZURE2,12,8
+2026-11-20,/AZURE2DEV/AZURE2/blob/527f63d/docs/source/user_guide/pyazr.rst,1,1
+2026-11-20,/AZURE2DEV/AZURE2/blob/main/CMakeLists.txt,2,1
+2026-11-20,/AZURE2DEV/AZURE2/blob/main/src/ReactionRate.cpp,2,1
+2026-11-20,/AZURE2DEV/AZURE2/blob/main/tests/13N/13N.azr,1,1
+2026-11-20,/AZURE2DEV/AZURE2/commits/feature/upgrade-5-fix-capture-ay-verify,2,1
+2026-11-20,/AZURE2DEV/AZURE2/tree/dev,5,4
+2026-11-20,/AZURE2DEV/AZURE2/tree/main/examples,2,2
+2026-11-20,/AZURE2DEV/AZURE2/tree/main/tests/13N,2,1
+2026-11-20,/AZURE2DEV/AZURE2/tree/thm,2,1
