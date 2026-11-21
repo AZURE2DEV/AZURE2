@@ -115,6 +115,11 @@ std::string FindLineFinal(const CompoundSystem *c, int entranceKey, int exitKey,
   }
   if (open == 0) return "its final state is bound (below every particle threshold): it has no line shape";
   if (open > 1) return "its final state lies above more than one particle threshold; the line-shape integration handles one";
+  // The scattering state of the line shape is built from the waves outside the channel radius and the one-level
+  // phase; with a potential that also acts inside the radius its phase and interior are the potential's as well.
+  if (const auto &potential = lf.fp->GetHybridPotential(jg->GetChannel(lf.ch)->GetL()); potential && potential->interior_boundary)
+    return "its final state's particle channel has a potential with interior_boundary, which the line-shape "
+           "integration is not built for; without line_window the final state is taken as a narrow resonance";
   const ExitRow &exit = P.exits[lf.exit - 1];
   for (int k = 1; k <= exit.num_groups; k++) {
     const SpinGroupRow &g = P.Group(exit, k);

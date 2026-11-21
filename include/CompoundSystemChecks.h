@@ -45,9 +45,9 @@ std::vector<PotentialState> InteriorPotentialStates(const PPair &pair, int l, in
 /// number of such levels.
 int WarnLevelDoublesPotential(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure);
 /// Warns of every external-capture final state that gets no capture from the potential's interior although its pair
-/// has a potential acting inside the channel radius (docs/upgrade/interior_potential.md section 6.4): a bound final
-/// state in a channel whose own l has no interior boundary constant (W_POT_INTERIOR_FINAL), and an unbound final
-/// state (not built).  Returns the number of such final states.
+/// has a potential acting inside the channel radius (docs/upgrade/interior_potential.md section 6.4): a final state,
+/// bound or not, in a channel whose own l has no interior boundary constant (W_POT_INTERIOR_FINAL).  Returns the
+/// number of such final states.
 int WarnInteriorCaptureFinal(const CompoundSystem &compound, const ObservedLevelTable &table, const Config &configure);
 
 #endif

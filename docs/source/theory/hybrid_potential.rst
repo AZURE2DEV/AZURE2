@@ -150,13 +150,23 @@ the entrance channel's :math:`l` adds :math:`q\,r^L` (:math:`q` in units of :mat
 :math:`Z_1 m_2/M - Z_2 m_1/M \approx -10^{-3}`) and the strength is the interior's (Koonin, Tombrello and Fox fit an
 effective dipole strength).  Left out: the matrix element between the *level* part of the final state and the
 potential part of the entrance wave; it vanishes when the final state is a state of the potential.  A final state
-whose channel has no ``interior_boundary`` of its own :math:`l`, or that is unbound, gets no interior capture and a
-warning at set-up.  These terms are integrated at every energy rather than interpolated from the energy tables of
+whose channel has no ``interior_boundary`` of its own :math:`l` gets no interior capture and a warning at set-up.
+
+An unbound final state (a narrow resonance, whose wave outside the radius is the outgoing wave
+:math:`O_f(r)/O_f(a_c)`) continues inside as :math:`[(L_f - b_f)/(f_f - b_f)]\,u_f(r)/u_f(a_c)`, with :math:`u_f` at
+the final energy and :math:`L_f = S_f + iP_f` of the waves outside.  For capture into a resonance of the potential
+itself, given as a level with the resonance's width, the cross section then depends on the channel radius only as
+far as the narrow-resonance form holds (a state 5 % of its energy wide: 2 % between 4.0 and 5.35 fm, 16 % at
+6.5 fm, against a factor 2.6 without the interior).  The line-shape integration of a broad final state
+(``line_window``) is refused on a final channel with ``interior_boundary``.
+
+In the rate mode the energy grid has a cluster of points on each resonance of the entrance pair's potential, as it
+has on each level.  These terms are integrated at every energy rather than interpolated from the energy tables of
 the external capture: they carry the potential's resonances, and at a pole of :math:`R_{pot}` the tables' divisors
 vanish or change sign.
 
 Limits: a pair whose two particles both have spin is refused (``E_POT_INTERIOR_TWO_SPINS``; :math:`R_{pot}` would
-couple the channel spins); no capture from the interior into an unbound final state; the potential's parameters and
+couple the channel spins); no ``line_window`` on a final channel with ``interior_boundary``; the potential's parameters and
 the interior charge are not fit parameters of the engine (``pyazr.record_fit.fit_record_settings`` fits them from
 outside, refitting the project at each trial value).  A potential may be given per orbital angular
 momentum with the record's ``l`` list.  The design note is ``docs/upgrade/interior_potential.md``.

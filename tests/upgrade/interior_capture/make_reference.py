@@ -23,6 +23,14 @@ and row "total" is int_0^inf u_i w r dr / (the same at a = 5.35 fm), u_i normali
 inside a and W~_f outside: 1 at every a for the potential's bound state (b = 0).  Before the rows the script asserts
 the identity behind "channel": with one level, R = 1/(f - b) + g^2/(E_l - E) and psi = I - U O, the potential's part
 of psi at a, R_pot (a psi' - b psi), minus its value without the level equals -(U - U_pot) O(a) (L - b)/(f - b).
+
+Rows "unbound" (section 6.5, step 4): a final state at E_f > 0 above the threshold, a narrow resonance whose
+exterior is O_f(r)/O_f(a).  Its potential part inside a is (L_f - b)/(f_f - b) u_f(r)/u_f(a), so the interior part of
+a term is that of the bound final state of B = 7.16 MeV at the same a, b and E times
+
+  (L_f - b)/(f_f - b) int_0^a [u_i/u_i(a)] [u_f/u_f(a)] r dr  /  I_in(B = 7.16)                    (complex),
+
+the same for the non-resonant and the channel term (column B_MeV holds -E_f).
 """
 import numpy as np, mpmath as mp
 from scipy.integrate import solve_ivp, quad
@@ -121,3 +129,18 @@ for B in (B0, 7.16):
                     print(f"closed,{a},{b},{B:.12f},{E},{1 + (Si - b) / (fi - b) * I_in / out:.12e},0")
             if a == 5.35:
                 first = dict(totals)
+B = 7.16
+wf = decaying(B, 0); uf = regular(-B, 0)
+for Ef in (0.3, 1.0, 2.5):
+    of = outgoing(Ef, 0); ufp = regular(Ef, 0)
+    for b in (0.0, -1.5):
+        for a in (5.35, 4.0, 6.5):
+            Sf = a * wf(a)[1] / wf(a)[0]; ff = a * uf(a)[1] / uf(a)[0]
+            oa, doa = of(a); Lf = a * doa / oa; ffp = a * ufp(a)[1] / ufp(a)[0]
+            for E in (2.0, 3.0, 5.0):
+                if E <= Ef:
+                    continue  # no photon
+                ui = regular(E, 1)
+                bound = wf(a)[0] * (Sf - b) / (ff - b) * integ(lambda r: ui(r)[0] / ui(a)[0] * uf(r)[0] / uf(a)[0] * r, RMIN, a)
+                c = (Lf - b) / (ffp - b) * integ(lambda r: ui(r)[0] / ui(a)[0] * ufp(r)[0] / ufp(a)[0] * r, RMIN, a) / bound
+                print(f"unbound,{a},{b},{-Ef},{E},{c.real:.12e},{c.imag:.12e}")

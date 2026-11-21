@@ -483,6 +483,8 @@ data ay_60: ay(1->1)
 data ay_120: ay(1->1)
 == tests/interior_capture/models/direct.azr
 extrapolation x1: sigma(1->2)
+== tests/interior_capture/models/unbound.azr
+extrapolation x1: sigma(1->2)
 == tests/isospin_levels/models/bad_T.azr
 project: <levels> cannot be set up
 exit 1

@@ -12,7 +12,10 @@
 //  (c) M1 between two l = 1 states of one potential, no level: the amplitude from outside the radius is cancelled by
 //      the interior (the wave functions are orthogonal);
 //  (d) the interior charge q: the amplitude is linear in q, and q equal to the pair's own E1 charge number
-//      Z1 m2/M - Z2 m1/M doubles the interior part.
+//      Z1 m2/M - Z2 m1/M doubles the interior part;
+//  (e) an unbound final state (a narrow resonance at E_f = 0.3, 1.0 and 2.5 MeV): the interior part of the
+//      non-resonant and of the channel term over the interior part of the same term for the bound final state of
+//      7.16 MeV (complex); and the interior charge is linear there as well.
 //
 //   interior_capture_test <interior_bound.azr> <reference.csv>      (ctest: upgrade_interior_capture)
 #include <cmath>
@@ -114,7 +117,14 @@ int main(int argc, char **argv) {
     if (kind == "bound") { B0 = B; continue; }
     const PPair with = makePair(b, 1, 0, true), without = makePair(b, 1, 0, false);
     double d;
-    if (kind == "total") {
+    if (kind == "unbound") {  // B = -E_f; both terms against the one reference number
+      d = 0.0;
+      for (bool channel : {false, true}) {
+        const cplx unbound = e1(with, lw, a, E, B, channel) - e1(without, lw, a, E, B, channel);
+        const cplx bound = e1(with, lw, a, E, 7.16, channel) - e1(without, lw, a, E, 7.16, channel);
+        d = std::fmax(d, std::abs(unbound / bound - cplx(re, im)) / std::abs(cplx(re, im)));
+      }
+    } else if (kind == "total") {
       d = std::fabs(std::abs(e1(with, lw, a, E, B, false) / e1(with, lw, 5.35, E, B, false)) / std::fabs(re) - 1.0);
       if (B == B0)
         worstExact = std::fmax(worstExact, std::fabs(std::abs(e1(with, exact, a, E, B, false) / e1(with, exact, 5.35, E, B, false)) - 1.0));
@@ -133,6 +143,8 @@ int main(int argc, char **argv) {
             std::to_string(count["channel"]) + " (limit 1e-4)", count["channel"] == 72 && worst["channel"] < 1e-4);
   check("(a) the channel term below threshold: worst " + num(worst["closed"]) + " of " + std::to_string(count["closed"]) +
             " (limit 1e-4)", count["closed"] == 18 && worst["closed"] < 1e-4);
+  check("(e) unbound final state, the interior part over that of the bound one, both terms: worst " + num(worst["unbound"]) +
+            " of " + std::to_string(count["unbound"]) + " (limit 1e-4)", count["unbound"] == 48 && worst["unbound"] < 1e-4);
   check("(b) the non-resonant term at 4.0 and 6.5 fm over 5.35 fm: worst " + num(worst["total"]) + " of " +
             std::to_string(count["total"]) + " (limit 1e-4)", count["total"] == 48 && worst["total"] < 1e-4);
   check("(b) exact form, the potential's bound state: independent of the radius to " + num(worstExact) + " (limit 1e-4)",
@@ -183,6 +195,13 @@ int main(int argc, char **argv) {
         worstOwn = std::fmax(worstOwn, std::abs((tOwn - t0) - (t0 - outside)) / std::abs(t0 - outside));
         if (std::abs(t1 - t0) == 0.0) worstLinear = 1.0;
       }
+    for (bool channel : {false, true}) {  // (e): the unbound final state at E_f = 1 MeV
+      const cplx t0 = e1(makePair(0.0, 1, 0, true), lw, a, 3.0, -1.0, channel);
+      const cplx t1 = e1(makePair(0.0, 1, 0, true, 0.01), lw, a, 3.0, -1.0, channel);
+      const cplx t2 = e1(makePair(0.0, 1, 0, true, 0.02), lw, a, 3.0, -1.0, channel);
+      worstLinear = std::fmax(worstLinear, std::abs((t2 - t0) - 2.0 * (t1 - t0)) / std::abs(t1 - t0));
+      if (std::abs(t1 - t0) == 0.0) worstLinear = 1.0;
+    }
     check("(d) the amplitude is linear in the interior charge to " + num(worstLinear) + " (limit 1e-9)", worstLinear < 1e-9);
     check("(d) the pair's own charge number (" + num(own) + ") as interior charge doubles the interior part, to " +
               num(worstOwn) + " (limit 1e-9)", worstOwn < 1e-9);

@@ -329,32 +329,44 @@ complex ECIntegral::operator()(int theInitialLValue, int theFinalLValue,
   return integral;
 }
 
-ECIntegral::InteriorTerm ECIntegral::Interior(int li, int lf, double chanRad, double outEnergy) {
+ECIntegral::InteriorTerm ECIntegral::Interior(int li, int lf, double chanRad, double outEnergy, double finalEnergy) {
   namespace phys = azure2::physics;
   InteriorTerm t;
   const std::optional<phys::HybridPotential> &pi = pair()->GetHybridPotential(li), &pf = pair()->GetHybridPotential(lf);
   if (!pi || !pi->interior_boundary || !pf || !pf->interior_boundary) return t;
+  const bool unbound = finalEnergy > 0.0;
   const int z1 = pair()->GetZ(1), z2 = pair()->GetZ(2);
   const double mu = pair()->GetRedMass() * uconv;
   const phys::RegularWave ui =
       phys::RegularWaveOnGrid(*pi, z1, z2, mu, li, pair()->SpinOrbitFactor(li, params_.twoJi), chanRad, outEnergy);
   const int intervals = static_cast<int>(ui.u.size()) - 1;
-  const FinalWaveKey key{lf, params_.twoJf, intervals, params_.bindingEnergy};
+  const FinalWaveKey key{lf, params_.twoJf, intervals, unbound ? finalEnergy : -params_.bindingEnergy};
+  const double bf = *pf->interior_boundary;
   auto it = finalWaves_.find(key);
   if (it == finalWaves_.end()) {
-    const double twoLDotI = pair()->SpinOrbitFactor(lf, params_.twoJf), bf = *pf->interior_boundary;
-    phys::RegularWave uf =
-        phys::RegularWaveOnGrid(*pf, z1, z2, mu, lf, twoLDotI, chanRad, -params_.bindingEnergy, intervals);
-    const double Sf = phys::HybridBoundShift(*pf, z1, z2, mu, lf, twoLDotI, chanRad, params_.bindingEnergy);
-    const double share = (Sf - bf) / (uf.log_derivative - bf);  // the potential's part of the final state at a
-    for (double &v : uf.u) v *= share;
+    const double twoLDotI = pair()->SpinOrbitFactor(lf, params_.twoJf);
+    phys::RegularWave uf = phys::RegularWaveOnGrid(*pf, z1, z2, mu, lf, twoLDotI, chanRad,
+                                                   unbound ? finalEnergy : -params_.bindingEnergy, intervals);
+    if (!unbound) {
+      const double Sf = phys::HybridBoundShift(*pf, z1, z2, mu, lf, twoLDotI, chanRad, params_.bindingEnergy);
+      const double share = (Sf - bf) / (uf.log_derivative - bf);  // the potential's part of the final state at a
+      for (double &v : uf.u) v *= share;
+    }
     it = finalWaves_.emplace(key, std::move(uf)).first;
   }
-  // W(a) in the units of the exterior integrand (fgEvaluate).
-  double sOut;
-  const double mOut = whitfunction()->ScaledMemo(lf, params_.twoJf, chanRad, params_.bindingEnergy, sOut);
-  const double exponent = sOut - params_.log10RefOut;
-  const double whitA = (exponent < -280.0) ? 0.0 : mOut * pow(10.0, exponent);
+  double whitA = 1.0;
+  if (unbound) {
+    // The outgoing wave O_f(r)/O_f(a) continues inside as (L_f - b_f)/(f_f - b_f) u_f(r)/u_f(a).
+    const complex Lf(coulfunction()->OuterShift(lf, params_.twoJf, chanRad, finalEnergy),
+                     coulfunction()->OuterPenetrability(lf, params_.twoJf, chanRad, finalEnergy));
+    t.finalShare = (Lf - bf) / (it->second.log_derivative - bf);
+  } else {
+    // W(a) in the units of the exterior integrand (fgEvaluate).
+    double sOut;
+    const double mOut = whitfunction()->ScaledMemo(lf, params_.twoJf, chanRad, params_.bindingEnergy, sOut);
+    const double exponent = sOut - params_.log10RefOut;
+    whitA = (exponent < -280.0) ? 0.0 : mOut * pow(10.0, exponent);
+  }
   const int L = params_.multLValue;
   t.plain = whitA * phys::InteriorOverlap(ui, it->second, [&](double r) { return pow(r, L); });
   t.withOperator = params_.useChargeFunction
@@ -480,6 +492,23 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
       return (std::real(hsp) * fw + std::imag(hsp) * gw) * flux;
     };
     overlapIntegral = overlap(FWc_, GWc_);
+    // The potential's interior, as in the bound branch below, with the continuation of the outgoing final wave
+    // (Interior).  Not in the standing parts: a line window on such a final channel is refused (LineWindowProblem).
+    const InteriorTerm inside = Interior(theInitialLValue, theFinalLValue, chanRad, outEnergy, finalEnergy);
+    if (inside.on) {
+      complex atSurface;
+      if (isChannelCapture) {
+        const complex Lc(coulfunction()->OuterShift(theInitialLValue, params_.twoJi, chanRad, outEnergy),
+                         coulfunction()->OuterPenetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy));
+        atSurface = complex(0.0, -0.5) *
+                    sqrt(coulfunction()->Penetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy)) * flux * hsp *
+                    complex(coul.G, coul.F) * (Lc - inside.b) / (inside.f - inside.b);
+      } else {
+        atSurface = (std::real(hsp) * coul.F + std::imag(hsp) * coul.G) * flux;
+      }
+      overlapIntegral += atSurface * inside.finalShare * inside.withOperator;
+      overlapCharge = atSurface * inside.finalShare * inside.plain;
+    }
     // the same with the exterior F_f alone and G_f alone (unnormalized), for StandingParts
     overlapF = overlap(complex(rawFF_, 0.0), complex(rawGF_, 0.0));
     overlapG = overlap(complex(rawFG_, 0.0), complex(rawGG_, 0.0));

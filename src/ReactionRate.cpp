@@ -20,8 +20,10 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <time.h>
 
@@ -102,9 +104,46 @@ static const double kRateEpsRel = 1e-7;
  * that a parameter file had moved by more than its cluster (64 widths) was never
  * resolved and dropped out of the rate.
  */
+/*!
+ * The resonances of the entrance pair's own potential, where it also acts inside the channel radius
+ * (interior_boundary): sigma(E) carries them without a level (docs/upgrade/interior_potential.md section 9), so the
+ * grid needs a cluster on each, as on a level.  One per (l, 2j, radius) of the pair's particle channels.
+ */
+static void AddPotentialResonances(const CompoundSystem *compound, int entranceKey,
+                                   std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &resonances) {
+  if (!compound->IsPairKey(entranceKey)) return;
+  const int entrance = compound->GetPairNumFromKey(entranceKey);
+  const PPair *pair = compound->GetPair(entrance);
+  std::set<std::tuple<int, int, double>> done;
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    const JGroup *group = compound->GetJGroup(j);
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      const AChannel *channel = group->GetChannel(ch);
+      if (channel->GetRadType() != 'P' || channel->GetPairNum() != entrance) continue;
+      const int l = channel->GetL(), twoJ = pair->SpinOrbitTwoJ(group->GetJ());
+      if (!pair->GetHybridPotential(l) || !pair->GetHybridPotential(l)->interior_boundary) continue;
+      if (!done.insert(std::make_tuple(l, twoJ, channel->GetRadius())).second) continue;
+      for (const PotentialState &state : InteriorPotentialStates(*pair, l, twoJ, channel->GetRadius(), 1e-3, kRateEnergyHigh))
+        if (state.width > 0.0) resonances.push_back({state.Ec, state.width, state.width, 0});
+    }
+  }
+}
+
+static std::vector<AdaptiveIntegrationGrid::ResonanceInfo> LevelResonances(const CompoundSystem *compound, const LevelState &state,
+                                                                         const LevelInputs &inputs, const Config &configure,
+                                                                         int entranceKey);
+
 static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
 RateResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
                int entranceKey) {
+  std::vector<AdaptiveIntegrationGrid::ResonanceInfo> resonances = LevelResonances(compound, state, inputs, configure, entranceKey);
+  AddPotentialResonances(compound, entranceKey, resonances);
+  return resonances;
+}
+
+static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
+LevelResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+                int entranceKey) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.entranceKey = entranceKey;
   try {

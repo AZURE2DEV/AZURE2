@@ -406,13 +406,11 @@ int WarnInteriorCaptureFinal(const CompoundSystem &compound, const ObservedLevel
         bool anyInside = false;
         for (int l = 0; l <= 12 && !anyInside; l++) anyInside = actsInside(pair, l);
         if (!anyInside) continue;
-        const bool unbound = table.Level(j, la).E > pair->GetSepE() + pair->GetExE();
-        if (!unbound && actsInside(pair, channel->GetL())) continue;
+        if (actsInside(pair, channel->GetL())) continue;
         std::ostringstream msg;
         msg << std::setprecision(6) << "**WARNING: the external-capture final state at E_x = " << table.Level(j, la).E << " MeV (J = "
             << group->GetJ() << ", l = " << channel->GetL() << " of pair " << channel->GetPairNum() << ") gets no capture from the "
-            << "potential's interior: " << (unbound ? "it is unbound (not built for an unbound final state)."
-                                                    : "the pair's potential has no interior_boundary for this l.")
+            << "potential's interior: the pair's potential has no interior_boundary for this l."
             << std::endl
             << "  Its capture is the levels' internal widths and the integral outside the channel radius only." << std::endl;
         configure.outStream << msg.str();

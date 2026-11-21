@@ -157,7 +157,12 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, const Compound
               // every other file keeps its signature.
               {
                 const PPair *fp = compound->GetPair(finalChannel->GetPairNum());
-                if (ecLevel->GetECEnergy() > fp->GetSepE() + fp->GetExE()) hash->Add("unbound final state v1");
+                if (ecLevel->GetECEnergy() > fp->GetSepE() + fp->GetExE()) {
+                  hash->Add("unbound final state v1");
+                  // with the capture from the potential's interior (ECIntegral::Interior) since 2026-11-21
+                  const auto &potential = fp->GetHybridPotential(finalChannel->GetL());
+                  if (potential && potential->interior_boundary) hash->Add("unbound final state, interior v1");
+                }
               }
               hash->Add(pathway.channel_capture ? 1 : 0);
               if (pathway.channel_capture) {

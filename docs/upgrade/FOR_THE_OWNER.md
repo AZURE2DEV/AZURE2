@@ -451,7 +451,9 @@ estimate from the 65 commits read, not a measurement).
   - a final state whose channel has no `interior_boundary` of its own l gets **no interior capture and a warning**;
     the alternative is to refuse the project;
   - **order**: the ¹²C(α,γ) trial with a fixed interior charge first; then the interior charge and the potential's
-    parameters as fit parameters; unbound final states and the rate mode after that.
+    parameters as fit parameters; unbound final states and the rate mode after that (built 2026-11-21 on the
+    owner's word, `interior_potential.md` §11; `line_window` on a final channel with `interior_boundary` is
+    **refused**, the alternative being to build the line shape with the potential's phase).
 
 ## 9. Known defects and limits
 

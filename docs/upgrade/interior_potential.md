@@ -382,7 +382,7 @@ listed in `FOR_THE_OWNER.md` §8.
 | `E_POT_INTERIOR_CHARGE` | built (the word without `interior_boundary`); other multipolarities have no word |
 | `W_POT_INTERIOR_FINAL`, `E_POT_INTERIOR_UNBOUND_FINAL` | one set-up warning for both cases (`WarnInteriorCaptureFinal`, `src/CompoundSystemChecks.cpp`); an unbound final state is **warned about, not refused**: it keeps the capture it had (√(P′/P) and the exterior integral) |
 | `ECTable` interpolates the sum | **not interpolated**: a term whose entrance channel has `interior_boundary` is integrated at every energy (`ECTable::Integral`). The table divides by √P′ or e^{−iφ′}, which vanish or change sign at a pole of R_pot (f = b), and the terms carry the potential's resonances (1/(f − L)): measured 1 % off on the 412 keV wide 1⁻ resonance and of the order of the value near f = b. **This was also wrong at `78587e70`** for the exterior term of such a channel (its primed √P and phase), with the tables on, which is the default |
-| the rate mode | untested (step 4) |
+| the rate mode | untested here; §11 |
 
 **Checks** (§6.6).
 
@@ -406,8 +406,8 @@ listed in `FOR_THE_OWNER.md` §8.
 state as a 0⁺ level, as external capture always did) and a potential record with `interior_boundary` that covers
 l = 0 as well as l = 1; a project without that final state has no computed capture at all.
 
-**Still open.** Unbound final states and the rate mode (step 4); the cross term of §6.2; the theory page's worked
-example. Fitting q and the potential's parameters: §10.
+**Still open.** The cross term of §6.2; the theory page's worked example; the line-shape integration (§11).
+Unbound final states and the rate mode (step 4): §11. Fitting q and the potential's parameters: §10.
 
 ## 10. The interior charge and the potential's parameters in a fit (2026-11-20)
 
@@ -483,3 +483,52 @@ difference every other kind falls back to), a column in the least-squares Jacobi
 It buys a joint MIGRAD with the levels (their covariance with q, MINOS, the sampler). Whether that is worth it
 against §10.2 is the owner's decision; the potential's shape parameters stay with §10.2 either way (§10.1).
 
+## 11. Unbound final states and the rate mode, as built (2026-11-21)
+
+Step 4 of §6.5, on the owner's "Go ahead with unbound final states and rate mode".
+
+**Unbound final state.** A final state above its pair's threshold is a narrow resonance whose wave outside a is
+O_f(r)/O_f(a) (`ECIntegral::IntegrateUnbound`), with the surface amplitude of `ECFinalStateFactors` (√(P′/P) for a
+potential inside the radius, since §8). By (7) the potential part of that wave inside a is
+
+    [(L_f − b_f)/(f_f − b_f)] u_f(r)/u_f(a),    u_f the regular solution at E_f,  L_f = S_f + iP_f of the waves outside,
+
+the form (8) has for the entrance channel. `ECIntegral::Interior` takes the final energy and returns the complex
+factor beside the integrals of u_i u_f/(u_i(a) u_f(a)); the two entrance terms (non-resonant, channel) add it as
+for a bound state, the interior charge included. The phase of the surface amplitude is left out, as it was outside
+the radius: it is of the order of P_f/(f_f − S_f), within the narrow-resonance form. The amplitude file's signature
+is marked for such a final state, so a file of an earlier build is recomputed.
+
+| | |
+|---|---|
+| the set-up warning for an unbound final state | gone; the warning for a final channel without `interior_boundary` of its own l now covers bound and unbound alike |
+| `line_window` (the line shape of a broad final state) on a final channel with `interior_boundary` | **refused** (`LineWindowProblem`). The line shape takes F, G and the one-level phase of the waves outside; with a potential inside, the phase and the interior are the potential's too. Before this commit it ran, with the capture from outside the radius alone. Building it needs the scattering state with R_pot: not done |
+| the standing parts (`StandingParts`) | without the interior; read by the line shape alone, which is refused |
+
+**The rate mode.** The interior terms were already computed in the rate mode (the fixed radial grid of the
+exterior integral sets the Whittaker scale `Interior` reads). What was missing is in the energy grid: it had a
+cluster of points on every level and none on a resonance of the potential, which σ(E) carries without a level. The
+412 keV wide 1⁻ resonance of the KTF potential lay between backbone nodes (5 % steps) and the rate of
+`tests/interior_capture/models/direct.azr` was 0.12 % low at T9 = 3 and 0.2 % low at 5 and 10. `RateResonances`
+(`src/ReactionRate.cpp`) now adds the states `InteriorPotentialStates` finds for the entrance pair's channels (zeros
+of f − S on a 50 keV grid up to 50 MeV; those wider than half their energy are not counted, as in the level
+warning). A project without `interior_boundary` gets the grid it had.
+
+**Checks.**
+
+- `upgrade_interior_capture` (e): the interior part of the non-resonant and of the channel term for E_f = 0.3, 1.0
+  and 2.5 MeV over the same for the bound final state of 7.16 MeV, 48 complex ratios against `make_reference.py`
+  (scipy, mpmath): within 10⁻⁴; linear in the interior charge.
+- `interior_capture` (e): `models/unbound.azr`, E1 from l = 2 and 4 into the potential's own l = 3 resonance
+  (E_cm 3.261 MeV, 173 keV at 5.35 fm) given as a 3⁻ level of that width. The cross section at 4.0 fm is that at
+  5.35 fm to 2.3 %, at 6.5 fm to 16 % (limits 5 % and 20 %); without the final channel's interior the radii differ
+  by a factor 2.6. This is as good as the narrow-resonance form is for a state 5 % of its energy wide, with the
+  level held fixed while the potential's state moves by 15 keV with the radius: it is not a test to 10⁻⁴.
+  (f): the `line_window` refusal.
+- `interior_capture` (g): the rate at T9 = 0.5 to 10 against N_A⟨σv⟩ integrated from a dense extrapolation
+  (`tests/reaction_rate/truth.py`): 9 × 10⁻⁶ (limit 10⁻⁴); 2 × 10⁻³ before the clusters.
+- `tests/upgrade/predictions.txt` gains the new model and no existing line changes.
+
+**Not checked.** An unbound final state in the exact (finite-wavelength) form against an independent number (the
+reference is long-wavelength; the operator enters `Interior` as it does for a bound state); the rate of a project
+with an unbound final state.

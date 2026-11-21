@@ -178,23 +178,31 @@ class ECIntegral {
   bool IntegrateUnbound(double chanrad, double finalEnergy);
   /*!
    * The capture from the potential's interior (docs/upgrade/interior_potential.md section 6), for a pathway whose
-   * entrance and final channel both have a potential with an interior boundary constant and whose final state is
-   * bound: the radial integrals over 0 .. a of [u_i(r)/u_i(a)] w_f(r), w_f = W(a) [(S_f - b_f)/(f_f - b_f)] u_f(r)/u_f(a)
-   * the final state's potential part (W in the scaled units of FW/GW), `withOperator` with the operator of the
-   * exterior integrand and `plain` with r^L alone (the interior charge's term).  f and b are the entrance channel's.
+   * entrance and final channel both have a potential with an interior boundary constant: the radial integrals over
+   * 0 .. a of [u_i(r)/u_i(a)] w_f(r), `withOperator` with the operator of the exterior integrand and `plain` with r^L
+   * alone (the interior charge's term).  w_f is the potential part of the final state inside a, continued from the
+   * exterior wave the pathway integrates:
+   *   bound      W(a) [(S_f - b_f)/(f_f - b_f)] u_f(r)/u_f(a)    (W in the scaled units of FW/GW; finalShare = 1);
+   *   unbound    [(L_f - b_f)/(f_f - b_f)] u_f(r)/u_f(a), the continuation of O_f(r)/O_f(a) (IntegrateUnbound), with
+   *              u_f at the final energy E_f > 0 and L_f = S_f + i P_f of the waves outside a: the integrals are
+   *              those of u_f(r)/u_f(a) and `finalShare` is the complex factor.
+   * f and b are the entrance channel's.
    */
   struct InteriorTerm {
     bool on = false;
     double f = 0.0, b = 0.0;
     double withOperator = 0.0, plain = 0.0;
+    complex finalShare = complex(1.0, 0.0);
   };
-  InteriorTerm Interior(int li, int lf, double chanRad, double outEnergy);
-  /// The final state's wave of Interior, kept between energies: its key and (S_f - b_f)/(f_f - b_f) times u_f/u_f(a).
+  /// \p finalEnergy: the final state's energy above its pair's threshold when it is unbound (> 0), else unused.
+  InteriorTerm Interior(int li, int lf, double chanRad, double outEnergy, double finalEnergy = 0.0);
+  /// The final state's wave of Interior, kept between energies: its key (energy: -B bound, E_f unbound) and
+  /// u_f/u_f(a), for a bound state times (S_f - b_f)/(f_f - b_f).
   struct FinalWaveKey {
     int lf, twoJf, intervals;
-    double binding;
+    double energy;
     bool operator<(const FinalWaveKey &o) const {
-      return std::tie(lf, twoJf, intervals, binding) < std::tie(o.lf, o.twoJf, o.intervals, o.binding);
+      return std::tie(lf, twoJf, intervals, energy) < std::tie(o.lf, o.twoJf, o.intervals, o.energy);
     }
   };
   std::map<FinalWaveKey, azure2::physics::RegularWave> finalWaves_;
