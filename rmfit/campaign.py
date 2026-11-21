@@ -133,7 +133,8 @@ class Campaign:
         if missing:
             raise ValueError(f"vector lacks {len(missing)} base parameters: " + ", ".join(str(k) for k in list(missing)[:5]))
         xb = take(x, keys, base_keys, self._base_x0())
-        sc, _ = verify(self.base_azr, xb, self.flags, workdir=self.vdir, name="verify", objective=self.objective)
+        sc, _ = verify(self.base_azr, xb, self.flags, workdir=self.vdir, name="verify", objective=self.objective,
+                       keys=base_keys)
         cid = self.ledger.add_candidate(self.structure_id, xb, base_keys, move=move, parent=parent, status="verified")
         self.ledger.record(cid, sc, "verified", evaluator="single")
         self.log(f"verified candidate {cid}: objective {sc.objective:.3f} (chi2 {sc.chi2:.3f} + pen {sc.penalty:.3f}) {note}"
@@ -1614,7 +1615,7 @@ class Campaign:
                         policy=self.policy, max_nfev=global_nfev, log=self.log)
             self.log(f"control polish (level off): {fC.start_objective:.3f} -> {fC.objective:.3f} ({fC.status})")
             # 4. verify on a single session of the variant
-            sc, keys2 = verify(path, take(fB.x, ev2.keys, ev2.keys, ev2.x0), self.flags, objective=self.objective,
+            sc, keys2 = verify(path, fB.x, self.flags, objective=self.objective, keys=ev2.keys,
                                workdir=self.vdir, name=f"verify_add_{tag}")
             ncid = self.ledger.add_candidate(sid2, take(fB.x, ev2.keys, keys2, np.zeros(len(keys2))), keys2,
                                              move=dict(kind="level_add", jpi=best.jpi, energy=cand.energy), parent=cid,
@@ -1876,7 +1877,7 @@ class Campaign:
             s0 = ev2.score(x2)
             fr = polish(ev2, x2, bounds=default_bounds(ev2, x2, self.policy), policy=self.policy,
                         max_nfev=nfev, log=self.log)
-            sc, keys2 = verify(path, take(fr.x, ev2.keys, ev2.keys, ev2.x0), self.flags, objective=self.objective,
+            sc, keys2 = verify(path, fr.x, self.flags, objective=self.objective, keys=ev2.keys,
                                workdir=self.vdir, name=f"verify_off_{tag}")
             rest_before = obj - own_chi2
             extra = rest_before - sc.objective
@@ -1957,7 +1958,7 @@ class Campaign:
             xC = take(x, keys, evC.keys, evC.x0)
             frC = polish(evC, xC, bounds=default_bounds(evC, xC, self.policy), policy=self.policy,
                          max_nfev=nfev, log=self.log)
-            scC, _ = verify(self.base_azr, frC.x, self.flags, objective=self.objective,
+            scC, _ = verify(self.base_azr, frC.x, self.flags, objective=self.objective, keys=evC.keys,
                             workdir=self.vdir, name="verify_rm_control")
         finally:
             evC.close()
@@ -1993,7 +1994,7 @@ class Campaign:
                 x2 = take(x, keys, ev2.keys, ev2.x0)
                 fr = polish(ev2, x2, bounds=default_bounds(ev2, x2, self.policy), policy=self.policy,
                             max_nfev=nfev, log=self.log)
-                sc, _ = verify(path, fr.x, self.flags, objective=self.objective,
+                sc, _ = verify(path, fr.x, self.flags, objective=self.objective, keys=ev2.keys,
                                workdir=self.vdir, name=f"verify_rm_{tag}")
             finally:
                 ev2.close()
