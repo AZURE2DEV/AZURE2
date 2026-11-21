@@ -946,7 +946,9 @@ class Campaign:
             try:
                 var = deactivate_level_variant(azr_inc, os.path.join(cdir, "base.azr"), jpi, e_true,
                                                output_dir=os.path.join(cdir, "output"))
-                child = Campaign.init(cdir, var["path"], flags=self.flags, nshards=self.nshards, policy=self.cfg.get("policy"),
+                # with the incumbent's .sav: the baked .azr carries the levels but every free norm and shift at its nominal
+                # value (bake writes those to the .sav only; campaigns initialised from the .azr alone started at nominal norms)
+                child = Campaign.init(cdir, var["path"], sav=sav_inc, flags=self.flags, nshards=self.nshards, policy=self.cfg.get("policy"),
                                       search=self.cfg.get("search"), objective=obj_cfg or None, cov_reference=covref,
                                       note=f"recall child of {self.dir}: {label} removed")
                 try:
@@ -1089,6 +1091,9 @@ class Campaign:
             os.makedirs(wdir, exist_ok=True)
             var = template_variant(self.base_azr, os.path.join(wdir, f"templates_{tag}.azr"), c["ex"],
                                    jpis=jpis, output_dir=os.path.join(wdir, "output"))
+            if var.get("skipped"):
+                self.log(f"  J^pi not screened at Ex {c['ex']:.4f}: no particle channel with Gamma_W >= "
+                         f"{var['min_open_ev']:g} eV (" + ", ".join(f"{j} {g:.2g} eV" for j, g in var["skipped"].items()) + ")")
             if grid:
                 nchg = self.set_grid_setting(var["path"], float(grid[0]), float(grid[1]))
                 if nchg:
@@ -1928,6 +1933,14 @@ class Campaign:
             for k in ev.keys:
                 if k.kind == "width" and k.level:
                     n_by_jpi.setdefault(level_group(k.level), set()).add(str(k.level))
+            # the hard-sphere term is carried by ANY active level of the group, fixed ones included: counting only the
+            # levels with free widths called a spurious added 6+ "the only level of 6+" on a windowed model whose other
+            # 6+ levels are fixed.  Single-nucleus labels only ("J^pi#n"); a
+            # multi-nucleus label ("...@23Ne") keeps the free-level count.
+            from .backend import AzrModel
+            n_active = {}
+            for lv in AzrModel.from_file(self.base_azr).active_levels:
+                n_active[lv.jpi] = n_active.get(lv.jpi, 0) + 1
             npts = max(sum(b - a for _, (a, b) in ev.row_ranges), 1)
             s2 = obj / npts
         finally:
@@ -1954,7 +1967,11 @@ class Campaign:
         for row in rows[:max(top, 0)]:
             lvl = str(row["level"])
             jpi = lvl.split("#")[0]
-            if keep_last_of_jpi and len(n_by_jpi.get(level_group(lvl), ())) <= 1:
+            grp = level_group(lvl)
+            n_grp = len(n_by_jpi.get(grp, ()))
+            if "@" not in str(lvl):
+                n_grp = max(n_grp, n_active.get(str(grp), 0))
+            if keep_last_of_jpi and n_grp <= 1:
                 self.log(f"  {lvl}: the only level of {jpi}; kept (it carries the group's hard-sphere term)")
                 continue
             energy = self._level_energy(lvl)
@@ -2042,6 +2059,9 @@ class Campaign:
         out_dir = os.path.abspath(out_dir)
         os.makedirs(out_dir, exist_ok=True)
         from .model import link_data_dirs
+        # from the base model's own directory first (a base outside the campaign directory
+        # has its data/ there, not in the campaign), then from the campaign directory as before
+        link_data_dirs(self.base_azr, out_dir)
         link_data_dirs(self.base_azr, out_dir, src_dir=self.dir)
         base_name = os.path.basename(self.base_azr)
         base_copy = os.path.join(out_dir, base_name)
@@ -2094,6 +2114,12 @@ class Campaign:
                                                else "a different sign basin"))
         # the new campaign: same config, its baseline = the perturbed, polished vector (verified there)
         cfg = dict(self.cfg); cfg["base_azr"] = base_name
+        # a fixed relvector covariance model travels with the objective: the sibling must score with the SAME reference
+        # (campaign.json named cov_reference.npz, the file stayed behind and the
+        # sibling's first session stopped with FileNotFoundError)
+        if self.objective.cov_reference:
+            shutil.copy2(self.objective.cov_reference, os.path.join(out_dir, "cov_reference.npz"))
+            cfg["objective"] = dict(cfg.get("objective") or {}, cov_reference="cov_reference.npz")
         cfg["perturbation"] = dict(parent=self.dir, parent_candidate=cid, parent_objective=obj,
                                    flips=[m.description for m in chosen], seed=seed, jitter=jitter, e_kick=e_kick)
         with open(os.path.join(out_dir, "campaign.json"), "w") as f:

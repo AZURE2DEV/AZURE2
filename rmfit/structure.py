@@ -140,11 +140,46 @@ def resolve_jpis(model, jpis: Optional[Sequence[str]] = None, log=None) -> List[
         raise ValueError(f"J^pi {bad} cannot couple to any particle pair of the model ({spins}); "
                          f"the model's own groups are {default_jpis(mdl)}")
     if log is not None:
-        new = [j for j in out if not mdl.find(jpi=j)]
+        new = [j for j in out if not [lv for lv in mdl.find(jpi=j) if getattr(lv, "active", True)]]
         log(f"  J^pi groups ({'given' if given else 'the model own, default'}): {' '.join(out)}"
             + (f"; NEW groups {new} add partial waves the model does not have (hard-sphere terms change "
                f"the elastic channels even at zero width)" if new else ""))
     return out
+
+
+def channel_wigner_ev(c, energy: float, L: Optional[int] = None) -> Optional[float]:
+    """Wigner-limit width ``Gamma_W = 2 P_L * 3 hbar^2 / (2 mu a^2)`` (eV) of channel ``c`` (a level
+    channel or a pair template of the backend model) at excitation energy ``energy``, computed OFFLINE
+    with pyazr's penetrability.  0.0 for a channel closed at ``energy``; None when it cannot be
+    computed (missing masses, penetrability failure).  ``L`` overrides the channel's own L (a pair
+    template carries none).  Factored out of ``omitted_open_channels`` 2026-11-20 for levelscan."""
+    if PYAZR3:
+        from pyazr.physics import penetrability, wigner_limit
+    else:
+        from pyazr.transform import penetrability, HBARC, UCONV
+    L = int(round(c.L)) if L is None else int(L)
+    try:
+        if PYAZR3:
+            m1, m2 = c.M1, c.M2
+            e_rel = float(energy) - (c.sep_energy + c.excitation)
+            if m1 <= 0.0 or m2 <= 0.0:
+                return None
+            if e_rel <= 0.0:
+                return 0.0
+            a = c.channel_radius
+            P = float(penetrability(L, c.Z1, c.Z2, m1, m2, a, e_rel))
+            return 2.0 * P * float(wigner_limit(m1, m2, a)) * 1e6
+        m1, m2 = c._get("m1", float), c._get("m2", float)
+        e_rel = float(energy) - (c._get("sepE", float) + c._get("e2", float))
+        if m1 <= 0.0 or m2 <= 0.0:
+            return None
+        if e_rel <= 0.0:
+            return 0.0
+        mu, a = m1 * m2 / (m1 + m2), c._get("chRad", float)
+        P = penetrability(L, c._get("z1", int), c._get("z2", int), mu, a, e_rel)
+        return 2.0 * P * 3.0 * HBARC ** 2 / (2.0 * mu * UCONV * a * a) * 1e6
+    except Exception:
+        return None
 
 
 def omitted_open_channels(existing, named, energy: float, seed_ev: float = 1.0,
@@ -157,10 +192,6 @@ def omitted_open_channels(existing, named, energy: float, seed_ev: float = 1.0,
     does not survive bake's write/re-read; two keys were once lost).  Each comes
     back free with a tiny seed ``min(seed_ev, 1% of Gamma_W)`` (theta^2 <= 0.01): enough to
     leave the zero stationary point, not a guess at the strength."""
-    if PYAZR3:
-        from pyazr.physics import penetrability, wigner_limit
-    else:
-        from pyazr.transform import penetrability, HBARC, UCONV
     have = {(int(c["pair"]), int(c["L"]), round(float(c["S"]), 3)) for c in named}
     out, seen = [], set()
     for lv in existing:
@@ -171,28 +202,9 @@ def omitted_open_channels(existing, named, energy: float, seed_ev: float = 1.0,
             seen.add(key)
             if bool(getattr(c, "is_photon", False)):
                 continue
-            if PYAZR3:
-                m1, m2 = c.M1, c.M2
-                e_rel = float(energy) - (c.sep_energy + c.excitation)
-                if e_rel <= 0.0 or m1 <= 0.0 or m2 <= 0.0:
-                    continue
-                a = c.channel_radius
-                try:
-                    P = float(penetrability(key[1], c.Z1, c.Z2, m1, m2, a, e_rel))
-                    gw_ev = 2.0 * P * float(wigner_limit(m1, m2, a)) * 1e6
-                except Exception:
-                    continue
-            else:
-                m1, m2 = c._get("m1", float), c._get("m2", float)
-                e_rel = float(energy) - (c._get("sepE", float) + c._get("e2", float))
-                if e_rel <= 0.0 or m1 <= 0.0 or m2 <= 0.0:
-                    continue
-                mu, a = m1 * m2 / (m1 + m2), c._get("chRad", float)
-                try:
-                    P = penetrability(key[1], c._get("z1", int), c._get("z2", int), mu, a, e_rel)
-                except Exception:
-                    continue
-                gw_ev = 2.0 * P * 3.0 * HBARC ** 2 / (2.0 * mu * UCONV * a * a) * 1e6
+            gw_ev = channel_wigner_ev(c, energy, L=key[1])
+            if not gw_ev:                                  # closed (0.0) or not computable (None)
+                continue
             if not (gw_ev >= margin * dead_channel_ev):
                 continue
             out.append(dict(pair=key[0], L=key[1], S=float(c.S), gamma=min(seed_ev, 0.01 * gw_ev),
@@ -229,6 +241,13 @@ def effective_k(params: Sequence[dict], seeded, frac: float = 0.01, theta2_floor
     return dict(k_pattern=k_pattern, k_effective=k_pattern + len(used), k_all=len(params), used=used)
 
 
+def channel_threshold(c) -> float:
+    """Excitation energy (MeV) at which a channel opens: its pair's separation energy plus the residual excitation."""
+    if PYAZR3:
+        return float(c.sep_energy) + float(getattr(c, "excitation", 0.0) or 0.0)
+    return float(c._get("sepE", float)) + float(c._get("e2", float) or 0.0)
+
+
 def add_level_variant(base_azr: str, path: str, cand: LevelCandidate, jpi: str,
                       output_dir: Optional[str] = None, seed_fraction: float = 0.05,
                       seed_omitted: Optional[bool] = None) -> dict:
@@ -236,6 +255,12 @@ def add_level_variant(base_azr: str, path: str, cand: LevelCandidate, jpi: str,
     ``jpi``.  Channels named in the candidate get their gamma; the group's
     other channels are inert.  If ``jpi`` has no level yet, the lowest
     partial waves into pairs 1 and 2 define the group with small seeds.
+
+    Only channels OPEN at the candidate's energy are seeded (2026-11-20): a physical width on a closed channel makes
+    the Brune transformation fail ("Denominator less than zero while transforming"), the level comes back with no free
+    amplitude and the scan dropped it silently (a 1- seeded on a pair that opens
+    2.5 MeV higher).  With an existing group the lowest wave of its first two open pairs (key order) is seeded -- pairs 1 and
+    2 whenever both are open, as before; ValueError when no pair of the group is open at that energy.
 
     ``seed_omitted`` (2026-09-20; default None = read the environment variable
     ``RMFIT_SEED_OMITTED``, unset/0 = the behaviour above): also add the group's OTHER
@@ -251,9 +276,16 @@ def add_level_variant(base_azr: str, path: str, cand: LevelCandidate, jpi: str,
     mdl = AzrModel.from_file(base_azr)
     resolve_jpis(mdl, [jpi])                      # raises for a J^pi no particle pair can couple to (2026-11-04)
     J, par = jpi_parse(jpi)
-    existing = mdl.find(jpi=jpi)
+    # ACTIVE levels only: an inactive level gets no parameters and no place in the engine's numbering, so counting it
+    # labelled the new level one past its real key ("1-#9" for the engine's 1-#8) and the scan found no free amplitude
+    # (a deleted level left in the file inactive)
+    existing = [lv for lv in mdl.find(jpi=jpi) if getattr(lv, "active", True)]
     if existing:
         allowed = [(c.pair, c.L, c.S) for c in existing[0].channels]
+        thr = {}
+        for c in existing[0].channels:                # a photon channel is never closed (seeded as before)
+            t = -1e9 if bool(getattr(c, "is_photon", False)) else channel_threshold(c)
+            thr[c.pair] = min(thr.get(c.pair, 1e9), t)
         chans = []
         for spec in cand.channels:
             key = (int(spec["pair"]), int(spec["L"]), float(spec["S"]))
@@ -261,20 +293,28 @@ def add_level_variant(base_azr: str, path: str, cand: LevelCandidate, jpi: str,
             if match:
                 chans.append(dict(pair=key[0], L=key[1], S=key[2], gamma=float(spec.get("gamma", spec.get("gamma_eV", spec.get("gamma_ev", 0.0)))), fixed=False))
         if not chans:
-            # seed the lowest allowed wave of pairs 1 and 2 present in the group
-            for pair in (1, 2):
+            # seed the lowest allowed wave of the group's first two pairs OPEN at the candidate energy
+            open_pairs = [p for p in sorted(thr) if thr[p] < float(cand.energy)][:2]
+            for pair in open_pairs:
                 ch = sorted([a for a in allowed if a[0] == pair], key=lambda a: a[1])
                 if ch:
                     chans.append(dict(pair=ch[0][0], L=ch[0][1], S=ch[0][2], gamma=1000.0, fixed=False))
+            if not chans:
+                raise ValueError(f"no channel of the {jpi} group is open at {cand.energy} MeV (thresholds "
+                                 + ", ".join(f"pair {p} {thr[p]:.3f}" for p in sorted(thr) if thr[p] > -1e8) + ")")
     else:
         tmpl = mdl.levels[0].channels[0]
         chans = []
         for pair in (1, 2):
             c = mdl.pair_template(pair) if PYAZR3 else mdl._pair_template(pair)
+            if not bool(getattr(c, "is_photon", False)) and channel_threshold(c) >= float(cand.energy):
+                continue                                  # closed at the candidate energy: never seed it
             for L, S in lowest_L(J, par, c.J1, c.parity1, c.J2, c.parity2)[:1]:
                 g = next((float(s.get("gamma", s.get("gamma_eV", s.get("gamma_ev", 0.0)))) for s in cand.channels
                           if int(s["pair"]) == pair and int(s["L"]) == L), 1000.0)
                 chans.append(dict(pair=pair, L=L, S=S, gamma=g, fixed=False))
+        if not chans:
+            raise ValueError(f"no channel of pairs 1-2 can carry {jpi} at {cand.energy} MeV (closed or no allowed wave)")
     seeded = []
     if seed_omitted and existing:
         seeded = omitted_open_channels(existing, chans, cand.energy)
@@ -492,6 +532,7 @@ def scan_jpi_on_window(base_azr: str, workdir: str, cand: LevelCandidate, flags:
             info = add_level_variant(win, path, cand, jpi, output_dir=os.path.join(workdir, f"output_{tag}"))
         except Exception as err:
             results.append(ScanResult(jpi, "", np.inf, np.inf, None, "crashed", f"variant: {err}"))
+            log(f"  {jpi}: not testable here ({str(err)[:160]})")
             continue
         try:
             with _open(path, workdir, flags, nshards, f"win_{tag}", objective=objective) as ev:
@@ -500,6 +541,7 @@ def scan_jpi_on_window(base_azr: str, workdir: str, cand: LevelCandidate, flags:
                 own = [j for j, k in enumerate(ev.keys) if k.kind == "width" and k.level == lvl and x[j] != 0]
                 if not own:
                     results.append(ScanResult(jpi, "", np.inf, np.inf, None, "crashed", "no free amplitude"))
+                    log(f"  {jpi}: the added level has no free non-zero amplitude (a failed width transformation?)")
                     continue
                 n = len(own)
                 # only the first 16 patterns are screened (below): generate those, not all 2^(n-1).  Building the full list
