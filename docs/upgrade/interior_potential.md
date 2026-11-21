@@ -529,6 +529,31 @@ warning). A project without `interior_boundary` gets the grid it had.
   (`tests/reaction_rate/truth.py`): 9 × 10⁻⁶ (limit 10⁻⁴); 2 × 10⁻³ before the clusters.
 - `tests/upgrade/predictions.txt` gains the new model and no existing line changes.
 
-**Not checked.** An unbound final state in the exact (finite-wavelength) form against an independent number (the
-reference is long-wavelength; the operator enters `Interior` as it does for a bound state); the rate of a project
-with an unbound final state.
+**The two cases left open on 2026-11-21, done the same day** (the owner's "go ahead with the two unchecked cases").
+
+- *An unbound final state in the exact (finite-wavelength) form.* `make_reference.py` has the 48 ratios of check (e)
+  again with the operator r q(r, E_γ), q of `EffectiveCharge.cpp` re-coded (G as a quadrature of scipy's j₁, not the
+  engine's series) at each final state's own photon energy, without and with the convection current (rows
+  `unbound_exact`, `unbound_conv`). The charge numbers of α + ¹²C nearly cancel, so these ratios are less than half the
+  long-wavelength ones: the check can fail. `upgrade_interior_capture` (e): within 1.0 × 10⁻⁵ and 1.5 × 10⁻⁵ (limit
+  10⁻⁴). The operator's formula is the engine's; what is independent is its evaluation and its place in the integral.
+- *The rate of a project with an unbound final state* (`models/unbound.azr`, binary of `fe2270ab`, queue job 1795476,
+  record in the archive, `AZURE2_code_audit/11-16-26_upgrade_merge_newer/unbound_rate_check/`). The cross section on
+  the rate's own grid equals a dense extrapolation (0.4 % steps in E − E_f) to 1.7 × 10⁻⁴ at every common point,
+  so the interior terms are the same in both modes. The **rate does not agree to 10⁻⁴**: it is 1.8 % (T9 = 0.5) to
+  0.4 % (T9 = 10) below the dense integral, and no test was added, for a reason that is not the interior's:
+
+  - in the narrow-resonance form the cross section into an unbound final state rises as 1/E_γ toward E = E_f
+    (σ E_γ = 1.74 × 10⁻¹² b MeV, constant to 1 % over the first 25 keV): the exterior integral of two oscillating
+    waves grows as 1/(k_i − k_f)², the soft-photon limit of bremsstrahlung;
+  - `ECIntegral::IntegrateUnbound` gives up where 40/(k_i − k_f) exceeds 50,000 fm, here below E_γ = 7.6 keV, and
+    the cross section steps from 2.3 × 10⁻¹⁰ b to 10⁻⁵⁰ b there;
+  - the rate is therefore ∫ e^(−E/kT) dE_γ/E_γ from that step, logarithmic in a numerical limit: with the step at
+    twice the photon energy the dense integral is 41 % lower at T9 = 0.5, 23 % at 3 and 9 % at 10. The 1.8 % above
+    is where the rate grid's points happen to bracket the step (6.6 and 7.9 keV).
+
+  The same step and the same σ E_γ come out with `interior_boundary` taken off the potential
+  (`rate_no_interior/`): this is the exterior integral of the stage-1 unbound final state, not the interior term.
+  It was not run on the installed dev engine. For the owner: the rate of capture into an unbound final state in the
+  narrow form is not a number to quote; whether the rate mode should warn, refuse, or take a physical cut (the
+  final state's width, a detector threshold) is his decision (`FOR_THE_OWNER.md` §9).

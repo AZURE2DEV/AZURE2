@@ -459,6 +459,13 @@ estimate from the 65 commits read, not a measurement).
 
 Each checked against the start commit of this page, by a run (R) or by reading the code (C):
 
+- **The rate of capture into an unbound final state depends on a numerical limit** (R, 2026-11-21,
+  `interior_potential.md` §11). In the narrow-resonance form σ rises as 1/E_γ toward E = E_f and
+  `ECIntegral::IntegrateUnbound` stops where 40/(k_i − k_f) > 50,000 fm (E_γ = 7.6 keV for α + ¹²C at 3.26 MeV), so
+  the rate is logarithmic in that limit: 9 to 41 % for a factor two in it, T9 = 10 to 0.5. With and without an
+  interior potential alike. Cross sections away from E_f are not affected. Open for the owner: a warning in the rate
+  mode, a refusal, or a physical cut.
+
 - Capture into a final state above a particle threshold is refused, not computed (R: T1 with its 3/2⁻ final state
   moved to 2.5 MeV, S_p = 1.943 MeV, is refused by `--validate`, the run and pyazr with `E_FINAL_STATE_UNBOUND`):
   with external capture, a final state at or above the threshold of a pair with a channel in its J^π group (the

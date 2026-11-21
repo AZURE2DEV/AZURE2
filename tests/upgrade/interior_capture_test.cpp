@@ -15,7 +15,10 @@
 //      Z1 m2/M - Z2 m1/M doubles the interior part;
 //  (e) an unbound final state (a narrow resonance at E_f = 0.3, 1.0 and 2.5 MeV): the interior part of the
 //      non-resonant and of the channel term over the interior part of the same term for the bound final state of
-//      7.16 MeV (complex); and the interior charge is linear there as well.
+//      7.16 MeV (complex); and the interior charge is linear there as well.  The same in the exact
+//      (finite-wavelength) form, without and with the convection current: the operator at the photon energy of each
+//      final state, which is where the two forms differ (the charge numbers of alpha + 12C nearly cancel, so the
+//      exact rows are tens of per cent from the long-wavelength ones).
 //
 //   interior_capture_test <interior_bound.azr> <reference.csv>      (ctest: upgrade_interior_capture)
 #include <cmath>
@@ -94,6 +97,9 @@ int main(int argc, char **argv) {
   Config lw(cfg), exact(cfg);
   lw.paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
   exact.paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
+  Config exactNoConvection(exact);
+  exact.ecConvectionCurrent = true;
+  exactNoConvection.ecConvectionCurrent = false;
   auto e1 = [&](const PPair &pair, const Config &c, double a, double E, double B, bool channel) {
     ECIntegral ec(&pair, c, a);
     ec.SetRelativeTolerance(1e-6);
@@ -117,11 +123,12 @@ int main(int argc, char **argv) {
     if (kind == "bound") { B0 = B; continue; }
     const PPair with = makePair(b, 1, 0, true), without = makePair(b, 1, 0, false);
     double d;
-    if (kind == "unbound") {  // B = -E_f; both terms against the one reference number
+    if (kind.compare(0, 7, "unbound") == 0) {  // B = -E_f; both terms against the one reference number
+      const Config &form = kind == "unbound" ? lw : kind == "unbound_conv" ? exact : exactNoConvection;
       d = 0.0;
       for (bool channel : {false, true}) {
-        const cplx unbound = e1(with, lw, a, E, B, channel) - e1(without, lw, a, E, B, channel);
-        const cplx bound = e1(with, lw, a, E, 7.16, channel) - e1(without, lw, a, E, 7.16, channel);
+        const cplx unbound = e1(with, form, a, E, B, channel) - e1(without, form, a, E, B, channel);
+        const cplx bound = e1(with, form, a, E, 7.16, channel) - e1(without, form, a, E, 7.16, channel);
         d = std::fmax(d, std::abs(unbound / bound - cplx(re, im)) / std::abs(cplx(re, im)));
       }
     } else if (kind == "total") {
@@ -145,6 +152,12 @@ int main(int argc, char **argv) {
             " (limit 1e-4)", count["closed"] == 18 && worst["closed"] < 1e-4);
   check("(e) unbound final state, the interior part over that of the bound one, both terms: worst " + num(worst["unbound"]) +
             " of " + std::to_string(count["unbound"]) + " (limit 1e-4)", count["unbound"] == 48 && worst["unbound"] < 1e-4);
+  check("(e) the same in the exact form without the convection current: worst " + num(worst["unbound_exact"]) + " of " +
+            std::to_string(count["unbound_exact"]) + " (limit 1e-4)",
+        count["unbound_exact"] == 48 && worst["unbound_exact"] < 1e-4);
+  check("(e) the same in the exact form with the convection current: worst " + num(worst["unbound_conv"]) + " of " +
+            std::to_string(count["unbound_conv"]) + " (limit 1e-4)",
+        count["unbound_conv"] == 48 && worst["unbound_conv"] < 1e-4);
   check("(b) the non-resonant term at 4.0 and 6.5 fm over 5.35 fm: worst " + num(worst["total"]) + " of " +
             std::to_string(count["total"]) + " (limit 1e-4)", count["total"] == 48 && worst["total"] < 1e-4);
   check("(b) exact form, the potential's bound state: independent of the radius to " + num(worstExact) + " (limit 1e-4)",

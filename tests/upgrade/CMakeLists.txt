@@ -53,7 +53,7 @@ target_link_libraries(interior_capture_test PRIVATE AZURE2Core)
 add_test(NAME upgrade_interior_capture
          COMMAND interior_capture_test ${CMAKE_CURRENT_SOURCE_DIR}/interior_bound/interior_bound.azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/interior_capture/reference.csv)
-set_tests_properties(upgrade_interior_capture PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+set_tests_properties(upgrade_interior_capture PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
 # The same through the whole engine: the potential model's direct capture does not depend on the channel radius
 # (tests/interior_capture/check.sh).
 add_test(NAME interior_capture COMMAND bash ${CMAKE_SOURCE_DIR}/tests/interior_capture/check.sh $<TARGET_FILE:AZURE2>)

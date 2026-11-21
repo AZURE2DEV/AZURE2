@@ -31,10 +31,22 @@ a term is that of the bound final state of B = 7.16 MeV at the same a, b and E t
   (L_f - b)/(f_f - b) int_0^a [u_i/u_i(a)] [u_f/u_f(a)] r dr  /  I_in(B = 7.16)                    (complex),
 
 the same for the non-resonant and the channel term (column B_MeV holds -E_f).
+
+Rows "unbound_exact" and "unbound_conv": the same ratio in the exact (finite-wavelength) form, where the operator r
+becomes q(r, E_gamma) r with E_gamma = E - E_f in the numerator and E + 7.16 MeV in the denominator,
+
+  q = 3/(k r) { Z1 G(c1 k r) - Z2 G(c2 k r)  [+ sqrt(2) ( Z1 hbar c/(2 m1) w(c1 k r) - Z2 hbar c/(2 m2) w(c2 k r) ) / r ] },
+  G(x) = int_0^x j_1(t)/t dt,   w(x) = (2 j_0(x) - j_2(x))/(3 sqrt 2) - sqrt(2) G(x)/x,   k = E_gamma/(hbar c),
+
+c1 = m2/M, c2 = m1/M (EffectiveCharge.cpp; its constant sqrt(alpha hbar c) drops out).  The bracket is the convection
+current of l_i = 1 -> l_f = 0, in "unbound_conv" alone.  G is a quadrature of scipy's j_1 here, not the engine's series
+or closed form.  The charge numbers nearly cancel in this pair (Z1 c1 - Z2 c2 = -0.001), so the finite-wavelength terms
+are of the size of the leading one: the rows differ from "unbound" by tens of per cent.
 """
 import numpy as np, mpmath as mp
 from scipy.integrate import solve_ivp, quad
 from scipy.optimize import brentq
+from scipy.special import spherical_jn
 
 HBARC = 197.3269804; ALPHA = 1 / 137.035999084; U = 931.49410242
 MU = 4.0026 * 12.0 / 16.0026 * U  # the masses of tests/upgrade/interior_bound/interior_bound.azr
@@ -144,3 +156,38 @@ for Ef in (0.3, 1.0, 2.5):
                 bound = wf(a)[0] * (Sf - b) / (ff - b) * integ(lambda r: ui(r)[0] / ui(a)[0] * uf(r)[0] / uf(a)[0] * r, RMIN, a)
                 c = (Lf - b) / (ffp - b) * integ(lambda r: ui(r)[0] / ui(a)[0] * ufp(r)[0] / ufp(a)[0] * r, RMIN, a) / bound
                 print(f"unbound,{a},{b},{-Ef},{E},{c.real:.12e},{c.imag:.12e}")
+
+
+M1, M2, Z1, Z2 = 4.0026, 12.0, 2, 6
+
+
+def G1(x):
+    return quad(lambda t: spherical_jn(1, t) / t if t > 0 else 1 / 3, 0, x, epsabs=0, epsrel=1e-13)[0]
+
+
+def q(r, Eg, convection):
+    k = Eg / HBARC; x1 = M2 / (M1 + M2) * k * r; x2 = M1 / (M1 + M2) * k * r
+    g1, g2 = G1(x1), G1(x2)
+    charge = Z1 * g1 - Z2 * g2
+    if convection:
+        w = lambda x, g: (2 * spherical_jn(0, x) - spherical_jn(2, x)) / (3 * np.sqrt(2)) - np.sqrt(2) * g / x
+        charge += np.sqrt(2) * (Z1 * HBARC / (2 * M1 * U) * w(x1, g1) - Z2 * HBARC / (2 * M2 * U) * w(x2, g2)) / r
+    return 3 / (k * r) * charge
+
+
+for kind, convection in (("unbound_exact", False), ("unbound_conv", True)):
+    for Ef in (0.3, 1.0, 2.5):
+        of = outgoing(Ef, 0); ufp = regular(Ef, 0)
+        for b in (0.0, -1.5):
+            for a in (5.35, 4.0, 6.5):
+                Sf = a * wf(a)[1] / wf(a)[0]; ff = a * uf(a)[1] / uf(a)[0]
+                oa, doa = of(a); Lf = a * doa / oa; ffp = a * ufp(a)[1] / ufp(a)[0]
+                for E in (2.0, 3.0, 5.0):
+                    if E <= Ef:
+                        continue  # no photon
+                    ui = regular(E, 1)
+                    bound = wf(a)[0] * (Sf - b) / (ff - b) * integ(
+                        lambda r: ui(r)[0] / ui(a)[0] * uf(r)[0] / uf(a)[0] * q(r, E + B, convection) * r, RMIN, a)
+                    c = (Lf - b) / (ffp - b) * integ(
+                        lambda r: ui(r)[0] / ui(a)[0] * ufp(r)[0] / ufp(a)[0] * q(r, E - Ef, convection) * r, RMIN, a) / bound
+                    print(f"{kind},{a},{b},{-Ef},{E},{c.real:.12e},{c.imag:.12e}")
