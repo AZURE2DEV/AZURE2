@@ -1893,12 +1893,27 @@ def _bake_write_p3(base_azr, xs, src_keys, path, flags, workdir, output_dir, nam
     return path, sav
 
 
-def verify(base_azr, x, flags, workdir=None, name="verify", objective=None) -> Tuple[Score, List[ParamKey]]:
+def verify(base_azr, x, flags, workdir=None, name="verify", objective=None, keys=None) -> Tuple[Score, List[ParamKey]]:
     """Authoritative ``(score, keys)`` of ``x`` from a fresh single session on
-    the full model, in its own output directory.  ``x`` must be in the base
-    model's own free-vector order (use :func:`rmfit.keys.take` to map a
-    sharded vector onto ``keys`` first if the orders differ)."""
+    the full model, in its own output directory.  ``keys``: the keys of ``x``,
+    in whatever order its evaluator uses; ``x`` is mapped onto the session's own
+    order by key, and every session key must be among them.  A Sharded
+    evaluator orders the free vector differently from a single session when the
+    model has energy-shift / shift-function parameters, and a sharded-order
+    vector scored positionally is a different fit (2026-11-21: every level add
+    on a model with a shift group was "verified" 1.7-10 % above its polish and
+    rejected, and every polish / sign candidate after an adopted structure,
+    whose ledger keys come from the sharded evaluator).  Without ``keys``,
+    ``x`` must already be in the single session's order."""
     workdir = workdir or os.path.join(os.path.dirname(os.path.abspath(base_azr)), "variants")
     azr = single_variant(base_azr, name, workdir)
     with SingleSession(azr, cwd=workdir, flags=flags, name=name, objective=objective) as ev:
+        if keys is not None:
+            from .keys import take
+            have = {str(k) for k in keys}
+            lack = [str(k) for k in ev.keys if str(k) not in have]
+            if lack or len(keys) != len(x):
+                raise ValueError(f"verify: the vector ({len(x)} values, {len(keys)} keys) lacks {len(lack)} of the "
+                                 f"session's parameters: " + ", ".join(lack[:5]))
+            x = take(x, keys, ev.keys, ev.x0)
         return ev.score(x), ev.keys
