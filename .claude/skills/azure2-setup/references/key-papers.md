@@ -158,9 +158,10 @@ channels, data segments, the level matrix, and capture treatment.
 - **D. Odell, C. R. Brune, D. R. Phillips et al., "Performing Bayesian Analyses With
   AZURE2 Using BRICK ... 7Be,"** *(Zotero key `VF28TJ8S`)* and **"How Bayesian
   methods can improve R-matrix analyses ... d+t,"** *(Zotero key `8PFWKX3B`)* —
-  modern Bayesian/uncertainty-quantification workflows layered on AZURE2 (the BRICK
-  toolkit). Reach for these when the task is uncertainty estimation or MCMC, not just
-  a point fit.
+  Bayesian/uncertainty-quantification workflows layered on AZURE2 (the BRICK
+  toolkit). Read these for the method when the task is uncertainty estimation or MCMC.
+  BRICK itself is obsolete: new posteriors are sampled with pyazr
+  (`azure2-uncertainty`, section 4).
 - **Leeb, Dimitriou & Thompson, IAEA R-matrix code reports** *(Zotero keys
   `H8R39NBY`, `UZCCXHAS`, `6NEQH6NW`)* — the IAEA code-comparison exercises; context
   for evaluation standards.

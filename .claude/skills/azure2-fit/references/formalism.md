@@ -188,8 +188,10 @@ Objective (deBoer Eq. 87), per-dataset normalization `n_i` and a systematic term
   background-pole values and some interference/cascade signs are **not** unique.
 - Adopt the **most physical** fit, not merely the lowest `χ²`.
 
-Bayesian / MCMC alternatives (BRICK on top of AZURE2): Odell, Brune & Phillips
-et al. (key papers: `azure2-setup`).
+Bayesian / MCMC: sample the posterior with pyazr (`azure2-uncertainty`, section 4).
+BRICK, the earlier wrapper on top of AZURE2 (Odell, Brune & Phillips et al.; key
+papers: `azure2-setup`), is obsolete: cite its papers for the
+method, do not use or propose it for new work.
 
 ## 11. Quantity ↔ AZURE2 input cheat-sheet
 
