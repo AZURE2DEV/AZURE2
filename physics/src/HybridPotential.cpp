@@ -47,7 +47,8 @@ bool operator==(const HybridPotential &a, const HybridPotential &b) {
 }
 
 bool operator==(const InteriorBackground &a, const InteriorBackground &b) {
-  return a.boundary == b.boundary && a.subtract_nodes == b.subtract_nodes && a.capture == b.capture;
+  return a.boundary == b.boundary && a.subtract_nodes == b.subtract_nodes && a.capture == b.capture &&
+         a.charge_e1 == b.charge_e1 && a.charge_e2 == b.charge_e2;
 }
 
 bool operator==(const PartialWave &a, const PartialWave &b) {
@@ -148,6 +149,9 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
       for (int n : w.background->subtract_nodes) key.push_back((double)n);
       // interior capture: a mark only when asked, so that the key of a background without it is the one before it existed
       if (w.background->capture) key.insert(key.end(), {-2.0, 1.0});
+      // interior charge: a mark only when given, for the same reason
+      if (w.background->charge_e1 != 0.0 || w.background->charge_e2 != 0.0)
+        key.insert(key.end(), {-4.0, w.background->charge_e1, w.background->charge_e2});
     }
     // bound state only: a mark only when set, so that every other key stays as it was
     if (w.bound_state_only) key.insert(key.end(), {-3.0, 1.0});

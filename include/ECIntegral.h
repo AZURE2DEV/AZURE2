@@ -168,7 +168,7 @@ class ECIntegral {
   bool IntegrateUnbound(double chanrad, double finalEnergy);
   /// The interior direct capture of a background partial wave with `capture interior`, added to FW_ and GW_ (nothing
   /// otherwise); ECIntegral.cpp.
-  void AddInteriorCapture(double chanrad);
+  void AddInteriorCapture(double chanrad, bool electric);
   Params params_;
   /// The run's scratch of this thread (ECScratch).
   ECScratch &scratch_;

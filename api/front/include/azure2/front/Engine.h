@@ -1143,6 +1143,7 @@ struct PotentialWave {
   std::string boundary;     ///< B_bg as written ("" none)
   std::string subtract;     ///< the node number of the subtracted box state as written ("" none)
   bool capture = false;     ///< `capture interior`
+  std::string chargeE1, chargeE2;  ///< the interior charges as written ("" none)
   bool boundStateOnly = false;  ///< `only bound_state`: point-Coulomb channel functions in this wave
 };
 /// The value `text` of a `wave` field split by the engine's parser; false with its words.

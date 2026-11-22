@@ -23,6 +23,9 @@
 #  10. a subtracted box pole put back as a level with the box state's particle and photon amplitudes reproduces the
 #      unsubtracted potential (capture and elastic);
 #  11. E2 and M1 through the interior capture against an independent calculation.
+#  12. the interior charge (`charge_e1 q` on a wave with capture interior, section 14): with q minus the pair's own
+#      E1 charge number the interior operator vanishes and the capture is that without `capture interior`; the cross
+#      section is a quadratic in q; `charge_e1` without `capture interior` is refused.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -355,6 +358,45 @@ if awk -v a="$n2" -v b="$n1" 'BEGIN { exit !(a ~ /^[0-9.e+-]+$/ && b ~ /^[0-9.e+
 else
   bad "without capture interior the E2 ($n2) and M1 ($n1) references should be missed"
 fi
+
+# ---- 12. the interior charge (potential_background.md section 14).  In the long-wavelength form the E1 operator of
+#          the relative motion is e (Z1 m2/M - Z2 m1/M) r; `charge_e1 q` adds e q r inside a_c.  q = -(Z1 m2 - Z2 m1)/M
+#          (0.2811 for 3He + 4He with the model's masses) removes the interior operator: the run equals the one
+#          without `capture interior`.  The amplitude is linear in q, so sigma(-c) + sigma(c) - 2 sigma(0) =
+#          sigma(2c) + sigma(0) - 2 sigma(c).
+charge() {  # charge NAME Q: capture_a40 at five energies, charge_e1 Q on every wave with capture interior ("": none)
+  edited "$HERE/models/capture_a40.azr.in" "$WORK/models/$1.azr" awk -v q="$2" '
+    / capture interior$/ && q != "" { $0 = $0 " charge_e1 " q }
+    /^    energies       list / { $0 = "    energies       list 0.1 0.5 1.0 2.0 4.0 MeV cm" } { print }' &&
+    run "$1" "$WORK/models/$1.azr" extrapolate 2
+}
+OWN="$(awk 'BEGIN { printf "%.17g", 2 * (4.0026032 - 3.0160293) / (4.0026032 + 3.0160293) }')"
+charge q_zero ""; charge q_minus "-$OWN"; charge q_plus "$OWN"; charge q_two "$(awk -v o="$OWN" 'BEGIN { printf "%.17g", 2 * o }')"
+edited "$WORK/models/q_zero.azr" "$WORK/models/q_nocap.azr" sed 's/ capture interior$//' && run q_nocap "$WORK/models/q_nocap.azr" extrapolate 2
+if res="$(python3 -I - "$WORK" <<'PY'
+import sys
+def sigma(name):
+    out = []
+    for key in (2, 3):
+        out += [float(l.split()[3]) for l in open(f"{sys.argv[1]}/{name}/output/AZUREOut_aa=1_R={key}.extrap") if len(l.split()) >= 5]
+    return out
+z, m, p, t, n = (sigma(x) for x in ("q_zero", "q_minus", "q_plus", "q_two", "q_nocap"))
+assert len(z) == 10 and all(len(x) == 10 for x in (m, p, t, n)), "ten cross sections each"
+same = max(abs(a / b - 1) for a, b in zip(m, n))
+moved = max(abs(a / b - 1) for a, b in zip(z, n))
+quad = max(abs((a + b - 2 * c) / (d + c - 2 * b) - 1) for a, b, c, d in zip(m, p, z, t))
+print(f"q = -own against no interior capture {same:.1e}, q = 0 against it {moved:.1e}, quadratic to {quad:.1e}")
+sys.exit(0 if same < 1e-9 and moved > 1e-2 and quad < 1e-5 else 1)
+PY
+)"; then ok "interior charge: $res"
+else bad "interior charge: ${res:-no result}"; fi
+edited "$WORK/models/q_nocap.azr" "$WORK/models/q_refused.azr" sed 's/\(background interior boundary 0.0\)$/\1 charge_e1 0.1/'
+mkdir -p "$WORK/q_refused"
+if "$AZURE2_BIN" --validate "$WORK/models/q_refused.azr" > "$WORK/q_refused/run.log" 2>&1; then
+  bad "charge_e1 without capture interior is accepted"
+elif grep -q "E_POTENTIAL_WAVE.*charge_e1 is the charge of the interior capture" "$WORK/q_refused/run.log"; then
+  ok "charge_e1 without capture interior is refused (E_POTENTIAL_WAVE)"
+else bad "charge_e1 without capture interior: refused, but not in these words"; fi
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))

@@ -339,6 +339,8 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
         out << " background interior, B_bg " << Fmt(w.background->boundary);
         for (int n : w.background->subtract_nodes) out << ", subtract " << n;
         if (w.background->capture) out << ", capture interior";
+        if (w.background->charge_e1 != 0.0) out << ", interior E1 charge " << Fmt(w.background->charge_e1);
+        if (w.background->charge_e2 != 0.0) out << ", interior E2 charge " << Fmt(w.background->charge_e2);
         out << ";";
       }
       if (w.bound_state_only) out << " only bound_state (point-Coulomb channel functions; the bound-state shape of interior capture);";
@@ -449,7 +451,10 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
         if (w.background) {
           j.Key("background").BeginObject().Key("boundary").Number(w.background->boundary).Key("subtract").BeginArray();
           for (int n : w.background->subtract_nodes) j.Integer(n);
-          j.EndArray().Key("capture_interior").Bool(w.background->capture).EndObject();
+          j.EndArray().Key("capture_interior").Bool(w.background->capture);
+          if (w.background->charge_e1 != 0.0) j.Key("charge_e1").Number(w.background->charge_e1);
+          if (w.background->charge_e2 != 0.0) j.Key("charge_e2").Number(w.background->charge_e2);
+          j.EndObject();
         }
         j.Key("only_bound_state").Bool(w.bound_state_only).EndObject();
       }

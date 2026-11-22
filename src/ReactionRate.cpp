@@ -1,10 +1,17 @@
+#include "AChannel.h"
+#include "ALevel.h"
+#include "CoulFunc.h"
+#include "Kinematics.h"
 #include "CompoundSystem.h"
+#include "JGroup.h"
+#include "PPair.h"
 #include "Config.h"
 #include "Unit.h"
 #include "ReactionRate.h"
 #include "ECTable.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "CompoundSystemChecks.h"
+#include "azure2/physics/HybridPotential.h"
 #include <iomanip>
 #include <iostream>
 #include <math.h>
@@ -22,6 +29,9 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <set>
+#include <tuple>
+#include <optional>
 #include <vector>
 #include <time.h>
 
@@ -102,8 +112,78 @@ static const double kRateEpsRel = 1e-7;
  * that a parameter file had moved by more than its cluster (64 widths) was never
  * resolved and dropped out of the rate.
  */
+/*!
+ * The resonances of the entrance pair's potential in its partial waves with an interior background
+ * (docs/upgrade/potential_background.md): sigma(E) carries them without a level, and the grid had a cluster on every
+ * level and none on these (a 412 keV wide 1- resonance of alpha + 12C between backbone nodes left the rate 0.2 % low
+ * from T9 = 3).  A resonance is a zero of l(E) - S(E), l the regular solution's logarithmic derivative at the channel
+ * radius and S the shift of the waves outside it, where the difference falls; its width 2P / -(l - S)'.  Found on a
+ * 50 keV grid; a zero wider than half its energy is no resonance (above the barrier) and is not counted.  A subtracted
+ * box state's resonance is listed too: its level has a cluster of its own and one more does no harm.
+ */
+static void AddPotentialResonances(const CompoundSystem *compound, int entranceKey,
+                                   std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &resonances) {
+  namespace phys = azure2::physics;
+  if (!compound->IsPairKey(entranceKey)) return;
+  const int entrance = compound->GetPairNumFromKey(entranceKey);
+  const PPair *pair = compound->GetPair(entrance);
+  const std::optional<phys::HybridPotential> &pot = pair->GetHybridPotential();
+  if (!pot) return;
+  const double mu = pair->GetRedMass() * uconv;
+  const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
+  CoulFunc coul(pair);
+  std::set<std::tuple<int, int, double>> done;
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    const JGroup *group = compound->GetJGroup(j);
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      const AChannel *channel = group->GetChannel(ch);
+      if (channel->GetRadType() != 'P' || channel->GetPairNum() != entrance) continue;
+      const int l = channel->GetL(), twoJ = pair->SpinOrbitTwoJ(group->GetJ());
+      const double a = channel->GetRadius();
+      if (!phys::BackgroundOf(*pot, l, twoJ) || a > pot->matching_radius_fm) continue;
+      if (!done.insert(std::make_tuple(l, twoJ, a)).second) continue;
+      const phys::HybridPotential wave = phys::ForPartialWave(*pot, l, twoJ);
+      const double ldoti = pair->SpinOrbitFactor(l, twoJ);
+      double P = 0.0;
+      auto mismatch = [&](double E) {  // l - S, with the undressed waves outside the radius
+        const struct CoulWaves w = coul(l, twoJ, a, E);
+        const double rho = Kinematics::Channel(pair).Rho(a, E), norm = w.F * w.F + w.G * w.G;
+        P = rho / norm;
+        return phys::InteriorLogDerivative(wave, z1, z2, mu, l, ldoti, a, E) - rho * (w.F * w.dF + w.G * w.dG) / norm;
+      };
+      const double low = 1e-3, step = 0.05;
+      const int n = static_cast<int>(std::ceil((kRateEnergyHigh - low) / step));
+      double prevE = low, prev = mismatch(low);
+      for (int i = 1; i <= n; i++) {
+        const double E = low + (kRateEnergyHigh - low) * i / n, g = mismatch(E);
+        if (std::isfinite(g) && std::isfinite(prev) && g * prev < 0.0) {
+          double lo = prevE, hi = E, glo = prev;
+          for (int it = 0; it < 50; it++) {
+            const double mid = 0.5 * (lo + hi), gm = mismatch(mid);
+            if (gm * glo < 0.0) hi = mid;
+            else {
+              lo = mid;
+              glo = gm;
+            }
+          }
+          const double Er = 0.5 * (lo + hi);
+          if (std::fabs(mismatch(Er)) < 1e-5) {  // a zero, not a pole of l
+            const double h = std::min(1e-3, 0.25 * Er);
+            const double slope = (mismatch(Er + h) - mismatch(Er - h)) / (2.0 * h);
+            mismatch(Er);
+            const double width = slope < 0.0 ? 2.0 * P / -slope : 0.0;
+            if (width > 0.0 && width <= 0.5 * Er) resonances.push_back({Er, width, width, 0});
+          }
+        }
+        prevE = E;
+        prev = g;
+      }
+    }
+  }
+}
+
 static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-RateResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+LevelResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
                int entranceKey) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.entranceKey = entranceKey;
@@ -120,6 +200,15 @@ RateResonances(const CompoundSystem *compound, const LevelState &state, const Le
     gc.inputWidthsArePhysical = false;
     return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound, inputs);
   }
+}
+
+/// The levels' resonances (LevelResonances) and those of the entrance pair's potential (AddPotentialResonances).
+static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
+RateResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+               int entranceKey) {
+  std::vector<AdaptiveIntegrationGrid::ResonanceInfo> resonances = LevelResonances(compound, state, inputs, configure, entranceKey);
+  AddPotentialResonances(compound, entranceKey, resonances);
+  return resonances;
 }
 
 /*!
@@ -573,6 +662,31 @@ void DispatchRateCalculation(const std::vector<double> &temps,
     configure.outStream << "\tIdentical entrance particles: N_A<sigma v> includes (1+delta_12) in sigma and excludes\n"
                         << "\tthe 1/(1+delta_12) of the rate equation r = n^2 <sigma v> / 2 (FCZ 1967, REACLIB convention)."
                         << std::endl;
+  // External capture into a final state above the entrance pair's threshold (a narrow resonance,
+  // ECIntegral::IntegrateUnbound): sigma rises as 1/E_gamma toward the final state's energy E_f, the soft-photon
+  // limit, and the exterior integral stops where 40/(k_i - k_f) exceeds 50,000 fm.  The rate is then logarithmic in
+  // that numerical limit (alpha + 12C at E_f = 3.26 MeV: 9 to 41 % for a factor two in it, T9 = 10 to 0.5;
+  // docs/upgrade/potential_background.md section 14).  The rate mode has no line_window, so it is always this form.
+  const double entranceThreshold = entrancePair->GetSepE() + entrancePair->GetExE();
+  for (int key : RateExitKeys(compound, entranceKey, exitKey)) {
+    const int exitPairNum = compound->GetPairNumFromKey(key);
+    if (exitPairNum < 1) continue;
+    const PPair *exitPair = compound->GetPair(exitPairNum);
+    const double finalEnergy = exitPair->GetHeavyExE() - entranceThreshold;
+    if (!(finalEnergy > 0.0)) continue;
+    bool external = false;
+    for (int j = 1; j <= compound->NumJGroups() && !external; j++)
+      for (int la = 1; la <= compound->GetJGroup(j)->NumLevels() && !external; la++) {
+        const ALevel *level = compound->GetJGroup(j)->GetLevel(la);
+        external = level->IsECLevel() && level->GetECPairNum() == exitPairNum;
+      }
+    if (external)
+      configure.outStream << "WARNING: the rate into pair " << key << " includes external capture into an UNBOUND final state (E_x = "
+                          << exitPair->GetHeavyExE() << " MeV, " << finalEnergy * 1e3 << " keV above the entrance threshold) in the"
+                          << " narrow-resonance form.  That cross section rises as 1/E_gamma toward E_cm = " << finalEnergy
+                          << " MeV and is cut where its radial integral is given up (photon energies of a few keV), so this"
+                          << " rate depends on a numerical limit, by tens of per cent.  Do not quote it without a physical cut." << std::endl;
+  }
   RunTabulatedRateCalculation(temps, compound, state, inputs, configure, entranceKey, exitKey, outRates);
 }
 

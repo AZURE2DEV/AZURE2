@@ -31,6 +31,8 @@ py::tuple SessionPotentialView(const Config &config, int pair) {
       b["boundary"] = w.background->boundary;
       b["subtract"] = w.background->subtract_nodes;
       b["capture_interior"] = w.background->capture;
+      b["charge_e1"] = w.background->charge_e1;
+      b["charge_e2"] = w.background->charge_e2;
       d["background"] = b;
     } else {
       d["background"] = py::none();

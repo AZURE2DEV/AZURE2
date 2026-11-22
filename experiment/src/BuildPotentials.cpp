@@ -91,9 +91,18 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
       ib.boundary = b->number.value;
       if (sub) ib.subtract_nodes.push_back((int)sub->integer);
       ib.capture = cap != nullptr;
+      for (const char *word : {"charge_e1", "charge_e2"})
+        if (const Value *q = w->Get(word)) {
+          if (!ib.capture) {
+            c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": " + word +
+                                                        " is the charge of the interior capture: it needs capture interior");
+            return false;
+          }
+          (std::string(word) == "charge_e1" ? ib.charge_e1 : ib.charge_e2) = q->number.value;
+        }
       pw.background = ib;
-    } else if (b || sub || cap) {
-      c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": boundary, subtract and capture belong to a background");
+    } else if (b || sub || cap || w->Get("charge_e1") || w->Get("charge_e2")) {
+      c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": boundary, subtract, capture and the interior charges belong to a background");
       return false;
     }
     for (const physics::PartialWave &o : s.waves)

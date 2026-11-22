@@ -1109,3 +1109,47 @@ r of a chosen pair, the engine finds the pair back from another start):
 running from −8.47 to 0.99 fm over the widths with that a; a Woods-Saxon term is refused.  pyazr
 (`Session.potential_depth_for(pair, a, l, J, r)`, `pyazr_potential_api` (g)), the facade (api_front (h)) and the panel
 (gui_potential (e)) find the same pair and the same refusal.
+
+## 14. Additions from the branch `feature/upgrade-6-interior-potential` (2026-11-22)
+
+A second implementation of the same interior R-function was built independently on
+`feature/upgrade-6-interior-potential` (R. deBoer's session; record-level `interior_boundary`). The owner's decision
+of 2026-11-22: this branch's record (`wave`) and its rules (sections 3, 5.2, 5.3) stand, and what the other branch
+had beyond it is ported here, on the branch `feature/upgrade-10-potential-unified`. Ported so far:
+
+### 14.1 The interior charge (`charge_e1`, `charge_e2`)
+
+    wave l <l> ... background interior boundary <B> capture interior [charge_e1 <q>] [charge_e2 <q>]
+
+In the long-wavelength form the E_L operator of the relative motion carries the charge number Z₁(m₂/M)^L +
+Z₂(−m₁/M)^L, which nearly vanishes for E1 between nuclei of equal Z/A (−10⁻³ for α + ¹²C). The E1 strength inside
+a_c is then the interior's own (isospin mixing, the clusters' structure), which the masses do not give: Koonin,
+Tombrello and Fox fit an effective dipole strength. `charge_e1 q` adds e q r (`charge_e2`: e q r²) to the operator of
+the interior capture of that entrance wave, inside a_c only; the operator outside stays the one the masses fix. In
+the exact form the same term is added to the charge function's. One place: the weight of (C4) in
+`ECIntegral::AddInteriorCapture`. Refused: an interior charge without `capture interior` (`E_POTENTIAL_WAVE`), and, in
+the long-wavelength form, a pair whose own charge number is exactly zero (the term is carried as a multiple of it;
+the exact form has no such limit). q is a fixed number of the record, a scan as the depth is.
+
+Checks (`tests/potential_capture/check.sh`, 12): with q = −(Z₁m₂ − Z₂m₁)/M the interior operator vanishes and the
+capture equals the run without `capture interior` (to the digits written); σ is a quadratic in q to 1.5 × 10⁻⁷; the
+refusal. Not checked: the exact form with an interior charge; E2.
+
+### 14.2 The rate mode
+
+- The rate's energy grid has a cluster of points on every level; a resonance of the potential in a background wave is
+  in σ(E) without a level. `AddPotentialResonances` (`src/ReactionRate.cpp`) adds a cluster on each zero of ℓ(E) − S(E)
+  of the entrance pair's background waves (50 keV grid to 50 MeV; width 2P/−(ℓ − S)′; a zero wider than half its
+  energy is not counted). On the other branch a 412 keV wide 1⁻ resonance of α + ¹²C between backbone nodes left the
+  rate 0.2 % low from T₉ = 3.
+- The rate of external capture into an unbound final state (the narrow-resonance form of the parent branch, no
+  potential needed) depends on a numerical limit: σ rises as 1/E_γ toward the final state's energy and
+  `ECIntegral::IntegrateUnbound` stops where 40/(k_i − k_f) exceeds 50,000 fm, so the rate is logarithmic in that
+  limit (α + ¹²C into a state 3.26 MeV above the threshold: a factor two in it moves the rate by 41 % at T₉ = 0.5 and
+  9 % at T₉ = 10). The rate mode prints a warning and writes the rate (the owner's choice, 2026-11-22).
+
+### 14.3 Not yet ported
+
+An unbound final state with interior capture (refused here, 5.3); the potential's parameters and the interior charge
+as fit parameters from outside (`pyazr.record_fit`); the warning for a level on a state of the potential that is not
+subtracted; a theory page; a converter for projects written with `interior_boundary`.

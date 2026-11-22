@@ -231,7 +231,7 @@ void ECIntegral::Integrate(double chanrad) {
  * wave and the channel-capture term the interior driven by the level-fed outgoing wave.  Nothing without such a
  * background (or beyond the matching radius, where the background is not applied either).
  */
-void ECIntegral::AddInteriorCapture(double chanRad) {
+void ECIntegral::AddInteriorCapture(double chanRad, bool electric) {
   const std::optional<azure2::physics::HybridPotential> &pot = pair()->GetHybridPotential();
   if (!pot || chanRad > pot->matching_radius_fm) return;
   const int li = params_.liValue, lf = params_.lfValue, twoJi = params_.twoJi, twoJf = params_.twoJf;
@@ -242,7 +242,24 @@ void ECIntegral::AddInteriorCapture(double chanRad) {
   const int L = params_.multLValue;
   const bool charge = params_.useChargeFunction;
   EffectiveCharge *effective = params_.effectiveCharge;
-  const auto weight = [&](double r) { return charge ? (*effective)(r) * pow(r, L) : pow(r, L); };
+  // The interior charge q (potential_background.md section 14) adds sqrt(alpha hbar c) q r^L to the operator inside
+  // the radius.  The integrals are multiplied afterwards by the operator's constant: 1 in the exact form (the charge
+  // function is in the weight), sqrt(alpha hbar c) (Z1 (m2/M)^L + Z2 (-m1/M)^L) in the long-wavelength form.
+  const double q = !electric ? 0.0 : L == 1 ? bg->charge_e1 : L == 2 ? bg->charge_e2 : 0.0;
+  double extra = 0.0;
+  if (q != 0.0) {
+    if (charge) extra = sqrt(fstruc * hbarc) * q;
+    else {
+      const double M = pair()->GetM(1) + pair()->GetM(2);
+      const double own = pair()->GetZ(1) * pow(pair()->GetM(2) / M, L) + pair()->GetZ(2) * pow(-pair()->GetM(1) / M, L);
+      if (own == 0.0)
+        throw std::runtime_error("interior charge in the long-wavelength form: the pair's own E" + std::to_string(L) +
+                                 " charge number is exactly zero, and the interior charge is carried as a multiple of it; "
+                                 "use the exact form (--no-long-wavelength)");
+      extra = q / own;
+    }
+  }
+  const auto weight = [&](double r) { return (charge ? (*effective)(r) : 1.0) * pow(r, L) + extra * pow(r, L); };
   const double K = azure2::physics::InteriorCaptureIntegral(
       azure2::physics::ForPartialWave(*pot, li, twoJi), li, pair()->SpinOrbitFactor(li, twoJi), E, *bg,
       azure2::physics::ForPartialWave(*pot, lf, twoJf), lf, pair()->SpinOrbitFactor(lf, twoJf), -params_.bindingEnergy,
@@ -495,7 +512,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     hasParts_ = true;
   } else if (outEnergy > 0.0) {
     Integrate(chanRad);
-    AddInteriorCapture(chanRad);
+    AddInteriorCapture(chanRad, radType == 'E');
     struct CoulWaves
         coul = coulfunction()->ChannelWaves(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     if (isChannelCapture) {
@@ -523,7 +540,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     }
   } else {
     Integrate(chanRad);
-    AddInteriorCapture(chanRad);
+    AddInteriorCapture(chanRad, radType == 'E');
     assert(isChannelCapture);
     // GW() now holds the integral divided by 10^(log10RefIn+log10RefOut), and
     // the Whittaker in the denominator is mWhit*10^log10RefIn.  The RefIn

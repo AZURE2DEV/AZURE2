@@ -116,7 +116,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kLabJacobianAtLimit, E, "a laboratory-frame differential datum at the kinematic maximum lab angle, where dOmega_lab/dOmega_cm is 0 and the lab-frame model diverges (set-up)"},
       {kPotentialTwice, E, "two potential records for one pair"},
       {kPotentialPairKind, E, "a potential record on a photon or beta pair (a potential belongs to a particle pair)"},
-      {kPotentialWave, E, "a wave field of a potential record: background without boundary, boundary, subtract or capture without background, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, or one (l, J) twice"},
+      {kPotentialWave, E, "a wave field of a potential record: background without boundary, boundary, subtract, capture or an interior charge without background, an interior charge without capture interior, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, or one (l, J) twice"},
       {kChannelRadiusTwice, E, "two channel_radius records for one selection of channels (pair, l, s, J)"},
       {kChannelRadiusPairKind, E, "a channel_radius record on a photon or beta pair (a radius belongs to a particle channel)"},
       {kChannelRadiusThm, E, "a channel_radius record on the entrance pair of a THM data set (the vertex is built at the pair's radius)"},

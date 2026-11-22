@@ -86,6 +86,13 @@ struct InteriorBackground {
   /// driven by the surface term of the channel's full wave at a, captured into the potential's bound state inside a
   /// (InteriorCaptureIntegral).  false: the background acts on the channel functions only.
   bool capture = false;
+  /// The interior charge of the interior capture (potential_background.md section 14): a charge number q (units of e)
+  /// added to the pair's own in the E1 (E2) operator inside the channel radius, q r (q r^2).  The operator of the
+  /// relative motion carries Z1 (m2/M)^L + Z2 (-m1/M)^L, which nearly vanishes for E1 between nuclei of equal Z/A;
+  /// the strength inside the radius is then the interior's (isospin mixing, the cluster's structure), a number the
+  /// masses do not give.  0: the pair's operator alone.  Only with `capture`.
+  double charge_e1 = 0.0;
+  double charge_e2 = 0.0;
 };
 bool operator==(const InteriorBackground &a, const InteriorBackground &b);
 

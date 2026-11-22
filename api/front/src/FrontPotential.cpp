@@ -200,6 +200,8 @@ bool ParsePotentialWave(const std::string &text, PotentialWave &out, std::string
     else if (p.name == "boundary") out.boundary = p.value.text.empty() ? p.value.number : p.value.text;
     else if (p.name == "subtract") out.subtract = p.value.text;
     else if (p.name == "capture") out.capture = true;
+    else if (p.name == "charge_e1") out.chargeE1 = p.value.text.empty() ? p.value.number : p.value.text;
+    else if (p.name == "charge_e2") out.chargeE2 = p.value.text.empty() ? p.value.number : p.value.text;
     else if (p.name == "only") out.boundStateOnly = true;
   }
   return true;
@@ -230,6 +232,8 @@ std::string PotentialWaveText(const PotentialWave &wave) {
     else if (part.name == "boundary") given = wave.background && !wave.boundary.empty(), v.text = v.number = wave.boundary;
     else if (part.name == "subtract") given = wave.background && !wave.subtract.empty(), v.text = wave.subtract;
     else if (part.name == "capture") given = wave.background && wave.capture, v.text = word;
+    else if (part.name == "charge_e1") given = wave.background && wave.capture && !wave.chargeE1.empty(), v.text = v.number = wave.chargeE1;
+    else if (part.name == "charge_e2") given = wave.background && wave.capture && !wave.chargeE2.empty(), v.text = v.number = wave.chargeE2;
     else if (part.name == "only") given = wave.boundStateOnly, v.text = word;
     else given = false;
     if (given) parts.parts.push_back({part.name, v});

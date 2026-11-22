@@ -288,6 +288,10 @@ Forms MakeForms() {
                       OptionalKw("capture", Words({"interior"}), "the interior direct capture of the background: the potential's interior wave, "
                                                                 "driven by the channel's full wave at a_c, captured into the potential's bound state "
                                                                 "inside a_c (potential_background.md section 5); left out: none"),
+                      OptionalKw("charge_e1", Num(), "the interior charge of the interior capture: a charge number q (units of e) added to "
+                                                     "the pair's own in the E1 operator inside the channel radius, q r "
+                                                     "(potential_background.md section 14); needs capture interior; left out: 0"),
+                      OptionalKw("charge_e2", Num(), "as charge_e1 for the E2 operator (q r^2); left out: 0"),
                       OptionalKw("only", Words({"bound_state"}), "the depth and width of this wave give the bound-state shape of the "
                                                                  "interior capture only; the wave's channel functions are the point-Coulomb "
                                                                  "ones (potential_background.md section 5.9); left out: they act on both")},
