@@ -1343,3 +1343,11 @@ add_test(NAME pyazr_parameter_settings
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/parameter_settings_test.py)
 set_tests_properties(pyazr_parameter_settings PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Settings of a potential record fitted from outside the engine (pyazr.record_fit; potential_background.md section
+# 14.4): the interior charge of a wave recovered from the model's own cross sections, its interval and linear error,
+# two numbers of one wave line.  Needs scipy.
+add_test(NAME pyazr_record_fit
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/record_fit_test.py)
+set_tests_properties(pyazr_record_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77 TIMEOUT 900)

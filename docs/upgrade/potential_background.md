@@ -1172,8 +1172,24 @@ to 7.5 MeV); without `capture interior` the radii differ by up to a factor 4.6. 
 16 %. Not checked: against an independent calculation (the check is a_c independence); a final state away from a
 resonance of the potential; the exact form; a closed entrance channel.
 
-### 14.4 Not yet ported
+### 14.4 The potential's numbers as fit parameters, from outside (`pyazr.record_fit`)
 
-The potential's parameters and the interior charge as fit parameters from outside (`pyazr.record_fit`); the warning
-for a level on a state of the potential that is not subtracted; a theory page; a converter for projects written with
-`interior_boundary`.
+Section 9 lists "the potential's numbers are not fit parameters; a depth is a scan". `pyazr.record_fit`
+(`fit_record_settings`) is that scan made a fit: for each trial value of the chosen numbers it writes a copy of the
+project, opens a session, runs the engine's fit of the project's own free parameters (from the project's values and
+from the best vector so far, keeping the lower) and takes the objective; the outer minimiser is Gauss-Newton on the
+objective's least-squares rows. It returns the values, their linear errors and covariance, and on request the
+profile interval of each (Δ = 1). It holds no formula. A `Setting` names a record and a field; for the repeatable
+`wave` field `match` picks one line by its first words and `keyword` the number after that word, so the depth and the
+interior charge of one wave can be fitted together. Cost: one set-up and one or two fits per trial.
+
+Test `pyazr_record_fit` (on `tests/potential_capture/models/capture_a40.azr.in` with `charge_e1 0.02` on the s wave
+and the model's own cross sections as data): the charge from 0.012 back to 0.02 to 10⁻⁶; the Δ = 1 interval against
+an independent session; the charge and the s-wave depth together; with the data set's norm fitted in every trial;
+the refusals. With the norm's prior at 5 % the norm takes up most of what the charge does to this one cross section
+(linear error 0.16 against 0.07): the test holds it to 0.5 %.
+
+### 14.5 Not yet ported
+
+The warning for a level on a state of the potential that is not subtracted; a theory page; a converter for projects
+written with `interior_boundary`.

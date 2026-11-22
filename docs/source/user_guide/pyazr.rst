@@ -1103,6 +1103,14 @@ depth for that ``a`` (or, with ``r``, its depth and Gaussian width for both) wit
 more robust input; the effective range depends more on the potential's shape.  All four are rows of
 ``s.describe()["functions"]``.
 
+The numbers of a potential record (the central depth, radius and diffuseness; a ``wave``'s depth, boundary constant
+and interior charge) are inputs of the engine, not fit parameters. ``pyazr.record_fit.fit_record_settings`` fits them
+from outside: at each trial value it writes the project, sets it up and runs the engine's fit of the project's own
+free parameters, and it returns the best values, their linear errors and, on request, the interval of each over
+which the profile of the objective rises by one. A ``Setting`` names a record and a field; ``match="l 0 J 1/2"`` picks
+one ``wave`` line by its first words and ``keyword="charge_e1"`` the number after that word, so several settings may
+share a line. Each trial costs a set-up and a fit; it needs scipy.
+
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the
 channel's Wigner limit, :math:`P_l` the penetrability the engine formed the observed width with (the session's own
