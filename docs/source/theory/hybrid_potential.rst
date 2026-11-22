@@ -116,8 +116,11 @@ energies and widths are those of a resonance on top of the background.
 
 The record states it per partial wave::
 
-    wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] background interior boundary <B> [subtract <n>]
-               [capture interior [charge_e1 <q>] [charge_e2 <q>]]
+    wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] [radius <R> fm] [diffuseness <a> fm]
+               background interior boundary <B> [subtract <n>] [capture interior [charge_e1 <q>] [charge_e2 <q>]]
+
+(``depth``, and ``width`` of a Gaussian or ``radius`` and ``diffuseness`` of a Woods-Saxon term, are the partial
+wave's own; left out, the central term's.)
 
 *A state counted twice.*  A level that is also a state of the potential in that wave is in :math:`R_\text{pot}`
 already.  ``subtract <n>`` removes the box state with :math:`n` nodes from the background,

@@ -26,6 +26,8 @@ py::tuple SessionPotentialView(const Config &config, int pair) {
     d["J"] = w.two_j >= 0 ? py::object(py::float_(w.two_j / 2.0)) : py::object(py::none());
     d["depth"] = w.depth_MeV ? py::object(py::float_(*w.depth_MeV)) : py::object(py::none());
     d["width"] = w.width_fm ? py::object(py::float_(*w.width_fm)) : py::object(py::none());
+    d["radius"] = w.radius_fm ? py::object(py::float_(*w.radius_fm)) : py::object(py::none());
+    d["diffuseness"] = w.diffuseness_fm ? py::object(py::float_(*w.diffuseness_fm)) : py::object(py::none());
     if (w.background) {
       py::dict b;
       b["boundary"] = w.background->boundary;

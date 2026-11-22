@@ -102,6 +102,11 @@ struct PartialWave {
   int two_j = -1;                          ///< 2J, or -1 (kNoSpinOrbit): every J of this l
   std::optional<double> depth_MeV;         ///< V0 of this partial wave (MeV, > 0 attractive); none: the central depth
   std::optional<double> width_fm;          ///< the Gaussian r0 of this partial wave (fm); none: the central one
+  /// The Woods-Saxon R and a of this partial wave (fm); none: the central ones.  The l-dependent potentials of
+  /// Koonin, Tombrello and Fox and of Langanke and Koonin have a geometry per partial wave
+  /// (potential_background.md section 14.8).
+  std::optional<double> radius_fm;
+  std::optional<double> diffuseness_fm;
   std::optional<InteriorBackground> background;  ///< none: no background (the channel functions of the exterior alone)
   /// `only bound_state` (potential_background.md section 5.9): the depth and width of this entry give the bound-state
   /// shape of the interior capture only; the channel functions of the wave are the point-Coulomb ones, as if the pair

@@ -38,8 +38,12 @@
 #  15. tools/convert_interior_boundary.py (section 14.6): models/old_layout.azr.in, a project of the branch
 #      feature/upgrade-6-interior-potential (`interior_boundary 0` on every l, E1 capture into the potential's own 0+
 #      bound state), becomes a `wave l 1 background interior boundary 0 capture interior` (the final state's s wave
-#      gets no background), and its capture is the same at a_c = 4.0 and 5.35 fm to 5e-4 (2.3e-4); two records of
-#      one pair with different Woods-Saxon radii are refused.
+#      gets no background), and its capture is the same at a_c = 4.0 and 5.35 fm to 5e-4 (2.3e-4); a second record
+#      of the pair with another Woods-Saxon radius becomes a wave with its own radius, one with another Coulomb
+#      radius is refused.
+#  16. a wave's own Woods-Saxon radius and diffuseness (section 14.8): the p wave with `radius 3.2 fm diffuseness
+#      0.55 fm` on a central term of 3.55 and 0.6 fm gives the cross sections of the central term 3.2 and 0.55 fm with
+#      the s wave given 3.55 and 0.6 fm, to the digits written; and they differ from the run without them.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -487,15 +491,51 @@ PY
 )"; then
   ok "the converted project's capture at 4.0 and 5.35 fm: $res"
 else bad "the converted project's capture depends on the radius: ${res:-}"; fi
-awk '/^<\/potentials>$/ { print "potential a12C_p"; print "    pair            a+12C"; print "    coulomb_radius  3.55 fm"
+second() {  # second NAME COULOMB_RADIUS: old_layout with a second record for l = 1 (radius 3.70 fm) of the pair
+  awk -v rc="$2" '/^<\/potentials>$/ { print "potential a12C_p"; print "    pair            a+12C"; print "    coulomb_radius  " rc " fm"
        print "    central         woods_saxon depth 40 MeV radius 3.70 fm diffuseness 0.6 fm"; print "    matching_radius 15 fm"
        print "    step            0.0275 fm"; print "    l               1"; print "    interior_boundary 0" } { print }' \
-  "$HERE/models/old_layout.azr.in" > "$WORK/models/old_two.azr"
-if python3 -I "$CONVERT" "$WORK/models/old_two.azr" "$WORK/models/conv_two.azr" 2> "$WORK/convert_two.log"; then
-  bad "two records with different Woods-Saxon radii were converted"
-elif grep -q "differ in the Woods-Saxon radius" "$WORK/convert_two.log" && [ ! -e "$WORK/models/conv_two.azr" ]; then
-  ok "two records of one pair with different Woods-Saxon radii are refused, nothing written"
-else bad "two records with different radii: $(tail -1 "$WORK/convert_two.log")"; fi
+    "$HERE/models/old_layout.azr.in" > "$WORK/models/$1.azr"
+}
+second old_two 3.55; second old_rc 3.40
+if python3 -I "$CONVERT" "$WORK/models/old_two.azr" "$WORK/models/conv_two.azr" 2> "$WORK/convert_two.log" &&
+   grep -q "^    wave            l 1 depth 40 MeV radius 3.70 fm background interior boundary 0 capture interior$" "$WORK/models/conv_two.azr" &&
+   "$AZURE2_BIN" --validate "$WORK/models/conv_two.azr" > "$WORK/convert_two.validate" 2>&1; then
+  ok "a second record with another Woods-Saxon radius becomes a wave with its own depth and radius, and validates"
+else bad "a second record with another radius: $(tail -1 "$WORK/convert_two.log") $(grep -m1 error "$WORK/convert_two.validate" 2> /dev/null)"; fi
+if python3 -I "$CONVERT" "$WORK/models/old_rc.azr" "$WORK/models/conv_rc.azr" 2> "$WORK/convert_rc.log"; then
+  bad "two records with different Coulomb radii were converted"
+elif grep -q "differ in coulomb_radius" "$WORK/convert_rc.log" && [ ! -e "$WORK/models/conv_rc.azr" ]; then
+  ok "two records of one pair with different Coulomb radii are refused, nothing written"
+else bad "two records with different Coulomb radii: $(tail -1 "$WORK/convert_rc.log")"; fi
+
+# ---- 16. a wave's own Woods-Saxon geometry (section 14.8): one potential written two ways
+edited "$WORK/models/conv535.azr" "$WORK/models/geo_wave.azr" sed 's/^\(    wave            l 1\) background/\1 radius 3.2 fm diffuseness 0.55 fm background/' &&
+  run geo_wave "$WORK/models/geo_wave.azr" extrapolate 2
+edited "$WORK/models/conv535.azr" "$WORK/models/geo_central.azr" awk '
+  /^    central / { print "    central         woods_saxon depth 45.891 MeV radius 3.2 fm diffuseness 0.55 fm"
+                    print "    wave            l 0 radius 3.55 fm diffuseness 0.6 fm"; next } { print }' &&
+  run geo_central "$WORK/models/geo_central.azr" extrapolate 2
+if res="$(python3 -I - "$WORK" <<'PY'
+import sys
+def sigma(name):
+    return [float(l.split()[3]) for l in open(f"{sys.argv[1]}/{name}/output/AZUREOut_aa=1_R=2.extrap") if len(l.split()) >= 5]
+a, b, c = sigma("geo_wave"), sigma("geo_central"), sigma("conv535")
+assert len(a) == 51 and len(b) == 51 and len(c) == 51 and min(a) > 0, "51 cross sections each"
+same = max(abs(x / y - 1) for x, y in zip(a, b))
+moved = max(abs(x / y - 1) for x, y in zip(a, c))
+print(f"written two ways: the same to {same:.1e}; against the central geometry in the p wave: {moved:.1e}")
+sys.exit(0 if same < 1e-9 and moved > 1e-2 else 1)
+PY
+)"; then ok "a wave's own radius and diffuseness: $res"
+else bad "a wave's own radius and diffuseness: ${res:-no result}"; fi
+mkdir -p "$WORK/geo_refused"
+sed 's/depth 67.5 MeV background interior boundary 0.0 capture interior$/depth 67.5 MeV radius 3.0 fm background interior boundary 0.0 capture interior/' \
+  "$HERE/models/capture_a40.azr.in" > "$WORK/models/geo_refused.azr"
+if "$AZURE2_BIN" --validate "$WORK/models/geo_refused.azr" > "$WORK/geo_refused/run.log" 2>&1; then bad "a wave radius on a Gaussian term is accepted"
+elif grep -q "E_POTENTIAL_WAVE.*radius belongs to a woods_saxon central term" "$WORK/geo_refused/run.log"; then
+  ok "a wave radius on a Gaussian central term is refused (E_POTENTIAL_WAVE)"
+else bad "a wave radius on a Gaussian term: refused, but not in these words"; fi
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))

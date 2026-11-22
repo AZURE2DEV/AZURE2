@@ -335,6 +335,8 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
       out << ":";
       if (w.depth_MeV) out << " depth " << Fmt(*w.depth_MeV) << " MeV;";
       if (w.width_fm) out << " width " << Fmt(*w.width_fm) << " fm;";
+      if (w.radius_fm) out << " radius " << Fmt(*w.radius_fm) << " fm;";
+      if (w.diffuseness_fm) out << " diffuseness " << Fmt(*w.diffuseness_fm) << " fm;";
       if (w.background) {
         out << " background interior, B_bg " << Fmt(w.background->boundary);
         for (int n : w.background->subtract_nodes) out << ", subtract " << n;
@@ -448,6 +450,8 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
         if (w.two_j >= 0) j.Key("two_J").Integer(w.two_j);
         if (w.depth_MeV) j.Key("depth_MeV").Number(*w.depth_MeV);
         if (w.width_fm) j.Key("width_fm").Number(*w.width_fm);
+        if (w.radius_fm) j.Key("radius_fm").Number(*w.radius_fm);
+        if (w.diffuseness_fm) j.Key("diffuseness_fm").Number(*w.diffuseness_fm);
         if (w.background) {
           j.Key("background").BeginObject().Key("boundary").Number(w.background->boundary).Key("subtract").BeginArray();
           for (int n : w.background->subtract_nodes) j.Integer(n);

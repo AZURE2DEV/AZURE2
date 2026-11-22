@@ -1139,6 +1139,8 @@ struct PotentialWave {
   int twoJ = -1;            ///< 2J, -1 without J
   std::string depth, width; ///< the wave's own V0 and Gaussian r0 as written ("" the central one's)
   std::string depthUnit = "MeV", widthUnit = "fm";
+  std::string radius, diffuseness;  ///< the wave's own Woods-Saxon R and a as written ("" the central ones)
+  std::string radiusUnit = "fm", diffusenessUnit = "fm";
   bool background = false;  ///< `background interior`: the external + internal mode
   std::string boundary;     ///< B_bg as written ("" none)
   std::string subtract;     ///< the node number of the subtracted box state as written ("" none)

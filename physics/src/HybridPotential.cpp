@@ -53,6 +53,7 @@ bool operator==(const InteriorBackground &a, const InteriorBackground &b) {
 
 bool operator==(const PartialWave &a, const PartialWave &b) {
   return a.l == b.l && a.two_j == b.two_j && a.depth_MeV == b.depth_MeV && a.width_fm == b.width_fm &&
+         a.radius_fm == b.radius_fm && a.diffuseness_fm == b.diffuseness_fm &&
          a.background == b.background && a.bound_state_only == b.bound_state_only;
 }
 
@@ -153,6 +154,10 @@ std::vector<double> PotentialKey(const std::optional<HybridPotential> &p) {
       if (w.background->charge_e1 != 0.0 || w.background->charge_e2 != 0.0)
         key.insert(key.end(), {-4.0, w.background->charge_e1, w.background->charge_e2});
     }
+    // its own Woods-Saxon geometry: a mark only when given, for the same reason
+    if (w.radius_fm || w.diffuseness_fm)
+      key.insert(key.end(), {-5.0, w.radius_fm ? 1.0 : 0.0, w.radius_fm.value_or(0.0), w.diffuseness_fm ? 1.0 : 0.0,
+                             w.diffuseness_fm.value_or(0.0)});
     // bound state only: a mark only when set, so that every other key stays as it was
     if (w.bound_state_only) key.insert(key.end(), {-3.0, 1.0});
   }
@@ -274,6 +279,8 @@ HybridPotential ForPartialWave(const HybridPotential &p, int l, int two_j) {
   const PartialWave *w = FindWave(p, l, two_j);
   if (w && w->depth_MeV) q.central_depth_MeV = *w->depth_MeV;
   if (w && w->width_fm) q.central.width_fm = *w->width_fm;
+  if (w && w->radius_fm) q.central.radius_fm = *w->radius_fm;
+  if (w && w->diffuseness_fm) q.central.diffuseness_fm = *w->diffuseness_fm;
   return q;
 }
 

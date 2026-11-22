@@ -2025,7 +2025,7 @@
     "wave": {
      "title": "Partial wave",
      "type": "structured",
-     "grammar": "l <integer >= 0> [J <J>] [depth <number> <energy unit>] [width <number> <length unit>] [background interior] [boundary <number>] [subtract <integer >= 0>] [capture interior] [charge_e1 <number>] [charge_e2 <number>] [only bound_state]",
+     "grammar": "l <integer >= 0> [J <J>] [depth <number> <energy unit>] [width <number> <length unit>] [radius <number> <length unit>] [diffuseness <number> <length unit>] [background interior] [boundary <number>] [subtract <integer >= 0>] [capture interior] [charge_e1 <number>] [charge_e2 <number>] [only bound_state]",
      "required": false,
      "repeatable": true,
      "rare": true,
@@ -2071,6 +2071,28 @@
          "units": ["fm", "m"],
          "positive": true,
          "doc": "r0 of a Gaussian central term in this partial wave, in both halves (left out: the central width; refused with a Woods-Saxon term)"
+        },
+        {
+         "name": "radius",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": true,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "R of a Woods-Saxon central term in this partial wave, in both halves (left out: the central radius; refused with a Gaussian term)"
+        },
+        {
+         "name": "diffuseness",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": true,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "a of a Woods-Saxon central term in this partial wave (left out: the central diffuseness; refused with a Gaussian term)"
         },
         {
          "name": "background",
@@ -4668,7 +4690,7 @@
   },
   "E_POTENTIAL_WAVE": {
    "severity": "error",
-   "meaning": "a wave field of a potential record: background without boundary, boundary, subtract, capture or an interior charge without background, an interior charge without capture interior, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, or one (l, J) twice"
+   "meaning": "a wave field of a potential record: background without boundary, boundary, subtract, capture or an interior charge without background, an interior charge without capture interior, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, a radius or diffuseness with a Gaussian term, or one (l, J) twice"
   },
   "E_CHANNEL_RADIUS_TWICE": {
    "severity": "error",

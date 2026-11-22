@@ -1226,3 +1226,21 @@ it. Its tests compared ratios and radii, never an absolute cross section. Result
 Nothing of the other branch remains. Not done on this one: an unbound final state against an independent
 calculation and away from a resonance of the potential; the interior charge in the exact form and for E2; a full
 gate of this branch.
+
+### 14.8 A wave's own Woods-Saxon radius and diffuseness (the owner's decision, 2026-11-22)
+
+    wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] [radius <R> fm] [diffuseness <a> fm] ...
+
+A `wave` had its own depth and, for a Gaussian term, its own width. The l-dependent potentials of Koonin, Tombrello
+and Fox and of Langanke and Koonin have a Woods-Saxon geometry per partial wave too, and the ¹²C(α,γ) fits made with
+the other branch scan the p wave's radius (1.5 to 3.55 fm) against an s wave of 3.55 fm; the converter of 14.6 had to
+refuse them. `radius` and `diffuseness` on a wave replace the central term's in that partial wave, in both halves,
+as `width` does for a Gaussian (`ForPartialWave`); refused with a Gaussian central term (`E_POTENTIAL_WAVE`). The
+potential's key gets a mark only where they are given. The converter now writes them where a single-l record's
+geometry differs from the pair's, and a record for single l replaces the pair's own record in that l. The Qt panel
+keeps them when it rewrites a wave but has no column for them.
+
+Check (`tests/potential_capture/check.sh`, 16): one potential written two ways, the p wave with `radius 3.2 fm
+diffuseness 0.55 fm` on a central term of 3.55 and 0.6 fm, and the central term 3.2 and 0.55 fm with the s wave given
+3.55 and 0.6 fm: the same cross sections at 51 energies to the digits written, and a factor of up to 6.4 from the
+run with the central geometry in the p wave; the refusal with a Gaussian term.

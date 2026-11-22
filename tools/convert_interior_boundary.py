@@ -9,15 +9,16 @@ Only the <potentials> section changes.  The records of one pair become one recor
   old                                              new
   ---------------------------------------------    ------------------------------------------------------------
   a record without `l`                             the pair's record (its central term, radii, step)
-  a record with `l 1 3`, depth D                   `wave l 1 depth D MeV ...`, `wave l 3 depth D MeV ...`
+  a record with `l 1 3`, depth D                   `wave l 1 depth D MeV ...`, `wave l 3 depth D MeV ...`, with its own
+                                                   radius and diffuseness (Gaussian width) where they differ
   `interior_boundary b`                            `... background interior boundary b capture interior`
   `interior_charge_e1 q` (`_e2`)                   `... charge_e1 q` (`charge_e2 q`) on those waves
   a pair with records for single l only            the first is the pair's record; every l keeps its depth as a wave
 
 What cannot be carried over is refused with the reason, and nothing is written:
 
-  - records of one pair that differ in more than the depth (a Woods-Saxon radius or diffuseness, the Coulomb radius,
-    the matching radius, the step, a spin-orbit term): a `wave` has its own depth (and Gaussian width) only;
+  - records of one pair that differ in the Coulomb radius, the matching radius, the step, a spin-orbit term or the
+    shape of the central term: a `wave` has its own depth and geometry only;
   - a depth that is not positive (the `wave` layout has attractive wells only).
 
 Two things change in the physics, and the conversion says so on stderr:
@@ -136,13 +137,9 @@ def main():
             for key in ("coulomb_radius", "matching_radius", "step", "spin_orbit"):
                 if get(r, key) != get(base, key):
                     fail(f"pair {pair}: the records {base['name']} and {r['name']} differ in {key} "
-                         f"('{get(base, key)}' and '{get(r, key)}'); a wave has its own depth only")
+                         f"('{get(base, key)}' and '{get(r, key)}'); a wave has its own depth and geometry only")
             if shape != base_shape:
                 fail(f"pair {pair}: the records {base['name']} and {r['name']} have different central shapes")
-            for key in ("radius", "diffuseness"):
-                if shape == "woods_saxon" and parts[key] != base_parts[key]:
-                    fail(f"pair {pair}: the records {base['name']} and {r['name']} differ in the Woods-Saxon {key} "
-                         f"({' '.join(base_parts[key])} and {' '.join(parts[key])}); a wave has its own depth only")
             boundary = get(r, "interior_boundary")
             listed = get(r, "l")
             if listed is None:
@@ -151,7 +148,8 @@ def main():
                 if lmax is None:
                     fail(f"potential {r['name']}: interior_boundary without l acts on every partial wave; "
                          "give --lmax (no maxOrbitalMomentum in <config>)")
-                ls = list(range(lmax + 1))
+                own = {int(v) for o in group if get(o, "l") is not None for v in get(o, "l").split()}
+                ls = [l for l in range(lmax + 1) if l not in own]  # a record for single l replaces the pair's there
             else:
                 ls = [int(v) for v in listed.split()]
             for l in ls:
@@ -160,6 +158,9 @@ def main():
                     text += f" depth {' '.join(parts['depth'])}"
                     if shape == "gaussian" and parts["width"] != base_parts["width"]:
                         text += f" width {' '.join(parts['width'])}"
+                    for key in ("radius", "diffuseness"):
+                        if shape == "woods_saxon" and parts[key] != base_parts[key]:
+                            text += f" {key} {' '.join(parts[key])}"
                 if boundary is not None and l in finals:
                     notes.append(f"pair {pair}, l = {l}: holds an external-capture final state, so it gets no background "
                                  f"(it had interior_boundary {boundary}); a bound final state must be the potential's own within 1 keV")

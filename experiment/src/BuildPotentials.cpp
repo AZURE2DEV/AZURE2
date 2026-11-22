@@ -71,6 +71,14 @@ bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) 
       }
       pw.width_fm = InBase(*wd);
     }
+    for (const char *word : {"radius", "diffuseness"})
+      if (const Value *g = w->Get(word)) {
+        if (s.shape != physics::FormShape::WoodsSaxon) {
+          c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": " + word + " belongs to a woods_saxon central term");
+          return false;
+        }
+        (std::string(word) == "radius" ? pw.radius_fm : pw.diffuseness_fm) = InBase(*g);
+      }
     const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract"), *cap = w->Get("capture");
     if (w->Get("only")) {
       if (bg) {

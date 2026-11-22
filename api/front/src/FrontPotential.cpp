@@ -196,6 +196,12 @@ bool ParsePotentialWave(const std::string &text, PotentialWave &out, std::string
     } else if (p.name == "width") {
       out.width = p.value.number;
       out.widthUnit = p.value.unit;
+    } else if (p.name == "radius") {
+      out.radius = p.value.number;
+      out.radiusUnit = p.value.unit;
+    } else if (p.name == "diffuseness") {
+      out.diffuseness = p.value.number;
+      out.diffusenessUnit = p.value.unit;
     } else if (p.name == "background") out.background = true;
     else if (p.name == "boundary") out.boundary = p.value.text.empty() ? p.value.number : p.value.text;
     else if (p.name == "subtract") out.subtract = p.value.text;
@@ -228,6 +234,8 @@ std::string PotentialWaveText(const PotentialWave &wave) {
     else if (part.name == "J") given = !wave.J.empty(), v.text = wave.J;
     else if (part.name == "depth") given = !wave.depth.empty(), v.number = wave.depth, v.unit = wave.depthUnit;
     else if (part.name == "width") given = !wave.width.empty(), v.number = wave.width, v.unit = wave.widthUnit;
+    else if (part.name == "radius") given = !wave.radius.empty(), v.number = wave.radius, v.unit = wave.radiusUnit;
+    else if (part.name == "diffuseness") given = !wave.diffuseness.empty(), v.number = wave.diffuseness, v.unit = wave.diffusenessUnit;
     else if (part.name == "background") given = wave.background, v.text = word;
     else if (part.name == "boundary") given = wave.background && !wave.boundary.empty(), v.text = v.number = wave.boundary;
     else if (part.name == "subtract") given = wave.background && !wave.subtract.empty(), v.text = wave.subtract;
