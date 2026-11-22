@@ -109,7 +109,7 @@ void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, doub
  * potential's own bound state in the final partial wave (l, 2J) at the level's energy E_f, its normalisation the
  * level's (the exterior W~ x ANC continued at a_c).  The potential must bind there: its eigenvalue nearest E_f must lie
  * within kInteriorCaptureEigenTolerance_MeV of E_f, else the run is refused with the depth that would bind at E_f (no
- * depth is changed).  An unbound final state is refused.  Prints the potential's eigenvalue and its own ANC, C_pot =
+ * depth is changed).  An unbound final state is continued in value without that rule (a note).  Prints the potential's eigenvalue and its own ANC, C_pot =
  * 1 / (|W~(a)| (int_0^a phi^2 + N_f)^1/2) with phi the interior regular solution normalised at a and N_f = int_a^inf
  * W~^2 / W~(a)^2 (nfIntegral), next to the level's ANC as written in <levels> (`writtenAnc`; NaN when the row holds
  * a reduced-width amplitude).  Only for a final channel that a wave with capture interior reaches by a multipole of
@@ -146,10 +146,24 @@ void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double r
   const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
   const std::string wave = "l = " + std::to_string(l) + (twoJ >= 0 ? ", 2J = " + std::to_string(twoJ) : std::string()) +
                            " of pair " + std::to_string(pair->GetPairKey());
-  if (!(finalEnergy < 0.0))
-    throw std::runtime_error("external capture with interior capture (potential_background.md section 5): the final state "
-                             "of photon pair " + std::to_string(exitPairKey) + " in the partial wave " + wave +
-                             " is not bound (E_f = " + std::to_string(finalEnergy) + " MeV): its interior wave is not built");
+  if (!(finalEnergy < 0.0)) {
+    // An unbound final state (section 14.3): a narrow resonance whose outgoing wave is continued inside a_c, in value,
+    // by the regular solution of this partial wave's potential at E_f.  No requirement that the potential has a
+    // resonance there: said, with the mismatch of the logarithmic derivatives at a_c.
+    const azure2::physics::HybridPotential qu = azure2::physics::ForPartialWave(*pot, l, twoJ);
+    const double ell = azure2::physics::InteriorLogDerivative(qu, pair->GetZ(1), pair->GetZ(2), pair->GetRedMass() * uconv, l,
+                                                              pair->SpinOrbitFactor(l, twoJ), radius, finalEnergy);
+    CoulFunc coul(pair);
+    const struct CoulWaves w = coul(l, twoJ, radius, finalEnergy);
+    const double rho = Kinematics::Channel(pair).Rho(radius, finalEnergy);
+    const double S = rho * (w.F * w.dF + w.G * w.dG) / (w.F * w.F + w.G * w.G);
+    configure.outStream << "NOTE: interior capture into the UNBOUND final state of photon pair " << exitPairKey << " (" << wave
+                        << ", E_f = " << finalEnergy << " MeV): inside a_c its outgoing wave is continued in value by the "
+                        << "potential's regular solution at E_f; at a_c the interior's a u'/u = " << ell
+                        << " against the shift of the waves outside, " << S
+                        << " (equal where the potential has its own resonance at E_f)." << std::endl;
+    return;
+  }
   const azure2::physics::HybridPotential q = azure2::physics::ForPartialWave(*pot, l, twoJ);
   const double mu = pair->GetRedMass() * uconv, ldoti = pair->SpinOrbitFactor(l, twoJ);
   const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);

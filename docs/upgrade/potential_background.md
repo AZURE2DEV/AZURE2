@@ -1148,8 +1148,32 @@ refusal. Not checked: the exact form with an interior charge; E2.
   limit (α + ¹²C into a state 3.26 MeV above the threshold: a factor two in it moves the rate by 41 % at T₉ = 0.5 and
   9 % at T₉ = 10). The rate mode prints a warning and writes the rate (the owner's choice, 2026-11-22).
 
-### 14.3 Not yet ported
+### 14.3 An unbound final state
 
-An unbound final state with interior capture (refused here, 5.3); the potential's parameters and the interior charge
-as fit parameters from outside (`pyazr.record_fit`); the warning for a level on a state of the potential that is not
-subtracted; a theory page; a converter for projects written with `interior_boundary`.
+Section 5.3 refused a final state above its pair's threshold. The parent branch treats one as a narrow resonance
+whose wave outside a_c is the outgoing wave O_f(r)/O_f(a) (`ECIntegral::IntegrateUnbound`, complex integrals FW, GW).
+Inside a_c it is now continued as the bound state is by (C3): in value, by the regular solution of the final partial
+wave's potential at E_f,
+
+    u_f(r) = φ_f(r),   φ_f = u_{E_f}/u_{E_f}(a),
+
+so the complex integrals get K D_F and K D_G with K of (C4) at E_f > 0 (`AddInteriorCapture`). There is **no rule
+that the potential has a resonance at E_f** (the bound-state rule asks for an eigenvalue within 1 keV): the set-up
+prints a note with a u′/u of the interior against the shift of the waves outside, which are equal where the potential
+has its own resonance there. Whether to require that is open (asked of the branch's author, 2026-11-22). The line
+shape of a broad final state (`line_window`) is refused when the final state's pair has interior capture: its
+standing parts do not carry the interior.
+
+Check (`tests/potential_capture/check.sh`, 13; `models/unbound.azr.in`): α + ¹²C with the Woods-Saxon of Koonin,
+Tombrello and Fox, E1 from the d and g waves into the potential's own l = 3 resonance (E_cm 3.261 MeV, 173 keV wide)
+given as a 3⁻ level of that width. σ at a_c = 4.0 and 6.5 fm is that at 5.35 fm to 0.4 % at 21 energies (E_cm 3.75
+to 7.5 MeV); without `capture interior` the radii differ by up to a factor 4.6. The same model on the other branch
+(its factor (L_f − b)/(f_f − b) on the final wave, the final channel's functions the potential's) held to 2 % and
+16 %. Not checked: against an independent calculation (the check is a_c independence); a final state away from a
+resonance of the potential; the exact form; a closed entrance channel.
+
+### 14.4 Not yet ported
+
+The potential's parameters and the interior charge as fit parameters from outside (`pyazr.record_fit`); the warning
+for a level on a state of the potential that is not subtracted; a theory page; a converter for projects written with
+`interior_boundary`.

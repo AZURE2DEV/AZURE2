@@ -26,6 +26,11 @@
 #  12. the interior charge (`charge_e1 q` on a wave with capture interior, section 14): with q minus the pair's own
 #      E1 charge number the interior operator vanishes and the capture is that without `capture interior`; the cross
 #      section is a quadratic in q; `charge_e1` without `capture interior` is refused.
+#  13. an unbound final state (section 14.3), models/unbound.azr.in: alpha + 12C with the Woods-Saxon of Koonin,
+#      Tombrello and Fox, E1 from the d and g waves (background and capture interior) into the potential's own l = 3
+#      resonance (E_cm 3.261 MeV, 173 keV wide at 5.35 fm), given as a 3- level of that width: the cross section at
+#      a_c = 4.0 and 6.5 fm is that at 5.35 fm to 1 %; without capture interior the radii differ by more than a
+#      factor 1.5; the set-up note; `line_window` on it is refused.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -397,6 +402,40 @@ if "$AZURE2_BIN" --validate "$WORK/models/q_refused.azr" > "$WORK/q_refused/run.
 elif grep -q "E_POTENTIAL_WAVE.*charge_e1 is the charge of the interior capture" "$WORK/q_refused/run.log"; then
   ok "charge_e1 without capture interior is refused (E_POTENTIAL_WAVE)"
 else bad "charge_e1 without capture interior: refused, but not in these words"; fi
+
+# ---- 13. an unbound final state (potential_background.md section 14.3).  The level stays where it is while the
+#          potential's state moves by 15 keV with the radius, and the state is 5 % of its energy wide: 1 %, not 1e-4.
+ub() {  # ub NAME RADIUS [nocap]
+  edited "$HERE/models/unbound.azr.in" "$WORK/models/$1.azr" awk -v a="$2" -v nocap="${3:-}" '
+    $27 == "0" && NF >= 31 { $28 = a } nocap != "" { sub(/ capture interior$/, "") } { print }' &&
+    run "$1" "$WORK/models/$1.azr" extrapolate 2
+}
+cp "$HERE/models/unbound.azr.in" "$WORK/models/ub535.azr"; run ub535 "$WORK/models/ub535.azr" extrapolate 2
+ub ub400 4.000; ub ub650 6.500; ub ubn400 4.000 nocap
+edited "$HERE/models/unbound.azr.in" "$WORK/models/ubn535.azr" sed 's/ capture interior$//' && run ubn535 "$WORK/models/ubn535.azr" extrapolate 2
+if res="$(python3 -I - "$WORK" <<'PY'
+import sys
+def sigma(name):
+    return [float(l.split()[3]) for l in open(f"{sys.argv[1]}/{name}/output/AZUREOut_aa=1_R=2.extrap") if len(l.split()) >= 5]
+a, b, c, n, m = (sigma(x) for x in ("ub535", "ub400", "ub650", "ubn535", "ubn400"))
+assert len(a) == 21 and all(len(x) == 21 and min(x) > 0 for x in (b, c, n, m)), "21 cross sections each"
+near = max(max(abs(x / y - 1) for x, y in zip(b, a)), max(abs(x / y - 1) for x, y in zip(c, a)))
+far = max(max(x / y, y / x) for x, y in zip(m, n))
+print(f"4.0 and 6.5 fm against 5.35 fm to {near:.1e}; without capture interior the radii differ by a factor {far:.2f}")
+sys.exit(0 if near < 1e-2 and far > 1.5 else 1)
+PY
+)"; then ok "unbound final state: $res"
+else bad "unbound final state: ${res:-no result}"; fi
+if grep -q "NOTE: interior capture into the UNBOUND final state of photon pair 2" "$WORK/ub535/run.log" &&
+   ! grep -q "interior capture into the UNBOUND" "$WORK/ubn535/run.log"; then
+  ok "unbound final state: the set-up note, only with capture interior"
+else bad "unbound final state: no set-up note, or one without capture interior"; fi
+edited "$HERE/models/unbound.azr.in" "$WORK/models/ubwin.azr" sed 's/^    quantity       sigma$/    quantity       sigma\
+    line_window    200 keV/'
+if run ubwin "$WORK/models/ubwin.azr" extrapolate 2; then bad "line_window with interior capture ran"
+elif grep -q "potential with interior capture, which the line-shape integration is not built" "$WORK/ubwin/run.log"; then
+  ok "line_window on a final state whose pair has interior capture is refused"
+else bad "line_window with interior capture: stopped, but not in these words"; fi
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))

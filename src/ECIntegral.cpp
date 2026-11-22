@@ -231,7 +231,7 @@ void ECIntegral::Integrate(double chanrad) {
  * wave and the channel-capture term the interior driven by the level-fed outgoing wave.  Nothing without such a
  * background (or beyond the matching radius, where the background is not applied either).
  */
-void ECIntegral::AddInteriorCapture(double chanRad, bool electric) {
+void ECIntegral::AddInteriorCapture(double chanRad, bool electric, double finalEnergy) {
   const std::optional<azure2::physics::HybridPotential> &pot = pair()->GetHybridPotential();
   if (!pot || chanRad > pot->matching_radius_fm) return;
   const int li = params_.liValue, lf = params_.lfValue, twoJi = params_.twoJi, twoJf = params_.twoJf;
@@ -262,8 +262,20 @@ void ECIntegral::AddInteriorCapture(double chanRad, bool electric) {
   const auto weight = [&](double r) { return (charge ? (*effective)(r) : 1.0) * pow(r, L) + extra * pow(r, L); };
   const double K = azure2::physics::InteriorCaptureIntegral(
       azure2::physics::ForPartialWave(*pot, li, twoJi), li, pair()->SpinOrbitFactor(li, twoJi), E, *bg,
-      azure2::physics::ForPartialWave(*pot, lf, twoJf), lf, pair()->SpinOrbitFactor(lf, twoJf), -params_.bindingEnergy,
-      pair()->GetZ(1), pair()->GetZ(2), mu, chanRad, weight);
+      azure2::physics::ForPartialWave(*pot, lf, twoJf), lf, pair()->SpinOrbitFactor(lf, twoJf),
+      finalEnergy > 0.0 ? finalEnergy : -params_.bindingEnergy, pair()->GetZ(1), pair()->GetZ(2), mu, chanRad, weight);
+  if (finalEnergy > 0.0) {
+    // An unbound final state (potential_background.md section 14.3): outside a_c its wave is O_f(r)/O_f(a)
+    // (IntegrateUnbound); inside it is continued in value by the regular solution of the final partial wave's
+    // potential at E_f, phi_f(r) with phi_f(a) = 1, as the bound state is by (C3).  The complex integrals of the
+    // outgoing wave get K D of the undressed F and G, as (C5).  Not in the standing parts: a line window with
+    // interior capture is refused (LineWindowProblem).
+    const struct CoulWaves w = coulfunction()->operator()(li, twoJi, chanRad, E);
+    const double rho = Kinematics::Channel(pair()).Rho(chanRad, E);
+    FWc_ += K * (rho * w.dF - B * w.F);
+    GWc_ += K * (rho * w.dG - B * w.G);
+    return;
+  }
   double sOut;
   const double wfA = whitfunction()->Scaled(lf, twoJf, chanRad, params_.bindingEnergy, sOut) * pow(10.0, sOut - params_.log10RefOut);
   if (E > 0.0) {
@@ -486,10 +498,6 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   complex overlapIntegral(0., 0.);
   complex overlapF(0., 0.), overlapG(0., 0.);  // StandingParts
   if (unboundFinal) {
-    if (pair()->GetHybridPotential() &&
-        azure2::physics::InteriorCaptureOf(*pair()->GetHybridPotential(), theInitialLValue, params_.twoJi))
-      throw std::runtime_error("external capture into an unbound final state from a partial wave with interior capture: "
-                               "not built (docs/upgrade/potential_background.md section 5)");
     // The expressions of the open bound branch below, with the complex integrals of the outgoing final-state wave.
     if (!IntegrateUnbound(chanRad, finalEnergy)) {
       status_ |= 1;
@@ -505,6 +513,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
                (gw + complex(0.0, 1.0) * fw);
       return (std::real(hsp) * fw + std::imag(hsp) * gw) * flux;
     };
+    AddInteriorCapture(chanRad, radType == 'E', finalEnergy);
     overlapIntegral = overlap(FWc_, GWc_);
     // the same with the exterior F_f alone and G_f alone (unnormalized), for StandingParts
     overlapF = overlap(complex(rawFF_, 0.0), complex(rawGF_, 0.0));
@@ -512,7 +521,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     hasParts_ = true;
   } else if (outEnergy > 0.0) {
     Integrate(chanRad);
-    AddInteriorCapture(chanRad, radType == 'E');
+    AddInteriorCapture(chanRad, radType == 'E', 0.0);
     struct CoulWaves
         coul = coulfunction()->ChannelWaves(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     if (isChannelCapture) {
@@ -540,7 +549,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     }
   } else {
     Integrate(chanRad);
-    AddInteriorCapture(chanRad, radType == 'E');
+    AddInteriorCapture(chanRad, radType == 'E', 0.0);
     assert(isChannelCapture);
     // GW() now holds the integral divided by 10^(log10RefIn+log10RefOut), and
     // the Whittaker in the denominator is mWhit*10^log10RefIn.  The RefIn
