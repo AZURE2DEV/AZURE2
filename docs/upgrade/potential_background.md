@@ -1189,7 +1189,40 @@ an independent session; the charge and the s-wave depth together; with the data 
 the refusals. With the norm's prior at 5 % the norm takes up most of what the charge does to this one cross section
 (linear error 0.16 against 0.07): the test holds it to 0.5 %.
 
-### 14.5 Not yet ported
+### 14.5 A level on a state of the potential
 
-The warning for a level on a state of the potential that is not subtracted; a theory page; a converter for projects
-written with `interior_boundary`.
+Section 3 ends "the engine does not detect this". It does now, at set-up (`WarnLevelDoublesPotential`,
+`src/CompoundSystemChecks.cpp`): a level with a width in a channel with an interior background that lies within one
+width (the larger of its observed particle width and the state's; 1 keV for two bound ones) of a resonance or bound
+state of that wave's potential is warned about. The states are the zeros of ℓ(E) − S(E) (`BackgroundPotentialStates`,
+the finder the rate grid uses; S of the decaying solution below the threshold), searched 5 MeV beyond the levels of
+the channel. In a wave with `subtract` the message is a note: the level is then meant to stand for a state of the
+potential, and whether the subtracted box state is that one is the user's to check (a box state's energy depends on
+a_c and B_bg and is not the state's). `tests/potential_capture/check.sh`, 14.
+
+### 14.6 Projects of the other branch (`tools/convert_interior_boundary.py`)
+
+    python3 tools/convert_interior_boundary.py old.azr new.azr [--lmax N] [--final-l L[,L...]]
+
+rewrites the `<potentials>` section of a project written with `interior_boundary`, `l` and `interior_charge_e1/e2`:
+the records of one pair become one record, a record for single l a `wave` with its depth, `interior_boundary b` a
+`background interior boundary b capture interior`. Refused, with nothing written: records of one pair that differ in
+more than the depth (a `wave` has no Woods-Saxon radius or diffuseness of its own), and a depth that is not positive.
+A partial wave that holds an external-capture final state gets no background (5.3 refuses one there), which the
+conversion says. `tests/potential_capture/check.sh`, 15.
+
+**The two branches do not give the same capture for the same project, and this one is right.** On the other
+branch's own test model (α + ¹²C, E1 into the potential's 0⁺ bound state given as a level with an ANC C) both are
+independent of a_c (here to 2.3 × 10⁻⁴ between 4.0 and 5.35 fm over 51 energies), but the other branch's cross section is lower by
+exactly 1 + (C/C_pot)², C_pot = 731.857 fm^−½ the potential's own ANC: 1.01867 at C = 100, 1.16803 at C = 300 and
+2.00000 at C = C_pot, at every energy. There the final state's partial wave had the interior R-function as well as
+the level, so the state was in the channel twice and the level's ANC was shared with the potential's pole. At
+C = C_pot this branch equals the independent potential-model calculation (5.7), so the other branch gave half of
+it. Its tests compared ratios and radii, never an absolute cross section. Results obtained with
+`feature/upgrade-6-interior-potential` for a final state in a wave with `interior_boundary` carry that factor.
+
+### 14.7 Not ported
+
+Nothing of the other branch remains. Not done on this one: an unbound final state against an independent
+calculation and away from a resonance of the potential; the interior charge in the exact form and for E2; a full
+gate of this branch.

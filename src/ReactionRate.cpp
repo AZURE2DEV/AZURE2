@@ -116,10 +116,8 @@ static const double kRateEpsRel = 1e-7;
  * The resonances of the entrance pair's potential in its partial waves with an interior background
  * (docs/upgrade/potential_background.md): sigma(E) carries them without a level, and the grid had a cluster on every
  * level and none on these (a 412 keV wide 1- resonance of alpha + 12C between backbone nodes left the rate 0.2 % low
- * from T9 = 3).  A resonance is a zero of l(E) - S(E), l the regular solution's logarithmic derivative at the channel
- * radius and S the shift of the waves outside it, where the difference falls; its width 2P / -(l - S)'.  Found on a
- * 50 keV grid; a zero wider than half its energy is no resonance (above the barrier) and is not counted.  A subtracted
- * box state's resonance is listed too: its level has a cluster of its own and one more does no harm.
+ * from T9 = 3).  The resonances are BackgroundPotentialStates' (CompoundSystemChecks.h).  A subtracted box state's
+ * resonance is listed too: its level has a cluster of its own and one more does no harm.
  */
 static void AddPotentialResonances(const CompoundSystem *compound, int entranceKey,
                                    std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &resonances) {
@@ -129,9 +127,6 @@ static void AddPotentialResonances(const CompoundSystem *compound, int entranceK
   const PPair *pair = compound->GetPair(entrance);
   const std::optional<phys::HybridPotential> &pot = pair->GetHybridPotential();
   if (!pot) return;
-  const double mu = pair->GetRedMass() * uconv;
-  const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
-  CoulFunc coul(pair);
   std::set<std::tuple<int, int, double>> done;
   for (int j = 1; j <= compound->NumJGroups(); j++) {
     const JGroup *group = compound->GetJGroup(j);
@@ -142,42 +137,8 @@ static void AddPotentialResonances(const CompoundSystem *compound, int entranceK
       const double a = channel->GetRadius();
       if (!phys::BackgroundOf(*pot, l, twoJ) || a > pot->matching_radius_fm) continue;
       if (!done.insert(std::make_tuple(l, twoJ, a)).second) continue;
-      const phys::HybridPotential wave = phys::ForPartialWave(*pot, l, twoJ);
-      const double ldoti = pair->SpinOrbitFactor(l, twoJ);
-      double P = 0.0;
-      auto mismatch = [&](double E) {  // l - S, with the undressed waves outside the radius
-        const struct CoulWaves w = coul(l, twoJ, a, E);
-        const double rho = Kinematics::Channel(pair).Rho(a, E), norm = w.F * w.F + w.G * w.G;
-        P = rho / norm;
-        return phys::InteriorLogDerivative(wave, z1, z2, mu, l, ldoti, a, E) - rho * (w.F * w.dF + w.G * w.dG) / norm;
-      };
-      const double low = 1e-3, step = 0.05;
-      const int n = static_cast<int>(std::ceil((kRateEnergyHigh - low) / step));
-      double prevE = low, prev = mismatch(low);
-      for (int i = 1; i <= n; i++) {
-        const double E = low + (kRateEnergyHigh - low) * i / n, g = mismatch(E);
-        if (std::isfinite(g) && std::isfinite(prev) && g * prev < 0.0) {
-          double lo = prevE, hi = E, glo = prev;
-          for (int it = 0; it < 50; it++) {
-            const double mid = 0.5 * (lo + hi), gm = mismatch(mid);
-            if (gm * glo < 0.0) hi = mid;
-            else {
-              lo = mid;
-              glo = gm;
-            }
-          }
-          const double Er = 0.5 * (lo + hi);
-          if (std::fabs(mismatch(Er)) < 1e-5) {  // a zero, not a pole of l
-            const double h = std::min(1e-3, 0.25 * Er);
-            const double slope = (mismatch(Er + h) - mismatch(Er - h)) / (2.0 * h);
-            mismatch(Er);
-            const double width = slope < 0.0 ? 2.0 * P / -slope : 0.0;
-            if (width > 0.0 && width <= 0.5 * Er) resonances.push_back({Er, width, width, 0});
-          }
-        }
-        prevE = E;
-        prev = g;
-      }
+      for (const PotentialState &state : BackgroundPotentialStates(*pair, l, twoJ, a, 1e-3, kRateEnergyHigh))
+        if (state.width > 0.0) resonances.push_back({state.Ec, state.width, state.width, 0});
     }
   }
 }
@@ -709,8 +670,10 @@ ReactionRate::ReactionRate(const CompoundSystem *compound, const LevelState &sta
   }
   // Warn once if a level has a radiative width comparable to its particle width,
   // where the R-Matrix treatment of capture breaks down.
-  if (const std::optional<ObservedLevelTable> observed = compound_->ObservedWidthsAt(configure, params, state_, inputs_))
+  if (const std::optional<ObservedLevelTable> observed = compound_->ObservedWidthsAt(configure, params, state_, inputs_)) {
     WarnLargeRadiativeWidths(*compound_, inputs_, *observed, configure);
+    WarnLevelDoublesPotential(*compound_, inputs_, *observed, configure);
+  }
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound_->CalcShiftFunctions(configure, state_);
 }
 

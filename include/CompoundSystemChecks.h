@@ -1,5 +1,6 @@
 #ifndef COMPOUNDSYSTEM_CHECKS_H
 #define COMPOUNDSYSTEM_CHECKS_H
+#include <vector>
 
 class CompoundSystem;
 class LevelInputs;
@@ -30,5 +31,25 @@ constexpr double kMassCheckTolerance = 1.0e-3;  ///< MeV
 /// Warns of every R-matrix level whose radiative width exceeds 10 % of its particle width, from the observed widths
 /// of `table` (CompoundSystem::ObservedWidthsAt).
 void WarnLargeRadiativeWidths(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure);
+
+/// A state of a pair's potential in a partial wave with an interior background: its channel energy (MeV; < 0 bound)
+/// and width (MeV; 0 below the threshold).
+class PPair;
+struct PotentialState {
+  double Ec = 0.0;
+  double width = 0.0;
+};
+/// The states of the potential of (pair, l, 2J) at `radius` with channel energies in [low, high] (MeV): the zeros of
+/// l(E) - S(E), the regular solution's logarithmic derivative at the radius less the shift of the waves outside it
+/// (the decaying solution below the threshold), on a 50 keV grid; above the threshold with the width 2P / -(l - S)'
+/// and only those narrower than half their energy (above the barrier a zero is no resonance).  Empty for a wave
+/// without an interior background (potential_background.md).
+std::vector<PotentialState> BackgroundPotentialStates(const PPair &pair, int l, int twoJ, double radius, double low, double high);
+/// Warns of every level with a width in a channel with an interior background that lies within one width (the larger
+/// of the level's observed particle width and the state's; 1 keV for two bound ones) of a state of that wave's
+/// potential: the background already produces it, and a level on top describes it twice
+/// (potential_background.md section 3).  In a wave with a subtracted box state it is a note: the level is then meant
+/// to stand for a state of the potential.  Returns the number of levels warned about.
+int WarnLevelDoublesPotential(const CompoundSystem &compound, const LevelInputs &inputs, const ObservedLevelTable &table, const Config &configure);
 
 #endif

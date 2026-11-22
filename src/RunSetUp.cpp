@@ -152,7 +152,10 @@ int SetUpObjective(ProgramRun &run) {
   // where the R-Matrix treatment of capture breaks down.
   if (const std::optional<ObservedLevelTable> observed =
           run.compound->ObservedWidthsAt(run.configure, run.params.GetMinuitParams().Params(), run.state, run.inputs))
+  {
     WarnLargeRadiativeWidths(*run.compound.get(), run.inputs, *observed, run.configure);
+    WarnLevelDoublesPotential(*run.compound.get(), run.inputs, *observed, run.configure);
+  }
 
   // AZURE_PROFILE: the set-up's stages (the channel table, the points' energy-dependent values) on their own, not
   // in the first evaluation's report.

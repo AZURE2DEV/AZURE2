@@ -1,0 +1,47 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+includeAllJPi=1 #Hard-sphere scattering in every J^pi up to maxOrbitalMomentum
+maxOrbitalMomentum=1
+format=3
+</config>
+<potentials>
+potential a12C
+    pair            a+12C
+    coulomb_radius  3.55 fm
+    central         woods_saxon depth 45.891 MeV radius 3.55 fm diffuseness 0.6 fm
+    matching_radius 15 fm
+    step            0.0275 fm
+    interior_boundary 0
+</potentials>
+<levels>
+0 1 4.734348545 1 1 1 0 0 1 1 1 100.0 0 1 0 1 0 4.0026 12 2 6 7.16191 7.16191 0 0 0.0 0 5.350 0 0 0
+
+1 -1 30.0 1 1 1 0 2 2 1 1 1e-12 0 1 0 1 0 4.0026 12 2 6 7.16191 7.16191 0 0 0.0 0 5.350 0 0 0
+1 -1 30.0 1 1 2 0 2 2 1 1 1e-12 1 1 0 1 4.734348545 0 15.9949 0 8 7.16191 0 0 0 0.0 10 0 0 0 1
+
+</levels>
+<data>
+</data>
+<extrapolations>
+extrapolation x1
+    reaction       12C(a,g)16O[4.734348545]
+    quantity       sigma
+    unit           b
+    energies       range 1.0 6.0 MeV lab step 0.1
+</extrapolations>
+<targets>
+</targets>
+<parameterSettings>
+# Fitting parameter settings (only non-fixed parameters shown)
+# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index
+</parameterSettings>

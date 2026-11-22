@@ -31,6 +31,15 @@
 #      resonance (E_cm 3.261 MeV, 173 keV wide at 5.35 fm), given as a 3- level of that width: the cross section at
 #      a_c = 4.0 and 6.5 fm is that at 5.35 fm to 1 %; without capture interior the radii differ by more than a
 #      factor 1.5; the set-up note; `line_window` on it is refused.
+#  14. a level on a state of the potential (section 14.5): a 1- level of 400 keV at E_x = 9.60 MeV in a p wave with
+#      an interior background lies on the potential's own 1- resonance (9.561 MeV, 412 keV): the set-up warns that it
+#      describes the state twice; with `subtract 1` on the wave it is a note; models/unbound.azr.in itself draws
+#      neither.
+#  15. tools/convert_interior_boundary.py (section 14.6): models/old_layout.azr.in, a project of the branch
+#      feature/upgrade-6-interior-potential (`interior_boundary 0` on every l, E1 capture into the potential's own 0+
+#      bound state), becomes a `wave l 1 background interior boundary 0 capture interior` (the final state's s wave
+#      gets no background), and its capture is the same at a_c = 4.0 and 5.35 fm to 5e-4 (2.3e-4); two records of
+#      one pair with different Woods-Saxon radii are refused.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -436,6 +445,57 @@ if run ubwin "$WORK/models/ubwin.azr" extrapolate 2; then bad "line_window with 
 elif grep -q "potential with interior capture, which the line-shape integration is not built" "$WORK/ubwin/run.log"; then
   ok "line_window on a final state whose pair has interior capture is refused"
 else bad "line_window with interior capture: stopped, but not in these words"; fi
+
+# ---- 14. a level on a state of the potential (potential_background.md section 14.5)
+edited "$HERE/models/unbound.azr.in" "$WORK/models/double.azr" awk '
+  /wave            l 4/ { print; print "    wave            l 1 background interior boundary 0"; next }
+  /^3 -1 10.4229 / { print; print ""; l = $0; sub(/^3 -1 10.4229 1 1 1 0 6 1 1 1 173042.0/, "1 -1 9.60 1 1 1 0 2 1 1 1 400000.0", l); print l; next }
+  { print }' && run double "$WORK/models/double.azr" extrapolate 2
+edited "$WORK/models/double.azr" "$WORK/models/double_sub.azr" sed 's/l 1 background interior boundary 0$/l 1 background interior boundary 0 subtract 1/' &&
+  run double_sub "$WORK/models/double_sub.azr" extrapolate 2
+W14="lies within one width of a resonance of the potential of pair 1 (l = 1)"
+if grep -q "WARNING: J^pi=1-.*$W14" "$WORK/double/run.log" && grep -q "a level on top of it describes it twice" "$WORK/double/run.log"; then
+  ok "a level on the potential's 1- resonance is warned about"
+else bad "a level on the potential's 1- resonance: no warning"; fi
+if grep -q "NOTE: J^pi=1-.*$W14" "$WORK/double_sub/run.log" && ! grep -q "WARNING: J^pi=1-.*$W14" "$WORK/double_sub/run.log"; then
+  ok "with subtract on the wave it is a note"
+else bad "with subtract on the wave: no note, or still a warning"; fi
+if [ -s "$WORK/ub535/run.log" ] && ! grep -q "lies within one width of a" "$WORK/ub535/run.log"; then
+  ok "no such message for a model without a level on a state of a background wave"
+else bad "the unbound model draws the doubled-level message"; fi
+
+# ---- 15. the converter from the layout of feature/upgrade-6-interior-potential (section 14.6)
+CONVERT="$HERE/../../tools/convert_interior_boundary.py"
+if python3 -I "$CONVERT" "$HERE/models/old_layout.azr.in" "$WORK/models/conv535.azr" 2> "$WORK/convert.log" &&
+   grep -q "^    wave            l 1 background interior boundary 0 capture interior$" "$WORK/models/conv535.azr" &&
+   [ "$(grep -c "^    wave " "$WORK/models/conv535.azr")" = 1 ] && ! grep -q "interior_boundary" "$WORK/models/conv535.azr" &&
+   grep -q "l = 0: holds an external-capture final state" "$WORK/convert.log"; then
+  ok "the old layout converts: one wave (l = 1), the final state's s wave without a background, said"
+else bad "the converter: $(tail -1 "$WORK/convert.log" 2> /dev/null)"; fi
+edited "$WORK/models/conv535.azr" "$WORK/models/conv400.azr" awk '$27 == "0" && NF >= 31 { $28 = "4.000" } { print }'
+run conv535 "$WORK/models/conv535.azr" extrapolate 2; run conv400 "$WORK/models/conv400.azr" extrapolate 2
+if res="$(python3 -I - "$WORK" <<'PY'
+import sys
+def sigma(name):
+    return [float(l.split()[3]) for l in open(f"{sys.argv[1]}/{name}/output/AZUREOut_aa=1_R=2.extrap") if len(l.split()) >= 5]
+a, b = sigma("conv535"), sigma("conv400")
+assert len(a) == 51 and len(b) == 51 and min(a) > 0, "51 cross sections each"
+d = max(abs(x / y - 1) for x, y in zip(a, b))
+print(f"the same to {d:.1e}")
+sys.exit(0 if d < 5e-4 else 1)
+PY
+)"; then
+  ok "the converted project's capture at 4.0 and 5.35 fm: $res"
+else bad "the converted project's capture depends on the radius: ${res:-}"; fi
+awk '/^<\/potentials>$/ { print "potential a12C_p"; print "    pair            a+12C"; print "    coulomb_radius  3.55 fm"
+       print "    central         woods_saxon depth 40 MeV radius 3.70 fm diffuseness 0.6 fm"; print "    matching_radius 15 fm"
+       print "    step            0.0275 fm"; print "    l               1"; print "    interior_boundary 0" } { print }' \
+  "$HERE/models/old_layout.azr.in" > "$WORK/models/old_two.azr"
+if python3 -I "$CONVERT" "$WORK/models/old_two.azr" "$WORK/models/conv_two.azr" 2> "$WORK/convert_two.log"; then
+  bad "two records with different Woods-Saxon radii were converted"
+elif grep -q "differ in the Woods-Saxon radius" "$WORK/convert_two.log" && [ ! -e "$WORK/models/conv_two.azr" ]; then
+  ok "two records of one pair with different Woods-Saxon radii are refused, nothing written"
+else bad "two records with different radii: $(tail -1 "$WORK/convert_two.log")"; fi
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))
