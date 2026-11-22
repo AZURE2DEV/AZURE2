@@ -1,5 +1,18 @@
 # The interior R-function of a hybrid potential
 
+**SUPERSEDED (2026-11-22). Do not use this branch for capture.** The work continues on
+`feature/upgrade-10-potential-unified`, which is built on `feature/upgrade-9-potential-gui` and its `wave` line
+(`docs/upgrade/potential_background.md` §14 there; `tools/convert_interior_boundary.py` converts a file of this
+branch's layout).
+
+**Known error on this branch:** capture into a bound final state that sits in a partial wave with `interior_boundary`
+is too low by the factor 1 + (C/C_pot)², at every energy, where C is the final level's ANC and C_pot the ANC of the
+potential's own bound state: the final state is counted in the channel twice. On
+`tests/interior_capture/models/direct.azr` (C_pot = 731.857 fm^-1/2) the factor is 1.01867 at C = 100, 1.16803 at
+C = 300 and 2.00000 at C = C_pot. The unified branch agrees with an independent potential-model calculation there.
+None of this branch's tests compared an absolute capture cross section with an independent one, so they pass.
+Scattering and capture into a final state outside such a wave are not affected.
+
 **Status (2026-11-20): built on `feature/upgrade-6-interior-potential`** — steps 1 to 4 of §4 and the bound levels;
 §8 lists what was built and where it differs from the design below. §6 (capture from the potential's interior):
 steps 1 to 3 of §6.5 are built (§9); unbound final states, the rate mode's check and the fit parameters are not. The text of §1 to §7 is the design note as
