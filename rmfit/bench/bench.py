@@ -54,6 +54,14 @@ def review_flags(campaign_dir: str) -> Optional[set]:
     return out
 
 
+def new_review_flags(run: set, ref: set) -> list:
+    """The run's flags the reference does not carry: same severity and code, and a subject that is not the same
+    (rmfit.review.same_flag_subject: a level that moved within its own width is the same level; 2026-11-21)."""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+    from rmfit.review import same_flag_subject
+    return sorted(f for f in run if not any(f[0] == g[0] and f[1] == g[1] and same_flag_subject(f[2], g[2]) for g in ref))
+
+
 def _campaign(d):
     sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
     from rmfit.campaign import Campaign
@@ -132,7 +140,8 @@ def score_run(case: dict, run_name: str, review_missing: bool = False) -> dict:
             elif os.path.exists(rv):
                 stale.append(f"{os.path.basename(c.dir)} REVIEW.md is of candidate {have}, incumbent {I['cid']}")
     fr, fp = review_flags(ref_dir), review_flags(run_dir)
-    inherited = fr is not None and fp is not None and not {f for f in fp - fr if f[0] == "HIGH"} and bool({f for f in fp if f[0] == "HIGH"})
+    fresh = new_review_flags(fp, fr) if fr is not None and fp is not None else []
+    inherited = fr is not None and fp is not None and not [f for f in fresh if f[0] == "HIGH"] and bool({f for f in fp if f[0] == "HIGH"})
     dec = decisions_summary(run_dir, tuple(run.get("pre_answered") or ()), inherited_review=inherited)
     row["wait_decisions"], row["human_turns"] = dec["wait"], dec["human"]
     pre_note = ((" pre-answered by the case definition" + (" / review-high on a HIGH flag the reference's REVIEW.md carries" if inherited else "")
@@ -143,7 +152,7 @@ def score_run(case: dict, run_name: str, review_missing: bool = False) -> dict:
         row["new_flags"] = "n/a (no REVIEW.md in " + ", ".join(n for n, f in (("reference", fr), ("run", fp)) if f is None) + ")"
         pass_flags = None
     else:
-        new = sorted(fp - fr)
+        new = fresh
         row["new_flags"] = "; ".join(f"{s} {c} {n}" for s, c, n in new) if new else "none"
         pass_flags = not new
     row["pass_data"] = P["data_chi2"] <= R["data_chi2"] * (1 + 1e-9)

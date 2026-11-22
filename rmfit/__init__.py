@@ -22,6 +22,20 @@ AZURE2_ROOT = os.environ.get("AZURE2_ROOT") or _containing_azure2() or os.path.e
 _root = os.path.abspath(AZURE2_ROOT)
 sys.path[:] = [p for p in sys.path if not p or os.path.abspath(p) != _root]
 sys.path.insert(0, AZURE2_ROOT)
+# ...but a spawned worker (multiprocessing "spawn": Sharded shards, SingleSession) starts from THIS process's sys.path and
+# imports rmfit afresh, so with AZURE2_ROOT first it finds AZURE2_ROOT/rmfit when that tree has one -- every clone of the
+# upgrade branch tracks an old rmfit/ (workers on such a frozen engine copy ran it).
+# Then import pyazr from AZURE2_ROOT now and put rmfit's own parent back in front: pyazr is bound to AZURE2_ROOT's copy
+# from here on, and the worker finds this rmfit (whose import repeats the same two steps).
+_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if os.path.isdir(os.path.join(_root, "rmfit")) and _root != _parent:
+    try:
+        import pyazr  # noqa: F401
+    except Exception:  # noqa: BLE001 -- not importable here: keep the order; rmfit.backend reports the error
+        pass
+    else:
+        sys.path[:] = [p for p in sys.path if not p or os.path.abspath(p) != _parent]
+        sys.path.insert(0, _parent)
 
 #: Runtime options the CLI fits of the development archive used
 #: (``--no-long-wavelength --ignore-externals --use-brune``).  pyazr's own

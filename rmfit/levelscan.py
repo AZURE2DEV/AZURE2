@@ -32,8 +32,9 @@ from .backend import PYAZR3
 from .diagnose import residual_runs
 from .engine import EvalError, Evaluator
 from .keys import ParamKey
+from .structure import channel_threshold
 from .local import BoundsPolicy, default_bounds, gn_step
-from .structure import JPI_GROUPS, LevelCandidate, jpi_parse, lowest_L, resolve_jpis  # noqa: F401 (JPI_GROUPS: explicit use only)
+from .structure import JPI_GROUPS, LevelCandidate, channel_wigner_ev, jpi_parse, lowest_L, resolve_jpis  # noqa: F401 (JPI_GROUPS: explicit use only)
 
 
 @dataclass
@@ -211,11 +212,30 @@ def cluster_density(score: float, width: float, span: float, floor_kev: float = 
 
 def template_variant(base_azr: str, path: str, ex: float, jpis: Optional[Sequence[str]] = None,
                      gamma_ref_ev: float = 1.0, gamma_ref_photon_ev: float = 1e-3,
-                     output_dir: Optional[str] = None) -> dict:
+                     output_dir: Optional[str] = None, seed_theta2: float = 1e-2, min_open_ev: float = 0.1) -> dict:
     """``path`` = ``base_azr`` plus one dummy level per J^pi at ``ex`` (energy
     free, so the screen can offset it) carrying every channel the group already uses (or the lowest waves
-    into pairs 1 and 2 for a new group), each at ``gamma_ref_ev`` so that the
-    engine's initial vector gives the rwa of that physical width.
+    into pairs 1 and 2 for a new group).  Each particle channel is written with the physical width
+    ``min(gamma_ref_ev, seed_theta2 * Gamma_W)`` (Gamma_W = the channel's Wigner-limit width at ``ex``,
+    ``structure.channel_wigner_ev``), i.e. theta^2 <= ``seed_theta2`` (the 1 % rule of
+    ``structure.omitted_open_channels``); a closed channel, or one whose Gamma_W cannot be computed, gets
+    ``seed_theta2 * gamma_ref_ev``.  A J^pi none of whose particle channels reaches Gamma_W >= ``min_open_ev``
+    at ``ex`` is NOT written (listed in the result's ``skipped``): template_screen leaves channels with
+    Gamma_W < 1 eV out of the templates and skips a J^pi with none left, so nothing it screens is lost.
+    The per-channel seed is kept in ``levels[jpi]["channels"][i]["gamma"]``.
+
+    If the transformation isn't successful, something could be seriously wrong: until now every particle
+    channel was written at a flat 1 eV.  Channels just above their threshold cannot hold 1 eV
+    (at Ex 15.45 MeV, Gamma_W of 1e-4 .. 3e-9 eV), so AZURE2's Brune transform of the dummy had
+    no real reduced width ("Denominator less than zero while transforming", 520 times in one
+    scan).  The screen's templates never used those amplitudes (Wigner-based since 2026-09-14),
+    but the dummy itself was an unphysical level and the warnings hid any real one.  The
+    rmfit-campaign skill's 2026-10-25 rule ("physical seeds must be TINY") now holds here too.
+    Why not tinier, or zero (tested on 13N, rmfit_dev_seedfix/readme): AZURE2's target-integration grid
+    puts a lattice of pitch Gamma_particle / pointsPerWidth on a level inside a <targetInt> window and
+    walks it in pitch steps to a 1e-12 MeV tolerance, so a level with Gamma_particle ~1e-13 eV hangs the
+    engine at init (seeds of 1e-6 Gamma_W near a threshold did); an exactly-zero width drops the channel's
+    parameter key.  Hence theta^2 = 1e-2 and no dummy without a channel able to carry >= min_open_ev.
     ``jpis`` None/empty = the model's own groups; a J^pi no particle pair can couple to
     raises (structure.resolve_jpis, 2026-11-04 -- the old default was the half-integer
     list (17O-like), unphysical on integer-spin systems)."""
@@ -225,10 +245,20 @@ def template_variant(base_azr: str, path: str, ex: float, jpis: Optional[Sequenc
     ex = round(float(ex), 6)
     mdl = AzrModel.from_file(base_azr)
     jpis = resolve_jpis(mdl, jpis)
-    levels = {}
+
+    gw_max = {}                                       # per J^pi: the largest Gamma_W of its particle channels
+
+    def _seed(c, L, jpi):
+        gw = channel_wigner_ev(c, ex, L=L)
+        if not gw or not np.isfinite(gw):              # closed (0.0) or not computable (None)
+            return float(seed_theta2 * gamma_ref_ev)
+        gw_max[jpi] = max(gw_max.get(jpi, 0.0), float(gw))
+        return float(min(gamma_ref_ev, seed_theta2 * gw))
+
+    levels, skipped = {}, {}
     for jpi in jpis:
         J, par = jpi_parse(jpi)
-        existing = mdl.find(jpi=jpi)
+        existing = [lv for lv in mdl.find(jpi=jpi) if getattr(lv, "active", True)]   # active only (rmfit.structure.add_level_variant)
         photon = []
         if existing:
             seen, chans = set(), []
@@ -239,8 +269,10 @@ def template_variant(base_azr: str, path: str, ex: float, jpis: Optional[Sequenc
                         continue
                     seen.add(key)
                     isph = bool(getattr(c, "is_photon", False))
-                    chans.append(dict(pair=c.pair, L=c.L, S=c.S, gamma=(gamma_ref_photon_ev if isph else gamma_ref_ev),
-                                      fixed=False))
+                    if not isph and channel_threshold(c) >= ex:
+                        continue      # closed at ex: a physical width there breaks the Brune transformation (2026-11-20)
+                    chans.append(dict(pair=c.pair, L=c.L, S=c.S,
+                                      gamma=(gamma_ref_photon_ev if isph else _seed(c, c.L, jpi)), fixed=False))
                     photon.append(isph)
         else:
             chans = []
@@ -251,10 +283,15 @@ def template_variant(base_azr: str, path: str, ex: float, jpis: Optional[Sequenc
                     continue
                 if getattr(c, "is_photon", False):
                     continue                              # a new group gets particle channels only
+                if channel_threshold(c) >= ex:
+                    continue                              # closed at ex (2026-11-20)
                 for L, S in lowest_L(J, par, c.J1, c.parity1, c.J2, c.parity2)[:1]:
-                    chans.append(dict(pair=pair, L=L, S=S, gamma=gamma_ref_ev, fixed=False))
+                    chans.append(dict(pair=pair, L=L, S=S, gamma=_seed(c, L, jpi), fixed=False))
                     photon.append(False)
         if not chans or not any(not ph for ph in photon):
+            continue
+        if gw_max.get(jpi, 0.0) < min_open_ev:
+            skipped[jpi] = gw_max.get(jpi, 0.0)       # no channel can carry min_open_ev here (see the docstring)
             continue
         # the partition of each EXISTING level of this group, on the dummy's own
         # particle-channel order: the only real prior on how the group spreads width
@@ -281,7 +318,8 @@ def template_variant(base_azr: str, path: str, ex: float, jpis: Optional[Sequenc
     from .model import link_data_dirs
     link_data_dirs(base_azr, wdir)
     mdl.write(path)
-    return dict(path=path, ex=ex, levels=levels, gamma_ref_ev=gamma_ref_ev, gamma_ref_photon_ev=gamma_ref_photon_ev)
+    return dict(path=path, ex=ex, levels=levels, gamma_ref_ev=gamma_ref_ev, gamma_ref_photon_ev=gamma_ref_photon_ev,
+                seed_theta2=seed_theta2, min_open_ev=min_open_ev, skipped=skipped)
 
 
 def dummy_labels(ev: Evaluator, variant: dict) -> Dict[str, str]:
@@ -656,7 +694,15 @@ def template_screen(ev: Evaluator, x_inc, variant: dict, gamma_total_ev: float,
         if dead_idx:
             log(f"    {jpi}: {len(dead_idx)} channel(s) with Gamma_W < {dead_channel_ev:g} eV left out of the templates: "
                 + ", ".join(f"{str(amp_keys[i])} ({gw_ev[i]:.2g} eV)" for i in dead_idx))
-        x0_ratio = [abs(float(ev.x0[cols[i]])) / np.sqrt(gref_p) / ref[i] for i in part_idx if ref[i] > 0]
+        # the engine's rwa of the dummy's own seed width vs the Wigner-based amplitude of that width:
+        # ~1 when AZURE2's transform of the dummy succeeded (per-channel seeds since 2026-11-20)
+        def _seed_of(k):
+            for spec in ch_specs:
+                if int(spec["pair"]) == k.pair and int(spec["L"]) == k.L and abs(float(spec["S"]) - k.S) < 1e-6:
+                    return float(spec.get("gamma", gref_p))
+            return gref_p
+        x0_ratio = [abs(float(ev.x0[cols[i]])) / np.sqrt(abs(_seed_of(amp_keys[i]))) / ref[i]
+                    for i in part_idx if ref[i] > 0 and _seed_of(amp_keys[i]) != 0.0]
         log(f"    {jpi}: {n} open particle channels" + (f", {len(closed)} closed left out" if closed else "")
             + (f"; x0-based / Wigner-based reference amplitude {min(x0_ratio):.2g}..{max(x0_ratio):.2g}"
                + (" -- the file-derived rwa is unusable here (Brune transform of the dummy)" if min(x0_ratio) < 0.3 or max(x0_ratio) > 3 else "")
