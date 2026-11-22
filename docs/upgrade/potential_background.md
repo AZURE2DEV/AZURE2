@@ -1207,7 +1207,7 @@ a_c and B_bg and is not the state's). `tests/potential_capture/check.sh`, 14.
 rewrites the `<potentials>` section of a project written with `interior_boundary`, `l` and `interior_charge_e1/e2`:
 the records of one pair become one record, a record for single l a `wave` with its depth, `interior_boundary b` a
 `background interior boundary b capture interior`. Refused, with nothing written: records of one pair that differ in
-more than the depth (a `wave` has no Woods-Saxon radius or diffuseness of its own), and a depth that is not positive.
+more than the depth and the Woods-Saxon radius and diffuseness (14.8), and a depth that is not positive.
 A partial wave that holds an external-capture final state gets no background (5.3 refuses one there), which the
 conversion says. `tests/potential_capture/check.sh`, 15.
 
@@ -1221,11 +1221,22 @@ C = C_pot this branch equals the independent potential-model calculation (5.7), 
 it. Its tests compared ratios and radii, never an absolute cross section. Results obtained with
 `feature/upgrade-6-interior-potential` for a final state in a wave with `interior_boundary` carry that factor.
 
+The constant factor is the direct capture's. With a level in the entrance wave the two branches differ by an
+energy-dependent amount, because the level's internal photon amplitude is not scaled and its channel part is: in
+the ¹²C(α,γ) fits made with the other branch (a 7.12 MeV 1⁻ level with a held Γγ) the ratio of the two at equal
+observed values runs from 1.50 at E_cm = 1.41 MeV to 0.66 at 2.94 MeV, and S_E1(300 keV) of a refit about doubles.
+14.9 is the check that this branch is the right one for a level.
+
+A parameter file written for the other branch's layout (`param.sav`, `param.par`, `param.fit`) must not be applied
+to a converted project: its reduced widths belong to the old channel functions (a bound final state's amplitude is
+read back as an ANC a thousand times too small, and the capture vanishes). The converter says so; start from the
+observed values in `<levels>`.
+
 ### 14.7 Not ported
 
 Nothing of the other branch remains. Not done on this one: an unbound final state against an independent
-calculation and away from a resonance of the potential; the interior charge in the exact form and for E2; a full
-gate of this branch.
+calculation and away from a resonance of the potential; the interior charge in the exact form, for E2, and
+together with a level; a level on a background that is not subtracted against an independent calculation.
 
 ### 14.8 A wave's own Woods-Saxon radius and diffuseness (the owner's decision, 2026-11-22)
 
@@ -1244,3 +1255,18 @@ Check (`tests/potential_capture/check.sh`, 16): one potential written two ways, 
 diffuseness 0.55 fm` on a central term of 3.55 and 0.6 fm, and the central term 3.2 and 0.55 fm with the s wave given
 3.55 and 0.6 fm: the same cross sections at 51 energies to the digits written, and a factor of up to 6.4 from the
 run with the central geometry in the p wave; the refusal with a Gaussian term.
+
+### 14.9 A bound state of the background as a level given by its observed values
+
+5.11 puts a subtracted box state back as a level whose photon amplitude is given as the internal one; what a fit
+holds is the observed width. `tests/potential_capture/check.sh`, 17 (`make_bound_level.py`,
+`models/bound_level.azr.in`): the model of 5.7 at a_c = 4.87 fm with the s½ depth 104 MeV, where the s-wave
+potential binds its 2-node state by 0.126 MeV. That state is subtracted and put back as a ½⁺ level with the
+normalised bound state's energy, ANC (12.663 fm^−½) and photon widths Γγ = 2 k_γ³ g², g from the overlap of the two
+normalised bound states over all r (375.6 and 67.6 meV), all from scipy. The capture into both final states equals
+the unsubtracted model's to 2 × 10⁻⁵ at E_cm = 0.02 to 3 MeV (the limit of the test, over 0.02 to 9 MeV, is 10⁻⁴);
+without the level's photon widths it is off by 28 to 210 %. The engine's numbers on the way: E_b = −0.1262355 MeV
+(scipy −0.1262345), the reduced width amplitude 1.150814 MeV^½ of the box state, N = 1 + γ² S̃′(E_b) = 1.8645, and
+the internal photon amplitude 0.571335 MeV^½, which is the box state's interior overlap. So the observed photon
+width the engine reads is the physical one, 2 P_γ g̃² / N, and its split into the internal and the channel part is
+right for a bound level in a wave with the interior term.

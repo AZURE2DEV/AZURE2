@@ -31,6 +31,10 @@ Two things change in the physics, and the conversion says so on stderr:
     interior is normalised to the level's ANC; the engine refuses the project otherwise and prints the depth that
     binds there.
 
+A parameter file written for the old layout (param.sav, param.par, param.fit) must NOT be applied to the converted
+project: its reduced widths belong to the old layout's channel functions (a bound final state's amplitude is read
+back as an ANC a thousand times too small, and the capture vanishes).  Start from the observed values in <levels>.
+
 A record with `interior_boundary` and no `l` acted on every partial wave: it becomes one `wave` per l from 0 to
 `maxOrbitalMomentum` of <config>, or to `--lmax`.
 """
@@ -188,6 +192,9 @@ def main():
         f.write("\n".join(new))
     for note in notes:
         print("convert_interior_boundary: " + note, file=sys.stderr)
+    print("convert_interior_boundary: start the converted project from the observed values in its <levels>; a parameter file "
+          "(param.sav, param.par, param.fit) written for the old layout holds reduced widths of the old channel functions "
+          "and must not be applied to it", file=sys.stderr)
     print(f"convert_interior_boundary: wrote {args.new} ({sum(1 for line in out if ' wave ' in line)} wave fields)", file=sys.stderr)
 
 

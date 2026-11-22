@@ -44,6 +44,11 @@
 #  16. a wave's own Woods-Saxon radius and diffuseness (section 14.8): the p wave with `radius 3.2 fm diffuseness
 #      0.55 fm` on a central term of 3.55 and 0.6 fm gives the cross sections of the central term 3.2 and 0.55 fm with
 #      the s wave given 3.55 and 0.6 fm, to the digits written; and they differ from the run without them.
+#  17. a bound state of the background put back as a level by its observed values (section 14.9):
+#      models/bound_level.azr.in (make_bound_level.py; s1/2 depth 104 MeV, the 2-node s state bound by 0.126 MeV,
+#      subtracted, and a 1/2+ level with the bound state's energy, ANC and photon widths from scipy alone) gives the
+#      capture of the unsubtracted model into both final states to 1e-4 (2e-5); without the level's photon widths it
+#      does not.
 #
 #   ./tests/potential_capture/check.sh path/to/AZURE2
 
@@ -536,6 +541,32 @@ if "$AZURE2_BIN" --validate "$WORK/models/geo_refused.azr" > "$WORK/geo_refused/
 elif grep -q "E_POTENTIAL_WAVE.*radius belongs to a woods_saxon central term" "$WORK/geo_refused/run.log"; then
   ok "a wave radius on a Gaussian central term is refused (E_POTENTIAL_WAVE)"
 else bad "a wave radius on a Gaussian term: refused, but not in these words"; fi
+
+# ---- 17. a bound state of the background as a level given by its observed values (section 14.9).  The level's ANC
+#          and photon widths are the normalised bound state's, from make_bound_level.py (scipy); the engine has to
+#          turn the ANC into the reduced width of the dressed channel and split the observed photon width into the
+#          internal amplitude and the channel's (interior and exterior) part.
+edited "$WORK/models/a487.azr" "$WORK/models/bound_U.azr" sed 's/l 0 J 1\/2 depth 67.5 MeV/l 0 J 1\/2 depth 104.0 MeV/'
+edited "$HERE/models/bound_level.azr.in" "$WORK/models/bound_S0g.azr" awk '$1 == "0.5" && $2 == "1" && ($6 == "2" || $6 == "3") && NF >= 31 { $12 = "0" } { print }'
+run bound_U "$WORK/models/bound_U.azr" extrapolate 2 -- --no-ignore-externals
+run bound_S "$HERE/models/bound_level.azr.in" extrapolate 2 -- --no-ignore-externals
+run bound_S0g "$WORK/models/bound_S0g.azr" extrapolate 2 -- --no-ignore-externals
+if res="$(python3 -I - "$WORK" <<'PY'
+import sys
+def sigma(name, pair):
+    return [float(l.split()[3]) for l in open(f"{sys.argv[1]}/{name}/output/AZUREOut_aa=1_R={pair}.extrap") if len(l.split()) >= 5]
+same = moved = 0.0
+for pair in (2, 3):
+    u, s, n = sigma("bound_U", pair), sigma("bound_S", pair), sigma("bound_S0g", pair)
+    assert len(u) == 24 and len(s) == 24 and len(n) == 24 and min(u) > 0, "24 cross sections each"
+    same = max(same, max(abs(x / y - 1) for x, y in zip(s, u)))
+    moved = max(moved, max(abs(x / y - 1) for x, y in zip(n, u)))
+print(f"the level = the potential's bound state to {same:.1e}; without its photon widths {moved:.1e}")
+sys.exit(0 if same < 1e-4 and moved > 0.2 else 1)
+PY
+)"; then ok "a subtracted bound state put back by its observed energy, ANC and photon widths: $res"
+else bad "a subtracted bound state as a level: ${res:-no result}"; fi
+grep -q "Could not\|ERROR" "$WORK/bound_S/run.log" && bad "bound_level run: $(grep -m1 'ERROR' "$WORK/bound_S/run.log")"
 
 [ "$failures" -eq 0 ] && echo "potential_capture: PASS" || echo "potential_capture: $failures FAILED"
 exit $((failures > 0))

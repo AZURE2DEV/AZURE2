@@ -51,3 +51,8 @@ box state of 2 nodes subtracted and put back as a 1/2⁺ level whose particle an
 **`models/e2m1.azr.in`**, **`data/reference_e2m1.csv`** (`make_reference_e2m1.py`): E2 and M1 (orbital) capture into
 VD's bound 0d5/2 state through the interior capture of the s1/2 and d3/2 waves, the final level's ANC 10⁻³ so that its
 own pole is negligible; check.sh section 11 (section 5.12).
+
+**`models/bound_level.azr.in`** (written by `make_bound_level.py`, no engine needed): the model at 4.87 fm with the
+s½ depth 104 MeV, where the s-wave potential binds its 2-node state by 0.126 MeV; that state subtracted and put back
+as a ½⁺ level given by the bound state's observed energy, ANC and photon widths, all from scipy. `check.sh` section
+17 compares its capture with the unsubtracted model's (potential_background.md section 14.9).
