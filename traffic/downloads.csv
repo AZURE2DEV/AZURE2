@@ -596,3 +596,15 @@ date,release,asset,downloads
 2026-11-22,v2.1,AZURE2-linux.zip,6
 2026-11-22,v2.1,AZURE2-macos.zip,3
 2026-11-22,v2.1,AZURE2-windows.zip,5
+2026-11-23,continuous-windows,AZURE2-macos-x86_64.tar.gz,0
+2026-11-23,continuous-windows,AZURE2-windows-x86_64.zip,0
+2026-11-23,continuous-windows,AZURE2-x86_64.AppImage,0
+2026-11-23,v1.0,AZURE2_1.0.0-MacOSX-binary.dmg,9
+2026-11-23,v1.0,AZURE2_1.0.0-Windows-binary.zip,21
+2026-11-23,v1.0,AZURE2_1.0.0-source.tar.gz,18
+2026-11-23,v2.0,AZURE2-linux.zip,4
+2026-11-23,v2.0,AZURE2-macos.zip,5
+2026-11-23,v2.0,AZURE2-windows.zip,9
+2026-11-23,v2.1,AZURE2-linux.zip,6
+2026-11-23,v2.1,AZURE2-macos.zip,3
+2026-11-23,v2.1,AZURE2-windows.zip,5
