@@ -658,13 +658,30 @@ void OverviewChecks(const fs::path &source, const std::string &binary) {
               run.parameterFile.find("param.par") != std::string::npos,
           "overview: T1: total " + std::to_string(run.totalChiSquared) + " over " + std::to_string(run.points) +
               " points, " + run.parameterFile);
-    // the stale mark: an edit saved after the run
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // the stale mark: an edit saved after the run.  The save has to land on a later file time than chiSquared.out's:
+    // the wait is on the file clock itself, not a fixed 20 ms (the Windows runner failed this check on every run with
+    // the fixed wait), and a failure says which part and the two times.
+    const fs::path chi = fs::path(run.outputDirectory) / "chiSquared.out";
+    std::error_code ec;
+    const fs::file_time_type ran = fs::last_write_time(chi, ec);
+    for (int i = 0; i < 250 && !ec && fs::file_time_type::clock::now() <= ran + std::chrono::milliseconds(50); i++)
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
     front::Record r = p.Records("data")[0];
     for (front::Field &f : r.fields)
       if (f.key == "norm") f.value = "1.01 fixed";
-    Check(p.SetRecord("data", r, why) && !front::ReadLastRun(p).stale && p.Save("", why) && front::ReadLastRun(p).stale,
-          "overview: an edit is not stale until it is saved; saved, the outputs are stale");
+    const bool set = p.SetRecord("data", r, why);
+    const bool staleUnsaved = front::ReadLastRun(p).stale;
+    const bool saved = p.Save("", why);
+    const front::RunSummary after = front::ReadLastRun(p);
+    Check(set && !staleUnsaved && saved && after.stale,
+          "overview: an edit is not stale until it is saved; saved, the outputs are stale" +
+              (set && !staleUnsaved && saved && after.stale
+                   ? std::string()
+                   : " (set " + std::to_string(set) + ", stale before the save " + std::to_string(staleUnsaved) +
+                         ", saved " + std::to_string(saved) + ", stale after " + std::to_string(after.stale) +
+                         ", project newer " + std::to_string(after.projectNewer) + ", project time " +
+                         std::to_string(after.projectTime) + " s, run time " + std::to_string(after.runTime) + " s, " +
+                         why + ")"));
   }
   // the program's own files: a fit of T1_start (a few calls), then a calculation after it
   const fs::path t1s = CopyProject(source / "tests/upgrade/T1/T1_start.azr", fs::path("front_test_work") / "overview_fit");

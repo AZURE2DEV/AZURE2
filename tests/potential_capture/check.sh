@@ -264,16 +264,35 @@ if "$AZURE2_BIN" --validate "$WORK/models/bso.azr" > "$WORK/v.log" 2>&1 &&
 else
   bad "only bound_state: --validate or --describe"; tail -3 "$WORK/v.log" "$WORK/d.log"
 fi
-if python3 -c "import pyazr" 2> /dev/null; then
+# pyazr is the tree's own (the checks of extrap_sav_segments and legendre_expansions find it the same way); the probe
+# runs away from the tree, as the round trip does, so a pyazr seen only from the caller's directory is not counted, and
+# the comparison is python's (no cmp on the Windows runner)
+PYAZR_ROOT="$(cd "$HERE/../.." && pwd)"
+if (cd "$WORK" && PYTHONPATH="$PYAZR_ROOT" python3 -c "import pyazr._azure2" > /dev/null 2>&1); then
   cp "$WORK/models/bso.azr" "$WORK/rt.azr"
-  if (cd "$WORK" && python3 -c "import pyazr; pyazr.Project.open('rt.azr').save('rt2.azr')") 2> "$WORK/rt.log" &&
-     cmp -s "$WORK/models/bso.azr" "$WORK/rt2.azr"; then
+  if (cd "$WORK" && PYTHONPATH="$PYAZR_ROOT" python3 -c "
+import pyazr, sys
+pyazr.Project.open('rt.azr').save('rt2.azr')
+sys.exit(0 if open('models/bso.azr', 'rb').read() == open('rt2.azr', 'rb').read() else 'rt2.azr differs from models/bso.azr')
+") 2> "$WORK/rt.log"; then
     ok "only bound_state: pyazr opens and saves the project byte for byte"
   else
     bad "only bound_state: pyazr round trip"; tail -3 "$WORK/rt.log"
   fi
 else
-  echo "  skip  pyazr round trip (pyazr not importable)"
+  echo "  skip  pyazr round trip (the tree's pyazr is not built)"
+fi
+
+#   7e. a bound capture final state in a partial wave that has an interior background: the library refuses it (the
+#       background's decaying solution is not built).  The command line says so and exits 1; before 2026-11-23 the
+#       refusal left the program as an uncaught exception (abort, exit 134).
+edited "$WORK/models/a40.azr" "$WORK/models/bgfinal.azr" \
+  sed 's/l 1 J 1\/2 depth 81.815179 MeV$/l 1 J 1\/2 depth 81.815179 MeV background interior boundary 0.0/'
+rc=0; run bgfinal "$WORK/models/bgfinal.azr" extrapolate 1 || rc=$?
+if [ "$rc" = 1 ] && grep -q '^ERROR: the partial wave l = 1, 2J = 1 of a hybrid pair has an interior background' "$WORK/bgfinal/run.log"; then
+  ok "a bound final state in a background wave: refused with the reason, exit 1"
+else
+  bad "a bound final state in a background wave: exit $rc, expected 1 with the refusal"; tail -3 "$WORK/bgfinal/run.log"
 fi
 
 # ---- 8. a narrow resonance of the background's potential (review 2026-11-20, finding 1): the s1/2 depth 100 MeV puts

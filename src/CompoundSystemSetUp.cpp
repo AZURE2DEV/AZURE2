@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "GSLException.h"
 
+#include <exception>
 #include <ostream>
 
 void CompoundSetUpRequests::AddEntrance(int pair) {
@@ -26,7 +27,18 @@ CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &
   // Made in place and handed over at the end: the data's set-up may keep the structure's address, which is the
   // finished object's.
   std::unique_ptr<CompoundSystem> building(new CompoundSystem());
-  if (building->Fill(configure, out.state, out.inputs, radii) == -1) {
+  int filled = -1;
+  try {
+    filled = building->Fill(configure, out.state, out.inputs, radii);
+  } catch (const GSLException &) {
+    throw;
+  } catch (const std::exception &e) {
+    // A refusal the physics library throws as itself while the structure is filled (a capture final state in a
+    // partial wave with an interior background, physics/src/HybridPotential.cpp): said and refused as the fill's own
+    // refusals are, not an abort of the program.
+    configure.outStream << "ERROR: " << e.what() << "." << std::endl;
+  }
+  if (filled == -1) {
     out.refusal = CompoundSetUp::Refusal::kUnreadable;
     return out;
   } else if (building->NumPairs() == 0 || building->NumJGroups() == 0) {
@@ -41,6 +53,11 @@ CompoundSetUp SetUpCompoundSystem(const Config &configure, const DataSetUpStep &
   try {
     building->Initialize(configure, out.state, out.inputs, *requests);
   } catch (const GSLException &e) {
+    out.refusal = CompoundSetUp::Refusal::kFinish;
+    out.finishError = e.what();
+    return out;
+  } catch (const std::exception &e) {
+    // A refusal thrown as a standard exception: the same stop, not an abort of the program.
     out.refusal = CompoundSetUp::Refusal::kFinish;
     out.finishError = e.what();
     return out;
