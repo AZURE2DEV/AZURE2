@@ -1531,8 +1531,9 @@ of the three equals dev's `expected/` (1e-5 of a six-digit number). `tests/upgra
 refusals, the validation; "What is not done" updated), `theory/polarization_theory.rst`,
 `getting_started/capabilities.rst`, `docs/upgrade/data_model.md` (the leaf kind `spin`), `dev_features.md`.
 
-**Open.** The table of literature names beside the quantity (dev's `pyazr/spin.py`, `resolve`: A_yy is a spin
-correlation or a tensor power according to the spins) is not written. Capture has A_y only. In-plane exit
+**Open.** Capture has A_y only.  (The table of literature names is written since 2026-11-22:
+`pyazr.spin_operator`, `pyazr/spin.py`, `tests/pyazr/spin_names_test.py`; A_yy is a spin correlation or a tensor
+power according to the spins, and is refused where they do not decide.) In-plane exit
 components need the exit frame. A folded spin observable (target, beam) is folded as A_y is, O sigma over sigma,
 and, as A_y, has no analytic derivative through a target integration. The site record is shared by the readers of
 one operator only; sharing it across operators (the record is the same) would need the operator in the row-set
