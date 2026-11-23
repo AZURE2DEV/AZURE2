@@ -59,7 +59,7 @@ DEFAULT_BUDGET = dict(polish_nfev=150, polish_rounds_max=4, sign_rounds_max=4, l
                       node_hours_max=0, grid_check=True, figures=6,
                       # POPULATION (2026-11-08): restarts + crossover per cycle; restart_nfev 0 = polish_nfev
                       restarts_per_cycle=4, restart_nfev=0, crossover_passes=2, population_rounds_max=3)
-DEFAULT_STRUCTURE = dict(broad_first_kev=10.0, narrow_phase=True, levelscan_per_cycle=1, levelscan_top=3,
+DEFAULT_STRUCTURE = dict(seed_omitted=True, broad_first_kev=10.0, narrow_phase=True, levelscan_per_cycle=1, levelscan_top=3,
                          levelscan_gamma_kev=None, local_release_mev=0.5, local_nfev=80, recall_levels=2, recall_min_pass=0.5)
 DEFAULT_STOP = dict(polish_gain_rel_min=5e-4, sign_rounds_without_accept=2, level_adds_marginal_in_a_row=2,
                     cycle_gain_rel_min=1e-3, population_gain_rel_min=1e-3, dataset_off_extra_pct=5.0, reproduce_rtol=1e-3,
@@ -1206,7 +1206,10 @@ class Driver:
             self.log("  level adds untrusted after RECALL: an accept is recorded as accept-pending (decision)")
         st = c.run_level_add(cand, jpis=jpis, global_nfev=int(self.budget["level_nfev"]), pinned_nfev=int(self.budget["pinned_nfev"]),
                              local_release=float(self.structure.get("local_release_mev") or 0.0),
-                             local_nfev=int(self.structure.get("local_nfev") or 80), note="rmfit drive")
+                             local_nfev=int(self.structure.get("local_nfev") or 80), note="rmfit drive",
+                             # the J^pi group's other open channels FREE (tiny seed), not gamma 0 FIXED: an ENSDF candidate
+                             # names no channels (structure.seed_omitted, default True since 2026-11-22)
+                             seed_omitted=bool(self.structure.get("seed_omitted", True)))
         self.state["tested_candidates"].append(i)
         self.counters["level_tests"] = ntests + 1
         out = st.get("outcome", "?")
