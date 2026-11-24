@@ -658,14 +658,11 @@ void OverviewChecks(const fs::path &source, const std::string &binary) {
               run.parameterFile.find("param.par") != std::string::npos,
           "overview: T1: total " + std::to_string(run.totalChiSquared) + " over " + std::to_string(run.points) +
               " points, " + run.parameterFile);
-    // the stale mark: an edit saved after the run.  The save has to land on a later file time than chiSquared.out's:
-    // the wait is on the file clock itself, not a fixed 20 ms (the Windows runner failed this check on every run with
-    // the fixed wait), and a failure says which part and the two times.
-    const fs::path chi = fs::path(run.outputDirectory) / "chiSquared.out";
-    std::error_code ec;
-    const fs::file_time_type ran = fs::last_write_time(chi, ec);
-    for (int i = 0; i < 250 && !ec && fs::file_time_type::clock::now() <= ran + std::chrono::milliseconds(50); i++)
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // the stale mark: an edit saved after the run.  The save has to land on a later file time than chiSquared.out's,
+    // and a file's time has whole seconds where the library reads it with stat (MinGW's libstdc++, the Windows
+    // runner: project and run in the same second, "project newer 0", on every run with a 20 ms wait): 1.1 s.
+    // A failure says which part and the two times.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     front::Record r = p.Records("data")[0];
     for (front::Field &f : r.fields)
       if (f.key == "norm") f.value = "1.01 fixed";
