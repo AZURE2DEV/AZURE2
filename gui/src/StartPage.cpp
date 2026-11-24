@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
@@ -46,6 +47,26 @@ QListWidget *ProjectList(const QString &name) {
 
 /// The project roots: a checkout (examples/ and tests/upgrade/) or an installed share/azure2.
 bool IsRoot(const QDir &d) { return d.exists("examples") || d.exists("tests/upgrade"); }
+
+/// The first heading of the folder's README.md ("# Neutrons on natural neon: a worked example"), "" when it has none.
+QString ReadmeTitle(const QDir &folder) {
+  QFile f(folder.filePath("README.md"));
+  if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return QString();
+  for (int n = 0; n < 20 && !f.atEnd(); n++) {
+    const QString line = QString::fromUtf8(f.readLine()).trimmed();
+    if (line.startsWith("# ")) return line.mid(2).trimmed();
+    if (!line.isEmpty() && !line.startsWith('#')) break;  // text before any title: no title
+  }
+  return QString();
+}
+
+/// A project of the test suite (tests/ of a checkout), not an example.
+bool IsTestProject(const QString &file, const QStringList &roots) {
+  const QString path = QFileInfo(file).absoluteFilePath();
+  for (const QString &root : roots)
+    if (path.startsWith(QDir(root).filePath("tests") + "/")) return true;
+  return false;
+}
 
 }  // namespace
 
@@ -148,11 +169,20 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
     connect(l, &QListWidget::itemClicked, this,
             [this](QListWidgetItem *item) { emit openFile(item->data(Qt::UserRole).toString()); });
   }
+  const QStringList roots = examplePlaces();
   for (const QString &f : findExamples()) {
     const QFileInfo info(f);
-    QListWidgetItem *item = new QListWidgetItem(QIcon(":/actions/open.svg"),
-                                                QString("%1   (%2)").arg(info.fileName(), info.dir().dirName()));
+    // the project's name, its folder when that differs, and the title of the folder's README when it has one; the
+    // test suite's projects (tests/) are listed in the expert view only (qt_gui.md section 19.8)
+    QString text = info.completeBaseName();
+    if (info.dir().dirName() != text) text += QString("   (%1)").arg(info.dir().dirName());
+    const QString title = ReadmeTitle(info.dir());
+    if (!title.isEmpty()) text += QString("  ") + QChar(0x2014) + "  " + title;
+    const bool test = IsTestProject(f, roots);
+    if (test) text += "   " + tr("[test project]");
+    QListWidgetItem *item = new QListWidgetItem(QIcon(":/actions/open.svg"), text);
     item->setData(Qt::UserRole, f);
+    item->setData(Qt::UserRole + 1, test);
     item->setToolTip(f);
     examples_->addItem(item);
   }
@@ -202,6 +232,9 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
 void StartPage::setExpertChecked(bool on) {
   QSignalBlocker block(expert_);
   expert_->setChecked(on);
+  // the test suite's projects in the expert view only
+  for (int i = 0; i < examples_->count(); i++)
+    examples_->item(i)->setHidden(!on && examples_->item(i)->data(Qt::UserRole + 1).toBool());
 }
 
 void StartPage::setRecent(const QStringList &files) {

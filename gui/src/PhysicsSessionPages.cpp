@@ -147,6 +147,35 @@ QWidget *Scrolled(QWidget *w) {
 
 }  // namespace
 
+/// A phase shift in degrees, defined modulo 180 (the engine gives arg(U_cc)/2 in (-90, 90], in [0, 180) for identical
+/// particles), drawn continuous: a step of more than 90 degrees between neighbouring points is taken as the wrap and
+/// removed, and the curve is moved by a multiple of 180 so that it starts in (-90, 90].  Display only: a phase near 0
+/// that wraps to 180 and back (c12c12_tumino2018, 12C+12C) no longer draws as a comb (qt_gui.md section 19.8).
+QVector<double> UnwrappedPhaseDegrees(const QVector<double> &deg) {
+  QVector<double> out = deg;
+  double offset = 0;
+  int first = -1;
+  for (int i = 0; i < out.size(); i++) {
+    if (!std::isfinite(deg[i])) continue;
+    if (first >= 0) {
+      int prev = i - 1;
+      while (prev >= 0 && !std::isfinite(deg[prev])) prev--;
+      const double step = deg[i] - deg[prev];
+      if (step > 90) offset -= 180;
+      else if (step < -90) offset += 180;
+    } else {
+      first = i;
+    }
+    out[i] = deg[i] + offset;
+  }
+  if (first >= 0) {
+    const double shift = -180.0 * std::round(out[first] / 180.0);
+    for (double &v : out) v += shift;
+  }
+  return out;
+}
+
+
 // ---------------------------------------------------------------- Channels
 
 ChannelsPage::ChannelsPage(PhysicsContext *context, QWidget *parent) : ProjectPage(context, parent) {
@@ -480,6 +509,7 @@ void RMatrixPage::redraw() {
     if (p->x.empty()) {
       ps.modelX = x;
       ps.modelY = Values(s.values);
+      if (p->y == "delta") ps.modelY = UnwrappedPhaseDegrees(ps.modelY);
     } else {
       const front::PhysicsSeries *sx = answer_.Find(p->x, s.keys);
       if (!sx) continue;

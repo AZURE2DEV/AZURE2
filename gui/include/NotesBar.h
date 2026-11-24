@@ -27,7 +27,10 @@ class NotesBar : public QToolBar {
   void clearNotes();
   /// Add a note: `summary` one line for the bar, `details` the full text for the Details window (empty: the summary).
   /// `diagnostics`: the note is about the engine's check, so Details also offers the Diagnostics.
-  void addNote(const QString &summary, const QString &details = QString(), bool diagnostics = false);
+  /// `warning`: something the user must know before saving (a section the tabs could not read): put first, the bar
+  /// shows the warning icon.
+  void addNote(const QString &summary, const QString &details = QString(), bool diagnostics = false, bool warning = false);
+  bool hasWarning() const { return warning_; }
   QStringList notes() const { return summaries_; }
   /// The Details window (null before the first click), for the tests.
   QDialog *detailsWindow() const { return details_; }
@@ -44,6 +47,8 @@ class NotesBar : public QToolBar {
   QStringList summaries_;
   QStringList texts_;
   bool aboutDiagnostics_ = false;
+  bool warning_ = false;
+  QLabel *icon_ = nullptr;
   QLabel *text_ = nullptr;
   QAction *detailsAction_ = nullptr;
   QAction *dismissAction_ = nullptr;

@@ -613,12 +613,22 @@ void OverviewPage::fillRun() {
   tiles_["dof"]->setStyleSheet(std::isfinite(dof) && dof > kHighChiPerPoint
                                    ? QString("color: %1;").arg(BarChart::warningColor().name())
                                    : QString());
-  QStringList totals;
+  QStringList totals, labels;
   for (const auto &t : run_.totals)
-    if (t.first != "Total-Chi-Squared" && t.first != "Total-N")
-      totals << QString("%1 %2").arg(QString::fromStdString(t.first).toHtmlEscaped(), Number(t.second));
+    if (t.first != "Total-Chi-Squared" && t.first != "Total-N" && t.second != 0) {
+      // the file's label in words ("Total-Norm-Chi-Squared" -> "norm chi²"), the label in the tip; a term that adds
+      // nothing is not listed (qt_gui.md section 19.8)
+      QString name = QString::fromStdString(t.first);
+      const QString label = name;
+      if (name.startsWith("Total-")) name.remove(0, 6);
+      if (name.endsWith("-Chi-Squared")) name = name.chopped(12) + QString::fromUtf8(" chi²");
+      name.replace('-', ' ');
+      totals << QString("%1 %2").arg(name.toHtmlEscaped(), Number(t.second));
+      labels << label;
+    }
   totalsText_->setText(totals.isEmpty() ? QString() : Muted(totals.join(" &middot; ")));
   totalsText_->setVisible(!totals.isEmpty());
+  totalsText_->setToolTip(labels.isEmpty() ? QString() : tr("chiSquared.out: %1").arg(labels.join(", ")));
 
   // the table: one row per data set of chiSquared.out
   table_->setSortingEnabled(false);
@@ -704,7 +714,14 @@ void OverviewPage::fillSteps() {
     steps_ << Step{tr("The project does not validate: %n error(s).", nullptr, errors_), "diagnostics"};
   else if (validated_ && warnings_ > 0)
     steps_ << Step{tr("The validation gives %n warning(s).", nullptr, warnings_), "diagnostics"};
-  if (!running_ && !run_.present) steps_ << Step{tr("There is no run yet: calculate or fit."), "tab:calculate"};
+  // a project not finished yet: the next thing to add, before any run (qt_gui.md section 19.8)
+  const bool noPairs = project_.pairs.empty(), noLevels = project_.levels == 0,
+             noData = project_.dataSets == 0 && project_.extrapolations == 0;
+  if (noPairs) steps_ << Step{tr("No particle pair yet: add the entrance and exit pairs."), "tab:pairs"};
+  else if (noLevels) steps_ << Step{tr("No level yet: add the levels of the compound nucleus."), "tab:levels"};
+  if (noData) steps_ << Step{tr("No data set or extrapolation yet: add one."), "tab:segments"};
+  if (!running_ && !run_.present && !noPairs && !noLevels && !noData)
+    steps_ << Step{tr("There is no run yet: calculate or fit."), "tab:calculate"};
   if (run_.present && run_.projectNewer)
     steps_ << Step{tr("The outputs are older than the project file: calculate again."), "tab:calculate"};
   if (run_.present && !run_.changedInputs.empty())
@@ -744,6 +761,9 @@ void OverviewPage::fillSteps() {
   if (!run_.leftOut.empty())
     steps_ << Step{tr("%n active data set(s) were left out by the run (no point in the window).", nullptr, (int)run_.leftOut.size()),
                    "record:data:" + QString::fromStdString(run_.leftOut.front())};
+  // Calculate and Fit once on the page: in "The last run" while there is none, here once there is one
+  for (const char *name : {"overviewAction_runcalculate", "overviewAction_runfit"})
+    if (QPushButton *b = findChild<QPushButton *>(name)) b->setVisible(run_.present || running_);
   QStringList lines;
   for (const Step &s : steps_) lines << "&bull; " + Link(s.link, s.text.toHtmlEscaped());
   if (lines.isEmpty())

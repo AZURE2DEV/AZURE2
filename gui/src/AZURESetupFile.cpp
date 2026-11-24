@@ -163,7 +163,11 @@ void AZURESetup::projectOpened() {
   // the notes of this project only, shown once (the bar is cleared when another project opens)
   notes_->clearNotes();
   QString why;
-  if (!loadLevels(why)) notes_->addNote(tr("The Levels tab could not read <levels>: %1").arg(why.section('\n', 0, 0)), why);
+  // a warning of the bar (put first, warning icon): an edit of the Levels tab would write back what it read
+  if (!loadLevels(why))
+    notes_->addNote(tr("The Levels tab could not read <levels>: %1 (do not save edits of the levels before fixing it)")
+                        .arg(why.section('\n', 0, 0)),
+                    why, false, true);
   openValidation_ = true;
   updateExpertTabs();
   levelsTab->setExpertMode(expertMode());  // the photon multipolarity rows follow the pairs just read

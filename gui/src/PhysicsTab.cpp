@@ -199,12 +199,8 @@ FunctionsPage::FunctionsPage(bool stopping, PhysicsWorker *worker, QWidget *pare
   doc_->setWordWrap(true);
   doc_->setTextInteractionFlags(Qt::TextSelectableByMouse);
   doc_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-  QScrollArea *docScroll = new QScrollArea;
-  docScroll->setWidget(doc_);
-  docScroll->setWidgetResizable(true);
-  docScroll->setFrameShape(QFrame::NoFrame);
-  docScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-  docScroll->setMaximumHeight(fontMetrics().height() * 8);
+  // one line (the name and group; the formula and source are its tip): no reserved height under it
+  doc_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
   form_ = new ArgumentForm;
   form_->setObjectName(name + "Form");
   QPushButton *drawButton = new QPushButton(tr("Draw"));
@@ -231,7 +227,7 @@ FunctionsPage::FunctionsPage(bool stopping, PhysicsWorker *worker, QWidget *pare
   top->addWidget(new QLabel(stopping ? tr("Stopping function") : tr("Function")));
   top->addWidget(function_, 1);
   c->addLayout(top);
-  c->addWidget(docScroll);
+  c->addWidget(doc_);
   c->addWidget(form_);
   QHBoxLayout *ret = new QHBoxLayout;
   ret->addWidget(new QLabel(tr("Draw")));

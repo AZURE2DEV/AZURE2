@@ -13,10 +13,11 @@
 NotesBar::NotesBar(QWidget *parent) : QToolBar(tr("Notes about the project"), parent) {
   setObjectName("notesBar");
   setMovable(false);
-  QLabel *icon = new QLabel;
-  icon->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxInformation).pixmap(16, 16));
-  icon->setContentsMargins(8, 0, 4, 0);
-  addWidget(icon);
+  icon_ = new QLabel;
+  icon_->setObjectName("notesIcon");
+  icon_->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxInformation).pixmap(16, 16));
+  icon_->setContentsMargins(8, 0, 4, 0);
+  addWidget(icon_);
   text_ = new QLabel;
   text_->setObjectName("notesText");
   text_->setContentsMargins(0, 0, 12, 0);
@@ -34,14 +35,22 @@ void NotesBar::clearNotes() {
   summaries_.clear();
   texts_.clear();
   aboutDiagnostics_ = false;
+  warning_ = false;
+  icon_->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxInformation).pixmap(16, 16));
   if (details_) details_->hide();
   hide();
 }
 
-void NotesBar::addNote(const QString &summary, const QString &details, bool diagnostics) {
-  summaries_ << summary;
-  texts_ << (details.isEmpty() ? summary : details);
+void NotesBar::addNote(const QString &summary, const QString &details, bool diagnostics, bool warning) {
+  // a warning first (the one line the bar shows), the others in the order they came
+  const int at = warning ? 0 : summaries_.size();
+  summaries_.insert(at, summary);
+  texts_.insert(at, details.isEmpty() ? summary : details);
   aboutDiagnostics_ = aboutDiagnostics_ || diagnostics;
+  if (warning && !warning_) {
+    warning_ = true;
+    icon_->setPixmap(style()->standardIcon(QStyle::SP_MessageBoxWarning).pixmap(16, 16));
+  }
   updateText();
   show();
   if (details_ && details_->isVisible()) showDetails();
