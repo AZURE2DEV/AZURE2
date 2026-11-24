@@ -1,4 +1,5 @@
 #include "FittingTab.h"
+#include "ExpertMode.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -45,7 +46,9 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   refreeze_->setSpecialValueText(tr("none"));
   refreeze_->setToolTip(tr("Refit up to N times with relvector covariance terms re-frozen at the fitted parameters "
                            "(--refreeze-covariance)."));
+  expert_ = expert::Enabled();
   QFormLayout *fitForm = new QFormLayout;
+  fitForm_ = fitForm;
   fitForm->addRow(tr("Minimizer:"), fitter_);
   fitForm->addRow(tr("Call limit:"), maxCalls_);
   fitForm->addRow(tr("Covariance refreeze passes:"), refreeze_);
@@ -66,18 +69,18 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   QHBoxLayout *priorRow = new QHBoxLayout;
   priorRow->addWidget(priorCovariance_, 1);
   priorRow->addWidget(browse);
-  QLabel *priorNote = new QLabel(tr("A Gaussian prior on one parameter is written on the parameter's own field: "
-                                    "\"norm 1 fit prior 1 0.05\" on a data set, \"areal_density ... fit prior ...\" on a "
-                                    "target, an energy scale's or a normalization record's value.  Nuisance parameters "
-                                    "are the fields written \"fit\"."));
-  priorNote->setWordWrap(true);
   QVBoxLayout *priorLayout = new QVBoxLayout;
   QFormLayout *priorForm = new QFormLayout;
   priorForm->addRow(tr("Prior covariance file:"), priorRow);
   priorLayout->addLayout(priorForm);
-  priorLayout->addWidget(priorNote);
   QGroupBox *priorBox = new QGroupBox(tr("Priors"));
   priorBox->setLayout(priorLayout);
+  // where a single parameter's prior is written: the box's tip, not a paragraph (qt_gui.md section 19.6)
+  priorBox->setToolTip(tr("A Gaussian prior on one parameter is written on the parameter's own field: \"norm 1 fit "
+                          "prior 1 0.05\" on a data set, \"areal_density ... fit prior ...\" on a target, an energy "
+                          "scale's or a normalization record's value.  Nuisance parameters are the fields written "
+                          "\"fit\"."));
+  priorBox_ = priorBox;
 
   parameterSettings_ = new SectionTextPanel(
       holder, "parameterSettings",
@@ -138,6 +141,7 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   tableLayout->addWidget(tableNote_);
 
   QTabWidget *texts = new QTabWidget;
+  pages_ = texts;
   texts->setObjectName("fittingPages");
   texts->addTab(tablePage, tr("Parameters"));
   texts->addTab(parameterSettings_, tr("Parameter Settings (text)"));
@@ -153,7 +157,35 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   reload();
 }
 
-void FittingTab::reload() { priorCovariance_->setText(holder_->configValue("priorCovariance")); }
+void FittingTab::reload() {
+  priorCovariance_->setText(holder_->configValue("priorCovariance"));
+  updateExpertRows();
+}
+
+void FittingTab::setExpertMode(bool on) {
+  expert_ = on;
+  updateExpertRows();
+}
+
+void FittingTab::updateExpertRows() {
+  auto row = [this](QWidget *field, bool shown) {
+    field->setVisible(shown);
+    if (QWidget *label = fitForm_->labelForField(field)) label->setVisible(shown);
+  };
+  row(maxCalls_, expert_ || maxCalls_->value() > 0);
+  row(refreeze_, expert_ || refreeze_->value() > 0);
+  priorBox_->setVisible(expert_ || !priorCovariance_->text().trimmed().isEmpty());
+  // a text page with lines other than comments is in effect: shown in either view
+  auto inUse = [this](const QString &section) {
+    for (const QString &line : holder_->sectionBody(section)) {
+      const QString t = line.trimmed();
+      if (!t.isEmpty() && !t.startsWith('#')) return true;
+    }
+    return false;
+  };
+  pages_->setTabVisible(pages_->indexOf(parameterSettings_), expert_ || inUse("parameterSettings"));
+  pages_->setTabVisible(pages_->indexOf(mcmc_), expert_ || inUse("mcmc"));
+}
 
 QStringList FittingTab::programOptions(const QString &command) const {
   QStringList out;

@@ -101,6 +101,11 @@ class AZURESetup : public QMainWindow {
   QLabel *statusJob() const { return jobLabel_; }
   QProgressBar *statusProgress() const { return jobBar_; }
   QDockWidget *diagnosticsDockWidget() const { return diagnosticsDock; }
+  /// Standard or expert view (qt_gui.md section 19.4): View > Show Expert Options, the start page's box and the status
+  /// bar's switch; kept in QSettings.  It changes what is shown, never the project.
+  void setExpertMode(bool on);
+  bool expertMode() const;
+  QAction *expertAction() const { return expertAction_; }
   /// The notes about the project just opened (one bar, never a modal box: qt_gui.md section 19.2).
   NotesBar *notesBar() const { return notes_; }
   /// Close the project (after asking to save) and show the start page.
@@ -198,6 +203,13 @@ class AZURESetup : public QMainWindow {
   DiagnosticsPanel *diagnostics;
   QDockWidget *diagnosticsDock;
   NotesBar *notes_ = nullptr;
+  QAction *expertAction_ = nullptr;
+  QToolButton *statusExpert_ = nullptr;
+  QWidget *physicsTab_ = nullptr;
+  QMenu *toolsMenu_ = nullptr;
+  QMap<QWidget *, QString> tabTips_;  ///< what each tab is for (its tool tip)
+  /// The expert tabs (Nuclear Potential, THM, MCMC) shown in standard view only when the project uses them.
+  void updateExpertTabs();
   bool openValidation_ = false;      ///< the next validation is the one of a project just opened (its notes)
   bool validateRequested_ = false;   ///< the next validation was asked for by the user (Validate)
 

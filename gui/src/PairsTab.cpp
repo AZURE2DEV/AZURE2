@@ -14,6 +14,7 @@
 #include <QInputDialog>
 #include <QTabWidget>
 #include "PairsTab.h"
+#include "RecordExtras.h"
 #include "LevelsTab.h"
 #include "LevelsViews.h"
 #include "ProjectHolder.h"
@@ -32,6 +33,7 @@ PairsTab::PairsTab(QWidget *parent) :
   pairsModel = new PairsModel(this);
 
   pairsView = new QTableView;
+  pairsView->setObjectName("pairsView");
   pairsView->setModel(pairsModel);
   pairsView->verticalHeader()->setHighlightSections(false);
   pairsView->horizontalHeader()->setHighlightSections(false);
@@ -132,20 +134,21 @@ PairsTab::PairsTab(QWidget *parent) :
   buttonBox->setHorizontalSpacing(0);
 #endif
 
-  QVBoxLayout *layout = new QVBoxLayout();
+  QWidget *content = new QWidget;
+  QVBoxLayout *layout = new QVBoxLayout(content);
+  layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(pairsView);
   layout->addLayout(buttonBox);
-  extras = new QTabWidget;
-  extras->setVisible(false);
-  layout->addWidget(extras);
-  layout->setStretch(0, 3);
-  setLayout(layout);
+  // the per-channel radii below the pairs in a splitter, hidden in standard view while there are none (RecordExtras)
+  extras = new RecordExtras(content, "pairsExtras");
+  QVBoxLayout *outer = new QVBoxLayout;
+  outer->addWidget(extras);
+  setLayout(outer);
 }
 
-void PairsTab::addExtraPanel(const QString &title, QWidget *panel) {
-  extras->addTab(panel, title);
-  extras->setVisible(true);
-}
+void PairsTab::addExtraPanel(const QString &title, RecordsPanel *panel) { extras->addPanel(title, panel); }
+
+void PairsTab::setExpertMode(bool on) { extras->setExpertMode(on); }
 
 void PairsTab::reset() {
   pairsModel->removeRows(0, pairsModel->numPairs(), QModelIndex());

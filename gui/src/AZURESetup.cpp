@@ -47,6 +47,7 @@
 #include "RecordsPanel.h"
 #include "MCMCTab.h"
 #include "NotesBar.h"
+#include "ExpertMode.h"
 #include "OverviewPage.h"
 #include "PlotWidget.h"
 #include "ProjectWatcher.h"
@@ -176,12 +177,14 @@ AZURESetup::AZURESetup() {
     connect(mcmcTab, &MCMCTab::stopRequested, this, &AZURESetup::stopRun);
   }
   tabWidget->addTab(plotTab, tr("Pl&ot"));
-  tabWidget->addTab(new PhysicsTab(holder_), tr("P&hysics"));
+  physicsTab_ = new PhysicsTab(holder_);
+  tabWidget->addTab(physicsTab_, tr("P&hysics"));
   tabWidget->setDocumentMode(false);
   startPage_ = new StartPage;
   connect(startPage_, &StartPage::newRequested, this, &AZURESetup::newProject);
   connect(startPage_, &StartPage::openRequested, this, qOverload<>(&AZURESetup::open));
   connect(startPage_, &StartPage::openFile, this, [this](const QString &file) { open(file); });
+  connect(startPage_, &StartPage::expertToggled, this, &AZURESetup::setExpertMode);
   central_ = new QStackedWidget;
   central_->addWidget(startPage_);
   central_->addWidget(tabWidget);
@@ -220,6 +223,7 @@ AZURESetup::AZURESetup() {
   connect(holder_, &ProjectHolder::sectionEdited, this, [this]() {
     updateTitle();
     updateLogo();
+    updateExpertTabs();
   });
 
   tools_ = new PythonTools(this);
@@ -400,6 +404,7 @@ AZURESetup::AZURESetup() {
   projectOpened();
   showProject(false);
   restoreWindowState();
+  setExpertMode(expert::Enabled());  // the view of the last session (standard the first time)
 }
 
 AZURESetup::~AZURESetup() {
@@ -409,6 +414,14 @@ AZURESetup::~AZURESetup() {
 }
 
 void AZURESetup::createActions() {
+  expertAction_ = new QAction(tr("Show &Expert Options"), this);
+  expertAction_->setObjectName("expertAction");
+  expertAction_->setCheckable(true);
+  expertAction_->setChecked(expert::Enabled());
+  expertAction_->setToolTip(tr("Show the options, columns, tabs and sections an occasional user does not need.  It "
+                               "changes what is shown, never the project: an expert option the project sets is shown "
+                               "either way."));
+  connect(expertAction_, &QAction::toggled, this, &AZURESetup::setExpertMode);
   // the main actions: the tool bar's and the menus' (one QAction each, so a shortcut has one owner)
   auto make = [this](const QString &name, const QString &icon, const QString &text, const QKeySequence &key,
                      const QString &tip) {
@@ -519,8 +532,13 @@ void AZURESetup::createMenus() {
   viewMenu->addAction(dockAction);
 
   // Tools: pyazr's commands as child processes (PythonTools.h), filled when the menu opens (pyazr importable or not)
+  // standard or expert view (qt_gui.md section 19.4)
+  viewMenu->addSeparator();
+  viewMenu->addAction(expertAction_);
+
   QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
   toolsMenu->setObjectName("toolsMenu");
+  toolsMenu_ = toolsMenu;
   connect(toolsMenu, &QMenu::aboutToShow, this, [this, toolsMenu]() { tools_->fillMenu(toolsMenu, holder_->path()); });
 
   QMenu *helpMenu = menuBar()->addMenu(tr("&Documentation"));
@@ -752,6 +770,11 @@ void AZURESetup::createStatusBar() {
   jobStop_->setObjectName("statusStop");
   jobStop_->setDefaultAction(actions_["stop"]);
   jobStop_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  statusExpert_ = new QToolButton;
+  statusExpert_->setObjectName("statusExpert");
+  statusExpert_->setAutoRaise(true);
+  statusExpert_->setToolTip(expertAction_->toolTip());
+  connect(statusExpert_, &QToolButton::clicked, expertAction_, &QAction::toggle);
   jobBox_ = new QWidget;
   QHBoxLayout *job = new QHBoxLayout(jobBox_);
   job->setContentsMargins(0, 0, 0, 0);
@@ -762,8 +785,56 @@ void AZURESetup::createStatusBar() {
   statusBar()->addWidget(statusFile_, 1);
   statusBar()->addPermanentWidget(jobBox_);
   statusBar()->addPermanentWidget(statusValidity_);
+  statusBar()->addPermanentWidget(statusExpert_);
   statusValidity_->hide();
   updateTitle();
+}
+
+bool AZURESetup::expertMode() const { return expertAction_->isChecked(); }
+
+void AZURESetup::setExpertMode(bool on) {
+  if (expertAction_->isChecked() != on) {
+    expertAction_->setChecked(on);  // toggled() comes back here
+    return;
+  }
+  expert::SetEnabled(on);
+  statusExpert_->setText(on ? tr("Expert view") : tr("Standard view"));
+  if (startPage_) startPage_->setExpertChecked(on);
+  pairsTab->setExpertMode(on);
+  levelsTab->setExpertMode(on);
+  for (SectionsTab *t : {segmentsTab, effectsTab, potentialTab}) t->setExpertMode(on);
+  fittingTab->setExpertMode(on);
+  runTab->setExpertMode(on);
+  static_cast<PhysicsTab *>(physicsTab_)->setExpertMode(on);
+  toolsMenu_->menuAction()->setVisible(on);
+  updateExpertTabs();
+}
+
+void AZURESetup::updateExpertTabs() {
+  // a section other than comments is in use: its tab is shown in either view (nothing hidden is in effect)
+  auto inUse = [this](const QString &section) {
+    for (const QString &line : holder_->sectionBody(section)) {
+      const QString t = line.trimmed();
+      if (!t.isEmpty() && !t.startsWith('#')) return true;
+    }
+    return false;
+  };
+  const bool on = expertMode();
+  const QList<QPair<QWidget *, bool>> tabs = {{potentialTab, potentialTab->hasRecords()},
+                                              {thmTab, inUse("thm")},
+                                              {mcmcTab, mcmcTab && inUse("mcmc")}};
+  for (const auto &t : tabs) {
+    if (!t.first) continue;
+    const int at = tabWidget->indexOf(t.first);
+    tabWidget->setTabVisible(at, on || t.second);
+    tabWidget->setTabToolTip(at, tabTips_.value(t.first) + (!on && t.second ? "\n" + expert::ShownBecauseSet() : QString()));
+  }
+  for (auto it = tabTips_.constBegin(); it != tabTips_.constEnd(); ++it) {
+    bool expertTab = false;
+    for (const auto &t : tabs) expertTab = expertTab || t.first == it.key();
+    if (!expertTab) tabWidget->setTabToolTip(tabWidget->indexOf(it.key()), it.value());
+  }
+  static_cast<PhysicsTab *>(physicsTab_)->setExpertMode(on);
 }
 
 void AZURESetup::updateActions() {
@@ -803,8 +874,10 @@ void AZURESetup::showProject(bool open) {
                                     "pole map and THM parts.")
                                : QString();
       if (!text.isEmpty()) notes << qMakePair(tabWidget->tabText(i).remove('&'), text);
+      if (!text.isEmpty()) tabTips_[tab] = text;  // what the tab is for: its tool tip
     }
     startPage_->setTabNotes(notes);
+    updateExpertTabs();
   }
   updateTitle();
   updateActions();

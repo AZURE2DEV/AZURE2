@@ -7,10 +7,18 @@
 //  (b) the notes bar: 13N (valid, 50 warnings) opens with one note of the engine's check and the Diagnostics dock
 //      closed; Details shows every note in a window that is not modal; Dismiss hides the bar; a valid project opens
 //      with no bar; opening another project clears the notes;
+//  (c) the record tabs at 1280x720 (the PI: "the bottom part covers everything"): 13N's data-set table (16 records,
+//      the notes bar shown) shows at least eight rows on open; the Form button closes the form and the table takes
+//      its height; the choice is kept for the next window; the Levels tab's level list shows at least ten rows and its
+//      empty Gamma Decays / Isospin panels are not shown in standard view;
 //  (d) the converter's repair of an old line: the old 13N with one data line short of its shift's vary flag; the
 //      window shows the line, its number and the two readings; the first taken and converted again gives the project
 //      the unmodified old 13N gives, byte for byte; the old file is unchanged, the repaired copy beside it, a note says
 //      so;
+//  (e) the expert switch: standard view by default; T1's Nuclear Potential and MCMC tabs (no records, no <mcmc>) and
+//      Model Data sub-tab hidden, shown in expert view; a project with a potential record shows its tab in standard
+//      view; the Calculate tab's --capture-amplitudes hidden in standard view, shown in expert view and when set;
+//      the switch changes no byte of the project (saved before and after, compared) and is kept in the settings;
 // PASS/FAIL per check; exit 1 on a failure.
 #include <algorithm>
 #include <filesystem>
@@ -29,6 +37,15 @@
 #include "AZURESetup.h"
 #include "NotesBar.h"
 #include "ConvertRepairDialog.h"
+#include "RecordExtras.h"
+#include "RecordTabs.h"
+#include "RecordsPanel.h"
+#include "RunTab.h"
+#include <QSplitter>
+#include <QTabWidget>
+#include <QTableView>
+#include <QHeaderView>
+#include <QToolButton>
 #include <QFile>
 #include <QLineEdit>
 #include <QPushButton>
@@ -179,6 +196,118 @@ int main(int argc, char **argv) {
     Settle(800);
     Check(!bar->isVisible() && bar->notes().isEmpty(), "T1 (valid): no notes bar; the notes of 13N are gone");
     Check(watch.seen.isEmpty(), "no modal dialog in (b)");
+  }
+
+  // (c) the record tabs at 1280x720
+  {
+    QSettings().setValue("view/expertOptions", false);
+    const fs::path n13 = CopyProject(source / "tests/13N/13N.azr", work / "layout_13N");
+    {
+      AZURESetup w;
+      w.resize(1280, 720);
+      w.show();
+      Settle(100);
+      w.open(QString::fromStdString(n13.string()));
+      Settle(500);
+      w.tabs()->setCurrentWidget(w.getSegmentsTab());
+      Settle(400);
+      RecordsPanel *data = w.getSegmentsTab()->records("data");
+      const int rows = data ? data->visibleRows() : 0;
+      w.grab().save(shots + "/layout_13N_data_1280x720.png");
+      Check(data && data->recordCount() == 16 && rows >= 8,
+            "(c) 13N at 1280x720: the data-set table shows " + std::to_string(rows) + " rows on open (at least 8)");
+      Check(data && data->formShown(), "(c) the form below the table is shown");
+      data->setFormShown(false);
+      Settle(200);
+      const int closedRows = data->visibleRows();
+      Check(!data->formShown() && closedRows > rows, "(c) Form closed: the table takes the height (" + std::to_string(closedRows) + " rows)");
+      w.tabs()->setCurrentWidget(w.getLevelsTab());
+      Settle(400);
+      QTableView *levels = w.getLevelsTab()->findChild<QTableView *>("levelsView");
+      const int levelRows = levels ? levels->viewport()->height() / std::max(1, levels->verticalHeader()->defaultSectionSize()) : 0;
+      Check(levelRows >= 10, "(c) the Levels tab's list shows " + std::to_string(levelRows) + " rows (at least 10)");
+      RecordExtras *extras = w.getLevelsTab()->extraPanels();
+      Check(extras && !extras->tabs()->isVisible(), "(c) the empty Gamma Decays / Isospin panels are not shown in standard view");
+      w.grab().save(shots + "/layout_13N_levels_1280x720.png");
+    }
+    {
+      // the next window: the closed form is remembered
+      AZURESetup w;
+      w.resize(1280, 720);
+      w.show();
+      Settle(100);
+      w.open(QString::fromStdString(n13.string()));
+      Settle(500);
+      w.tabs()->setCurrentWidget(w.getSegmentsTab());
+      Settle(400);
+      RecordsPanel *data = w.getSegmentsTab()->records("data");
+      Check(data && !data->formShown(), "(c) the next window keeps the form closed");
+      data->setFormShown(true);
+      Settle(200);
+      Check(data->formShown() && data->visibleRows() >= 5, "(c) the form opened again, the table keeps at least five rows");
+    }
+  }
+
+  // (e) the expert switch
+  {
+    QSettings().remove("view/expertOptions");
+    const fs::path t1 = CopyProject(source / "tests/upgrade/T1/T1.azr", work / "expert_T1");
+    const fs::path ex = CopyProject(source / "experiment/tests/data/section_examples.azr", work / "expert_sections");
+    auto bytes = [](const fs::path &p) {
+      std::ifstream in(p, std::ios::binary);
+      std::stringstream b;
+      b << in.rdbuf();
+      return b.str();
+    };
+    const std::string before = bytes(t1);
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    Check(!w.expertMode(), "(e) standard view by default");
+    w.open(QString::fromStdString(t1.string()));
+    Settle(500);
+    QTabWidget *tabs = w.tabs();
+    auto tabShown = [tabs](const QString &title) {
+      for (int i = 0; i < tabs->count(); i++)
+        if (tabs->tabText(i).remove('&') == title) return tabs->isTabVisible(i);
+      return false;
+    };
+    QTabWidget *segmentTabs = w.getSegmentsTab()->findChild<QTabWidget *>();
+    auto subShown = [segmentTabs](const QString &title) {
+      for (int i = 0; segmentTabs && i < segmentTabs->count(); i++)
+        if (segmentTabs->tabText(i) == title) return segmentTabs->isTabVisible(i);
+      return false;
+    };
+    w.getRunTab()->setCommand("calculate");
+    Check(!tabShown("Nuclear Potential") && !tabShown("MCMC") && !subShown("Model Data") && tabShown("Segments"),
+          "(e) T1, standard view: Nuclear Potential, MCMC and Model Data hidden");
+    Check(!w.getRunTab()->optionShown("--capture-amplitudes=") && w.getRunTab()->optionShown("--parameter-file="),
+          "(e) Calculate, standard view: --capture-amplitudes hidden, --parameter-file shown");
+    w.grab().save(shots + "/expert_off_T1.png");
+    w.setExpertMode(true);
+    Settle(200);
+    Check(tabShown("Nuclear Potential") && tabShown("MCMC") && subShown("Model Data") &&
+              w.getRunTab()->optionShown("--capture-amplitudes="),
+          "(e) expert view: the hidden tabs, sub-tab and option shown");
+    Check(QSettings().value("view/expertOptions").toBool(), "(e) the switch kept in the settings");
+    w.grab().save(shots + "/expert_on_T1.png");
+    w.setExpertMode(false);
+    Settle(200);
+    w.getRunTab()->setOption("--capture-amplitudes=", "intEC.dat");
+    w.getRunTab()->setCommand("fit");
+    Settle(100);
+    Check(w.getRunTab()->optionShown("--capture-amplitudes="), "(e) standard view: an expert option that is set is shown");
+    w.getRunTab()->setOption("--capture-amplitudes=", "");
+    Check(!w.isWindowModified() && !w.holder()->project().Modified(), "(e) the switch marks nothing modified");
+    QString why;
+    Check(w.writeProjectFile(QString::fromStdString(t1.string()), why) && bytes(t1) == before,
+          "(e) saved after switching both ways: the file is byte for byte as before " + why.toStdString());
+    w.open(QString::fromStdString(ex.string()));
+    Settle(500);
+    Check(w.getSegmentsTab() && tabShown("Nuclear Potential") && subShown("Model Data"),
+          "(e) a project with potential and model-data records: their tab and sub-tab shown in standard view");
+    QSettings().setValue("view/expertOptions", false);
   }
 
   // (d) the converter's repair of a line

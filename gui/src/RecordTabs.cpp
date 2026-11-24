@@ -3,6 +3,8 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+#include "ExpertMode.h"
+#include "RecordTableModel.h"
 #include "RecordsPanel.h"
 #include "SectionTextPanel.h"
 
@@ -40,10 +42,39 @@ SectionsTab::SectionsTab(ProjectHolder *holder, const QList<Part> &given, QWidge
     } else {
       RecordsPanel *r = new RecordsPanel(holder, p.section, p.help, nullptr, kindsOf[i]);
       records_ << r;
+      if (p.expert) {
+        expertPanels_ << r;
+        connect(r->model(), &QAbstractItemModel::modelReset, this, &SectionsTab::updateExpertTabs);
+        connect(r->model(), &QAbstractItemModel::rowsInserted, this, &SectionsTab::updateExpertTabs);
+        connect(r->model(), &QAbstractItemModel::rowsRemoved, this, &SectionsTab::updateExpertTabs);
+      }
       panel = r;
     }
     if (tabs_) tabs_->addTab(panel, p.title);
     else layout->addWidget(panel);
+  }
+  expert_ = expert::Enabled();
+  updateExpertTabs();
+}
+
+void SectionsTab::setExpertMode(bool on) {
+  expert_ = on;
+  for (RecordsPanel *p : records_) p->setExpertMode(on);
+  updateExpertTabs();
+}
+
+bool SectionsTab::hasRecords() const {
+  for (RecordsPanel *p : records_)
+    if (p->recordCount() > 0) return true;
+  return false;
+}
+
+void SectionsTab::updateExpertTabs() {
+  if (!tabs_) return;
+  for (RecordsPanel *p : expertPanels_) {
+    const int at = tabs_->indexOf(p);
+    tabs_->setTabVisible(at, expert_ || p->recordCount() > 0);  // a part that holds records is shown in either view
+    tabs_->setTabToolTip(at, !expert_ && p->recordCount() > 0 ? expert::ShownBecauseSet() : QString());
   }
 }
 
@@ -93,7 +124,8 @@ QList<SectionsTab::Part> SegmentsParts() {
                        "angles, calculated without data (the command extrapolate).")},
           {"modelData", QObject::tr("Model Data"),
            QObject::tr("Model data (<modelData>): measured numbers of the model itself (a resonance strength, a width, "
-                       "an ANC, a scattering length) compared in the chi-squared.")}};
+                       "an ANC, a scattering length) compared in the chi-squared."),
+           false, false, true}};
 }
 
 QList<SectionsTab::Part> EffectsParts() {

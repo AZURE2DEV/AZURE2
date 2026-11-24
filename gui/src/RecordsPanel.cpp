@@ -1,4 +1,5 @@
 #include "RecordsPanel.h"
+#include "ExpertMode.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -19,6 +20,12 @@
 #include <QScrollArea>
 #include <QSortFilterProxyModel>
 #include <QSplitter>
+#include <QScrollBar>
+#include <QSettings>
+#include <QSignalBlocker>
+#include <QToolButton>
+#include <QToolTip>
+#include <algorithm>
 #include <QTableView>
 #include <QTimer>
 #include <QToolButton>
@@ -255,6 +262,7 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   const QString id = section + (kinds.isEmpty() ? QString() : "_" + kinds.join("_"));
   setObjectName("records_" + id);
 
+  expert_ = expert::Enabled();
   model_ = new RecordTableModel(holder_, section_, kinds_, this);
   proxy_ = new QSortFilterProxyModel(this);
   proxy_->setSourceModel(model_);
@@ -359,15 +367,30 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   includeButton_->setVisible(model_->hasIncludeColumn());
   excludeButton_->setVisible(model_->hasIncludeColumn());
   buttons->addStretch(1);
+  // what the section is: a "?" with its sentence as the tip, not a paragraph above the table (qt_gui.md 19.6)
+  if (!help.isEmpty()) {
+    QToolButton *about = new QToolButton;
+    about->setObjectName("sectionHelp");
+    about->setText("?");
+    about->setToolTip(help);
+    about->setAutoRaise(true);
+    connect(about, &QToolButton::clicked, this, [about, help]() { QToolTip::showText(about->mapToGlobal(QPoint(0, about->height())), help, about); });
+    buttons->addWidget(about);
+  }
+  // the form below the table: closed and opened here, or by dragging the splitter
+  formToggle_ = new QToolButton;
+  formToggle_->setObjectName("formToggle");
+  formToggle_->setText(tr("Form"));
+  formToggle_->setCheckable(true);
+  formToggle_->setChecked(true);
+  formToggle_->setToolTip(tr("Show or hide the form of the selected record below the table (a double click on a row "
+                             "opens the record in its own window)."));
+  connect(formToggle_, &QToolButton::toggled, this, &RecordsPanel::setFormShown);
+  buttons->addWidget(formToggle_);
 
   QWidget *top = new QWidget;
   QVBoxLayout *topLayout = new QVBoxLayout(top);
   topLayout->setContentsMargins(0, 0, 0, 0);
-  if (!help.isEmpty()) {
-    QLabel *helpLabel = new QLabel(help);
-    helpLabel->setWordWrap(true);
-    topLayout->addWidget(helpLabel);
-  }
   topLayout->addWidget(filter_);
   topLayout->addWidget(table_, 1);
   topLayout->addLayout(buttons);
@@ -425,15 +448,27 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   bottomLayout->addWidget(scroll, 1);
   bottomLayout->addLayout(formButtons);
 
-  QSplitter *splitter = new QSplitter(Qt::Vertical);
-  splitter->addWidget(top);
-  splitter->addWidget(bottom);
-  splitter->setStretchFactor(0, 2);
-  splitter->setStretchFactor(1, 5);
-  splitter->setSizes({220, 550});
+  // The table and the form share the height by a splitter (qt_gui.md section 19.3): the table keeps at least five
+  // rows, the form may be closed (dragged to the bottom, or the Form button), and the sizes a user sets are kept per
+  // panel.  Before, the form took 5/7 of the height and the table of a project's data sets showed two rows at 720 px.
+  splitter_ = new QSplitter(Qt::Vertical);
+  splitter_->setObjectName("split_" + id);
+  splitter_->addWidget(top);
+  splitter_->addWidget(bottom);
+  splitter_->setStretchFactor(0, 1);
+  splitter_->setStretchFactor(1, 1);
+  splitter_->setCollapsible(0, false);
+  splitter_->setCollapsible(1, true);
+  connect(splitter_, &QSplitter::splitterMoved, this, [this]() {
+    const QList<int> sizes = splitter_->sizes();
+    if (sizes.size() == 2 && sizes[1] > 0) formHeight_ = sizes[1];
+    QSignalBlocker block(formToggle_);
+    formToggle_->setChecked(sizes.size() == 2 && sizes[1] > 0);
+    QSettings().setValue("layout/" + splitter_->objectName(), splitter_->saveState());
+  });
   QVBoxLayout *layout = new QVBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
-  layout->addWidget(splitter);
+  layout->addWidget(splitter_);
 
   connect(holder_, &ProjectHolder::opened, this, &RecordsPanel::reload);
   connect(holder_, &ProjectHolder::sectionEdited, this, [this](const QString &s) {
@@ -446,6 +481,81 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
 
 int RecordsPanel::recordCount() const { return model_->rowCount(); }
 
+int RecordsPanel::tableRowsHeight(int rows) const {
+  return table_->horizontalHeader()->sizeHint().height() + rows * table_->verticalHeader()->defaultSectionSize() +
+         2 * table_->frameWidth() + table_->horizontalScrollBar()->sizeHint().height();
+}
+
+int RecordsPanel::visibleRows() const {
+  return table_->viewport()->height() / std::max(1, table_->verticalHeader()->defaultSectionSize());
+}
+
+void RecordsPanel::showEvent(QShowEvent *event) {
+  QWidget::showEvent(event);
+  if (!sized_) initialSizes();
+}
+
+void RecordsPanel::initialSizes() {
+  const int total = splitter_->height();
+  if (total < 100) return;  // not laid out yet
+  sized_ = true;
+  const QByteArray saved = QSettings().value("layout/" + splitter_->objectName()).toByteArray();
+  if (!saved.isEmpty() && splitter_->restoreState(saved)) {
+    QSignalBlocker block(formToggle_);
+    formToggle_->setChecked(splitter_->sizes().value(1) > 0);
+    return;
+  }
+  // the table: its rows up to ten (at least four), with the filter and the buttons; at most 60 % of the height
+  const int rows = std::clamp(model_->rowCount(), 4, 10);
+  const int chrome = filter_->sizeHint().height() + addButton_->sizeHint().height() + 24;
+  const int top = std::min(tableRowsHeight(rows) + chrome, total * 3 / 5);
+  splitter_->setSizes({top, total - top});
+}
+
+void RecordsPanel::setFormShown(bool on) {
+  const QList<int> sizes = splitter_->sizes();
+  if (sizes.size() != 2) return;
+  const int total = sizes[0] + sizes[1];
+  if (!on) {
+    if (sizes[1] > 0) formHeight_ = sizes[1];
+    splitter_->setSizes({total, 0});
+  } else if (sizes[1] == 0) {
+    const int form = formHeight_ > 0 ? formHeight_ : total / 2;
+    splitter_->setSizes({std::max(total - form, tableRowsHeight(5)), form});
+  }
+  {
+    QSignalBlocker block(formToggle_);
+    formToggle_->setChecked(on);
+  }
+  QSettings().setValue("layout/" + splitter_->objectName(), splitter_->saveState());
+}
+
+bool RecordsPanel::formShown() const { return splitter_->sizes().value(1) > 0; }
+
+void RecordsPanel::setExpertMode(bool on) {
+  expert_ = on;
+  updateColumns();
+}
+
+void RecordsPanel::updateColumns() {
+  // standard view: the Kind column when every row is of one kind, and the columns empty in every row, hidden; a
+  // column that holds a value in any row stays (nothing in effect is hidden)
+  const int rows = model_->rowCount();
+  for (int c = 0; c < model_->columnCount(); c++) {
+    const RecordTableModel::Column &col = model_->column(c);
+    bool hide = false;
+    if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Kind) {
+      hide = true;
+      const QString first = model_->data(model_->index(0, c)).toString();
+      for (int r = 1; r < rows && hide; r++) hide = model_->data(model_->index(r, c)).toString() == first;
+    } else if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Field) {
+      hide = true;
+      for (int r = 0; r < rows && hide; r++) hide = model_->data(model_->index(r, c)).toString().trimmed().isEmpty();
+    }
+    table_->setColumnHidden(c, hide);
+  }
+}
+
 QString RecordsPanel::shownName() const { return haveShown_ ? Q(shown_.name) : QString(); }
 
 void RecordsPanel::reload() {
@@ -456,6 +566,7 @@ void RecordsPanel::reload() {
   table_->resizeColumnsToContents();
   for (int c = 0; c < model_->columnCount(); c++)
     table_->setColumnWidth(c, std::min(table_->columnWidth(c), fontMetrics().horizontalAdvance(QString(40, 'x'))));
+  updateColumns();
   reloading_ = false;
   haveShown_ = false;
   QStringList again;
@@ -585,6 +696,8 @@ void RecordsPanel::clearForm() {
   bottom_->setVisible(!empty);
   table_->setMaximumHeight(empty ? table_->horizontalHeader()->sizeHint().height() + 3 * table_->verticalHeader()->defaultSectionSize() + 4
                                  : QWIDGETSIZE_MAX);
+  // a table with records keeps five rows in sight, whatever the splitter (qt_gui.md section 19.3)
+  table_->setMinimumHeight(empty ? 0 : tableRowsHeight(std::min(5, std::max(1, model_->rowCount()))));
   usedBy_->clear();
   usedBy_->setVisible(false);
   assignButton_->setVisible(false);

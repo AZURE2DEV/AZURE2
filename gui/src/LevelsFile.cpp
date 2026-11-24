@@ -9,6 +9,7 @@
 #include <QSet>
 
 #include "LevelsTab.h"
+#include "RecordExtras.h"
 
 namespace {
 
@@ -115,6 +116,7 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
     for (const std::string &s : t) tokens << QString::fromStdString(s);
     channelsModel->setFileTokens(channelIndex, tokens);
   }
+  updateExpertRows();
   maxLSpin->setValue(maxLValue);
   maxMultSpin->setValue(maxMultValue);
   maxNumMultSpin->setValue(maxNumMultValue);
@@ -237,7 +239,21 @@ std::vector<azure2::front::LevelRow> LevelsTab::levelRows() {
   return rows;
 }
 
-void LevelsTab::addExtraPanel(const QString &title, QWidget *panel) {
-  extras->addTab(panel, title);
-  extras->setVisible(true);
+void LevelsTab::addExtraPanel(const QString &title, RecordsPanel *panel) { extras->addPanel(title, panel); }
+
+void LevelsTab::setExpertMode(bool on) {
+  expert_ = on;
+  extras->setExpertMode(on);
+  updateExpertRows();
+}
+
+void LevelsTab::updateExpertRows() {
+  // the photon multipolarity limits matter only with a photon pair (pair type 10); Export LaTeX is a writer's tool
+  bool photon = false;
+  if (pairsModel)
+    for (const PairsData &p : pairsModel->getPairs()) photon = photon || p.pairType == 10;
+  for (QWidget *w : {static_cast<QWidget *>(maxMultSpin), static_cast<QWidget *>(maxNumMultSpin),
+                     static_cast<QWidget *>(maxMultLabelW_), static_cast<QWidget *>(maxNumMultLabelW_)})
+    if (w) w->setVisible(expert_ || photon);
+  exportLatexButton->setVisible(expert_);
 }

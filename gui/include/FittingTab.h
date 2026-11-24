@@ -8,6 +8,8 @@
 class SectionTextPanel;
 
 QT_BEGIN_NAMESPACE
+class QFormLayout;
+class QTabWidget;
 class QComboBox;
 class QLineEdit;
 class QSpinBox;
@@ -49,6 +51,9 @@ class FittingTab : public QWidget {
   QString fittedFile() const;
   /// Write the limits and the prior of one row of the table as its <parameterSettings> row (an empty row removed).
   bool applyRow(int row, QString &why);
+  /// Standard or expert view (qt_gui.md section 19.4): the call limit, the covariance refreeze passes, the prior
+  /// covariance file and the text pages of <parameterSettings> and <mcmc> hidden in standard view unless set.
+  void setExpertMode(bool on);
 
  signals:
   /// The parameter file the next run starts from (RunTab: --parameter-file).
@@ -70,6 +75,11 @@ class FittingTab : public QWidget {
   QTableWidget *table_;
   QLabel *tableNote_;
   bool filling_ = false;
+  bool expert_ = false;
+  QFormLayout *fitForm_ = nullptr;
+  QWidget *priorBox_ = nullptr;
+  QTabWidget *pages_ = nullptr;
+  void updateExpertRows();
 };
 
 #endif

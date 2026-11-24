@@ -18,6 +18,8 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
+class QSplitter;
+class QToolButton;
 class QTableView;
 class QVBoxLayout;
 QT_END_NAMESPACE
@@ -87,12 +89,25 @@ class RecordsPanel : public QWidget {
   QStringList hiddenByQuantity() const { return hiddenByQuantity_; }
   /// Whether a field's row is shown on the form (the tests).
   bool fieldRowShown(const QString &key) const;
+  /// The table above, the form below (qt_gui.md section 19.3): the table keeps at least five rows, the form can be
+  /// closed (the Form button, or the splitter dragged to the bottom), the sizes are kept per panel in QSettings.
+  QSplitter *splitter() const { return splitter_; }
+  void setFormShown(bool on);
+  bool formShown() const;
+  /// The table's rows a user sees without scrolling (the tests).
+  int visibleRows() const;
+  /// Standard or expert view (qt_gui.md section 19.4): in standard view the Kind column of a one-kind table and the
+  /// columns empty in every row are hidden (a column with a value in any row is shown).
+  void setExpertMode(bool on);
 
  signals:
   void edited();
 
  public slots:
   void reload();
+
+ protected:
+  void showEvent(QShowEvent *event) override;
 
  private slots:
   void selectionChanged();
@@ -175,6 +190,14 @@ class RecordsPanel : public QWidget {
   bool reloading_ = false;
   bool previewPending_ = false;
   QString quantityKey_;
+  QSplitter *splitter_ = nullptr;
+  QToolButton *formToggle_ = nullptr;
+  int formHeight_ = 0;       ///< the form's height before it was closed (to open it again at that size)
+  bool sized_ = false;       ///< the splitter's sizes were set (saved ones, or the first ones on show)
+  bool expert_ = false;
+  void initialSizes();
+  void updateColumns();
+  int tableRowsHeight(int rows) const;
 };
 
 #endif

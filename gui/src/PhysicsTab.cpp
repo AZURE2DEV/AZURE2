@@ -272,9 +272,9 @@ void FunctionsPage::functionChanged() {
                        QString::fromStdString(r.doc));
     for (int k = 0; k < return_->count(); k++) return_->setItemData(k, QString::fromStdString(f.returns[k].doc), Qt::ToolTipRole);
   }
-  doc_->setText(QString("<b>%1</b> (%2)<br>%3<br><i>%4</i>")
-                    .arg(QString::fromStdString(f.name).toHtmlEscaped(), QString::fromStdString(f.group).toHtmlEscaped(),
-                         QString::fromStdString(f.doc).toHtmlEscaped(), QString::fromStdString(f.library).toHtmlEscaped()));
+  // the function's name and group on the page; its formula and its source in the tip (qt_gui.md section 19.6)
+  doc_->setText(QString("<b>%1</b> (%2)").arg(QString::fromStdString(f.name).toHtmlEscaped(), QString::fromStdString(f.group).toHtmlEscaped()));
+  doc_->setToolTip(QString("%1\n%2").arg(QString::fromStdString(f.doc), QString::fromStdString(f.library)));
   panel_->logX()->setChecked(form_->swept() >= 0 && form_->sweep()->log->isChecked());
   curves_.clear();
   draw(false);
@@ -446,13 +446,14 @@ PhysicsTab::PhysicsTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
       return;
     }
     const QString param = context_->parameterFile();
-    sessionStatus_->setText(tr("Session of %1 at %2; %3 parametrization; %4 J^pi groups, %5 levels%6")
-                                .arg(QFileInfo(context_->projectFile()).fileName(),
-                                     param.isEmpty() ? tr("the start values") : QFileInfo(param).fileName(),
+    // one short line: what the session holds; the file and the set-up in the tip
+    sessionStatus_->setText(tr("%1; %2; %3 J^pi groups, %4 levels")
+                                .arg(param.isEmpty() ? tr("start values") : QFileInfo(param).fileName(),
                                      QString::fromStdString(i.parametrization))
                                 .arg(i.groups.size())
-                                .arg(i.poles.size())
-                                .arg(i.extrapolations ? tr(" (set up with its extrapolations: no data set)") : QString()));
+                                .arg(i.poles.size()));
+    sessionStatus_->setToolTip(tr("The engine's session of %1%2").arg(QFileInfo(context_->projectFile()).fileName(),
+                                  i.extrapolations ? tr(", set up with its extrapolations (no data set)") : QString()));
   });
 
   // the busy strip: either worker running
@@ -491,6 +492,14 @@ PhysicsTab::PhysicsTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
 }
 
 PhysicsTab::~PhysicsTab() = default;
+
+void PhysicsTab::setExpertMode(bool on) {
+  bool thm = false;
+  for (const QString &line : holder_->sectionBody("thm")) thm = thm || (!line.trimmed().isEmpty() && !line.trimmed().startsWith('#'));
+  pages_->item(PoleMap)->setHidden(!on);
+  pages_->item(Thm)->setHidden(!on && !thm);
+  if (pages_->currentItem() && pages_->currentItem()->isHidden()) pages_->setCurrentRow(Functions);
+}
 
 void PhysicsTab::showPage(int page) {
   if (page < 0 || page >= stack_->count()) return;

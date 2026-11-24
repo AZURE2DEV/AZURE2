@@ -165,6 +165,8 @@ void AZURESetup::projectOpened() {
   QString why;
   if (!loadLevels(why)) notes_->addNote(tr("The Levels tab could not read <levels>: %1").arg(why.section('\n', 0, 0)), why);
   openValidation_ = true;
+  updateExpertTabs();
+  levelsTab->setExpertMode(expertMode());  // the photon multipolarity rows follow the pairs just read
   const QString amatrix = holder_->configValue("amatrix", "true");
   (amatrix == "false" ? rMatrixAction : aMatrixAction)->setChecked(true);
   runTab->clearLog();

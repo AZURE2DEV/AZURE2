@@ -6,6 +6,7 @@
 
 QT_BEGIN_NAMESPACE
 class QListWidget;
+class QCheckBox;
 class QListWidgetItem;
 class QPushButton;
 QT_END_NAMESPACE
@@ -28,6 +29,9 @@ class StartPage : public QWidget {
   QListWidget *exampleList() const { return examples_; }
   QPushButton *newButton() const { return new_; }
   QPushButton *openButton() const { return open_; }
+  /// "Show expert options" (qt_gui.md section 19.4): the same switch as View > Show Expert Options.
+  QCheckBox *expertBox() const { return expert_; }
+  void setExpertChecked(bool on);
 
   /// The example projects (*.azr) of the directories examplePlaces() finds, sorted by folder.
   static QStringList findExamples();
@@ -39,12 +43,14 @@ class StartPage : public QWidget {
   void newRequested();
   void openRequested();
   void openFile(const QString &file);
+  void expertToggled(bool on);
 
  private:
   QListWidget *recent_;
   QListWidget *examples_;
   QWidget *tabNotes_;
   QPushButton *new_, *open_;
+  QCheckBox *expert_ = nullptr;
 };
 
 #endif

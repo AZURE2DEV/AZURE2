@@ -1,6 +1,7 @@
 // The page shown while no project is open (StartPage.h).
 #include "StartPage.h"
 
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -13,6 +14,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSet>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace {
@@ -126,11 +128,17 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   connect(open_, &QPushButton::clicked, this, &StartPage::openRequested);
   QLabel *drop = new QLabel(tr("or drop an .azr file on this window"));
   drop->setProperty("role", "hint");
+  expert_ = new QCheckBox(tr("Show expert options"));
+  expert_->setObjectName("startExpert");
+  expert_->setToolTip(tr("Show the options, columns, tabs and sections an occasional user does not need (also View > "
+                         "Show Expert Options).  It changes what is shown, never the project."));
+  connect(expert_, &QCheckBox::toggled, this, &StartPage::expertToggled);
   QHBoxLayout *buttons = new QHBoxLayout;
   buttons->addWidget(new_);
   buttons->addWidget(open_);
   buttons->addWidget(drop);
   buttons->addStretch(1);
+  buttons->addWidget(expert_);
 
   recent_ = ProjectList("startRecent");
   examples_ = ProjectList("startExamples");
@@ -165,10 +173,9 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   lists->addWidget(Card(recentBox), 1);
   lists->addWidget(Card(exampleBox), 1);
 
+  // what each tab is for: the tabs' tool tips (qt_gui.md section 19.6), not eleven lines on this page
   tabNotes_ = new QWidget;
-  QVBoxLayout *notesBox = new QVBoxLayout;
-  notesBox->addWidget(Heading(tr("The tabs")));
-  notesBox->addWidget(tabNotes_);
+  tabNotes_->hide();
 
   QWidget *content = new QWidget;
   content->setMaximumWidth(1100);
@@ -176,8 +183,7 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   layout->setSpacing(14);
   layout->addLayout(header);
   layout->addLayout(buttons);
-  layout->addLayout(lists, 3);
-  layout->addWidget(Card(notesBox), 2);
+  layout->addLayout(lists, 1);
   QHBoxLayout *centred = new QHBoxLayout;
   centred->addStretch(1);
   centred->addWidget(content, 12);
@@ -191,6 +197,11 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *outer = new QVBoxLayout(this);
   outer->setContentsMargins(0, 0, 0, 0);
   outer->addWidget(scroll);
+}
+
+void StartPage::setExpertChecked(bool on) {
+  QSignalBlocker block(expert_);
+  expert_->setChecked(on);
 }
 
 void StartPage::setRecent(const QStringList &files) {

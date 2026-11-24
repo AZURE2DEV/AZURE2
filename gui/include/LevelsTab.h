@@ -31,6 +31,8 @@
 
 class InfoDialog;
 class ProjectHolder;
+class RecordsPanel;
+class RecordExtras;
 class QUndoStack;
 class QComboBox;
 
@@ -61,7 +63,11 @@ class LevelsTab : public QWidget {
    *  value the GUI did not change keeps the token it was read with (LevelsFile.cpp). */
   std::vector<azure2::front::LevelRow> levelRows();
   /*! A panel shown below the levels (gamma decays, isospin; AZURESetup). */
-  void addExtraPanel(const QString &title, QWidget *panel);
+  void addExtraPanel(const QString &title, RecordsPanel *panel);
+  /// Standard or expert view (qt_gui.md section 19.4): the gamma multipolarity limits (unless a pair is a photon pair
+  /// or they are set above 1), Export LaTeX and the panels without records hidden in standard view.
+  void setExpertMode(bool on);
+  RecordExtras *extraPanels() const { return extras; }
   /*! Model rows of the levels in the order writeNuclearFile writes them: compound nuclei in order of first
    *  appearance, then J, parity and energy. */
   QList<int> writtenLevelOrder();
@@ -176,7 +182,10 @@ class LevelsTab : public QWidget {
   void readExistingPair(PairsData, int, bool);
 
  private:
-  QTabWidget *extras = nullptr;
+  RecordExtras *extras = nullptr;
+  bool expert_ = false;
+  QLabel *maxMultLabelW_ = nullptr, *maxNumMultLabelW_ = nullptr;
+  void updateExpertRows();
   /// The state of the tabs as it was after the last recorded action, and the stack (LevelsUndo.h).
   LevelsState currentState() const;
   void applyState(const LevelsState &state);
