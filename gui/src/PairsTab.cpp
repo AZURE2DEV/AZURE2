@@ -195,7 +195,9 @@ void PairsTab::duplicatePair() {
 }
 
 void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
-  if (pairsModel->isPair(pair) == -1) {
+  // A pair typed by the user that repeats another is refused; one read from the project is taken at its key (the
+  // file may hold the same pair under two keys, LevelsTab::readLevels).
+  if (fromFile || pairsModel->isPair(pair) == -1) {
     pairsModel->insertRows(pairsModel->numPairs(), pairIndex + 1 - pairsModel->numPairs(), QModelIndex());
 
     QModelIndex index = pairsModel->index(pairIndex, 0, QModelIndex());

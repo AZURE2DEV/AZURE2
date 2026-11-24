@@ -57,3 +57,11 @@ add_executable(gui_overview_test gui_overview_test.cpp)
 target_link_libraries(gui_overview_test PRIVATE AZURESetupLib)
 add_test(NAME gui_overview COMMAND gui_overview_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:AZURE2> ${AZURE2_QT_SHOTS}/u8-overview)
 set_tests_properties(gui_overview PROPERTIES LABELS gui TIMEOUT 1200 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+
+# The window for an occasional user (docs/upgrade/qt_gui.md section 19): every example opened with no modal dialog,
+# the notes bar, the record tabs' tables usable at 1280x720, the expert switch (hides, shows, never changes the file),
+# the converter's repair of an old line.  Screenshots in AZURE2_QT_SHOTS/casual.
+add_executable(gui_casual_test gui_casual_test.cpp)
+target_link_libraries(gui_casual_test PRIVATE AZURESetupLib)
+add_test(NAME gui_casual COMMAND gui_casual_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/casual)
+set_tests_properties(gui_casual PROPERTIES LABELS gui TIMEOUT 900 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")

@@ -78,8 +78,11 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
       why = tr("<levels> row %1: pair key %2").arg(rowNumber).arg(ir);
       return false;
     }
+    // The pair goes to its own key, whatever the other keys hold: a project may name the same pair under two keys
+    // (c12c12_tumino2018: key 1 for the THM data, key 6 for the direct data, each with its own widths).  Comparing
+    // with every pair (isPair) refused such a key with a box per row and left its channels without a pair.
     if (pairsModel->numPairs() < ir) emit readNewPair(pair, pairIndex, true);
-    else if (pairsModel->isPair(pair) == -1) emit readExistingPair(pair, pairIndex, true);
+    else if (!pairsModel->pairAt(pairIndex, pair)) emit readExistingPair(pair, pairIndex, true);
     LevelsData level = {(int)Number(t, kIsActive), (int)Number(t, kLevelFix), Number(t, kLevelJ), (int)levelPi,
                         Number(t, kLevelE)};
     const Nucleus nucleus = PairsModel::nucleusOf(pair);  // the engine's rule: a level belongs to its channels' nucleus
