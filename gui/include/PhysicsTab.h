@@ -271,8 +271,8 @@ class ThmPage : public ProjectPage {
   QList<Curve> curves_;
 };
 
-/// A phase shift in degrees, defined modulo 180, made continuous for drawing (a step of more than 90 degrees removed
-/// as the wrap; the curve starts in (-90, 90]).  Display only (qt_gui.md section 19.8).
+/// A phase shift in degrees, defined modulo 180, made continuous for drawing where it wraps across 0/180 (the
+/// identical-particle range [0, 180)); a jump at +-90 and the first value stay as the engine gives them.  Display only (qt_gui.md section 19.8).
 QVector<double> UnwrappedPhaseDegrees(const QVector<double> &deg);
 
 }  // namespace physicsqt
