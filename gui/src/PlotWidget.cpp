@@ -311,6 +311,8 @@ void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
   if (!markersX_.isEmpty()) {
     QColor mark = ink;
     mark.setAlpha(150);
+    // a label is drawn only where it does not cover the one before it on its row (three rows; the lines are all drawn)
+    double rowEnd[3] = {-1e300, -1e300, -1e300};
     for (int i = 0; i < markersX_.size(); i++) {
       const double x = markersX_[i];
       if (!std::isfinite(x) || (logX_ && x <= 0)) continue;
@@ -318,9 +320,10 @@ void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
       p.setPen(QPen(mark, 1, Qt::DashLine));
       p.drawLine(QPointF(px, r.top()), QPointF(px, r.bottom()));
       const QString label = markerLabels_.value(i);
-      if (!label.isEmpty()) {
+      if (!label.isEmpty() && px + 3 > rowEnd[i % 3]) {
         p.setPen(mark);
         p.drawText(QPointF(px + 3, r.bottom() - 4 - (i % 3) * fm.height()), label);
+        rowEnd[i % 3] = px + 3 + fm.horizontalAdvance(label) + 4;
       }
     }
   }

@@ -114,6 +114,23 @@ QString FactsText(const front::PhysicsCurves &c) {
   return out;
 }
 
+/// The facts on the page without the list of level energies (the pole table below lists them; the tip has all).
+QString ShortFactsText(const front::PhysicsCurves &c) {
+  QStringList parts;
+  int levels = 0;
+  for (const auto &f : c.facts) {
+    if (f.first.compare(0, 8, "E_level ") == 0) {
+      levels++;
+      continue;
+    }
+    parts << QString::fromStdString(f.first + " = " + f.second);
+  }
+  if (levels > 0) parts << QObject::tr("%n level(s)", nullptr, levels);
+  QString out = parts.join("; ");
+  for (const std::string &n : c.notes) out += "\n" + QString::fromStdString(n);
+  return out;
+}
+
 QWidget *Scrolled(QWidget *w) {
   // the form at its natural height, the rest of the column empty (a form layout would stretch its rows)
   QWidget *box = new QWidget;
@@ -189,10 +206,8 @@ ChannelsPage::ChannelsPage(PhysicsContext *context, QWidget *parent) : ProjectPa
   buttons->addWidget(clearButton);
   buttons->addStretch(1);
   f->addRow(buttons);
-  QLabel *about = new QLabel(QString::fromStdString(CallNamed("ChannelFunctions").doc));
-  about->setWordWrap(true);
-  about->setProperty("role", "hint");
-  f->addRow(about);
+  // what the page computes: the tip of the pair's drop-down, not a paragraph (qt_gui.md section 19.6)
+  pair_->setToolTip(QString::fromStdString(CallNamed("ChannelFunctions").doc));
   QSplitter *split = new QSplitter;
   split->addWidget(Scrolled(controls));
   split->addWidget(panel_);
@@ -418,7 +433,8 @@ void RMatrixPage::compute() {
         }
         answer_ = *answer;
         answerGroup_ = jgroup;
-        facts_->setText(FactsText(answer_));
+        facts_->setText(ShortFactsText(answer_));
+        facts_->setToolTip(FactsText(answer_));
         fillSeries();
         redraw();
       });
@@ -505,7 +521,9 @@ void RMatrixPage::centreOnPole(int row) {
 
 PoleMapPage::PoleMapPage(PhysicsContext *context, QWidget *parent) : ProjectPage(context, parent) {
   setObjectName("poleMapPage");
-  explanation_ = new QLabel(
+  // one line on the page, the reading of the map in its tip (qt_gui.md section 19.6)
+  explanation_ = new QLabel(tr("A real-energy map along E_x (the complex plane is not available)."));
+  explanation_->setToolTip(
       tr("A real-energy map: the excitation energy E_x runs along the real axis, each row is a J^pi group (log10 "
          "|det A^-1|), a pair of channels (|U_cc'|) or a pair of levels (|A|) of one group.  A minimum of |det A^-1| "
          "(a dark valley of log10 |det A^-1|) is where the inverse level matrix is nearly singular on the real axis: "

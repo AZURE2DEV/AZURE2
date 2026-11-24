@@ -235,8 +235,9 @@ void OverviewPage::build() {
   none->setObjectName("overviewNoRun");
   QVBoxLayout *nl = new QVBoxLayout(none);
   QLabel *noneText = Text();
-  noneText->setText(tr("<b>No run yet.</b> The output directory holds no results of this project. Calculate the data "
-                       "sets from the parameters as they stand, or fit them."));
+  noneText->setText(tr("<b>No run yet.</b>"));
+  noneText->setToolTip(tr("The output directory holds no results of this project: calculate the data sets from the "
+                          "parameters as they stand, or fit them."));
   nl->addWidget(noneText);
   QHBoxLayout *nb = new QHBoxLayout;
   for (const auto &button : {qMakePair(QString("calculate"), tr("Calculate")), qMakePair(QString("fit"), tr("Fit"))}) {
@@ -423,8 +424,8 @@ void OverviewPage::clearProgress() {
   trace_->clear();
   trace_->hide();
   traceTitle_->hide();
-  traceNote_->setText(Muted(tr("Recorded while a fit runs in this window (the engine writes no file of a fit's "
-                               "progress).")));
+  traceNote_->setText(Muted(tr("Drawn while a fit runs here.")));
+  traceNote_->setToolTip(tr("Recorded while a fit runs in this window: the engine writes no file of a fit's progress."));
 }
 
 void OverviewPage::refresh() {
@@ -489,16 +490,21 @@ void OverviewPage::parametersDone() {
 
 void OverviewPage::fillProject() {
   const QFileInfo file(QString::fromStdString(project_.file));
-  QString head = QString("<b>%1</b> %2").arg(file.fileName().toHtmlEscaped(), Muted(QDir::toNativeSeparators(file.absolutePath()).toHtmlEscaped()));
+  // the file's name; its folder in the tip (qt_gui.md section 19.6)
+  QString head = QString("<b>%1</b>").arg(file.fileName().toHtmlEscaped());
+  projectHead_->setToolTip(QDir::toNativeSeparators(file.absoluteFilePath()));
   if (holder_->project().Modified()) head += "<br>" + Warn(tr("modified, not saved"));
   QStringList nuclei;
   for (const std::string &n : project_.nuclei) nuclei << QString::fromStdString(n);
   head += "<br>" + tr("Compound nucleus: <b>%1</b>").arg(nuclei.isEmpty() ? tr("none yet") : nuclei.join(", "));
-  QStringList pairs;
-  for (const front::PairChoice &p : project_.pairs)
-    pairs << QString("%1 %2").arg(QString::fromStdString(p.label).toHtmlEscaped(),
-                                  Muted(tr("E<sub>x</sub> %1 MeV").arg(p.threshold, 0, 'f', 3)));
+  // the pairs by name; each threshold (E_x of the compound nucleus) in the tip
+  QStringList pairs, thresholds;
+  for (const front::PairChoice &p : project_.pairs) {
+    pairs << QString::fromStdString(p.label).toHtmlEscaped();
+    thresholds << tr("%1: threshold at E_x = %2 MeV").arg(QString::fromStdString(p.label)).arg(p.threshold, 0, 'f', 3);
+  }
   head += "<br>" + tr("Pairs: %1").arg(pairs.isEmpty() ? tr("none yet") : pairs.join(" &middot; "));
+  if (!thresholds.isEmpty()) projectHead_->setToolTip(projectHead_->toolTip() + "\n" + thresholds.join("\n"));
   projectHead_->setText(head);
 
   levelsTitle_->setText(tr("<b>%n level(s)</b>", nullptr, project_.levels) +
@@ -593,7 +599,7 @@ void OverviewPage::fillRun() {
     if (!run_.minimizer.empty()) status += tr(" (%1, %n call(s))", nullptr, (int)run_.calls).arg(QString::fromStdString(run_.minimizer));
     runStatus_->setText(status);
   } else {
-    runStatus_->setText(command == "calculate" ? Muted(tr("A calculation: the parameters as they were, no fit."))
+    runStatus_->setText(command == "calculate" ? Muted(tr("A calculation (no fit)."))
                                                : QString());
   }
   runStatus_->setVisible(!runStatus_->text().isEmpty());
