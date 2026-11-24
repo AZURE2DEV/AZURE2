@@ -21,7 +21,11 @@ ConvertRepairDialog::ConvertRepairDialog(const QString &file, const azure2::fron
                                  .arg(problem.line)
                                  .arg(QString::fromStdString(problem.section)));
   v->addWidget(where);
-  edit_ = new QLineEdit(QString::fromStdString(problem.text).simplified());
+  // the line exactly as in the file (its blanks, also inside quotes, kept): "Convert again" without an edit writes the
+  // same line into the copy (qt_gui.md section 19.8)
+  QString line = QString::fromStdString(problem.text);
+  while (line.endsWith('\n') || line.endsWith('\r')) line.chop(1);
+  edit_ = new QLineEdit(line);
   edit_->setObjectName("convertRepairLine");
   edit_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
   edit_->setToolTip(tr("The line as the converted copy will hold it: edit it, or take a reading below."));

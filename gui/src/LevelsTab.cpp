@@ -105,7 +105,8 @@ LevelsTab::LevelsTab(QWidget *parent) :
   maxNumMultSpin->setValue(2);
   QLabel *maxNumMultLabel = new QLabel(tr("Maximum Gamma Multipolarities\nPer Decay"));
   maxNumMultLabelW_ = maxNumMultLabel;
-  includeAllJPiCheck = new QCheckBox(tr("Hard-sphere scattering in every J%1 (levels or not)").arg(QChar(0x03C0)));
+  // two lines: the configuration column narrow, the channel table wide (qt_gui.md section 19.8)
+  includeAllJPiCheck = new QCheckBox(tr("Hard-sphere scattering in every J%1\n(levels or not)").arg(QChar(0x03C0)));
   includeAllJPiCheck->setToolTip(tr("AZURE2 only includes a J\u03c0 in the calculation when a level carries it. Without this, every J\u03c0 "
                                     "that has no level is missing from elastic scattering (its hard-sphere phase shift), unless a fixed "
                                     "zero-width level is added by hand. With it, every J\u03c0 the particle pairs allow up to the maximum "
@@ -150,7 +151,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::MeaningColumn, QHeaderView::Fixed);
   channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::RatioColumn, QHeaderView::Fixed);
   channelsView->setColumnWidth(ChannelsModel::MeaningColumn, 78);
-  channelsView->setColumnWidth(ChannelsModel::RatioColumn, 50);
+  channelsView->setColumnWidth(ChannelsModel::RatioColumn, channelsView->fontMetrics().horizontalAdvance("0.000000") + 12);
   channelsView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(channelsView, &QWidget::customContextMenuRequested, this, &LevelsTab::showChannelsMenu);
   {
@@ -318,8 +319,8 @@ LevelsTab::LevelsTab(QWidget *parent) :
   // the channel table holds nine columns, the configuration a few lines: the middle column wider, so that the Value
   // column (the width or ANC) is not cut to "2..." (qt_gui.md section 19.8)
   mainLayout->setColumnStretch(0, 4);
-  mainLayout->setColumnStretch(1, 5);
-  mainLayout->setColumnStretch(2, 3);
+  mainLayout->setColumnStretch(1, 6);
+  mainLayout->setColumnStretch(2, 2);  // the configuration at its natural width, the rest to the channels
   mainLayout->setRowStretch(0, 3);
   mainLayout->setRowStretch(1, 4);
   // the records that belong to the level scheme (gamma decays, isospin): sub-tabs below the levels in a splitter, a

@@ -50,7 +50,10 @@ SweepFields::SweepFields(const QString &unit, QWidget *parent) : QWidget(parent)
   from->setObjectName("sweepFrom");
   to->setObjectName("sweepTo");
   for (QLineEdit *e : {from, to}) {
-    e->setMaximumWidth(fontMetrics().horizontalAdvance("0000.000000"));
+    // wide enough for a value as the pages write it ("14.769448", "-0.0012345"): it was cut to "769448" (qt_gui.md
+    // section 19.8)
+    e->setMinimumWidth(fontMetrics().horizontalAdvance("-00.0000000") + 16);
+    e->setMaximumWidth(fontMetrics().horizontalAdvance("-0000.0000000") + 16);
     connect(e, &QLineEdit::editingFinished, this, &SweepFields::changed);
   }
   points = new QSpinBox;
@@ -64,17 +67,24 @@ SweepFields::SweepFields(const QString &unit, QWidget *parent) : QWidget(parent)
   unit_ = new QLabel(unit);
   connect(points, &QSpinBox::valueChanged, this, &SweepFields::changed);
   connect(log, &QCheckBox::toggled, this, &SweepFields::changed);
-  QHBoxLayout *h = new QHBoxLayout(this);
-  h->setContentsMargins(0, 0, 0, 0);
+  // two rows: the range with its unit, then the points and the log switch (one row did not fit the pages' form
+  // column once the fields show their whole values; qt_gui.md section 19.8)
+  QVBoxLayout *v = new QVBoxLayout(this);
+  v->setContentsMargins(0, 0, 0, 0);
+  v->setSpacing(2);
+  QHBoxLayout *h = new QHBoxLayout;
   h->addWidget(from);
   h->addWidget(new QLabel(tr("to")));
   h->addWidget(to);
   h->addWidget(unit_);
-  h->addSpacing(8);
-  h->addWidget(points);
-  h->addWidget(new QLabel(tr("points")));
-  h->addWidget(log);
   h->addStretch(1);
+  QHBoxLayout *h2 = new QHBoxLayout;
+  h2->addWidget(points);
+  h2->addWidget(new QLabel(tr("points")));
+  h2->addWidget(log);
+  h2->addStretch(1);
+  v->addLayout(h);
+  v->addLayout(h2);
 }
 
 void SweepFields::set(double a, double b, int n, bool lg) {

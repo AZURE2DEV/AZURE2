@@ -673,7 +673,14 @@ class FormEditor : public PieceEditor {
   void showAlternative(int i) {
     if (i < 0 || i >= (int)info_.alternatives.size()) return;
     pages_->setCurrentIndex(i);
+    // the alternative's doc beside the choice explains the choice; a value of one form only has no choice, and its doc
+    // is the field's (its box or label says it): the tip only, not a grey line repeated on every entry of a repeatable
+    // field (natural_neon's isotopes; qt_gui.md section 19.8)
     doc_->setText(Q(info_.alternatives[i].doc));
+    // (an unkeyed alternative is listed in the choice by its doc already: no second copy beside it)
+    const bool explains = info_.alternatives.size() > 1 && !info_.alternatives[i].keyword.empty();
+    doc_->setVisible(explains);
+    setToolTip(explains ? QString() : Q(info_.alternatives[i].doc));
     // the stack takes the height of the page shown, not of the tallest
     for (int k = 0; k < pages_->count(); k++)
       pages_->widget(k)->setSizePolicy(QSizePolicy::Preferred, k == i ? QSizePolicy::Preferred : QSizePolicy::Ignored);
