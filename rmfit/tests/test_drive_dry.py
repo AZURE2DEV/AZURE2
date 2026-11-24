@@ -117,6 +117,12 @@ class StubCampaign:
             self.obj -= 30.0
         return dict(outcome=out, jpi=cand.jpi or "1/2+", delta=-30.0 if out == "accept" else -1.0)
 
+    def run_remove(self, top=3, nfev=100, only=None, adopt=False, note="", **kw):
+        # PRUNE (2026-11-21): every own level is kept unless remove_verdicts says otherwise
+        self.calls.append(("remove", tuple((o["jpi"], o["energy"]) for o in (only or ())), adopt))
+        return dict(results=[dict(level=f"{o['jpi']}#9", jpi=o["jpi"], energy=o["energy"], cost=100.0, threshold=10.0, verdict="keep")
+                             for o in (only or ())], adopted=None)
+
     def run_levelscan(self, top=3, gamma_kev=None, ex_range=None, refit=0, note="", **kw):
         res = self.levelscan_results.pop(0) if self.levelscan_results else []
         self.calls.append(("levelscan", top, ex_range))

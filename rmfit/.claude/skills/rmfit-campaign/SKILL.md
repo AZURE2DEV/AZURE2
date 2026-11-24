@@ -324,7 +324,7 @@ compute node; where a site forbids that, resubmit from a login node.
   adopted.
 
 **Loop** (section 3 steps 1-7 with section 4's stopping rules):
-`TIGHTEN SIGN POPULATION SHIFTS_FREE LEVELSCAN STRUCTURE_ADD SIGN_POST DATASET_OFF REVIEW EXPORT CYCLE`
+`TIGHTEN SIGN POPULATION SHIFTS_FREE LEVELSCAN STRUCTURE_ADD PRUNE SIGN_POST DATASET_OFF REVIEW EXPORT CYCLE`
 
 - **Polish** rounds run until the gain is below `polish_gain_rel_min`.  Size `budget.polish_nfev` to the model: 150 is far
   too few for 200 free parameters.
@@ -353,11 +353,16 @@ compute node; where a site forbids that, resubmit from a login node.
   the best (J^pi, pattern) to `candidates.json`, with the screen as hypothesis and the next two J^pi as alternatives.
   Every add polishes the neighbourhood first (`local_release_mev`, `local_nfev`).  Level adds continue until
   `level_adds_marginal_in_a_row`; adoption follows `pre_authorized.adopt_level`.
+- **PRUNE** (`structure.prune_own`) runs backward elimination (`run_remove(only=..., adopt=True)`) over the levels this
+  run adopted, and only those.  A narrow level adopted early can become redundant once the broad level it stood in for is
+  found; elimination over the whole model would also remove known levels that the data cannot constrain.  The cheapest
+  removal within the threshold is adopted and the step repeats on the new structure.
 - **DATASET_OFF** runs the data-set-off test (the "Botek test" in the logs) on the worst chi2/N sets.  The result is
   recorded; a data set is never excluded by the drive.
 - **REVIEW**: HIGH flags wait for the evaluator.
 - **CYCLE**: another pass while a cycle gains `cycle_gain_rel_min` and `cycles_max` allows; then UQ if `spec.uq.enabled`
-  (section 3d).
+  (section 3d).  The drive stops only after a residual scan of the final structure whose candidates were all tested
+  (`stop_rules.scan_before_done`, at most `final_scans_max` extra scans; a final scan ignores the level-test budget).
 
 `DRIVE.md` is rewritten after every state; `drive_state.json` is the checkpoint (`--state S` jumps, `--reset` starts over
 and keeps the old file).  Engine states refuse the login node (`--local` is for fixtures).
@@ -498,6 +503,9 @@ re-absorb the misfit, and a collapsed candidate is then scored as "nothing there
 Cost: eleven J^pi = 4 node jobs of 6-8 h; the anatomy and the window screen are login-node work.
 
 ## 3d. Uncertainty quantification: `rmfit uq`
+
+This stage (or `pyazr.sampling` directly, outside a campaign) is the preferred way to sample a posterior; the older
+BRICK wrapper is obsolete and should not be used for new work.
 
 `rmfit <dir> uq [--uq uq.json|JSON] [--nprocs N] [--threads T]` runs `rmfit/uq.py`, as a job (`qsub -v RMFIT_CMD="uq --uq
 uq.json --nprocs 4 --threads 6" run_crc_rmfit`) or as the drive's last state when `spec.uq.enabled` is set:

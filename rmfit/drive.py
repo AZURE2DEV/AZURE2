@@ -44,10 +44,10 @@ from .spec import FitSpec, Finding, write_findings_md
 
 BUILD_STATES = ["PIN_CHECK", "AUDIT", "REPRODUCE", "SPEC_CHECK", "SCALE_ANCHOR", "SEED_CHANNELS", "PAIR_COMPLETENESS",
                 "LADDER", "CANDIDATES", "INIT", "RECALL"]
-LOOP_STATES = ["TIGHTEN", "SIGN", "POPULATION", "SHIFTS_FREE", "LEVELSCAN", "STRUCTURE_ADD", "SIGN_POST", "DATASET_OFF", "REVIEW", "EXPORT",
+LOOP_STATES = ["TIGHTEN", "SIGN", "POPULATION", "SHIFTS_FREE", "LEVELSCAN", "STRUCTURE_ADD", "PRUNE", "SIGN_POST", "DATASET_OFF", "REVIEW", "EXPORT",
                "CYCLE", "UQ"]
 STATES = BUILD_STATES + LOOP_STATES
-ENGINE_STATES = {"REPRODUCE", "SEED_CHANNELS", "LADDER", "INIT", "TIGHTEN", "SIGN", "POPULATION", "SHIFTS_FREE", "LEVELSCAN", "STRUCTURE_ADD",
+ENGINE_STATES = {"REPRODUCE", "SEED_CHANNELS", "LADDER", "INIT", "TIGHTEN", "SIGN", "POPULATION", "SHIFTS_FREE", "LEVELSCAN", "STRUCTURE_ADD", "PRUNE",
                  "SIGN_POST", "DATASET_OFF", "REVIEW", "EXPORT", "UQ"}
 STATUS_WORDS = ("CONTINUE", "WAITING", "DONE", "STOP", "ERROR")
 STATE_FILE = "drive_state.json"
@@ -60,14 +60,19 @@ DEFAULT_BUDGET = dict(polish_nfev=150, polish_rounds_max=4, sign_rounds_max=4, l
                       # POPULATION (2026-11-08): restarts + crossover per cycle; restart_nfev 0 = polish_nfev
                       restarts_per_cycle=4, restart_nfev=0, crossover_passes=2, population_rounds_max=3)
 DEFAULT_STRUCTURE = dict(seed_omitted=True, broad_first_kev=10.0, narrow_phase=True, levelscan_per_cycle=1, levelscan_top=3,
-                         levelscan_gamma_kev=None, local_release_mev=0.5, local_nfev=80, recall_levels=2, recall_min_pass=0.5)
+                         levelscan_gamma_kev=None, local_release_mev=0.5, local_nfev=80, recall_levels=2, recall_min_pass=0.5,
+                         # PRUNE (the evaluator 2026-11-21 "prune-own"): backward elimination over the levels THIS run adopted only
+                         prune_own=True, prune_nfev=None)
 DEFAULT_STOP = dict(polish_gain_rel_min=5e-4, sign_rounds_without_accept=2, level_adds_marginal_in_a_row=2,
                     cycle_gain_rel_min=1e-3, population_gain_rel_min=1e-3, dataset_off_extra_pct=5.0, reproduce_rtol=1e-3,
                     # sign rounds only after the polish converged (skill section 3, step 1 "when done" before step 2): a flip
                     # is credited with what it gains beyond the control polish, and an unconverged incumbent moves by more
                     # than any flip (in one benchmark 18 sign rounds accepted nothing while the polishes
                     # still gained 1-2 % per round).  0 disables the gate.
-                    sign_after_converged_polish=1)
+                    sign_after_converged_polish=1,
+                    # DONE only after a residual scan on the final structure whose candidates were all tested (the evaluator
+                    # 2026-11-21 "scan"); at most final_scans_max extra scan passes, then DONE with the reason noted
+                    scan_before_done=1, final_scans_max=2)
 
 SYMBOLS = ["n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K",
            "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr",
@@ -1102,19 +1107,22 @@ class Driver:
         largest gain).  Campaign.run_levelscan; the best (J^pi, pattern) per residual cluster is appended to candidates.json
         with its screen as hypothesis and the next two J^pi as alternatives; STRUCTURE_ADD tests it like any candidate."""
         per = int(self.structure.get("levelscan_per_cycle") or 0)
-        if per <= 0:
-            return "next", "structure.levelscan_per_cycle 0: skipped"
-        if int(self.counters.get("level_tests", 0)) >= int(self.budget["level_tests_max"]):
-            return "next", "no level-test budget left this cycle: no scan"
+        forced = bool(self.state.get("force_scan"))
         path, data, bank = self._bank()
-        tested = set(int(i) for i in self.state["tested_candidates"])
-        broad = [i for i in range(len(bank)) if i not in tested and not self._is_narrow(bank[i])
-                 and (bank[i].get("hypothesis") or bank[i].get("note"))]
-        if broad:
-            return "next", f"{len(broad)} broad candidate(s) untested: no scan needed yet"
         done = int(self.counters.get("levelscan_rounds", 0))
-        if done >= per:
-            return "next", f"structure.levelscan_per_cycle {per} reached this cycle"
+        if not forced:
+            if per <= 0:
+                return "next", "structure.levelscan_per_cycle 0: skipped"
+            if int(self.counters.get("level_tests", 0)) >= int(self.budget["level_tests_max"]):
+                return "next", "no level-test budget left this cycle: no scan"
+            tested = set(int(i) for i in self.state["tested_candidates"])
+            broad = [i for i in range(len(bank)) if i not in tested and not self._is_narrow(bank[i])
+                     and (bank[i].get("hypothesis") or bank[i].get("note"))]
+            if broad:
+                return "next", f"{len(broad)} broad candidate(s) untested: no scan needed yet"
+            if done >= per:
+                return "next", f"structure.levelscan_per_cycle {per} reached this cycle"
+        self.state["force_scan"] = False
         c = self.campaign
         top = self._ex_top()
         fw = (self.spec.get("model") or {}).get("fit_window") or {}
@@ -1130,7 +1138,12 @@ class Driver:
                 continue
             row = bg[0]
             ex = float(row.get("ex", r["ex"]))
-            if any(abs(ex - float(b.get("energy", 1e9))) < 0.030 and b.get("jpi") in (None, row["jpi"]) for b in bank):
+            # already in the bank (its J^pi or one of the J^pi it was tested with), or a level this run pruned
+            if any(abs(ex - float(b.get("energy", 1e9))) < 0.030 and (b.get("jpi") in (None, row["jpi"]) or row["jpi"] in (b.get("jpis") or []))
+                   for b in bank):
+                continue
+            if any(abs(ex - float(a.get("energy_fit") or a["energy"])) < 0.030 and a.get("jpi") == row["jpi"]
+                   for a in self.state.get("drive_added", []) if a.get("pruned")):
                 continue
             lc = to_level_candidate(row, ex)
             bank.append(dict(energy=lc.energy, jpi=lc.jpi, jpis=[q["jpi"] for q in bg[:3]], channels=lc.channels, energy_fixed=True,
@@ -1142,6 +1155,8 @@ class Driver:
             added.append(f"{lc.jpi} @ {lc.energy:.3f}")
         data["candidates"] = bank
         json.dump(data, open(path, "w"), indent=1)
+        self.state["scan_on"] = dict(structure=getattr(c, "structure_id", None), changes=int(self.counters.get("structure_changes", 0)),
+                                     appended=[len(bank) - len(added) + j for j in range(len(added))], forced=forced)
         self.counters["levelscan_rounds"] = done + 1
         self.counters["levelscan_last_added"] = len(added)
         msg = f"{len(res.get('results', []))} residual cluster(s) screened, {len(added)} candidate(s) appended: " + ", ".join(added)
@@ -1216,6 +1231,12 @@ class Driver:
         if out == "accept":
             self.counters["marginal_in_a_row"] = 0
             self.counters["adopted_since_sign"] = 1
+            self.counters["structure_changes"] = int(self.counters.get("structure_changes", 0)) + 1
+            # the levels THIS run adopted: the only ones PRUNE may take out again (the evaluator 2026-11-21)
+            self.state.setdefault("drive_added", []).append(dict(
+                jpi=st.get("jpi", cand.jpi), energy=float(st.get("energy", cand.energy)),
+                energy_fit=(float(st["energy_fit"]) if _isnum(st.get("energy_fit")) else None),
+                structure=st.get("structure"), candidate=i, cycle=int(self.state["cycle"]), pruned=False))
             self.counters["population_exhausted"] = 0          # a new structure: the population stage may pay again
             self.state["broad_done"] = False                   # new residuals: the broad queue / scan may have more
         elif out == "accept-pending":
@@ -1227,6 +1248,63 @@ class Driver:
         else:
             self.counters["marginal_in_a_row"] = marg + 1
         return "stay", f"candidate {i} {st.get('jpi', cand.jpi) or 'scan'} @ {cand.energy}: {out} (delta {st.get('delta', float('nan')):+.1f})"
+
+    def _s_prune(self):
+        """Backward elimination over the levels this run adopted, and only those (in a benchmark a narrow level adopted
+        before the broad level it stood in for stayed in the final model, while elimination over the whole model would also
+        have removed a known level the data do not constrain).
+        Campaign.run_remove(only=..., adopt=True): honest refit against a control polish, threshold max(s^2 k ln N, 0.1 %
+        obj); the cheapest REMOVE is adopted and the state re-runs on the new structure; a level kept on one structure is
+        not re-tested until the structure changes."""
+        if not self.structure.get("prune_own", True):
+            return "next", "structure.prune_own false: skipped"
+        own = [a for a in self.state.get("drive_added", []) if not a.get("pruned")]
+        if not own:
+            return "next", "no level adopted by this run: nothing to prune"
+        c = self.campaign
+        key = [getattr(c, "structure_id", None), int(self.counters.get("structure_changes", 0))]
+        if self.state.get("prune_checked") == key:
+            return "next", f"{len(own)} own level(s) already checked on this structure"
+        nfev = int(self.structure.get("prune_nfev") or self.budget["level_nfev"])
+        st = c.run_remove(top=len(own), nfev=nfev, only=[dict(jpi=a["jpi"], energy=a["energy"], energy_fit=a.get("energy_fit")) for a in own],
+                          adopt=True, note="rmfit drive PRUNE")
+        res = st.get("results", []) or []
+        desc = "; ".join(f"{r['level']} @ {float(r['energy']):.3f} cost {float(r['cost']):+.1f} vs {float(r['threshold']):.1f} -> {r['verdict']}" for r in res)
+        a = st.get("adopted")
+        if a:
+            ea = float(a["energy"])
+            hit = min(own, key=lambda o: abs(float(o.get("energy_fit") or o["energy"]) - ea) if o["jpi"] == a["jpi"] else 1e9)
+            hit["pruned"] = True
+            hit["pruned_cycle"] = int(self.state["cycle"])
+            self.counters["structure_changes"] = int(self.counters.get("structure_changes", 0)) + 1
+            self.counters["adopted_since_sign"] = 1
+            self.state["broad_done"] = False
+            path, data, bank = self._bank()
+            if 0 <= int(hit.get("candidate", -1)) < len(bank):
+                bank[int(hit["candidate"])]["pruned"] = True
+                data["candidates"] = bank
+                json.dump(data, open(path, "w"), indent=1)
+            self.note(f"PRUNE: {a['jpi']} at {ea:.4f} MeV (adopted by this run in cycle {hit.get('cycle')}) removed: cost "
+                      f"{float(a['cost']):+.1f} <= threshold {float(a['threshold']):.1f}; objective {float(a['objective']):.3f}")
+            self.save()
+            return "stay", f"removed {a['level']} @ {ea:.4f} MeV ({desc})"
+        self.state["prune_checked"] = key
+        return "next", (f"{len(own)} own level(s) kept: {desc}" if res else f"{len(own)} own level(s): none refitted")
+
+    def _final_scan_clean(self):
+        """(clean, why): a residual scan ran on the current structure (no adopt or prune since) and every candidate it
+        appended has been tested."""
+        so = self.state.get("scan_on")
+        if not so:
+            return False, "no residual scan has run"
+        c = self.campaign
+        if so.get("changes") != int(self.counters.get("structure_changes", 0)) or so.get("structure") != getattr(c, "structure_id", None):
+            return False, "the structure changed after the last residual scan"
+        tested = set(int(i) for i in self.state["tested_candidates"])
+        left = [i for i in so.get("appended", []) if int(i) not in tested]
+        if left:
+            return False, f"{len(left)} candidate(s) of the last residual scan untested"
+        return True, f"residual scan on the final structure clean ({len(so.get('appended', []))} candidate(s) appended, all tested)"
 
     def _s_dataset_off(self):
         """Step 5: the Botek test on the worst chi2/N sets; the result is a table and (if the extra recovery is large) a
@@ -1343,6 +1421,22 @@ class Driver:
             self.counters["levelscan_last_added"] = 0
             self.state["broad_done"] = False
             return "TIGHTEN", msg + " -> another pass"
+        if int(self.stop.get("scan_before_done", 1)):
+            ok, why = self._final_scan_clean()
+            nf = int(self.state.get("final_scans", 0))
+            if not ok and nf < int(self.stop.get("final_scans_max", 2)):
+                self.state["final_scans"] = nf + 1
+                self.state["force_scan"] = True
+                self.counters["level_tests"] = 0
+                self.counters["marginal_in_a_row"] = 0
+                self.counters["levelscan_rounds"] = 0
+                self.counters["levelscan_last_added"] = 0
+                self.state["broad_done"] = False
+                self.note(f"CYCLE {cyc}: {why} -> residual scan {nf + 1} on the final structure before DONE (stop rule scan_before_done)")
+                return "LEVELSCAN", msg + f" -> {why}: final residual scan {nf + 1} before DONE"
+            msg += f"; {why}" if ok else f"; NOT clean after {nf} final scan(s): {why}"
+            if not ok:
+                self.note(f"CYCLE {cyc}: residual scan not clean after final_scans_max {nf} extra scan(s) ({why}); DONE on the budget")
         if (self.spec.get("uq") or {}).get("enabled"):
             return "UQ", msg + " -> UQ (spec uq.enabled)"
         return "DONE", msg + " -> DONE"
@@ -1406,11 +1500,12 @@ PLAN_TEXT = {
     "SHIFTS_FREE": "polish --shifts-free if pre_authorized.shifts_free",
     "LEVELSCAN": "when the broad candidate queue is empty: residual-run clusters -> template screen of every J^pi -> candidates appended (structure.levelscan_per_cycle)",
     "STRUCTURE_ADD": "level add per candidates.json entry, broad first (structure.broad_first_kev), narrow alignment after the broad queue + scan; hypothesis required; adoption per pre_authorized.adopt_level",
+    "PRUNE": "backward elimination over the levels this run adopted only (structure.prune_own); the cheapest REMOVE verdict adopted, repeated on the new structure",
     "SIGN_POST": "sign rounds again if a structure was adopted",
     "DATASET_OFF": "Botek test on the worst chi2/N sets (budget dataset_off_max); large extra recovery -> decision (keep)",
     "REVIEW": "rmfit review (+ grid check) -> REVIEW.md; a NEW HIGH flag (not in the base model's REVIEW_baseline.md) -> decision review-high (wait)",
     "EXPORT": "export + report",
-    "CYCLE": "another pass from TIGHTEN if the cycle gained >= cycle_gain_rel_min and cycles < cycles_max, else UQ (spec uq.enabled) or DONE",
+    "CYCLE": "another pass from TIGHTEN if the cycle gained >= cycle_gain_rel_min and cycles < cycles_max, else (stop_rules.scan_before_done) a residual scan on the final structure until clean (final_scans_max), then UQ (spec uq.enabled) or DONE",
     "UQ": "rmfit.uq on the incumbent: export, saturated poles held, Laplace, NUTS chains, R-hat/ESS/divergence gates, linear vs sampled bands -> UQ.md; failed gates after uq.max_attempts -> decision uq-gates (wait)",
 }
 
