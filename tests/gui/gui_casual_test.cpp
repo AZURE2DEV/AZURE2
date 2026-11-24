@@ -19,6 +19,13 @@
 //      Model Data sub-tab hidden, shown in expert view; a project with a potential record shows its tab in standard
 //      view; the Calculate tab's --capture-amplitudes hidden in standard view, shown in expert view and when set;
 //      the switch changes no byte of the project (saved before and after, compared) and is kept in the settings;
+//  (f) the second review (qt_gui.md section 19.8): natural_neon's target of kind none shows no field marked required
+//      that does not apply, its data-set table fits 1280 px; Tumino's channel table shows its Value column and its
+//      extrapolation grids rounded for display (the record kept); the THM experiment's expert keys hidden unless given;
+//      a phase wrapped at 180 drawn continuous; the multipolarity limits shown when a photon pair is added and the
+//      Parameter Settings page when <parameterSettings> gets a line (standard view); the start page's test projects
+//      in expert view only, a README title; New Project's first step; the notes bar's warning; Physics > Functions'
+//      title line without a gap; the Overview's Calculate and Fit once before a run.
 // PASS/FAIL per check; exit 1 on a failure.
 #include <algorithm>
 #include <filesystem>
@@ -56,6 +63,18 @@
 #include "LevelsTab.h"
 #include "PairsModel.h"
 #include "PairsTab.h"
+#include "ChannelsModel.h"
+#include "FittingTab.h"
+#include "RecordTableModel.h"
+#include "OverviewPage.h"
+#include "PhysicsTab.h"
+#include "StartPage.h"
+#include "ThmTab.h"
+#include "ValueEditor.h"
+#include <QListWidget>
+#include <QScrollBar>
+#include <QSpinBox>
+#include <cmath>
 
 namespace fs = std::filesystem;
 
@@ -373,6 +392,179 @@ int main(int argc, char **argv) {
     Check(so.str() == broken, "(d) the old file is unchanged");
     Check(fs::exists(dir / "13N.repaired.azr"), "(d) the repaired copy beside it");
     Check(w.notesBar()->notes().join(" ").contains("repaired"), "(d) a note says which line was repaired");
+  }
+
+  // (f) the second review (qt_gui.md section 19.8)
+  {
+    QSettings().setValue("view/expertOptions", false);
+    // a target of kind none (natural_neon): its active nucleus, areal density, stopping and straggling do not apply,
+    // so no field is marked required and no red line is shown
+    const fs::path neon = CopyProject(source / "examples/natural_neon/natural_neon.azr", work / "review_neon");
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    ModalWatch watch;
+    w.open(QString::fromStdString(neon.string()));
+    Settle(800);
+    w.tabs()->setCurrentWidget(w.getEffectsTab());
+    Settle(300);
+    RecordsPanel *targets = w.getEffectsTab()->records("targets");
+    if (targets) targets->selectRecord("natural");
+    Settle(300);
+    QStringList red;
+    for (const char *key : {"active", "areal_density", "stopping", "straggling"})
+      if (FieldEditor *e = targets ? targets->fieldEditor(key) : nullptr)
+        if (!e->message().isEmpty()) red << QString(key) + ": " + e->message().left(40);
+    Check(targets && !targets->fieldApplies("active") && !targets->fieldApplies("areal_density") && red.isEmpty(),
+          "(f) natural_neon, target of kind none: active nucleus and areal density do not apply, no red line (" +
+              red.join(" / ").toStdString() + ")");
+    Check(targets && !targets->fieldRowShown("active") && !targets->fieldRowShown("areal_density"),
+          "(f) natural_neon: the rows that do not apply are not shown while empty");
+    w.grab().save(shots + "/review_neon_target.png");
+    // the data-set table at 1280 px: no sideways scrolling
+    w.tabs()->setCurrentWidget(w.getSegmentsTab());
+    Settle(400);
+    QTableView *dataTable = w.getSegmentsTab()->records("data") ? w.getSegmentsTab()->records("data")->table() : nullptr;
+    Check(dataTable && dataTable->horizontalScrollBar()->maximum() == 0,
+          "(f) natural_neon at 1280x720: the data-set table fits without sideways scrolling (" +
+              std::to_string(dataTable ? dataTable->horizontalScrollBar()->maximum() : -1) + ")");
+    w.grab().save(shots + "/review_neon_data.png");
+    // the Overview: Calculate and Fit once on the page before a run
+    OverviewPage *overview = w.findChild<OverviewPage *>();
+    QPushButton *stepCalc = overview ? overview->findChild<QPushButton *>("overviewAction_runcalculate") : nullptr;
+    Check(stepCalc && stepCalc->isHidden() && overview->findChild<QPushButton *>("overviewNoRun_calculate"),
+          "(f) Overview before a run: Calculate and Fit once (in The last run), not twice");
+    Check(watch.seen.isEmpty(), "(f) natural_neon: no modal dialog");
+  }
+  {
+    // Tumino: the channel table's Value column readable; the extrapolation grids' display rounded, the file kept
+    const fs::path tumino = CopyProject(source / "examples/c12c12_tumino2018/c12c12_tumino2018.azr", work / "review_tumino");
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    w.open(QString::fromStdString(tumino.string()));
+    Settle(800);
+    w.tabs()->setCurrentWidget(w.getLevelsTab());
+    Settle(300);
+    QTableView *channels = w.getLevelsTab()->findChild<QTableView *>("channelsView");
+    const int valueWidth = channels ? channels->columnWidth(ChannelsModel::ValueColumn) : 0;
+    Check(valueWidth >= 70, "(f) Tumino at 1280x720: the channel table's Value column is " + std::to_string(valueWidth) +
+                                " px wide (at least 70)");
+    RecordsPanel *extrap = w.getSegmentsTab()->records("extrapolations");
+    QString shown, stored;
+    if (extrap)
+      for (int c = 0; c < extrap->model()->columnCount(); c++) {
+        const QString t = extrap->model()->data(extrap->model()->index(0, c)).toString();
+        if (t.startsWith("list ")) shown = t;
+      }
+    for (const azure2::front::Record &r : w.holder()->project().Records("extrapolations"))
+      if (r.name == "x1") stored = QString::fromStdString(r.Value("energies"));
+    Check(shown.contains(" 5.5 MeV") && !shown.contains("5.4999"),
+          "(f) Tumino: the grid is shown \"" + shown.toStdString() + "\"");
+    Check(stored.endsWith("5.49999999999997 MeV lab"),
+          "(f) Tumino: the record keeps the grid as written (" + stored.right(30).toStdString() + ")");
+    w.grab().save(shots + "/review_tumino_levels.png");
+    // the THM experiment: the keys of an occasional user shown, the others only when given (or in expert view)
+    ThmTab *thm = w.getThmTab();
+    if (thm) thm->selectExperiment("E1");
+    Check(thm && thm->rowShown("beam", true) && thm->rowShown("Ebeam", true) && thm->rowShown("ps", true) &&
+              !thm->rowShown("psNodes", true) && !thm->rowShown("opticalAA", true),
+          "(f) THM, standard view: beam, Ebeam, ps shown; psNodes, opticalAA (not given) hidden");
+    w.setExpertMode(true);
+    Settle(100);
+    Check(thm && thm->rowShown("psNodes", true) && thm->rowShown("opticalAA", true), "(f) THM, expert view: every key");
+    w.setExpertMode(false);
+    Settle(100);
+  }
+  {
+    // a phase near 0 that the convention [0, 180) wraps to 180: drawn continuous
+    const QVector<double> wrapped = {0.5, 179.8, 0.2, 179.9, 1.0, 60.0, 120.0, 170.0, 10.0};
+    const QVector<double> u = physicsqt::UnwrappedPhaseDegrees(wrapped);
+    bool smooth = u.size() == wrapped.size();
+    for (int i = 1; smooth && i < u.size(); i++) smooth = std::fabs(u[i] - u[i - 1]) <= 90;
+    Check(smooth && std::fabs(u[1] + 0.2) < 1e-9 && std::fabs(u[8] - 190.0) < 1e-9,
+          "(f) the phase drawn continuous (-0.2 for 179.8, the last step through 180 to 190)");
+  }
+  {
+    // the multipolarity limits: shown in standard view as soon as a photon pair is added
+    const fs::path o18 = CopyProject(source / "examples/o18_lacognata2008/o18_lacognata2008.azr", work / "review_o18");
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    w.open(QString::fromStdString(o18.string()));
+    Settle(600);
+    QSpinBox *mult = w.getLevelsTab()->findChild<QSpinBox *>("maxMultSpin");
+    bool photon = false;
+    for (const PairsData &p : w.getPairsTab()->getPairsModel()->getPairs()) photon = photon || p.pairType == 10;
+    Check(mult && !photon && mult->isHidden(), "(f) o18: no photon pair, the multipolarity limits hidden in standard view");
+    PairsData g = w.getPairsTab()->getPairsModel()->getPairs().first();
+    g.pairType = 10;
+    g.lightJ = 1, g.lightPi = 1, g.lightZ = 0, g.lightM = 0, g.lightG = 0;
+    w.getPairsTab()->addPair(g, w.getPairsTab()->getPairsModel()->numPairs(), false);
+    Settle(200);
+    Check(mult && !mult->isHidden(), "(f) a photon pair added in standard view: the multipolarity limits shown at once");
+    // a row of <parameterSettings> written while its page is hidden: the page is shown
+    QTabWidget *pages = w.getFittingTab()->findChild<QTabWidget *>("fittingPages");
+    auto pageShown = [pages](const QString &prefix) {
+      for (int i = 0; pages && i < pages->count(); i++)
+        if (pages->tabText(i).startsWith(prefix)) return pages->isTabVisible(i);
+      return false;
+    };
+    const bool before = pageShown("Parameter Settings");
+    w.holder()->setSectionBody("parameterSettings", {"# a comment", "R1.E fixed"});
+    Settle(100);
+    Check(!before && pageShown("Parameter Settings"),
+          "(f) Fitting Settings: the text page hidden while empty, shown once <parameterSettings> holds a line");
+  }
+  {
+    // the start page: the repository's examples by name (a README's title), the test suite's projects in expert view
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(200);
+    QListWidget *list = w.startPage()->exampleList();
+    int tests = 0, hiddenTests = 0;
+    bool neonTitle = false;
+    for (int i = 0; i < list->count(); i++) {
+      const bool test = list->item(i)->data(Qt::UserRole).toString().contains("/tests/");
+      tests += test;
+      hiddenTests += test && list->item(i)->isHidden();
+      neonTitle = neonTitle || (list->item(i)->text().startsWith("natural_neon") && list->item(i)->text().contains("worked example"));
+    }
+    Check(tests >= 4 && hiddenTests == tests && neonTitle,
+          "(f) start page, standard view: " + std::to_string(tests) + " test projects hidden, natural_neon with its README title");
+    w.grab().save(shots + "/review_start.png");
+    w.setExpertMode(true);
+    hiddenTests = 0;
+    for (int i = 0; i < list->count(); i++) hiddenTests += list->item(i)->isHidden();
+    Check(hiddenTests == 0, "(f) start page, expert view: the test projects listed too");
+    w.setExpertMode(false);
+    // New Project: the next step is a particle pair, not a run
+    QMetaObject::invokeMethod(&w, "newProject");
+    Settle(500);
+    OverviewPage *overview = w.findChild<OverviewPage *>();
+    QString first;
+    if (overview && !overview->steps().isEmpty()) first = overview->steps().first().text;
+    bool runStep = false;
+    for (const OverviewPage::Step &st : overview ? overview->steps() : QList<OverviewPage::Step>()) runStep = runStep || st.text.contains("no run yet");
+    Check(first.contains("particle pair") && !runStep, "(f) New Project: the first step is \"" + first.toStdString() + "\"");
+    w.grab().save(shots + "/review_new_overview.png");
+    // the notes bar: a warning goes first and changes the icon
+    w.notesBar()->clearNotes();
+    w.notesBar()->addNote("an information");
+    w.notesBar()->addNote("a warning", QString(), false, true);
+    Check(w.notesBar()->hasWarning() && w.notesBar()->notes().first() == "a warning", "(f) notes bar: a warning first");
+    w.notesBar()->clearNotes();
+    Check(!w.notesBar()->hasWarning() && w.notesBar()->notes().isEmpty(), "(f) notes bar: cleared, no warning left");
+    // Physics > Functions: no blank band under the function's title
+    w.tabs()->setCurrentIndex(w.tabs()->count() - 1);
+    Settle(300);
+    QLabel *doc = w.findChild<QLabel *>("functionsDoc");
+    Check(doc && doc->height() <= 3 * doc->fontMetrics().height(),
+          "(f) Physics > Functions: the title line is " + std::to_string(doc ? doc->height() : -1) + " px high (no gap)");
   }
 
   std::cout << (failures ? "FAILED: " : "ALL PASSED") << (failures ? std::to_string(failures) : "") << std::endl;
