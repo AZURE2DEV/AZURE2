@@ -112,9 +112,45 @@ def test_repin_job_scripts(fp):
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_engine_dir():
+    """A build with -DPYAZR_OUTPUT_DIR puts _azure2 outside pyazr/ and the tests set PYAZR_ENGINE_DIR (2026-11-19):
+    the pin finds the module there, records engine_dir, and the job-script guards check that file.  Engine-free."""
+    d = tempfile.mkdtemp(prefix="rmfit_enginedir_")
+    old_env = os.environ.get("PYAZR_ENGINE_DIR")
+    try:
+        root, edir = os.path.join(d, "root"), os.path.join(d, "engine")
+        os.makedirs(os.path.join(root, "pyazr")); os.makedirs(edir)
+        with open(os.path.join(root, "pyazr", "__init__.py"), "w") as fh:
+            fh.write('__version__ = "9.9.9"\n')
+        with open(os.path.join(edir, "_azure2.cpython-312-x86_64-linux-gnu.so"), "wb") as fh:
+            fh.write(b"not an engine")
+        os.environ.pop("PYAZR_ENGINE_DIR", None)
+        fp0 = enginepin.fingerprint(root)
+        assert fp0["so"] is None and "engine_dir" not in fp0, fp0          # nothing in pyazr/, no engine dir: no module
+        os.environ["PYAZR_ENGINE_DIR"] = edir
+        fp1 = enginepin.fingerprint(root)
+        assert fp1["so"] == "_azure2.cpython-312-x86_64-linux-gnu.so" and fp1["engine_dir"] == edir, fp1
+        assert fp1["so_md5"] == enginepin._md5(os.path.join(edir, fp1["so"])), fp1
+        assert f'export PYAZR_ENGINE_DIR="{edir}"' in enginepin.guard_lines_sh(fp1)
+        assert f'md5sum "$PYAZR_ENGINE_DIR/{fp1["so"]}"' in enginepin.guard_lines_sh(fp1)
+        assert f"setenv PYAZR_ENGINE_DIR {edir}" in enginepin.guard_lines_csh(fp1)
+        # a module in pyazr/ wins over the engine dir, and then nothing extra is recorded or written
+        shutil.copy(os.path.join(edir, fp1["so"]), os.path.join(root, "pyazr", fp1["so"]))
+        fp2 = enginepin.fingerprint(root)
+        assert "engine_dir" not in fp2 and "PYAZR_ENGINE_DIR" not in enginepin.guard_lines_sh(fp2), fp2
+        print("engine module in PYAZR_ENGINE_DIR: ok")
+    finally:
+        if old_env is None:
+            os.environ.pop("PYAZR_ENGINE_DIR", None)
+        else:
+            os.environ["PYAZR_ENGINE_DIR"] = old_env
+        shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     fp = test_fingerprint()
     test_check(fp)
     test_campaign_refuses(fp)
     test_repin_job_scripts(fp)
+    test_engine_dir()
     print("test_enginepin: PASS")

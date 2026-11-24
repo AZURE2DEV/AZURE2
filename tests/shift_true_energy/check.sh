@@ -70,7 +70,9 @@ grad_check() {  # NAME MODEL: AZURE_GRAD_CHECK on the Jacobian path of models/MO
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
   ln -s "$HERE/models/data" "$WORK/$name/data"
   cp "$HERE/models/$model" "$WORK/$name/"
-  (cd "$WORK/$name" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 900) "$AZURE2_BIN" fit \
+  # 1800 s: the run takes 10 to 15 minutes on the Windows runner and was stopped at a 900 s limit in 2 of 6 runs
+  # (44520751651, 44579576677); it is long everywhere (more than 280 s with two threads on a Linux login node).
+  (cd "$WORK/$name" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 $(guard_command 1800) "$AZURE2_BIN" fit \
      --use-gradient --no-gui "$model" > grad.log 2>&1) && gradrc=0 || gradrc=$?
   line="$(grep -a '\[grad-check\] idx .* shift ' "$WORK/$name/grad.log" | sed -n 1p)"
   relJ="$(echo "$line" | grep -o 'relJ [-0-9.e+]*' | cut -d' ' -f2)"
@@ -78,7 +80,7 @@ grad_check() {  # NAME MODEL: AZURE_GRAD_CHECK on the Jacobian path of models/MO
     ok "$model: the shift's gradient (Jacobian path) = the central difference of chi^2 (relative $relJ, tolerance 1e-5)"
   else
     bad "$model: the shift's gradient against the central difference of chi^2: '${line:-no grad-check line}'"
-    # why, where the line is missing: the run's exit status (124 or 143: stopped at the 900 s limit) and its last lines
+    # why, where the line is missing: the run's exit status (124 or 143: stopped at the 1800 s limit) and its last lines
     if [ -z "$line" ]; then
       echo "    exit status of the gradient run: $gradrc; the last lines of its log:"
       tail -n 15 "$WORK/$name/grad.log" | sed 's/^/      /'

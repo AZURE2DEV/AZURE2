@@ -54,14 +54,14 @@ Upstream project: <https://azure.nd.edu/> · Source:
 ## Ready-built downloads
 
 If you only want to *run* AZURE2, take one of these instead of building it.
-They are builds of the released line (`dev`), with its Qt setup utility, not of
-this branch. Each is self-contained: Qt, Qwt, GSL, readline and the OpenMP
-runtime are inside, so nothing else has to be installed.
+They are builds of `dev`: the command-line program, without a graphical setup
+utility (see the note at the top). The Windows and Linux downloads are
+self-contained; the macOS one loads GSL and the OpenMP runtime from Homebrew.
 
 | Platform | Download | How to run it |
 |---|---|---|
 | **Windows** (x86_64) | [`AZURE2-windows-x86_64.zip`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip) | Unzip anywhere, run `AZURE2.exe`. |
-| **macOS** | [`AZURE2-macos.dmg`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos.dmg) | Open the disk image, drag `AZURE2.app` onto Applications. |
+| **macOS** (Intel) | [`AZURE2-macos-x86_64.tar.gz`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos-x86_64.tar.gz) | `brew install gsl libomp`, unpack, run `./AZURE2` in a terminal. |
 | **Linux** (x86_64) | [`AZURE2-x86_64.AppImage`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-x86_64.AppImage) | `chmod +x AZURE2-x86_64.AppImage` and run it. |
 
 These are rolling builds of the latest `dev` commit, replaced on every push, so
@@ -87,11 +87,11 @@ and the failures look like AZURE2 bugs rather than permission errors. `snapd`
 is also absent by default outside Ubuntu, so a snap would reach fewer machines
 than the AppImage does.
 
-On macOS the first launch is refused with "the developer cannot be verified":
-the build is signed ad-hoc rather than notarized with an Apple Developer ID.
-Right-click (or control-click) `AZURE2.app`, choose **Open**, and confirm. Only
-the first launch needs this. The macOS build is compiled for Intel and runs on
-Apple Silicon through Rosetta.
+The macOS build is not notarized with an Apple Developer ID. If the first run
+is refused ("the developer cannot be verified"), clear the download mark with
+`xattr -d com.apple.quarantine AZURE2 azure2-coulomb-table`. It is compiled for
+Intel and loads Homebrew's Intel libraries (under `/usr/local`); the disk image
+with the Qt application of the earlier code is no longer built.
 
 ---
 

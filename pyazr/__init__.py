@@ -24,7 +24,7 @@ Ask the package about itself (plain data, ``json.dumps`` takes it): :func:`descr
 table, data in use, threads), :func:`kinds` (record kinds, data kinds, parameter kinds, session options, bound
 physics functions, error classes), :func:`schema` (the format-3 table), ``Session(...).describe()``.
 Errors derive from :class:`Error` (:mod:`pyazr.errors`): :class:`FormatError`, :class:`ParameterError`,
-:class:`EngineError` (also named ``AZURE2Error``), :class:`DomainError`, :class:`SessionClosed`, :class:`MissingFile`, :class:`FormatRefused`;
+:class:`EngineError` (also named ``AZURE2Error``), :class:`DomainError`, :class:`SessionClosed`, :class:`MissingFile`, :class:`FormatRefused`, :class:`SpinOperatorError`;
 engine notices are :class:`EngineWarning`.  Each message says what was wrong, what is allowed, which call helps.
 
 A session (run from the repository's root; ``tests/upgrade/T1`` is a test project)::
@@ -54,7 +54,8 @@ if _os.environ.get("PYAZR_ENGINE_DIR"):
 
 from .errors import (Error, FormatError, ParameterError, ParameterKeyError, ParameterIndexError,
                      ParameterVectorError, EngineError, AZURE2Error, DomainError, DomainZeroDivision, SessionClosed,
-                     MissingFile, FormatRefused, EngineWarning)
+                     MissingFile, FormatRefused, SpinOperatorError, EngineWarning)
+from .spin import spin_operator
 # The engine-dependent objects.  Without the compiled module only the command line's own help can run
 # (`python -m pyazr --help`, `pyazr commands`: cli.py imports nothing of the engine); any other use raises the
 # ImportError that says how to build it.
@@ -130,5 +131,5 @@ __all__ = ["Session", "convert_azr", "convert_params", "ScatteringLength", "whit
            "kinds",
            "Error", "ParameterError", "ParameterKeyError", "ParameterIndexError", "ParameterVectorError",
            "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed", "MissingFile",
-           "FormatRefused", "EngineWarning", "Objective", "Evaluation", "EvaluatedData", "endf"]
+           "FormatRefused", "SpinOperatorError", "EngineWarning", "spin_operator", "Objective", "Evaluation", "EvaluatedData", "endf"]
 __version__ = '3.0.0.dev8'

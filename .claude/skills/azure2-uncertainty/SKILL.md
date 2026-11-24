@@ -95,7 +95,8 @@ touches a limit.
 
 The target is `f.log_prob(x)` = −f(x)/2, −∞ outside the fit's limits and where Park's J < 0 (the program's
 sampler's rule), with the priors of the project; never `s.evaluate(x).chi2` (data only). Procedure and lessons:
-`references/sampling.md`.
+`references/sampling.md`. Sampling goes through pyazr as below; BRICK, the earlier MCMC wrapper around AZURE2, is
+obsolete and is not used or proposed for new work.
 
 1. Start at the best fit (MAP): `lsq_fit.py` / `engine_fit.py` of `azure2-fit`.
 2. `scripts/sample_nuts.py PROJECT --x-json fit.json --chains 4 --warmup 300 --draws 500 --out nuts.npz`: exact

@@ -20,6 +20,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QFileInfo>
 #include <QCheckBox>
 #include <QDir>
 #include <QDockWidget>
@@ -229,7 +230,7 @@ int main(int argc, char **argv) {
     Check(w.openDropped({QUrl::fromLocalFile("/x/notes.txt"), QUrl::fromLocalFile(QString::fromStdString(t1.string()))}),
           "a drop of a .txt and T1.azr: T1 is taken");
     Settle();
-    Check(w.hasProject() && w.holder()->path() == QString::fromStdString(t1.string()), "T1 dropped on the window: opened");
+    Check(w.hasProject() && QFileInfo(w.holder()->path()) == QFileInfo(QString::fromStdString(t1.string())), "T1 dropped on the window: opened");
   }
 
   // (c) the Calculate tab's editors from the facade's rows

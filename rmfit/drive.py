@@ -59,7 +59,7 @@ DEFAULT_BUDGET = dict(polish_nfev=150, polish_rounds_max=4, sign_rounds_max=4, l
                       node_hours_max=0, grid_check=True, figures=6,
                       # POPULATION (2026-11-08): restarts + crossover per cycle; restart_nfev 0 = polish_nfev
                       restarts_per_cycle=4, restart_nfev=0, crossover_passes=2, population_rounds_max=3)
-DEFAULT_STRUCTURE = dict(broad_first_kev=10.0, narrow_phase=True, levelscan_per_cycle=1, levelscan_top=3,
+DEFAULT_STRUCTURE = dict(seed_omitted=True, broad_first_kev=10.0, narrow_phase=True, levelscan_per_cycle=1, levelscan_top=3,
                          levelscan_gamma_kev=None, local_release_mev=0.5, local_nfev=80, recall_levels=2, recall_min_pass=0.5)
 DEFAULT_STOP = dict(polish_gain_rel_min=5e-4, sign_rounds_without_accept=2, level_adds_marginal_in_a_row=2,
                     cycle_gain_rel_min=1e-3, population_gain_rel_min=1e-3, dataset_off_extra_pct=5.0, reproduce_rtol=1e-3,
@@ -879,9 +879,11 @@ class Driver:
             if any(abs(ex - e) < 0.030 for _, e in have):
                 continue
             jp = (lv.jp or "").strip()
-            clean = re.fullmatch(r"\(?(\d+(/2)?)([+-])\)?", jp.replace(" ", ""))
+            # tentative assignments as firm ones: "(0+)", "4(-)", "(3)-" (the hypothesis keeps ENSDF's text)
+            # (spaces are kept: pyazr's NNDC source spells a J list "(1 2)+", which must not read as 12+)
+            clean = re.fullmatch(r"(\d+(/2)?)([+-])", jp.replace("(", "").replace(")", "").strip())
             jpi = f"{clean.group(1)}{clean.group(3)}" if clean else None
-            w = lv.width_kev
+            w = _ensdf_width_kev(lv)
             cands.append(dict(energy=round(ex, 4), jpi=jpi, energy_fixed=True, channels=[], source="ensdf",
                               width_kev=w, hypothesis=f"ENSDF adopted level {ex:.4f} MeV {jp or '(J unknown)'}"
                               + (f", Gamma {w:g} keV" if w else "") + " has no level in the model within 30 keV"))
@@ -1204,7 +1206,10 @@ class Driver:
             self.log("  level adds untrusted after RECALL: an accept is recorded as accept-pending (decision)")
         st = c.run_level_add(cand, jpis=jpis, global_nfev=int(self.budget["level_nfev"]), pinned_nfev=int(self.budget["pinned_nfev"]),
                              local_release=float(self.structure.get("local_release_mev") or 0.0),
-                             local_nfev=int(self.structure.get("local_nfev") or 80), note="rmfit drive")
+                             local_nfev=int(self.structure.get("local_nfev") or 80), note="rmfit drive",
+                             # the J^pi group's other open channels FREE (tiny seed), not gamma 0 FIXED: an ENSDF candidate
+                             # names no channels (structure.seed_omitted, default True since 2026-11-22)
+                             seed_omitted=bool(self.structure.get("seed_omitted", True)))
         self.state["tested_candidates"].append(i)
         self.counters["level_tests"] = ntests + 1
         out = st.get("outcome", "?")
@@ -1215,6 +1220,10 @@ class Driver:
             self.state["broad_done"] = False                   # new residuals: the broad queue / scan may have more
         elif out == "accept-pending":
             self.counters["marginal_in_a_row"] = 0
+        elif out == "scan_failed":
+            # not a measured marginal level: nothing could be tested (e.g. no channel open at that energy); it must not
+            # end the queue for the candidates behind it
+            self.log(f"  candidate {i}: untestable ({out}); not counted toward level_adds_marginal_in_a_row")
         else:
             self.counters["marginal_in_a_row"] = marg + 1
         return "stay", f"candidate {i} {st.get('jpi', cand.jpi) or 'scan'} @ {cand.energy}: {out} (delta {st.get('delta', float('nan')):+.1f})"
@@ -1280,16 +1289,18 @@ class Driver:
         counts = r["counts"]
         note = ", ".join(f"{k} {v}" for k, v in counts.items())
         key = lambda f: (f.code, f.message.split(":")[0].strip())
+        from .review import same_flag_subject
+        has = lambda f, keys: any(f.code == k[0] and same_flag_subject(key(f)[1], k[1]) for k in keys)   # a level may move within its width
         if highs:
             inherited = self._baseline_review_flags()
-            old = [f for f in highs if key(f) in inherited]
+            old = [f for f in highs if has(f, inherited)]
             if old:
                 note += f"; {len(old)} HIGH inherited from the base model (the evaluator's, not waited on): " + "; ".join(
                     f"{f.code}: {key(f)[1]}" for f in old[:3])
             # a flag the evaluator already answered 'continue' is not asked again in a later cycle (a benchmark,
             # 2026-11-10: the same broad-pole flag was queued in cycles 1 and 2)
             cont = {tuple(k) for k in self.state.get("review_continued", [])}
-            seen = [f for f in highs if f not in old and key(f) in cont]
+            seen = [f for f in highs if f not in old and has(f, cont)]
             if seen:
                 note += f"; {len(seen)} HIGH already answered 'continue' (not asked again): " + "; ".join(f"{f.code}: {key(f)[1]}" for f in seen[:3])
             highs = [f for f in highs if f not in old and f not in seen]
@@ -1411,6 +1422,23 @@ def _cand_width_kev_known(cand):
         return float(w)
     tot = sum(abs(float(ch.get("gamma", 0.0))) for ch in (cand.get("channels") or []) if _isnum(ch.get("gamma")))
     return tot / 1e3 if tot > 0 else None
+
+
+HBAR_LN2_KEV_S = 6.582119569e-19 * 0.6931471805599453     # hbar ln 2 (keV s): Gamma = hbar ln 2 / T_1/2
+
+
+def _ensdf_width_kev(lv) -> Optional[float]:
+    """Total width (keV) of an ENSDF level from pyazr.fetch_levels: ``width_kev`` when set, else from the half-life.
+    fetch_levels leaves width_kev None for levels whose width ENSDF quotes in the half-life field (all of 16O above
+    S_alpha: 9.585 1- "420" keV) and gives half_life_sec = hbar ln 2 / Gamma; without the width the broad-first sort fell
+    back to energy order and the budget cut dropped the top of the window."""
+    w = getattr(lv, "width_kev", None)
+    if _isnum(w) and float(w) > 0:
+        return float(w)
+    t = getattr(lv, "half_life_sec", None)
+    if not _isnum(t) or not (0.0 < float(t) < float("inf")):
+        return None
+    return float(f"{HBAR_LN2_KEV_S / float(t):.4g}")
 
 
 def _cand_width_kev(cand) -> float:

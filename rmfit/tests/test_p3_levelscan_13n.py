@@ -104,7 +104,8 @@ def main():
         elif k.kind == "width" and k.pair == 1 and k.L == 1:
             check("the dummy's open particle channel has a Wigner width from the engine", j in gW_wid and gW_wid[j] > 0)
             xe[j] = gW_amp[j] * np.sqrt(55200.0 / gW_wid[j])
-            r = abs(ev2.x0[j]) / np.sqrt(var["gamma_ref_ev"]) / (gW_amp[j] / np.sqrt(gW_wid[j]))
+            g_seed = next(float(c["gamma"]) for c in var["levels"]["3/2-"]["channels"] if int(c["pair"]) == 1 and int(c["L"]) == 1)
+            r = abs(ev2.x0[j]) / np.sqrt(g_seed) / (gW_amp[j] / np.sqrt(gW_wid[j]))   # per-channel seed (2026-11-20)
             print(f"   x0-based / Wigner-based reference amplitude for {k}: {r:.3g}")
         elif k.kind == "width" and k.pair == 2 and k.L == 1: xe[j] = -abs(ev2.x0[j]) * np.sqrt(0.49 / var["gamma_ref_photon_ev"])
     oe = ev2.objective(xe); ev2.close()

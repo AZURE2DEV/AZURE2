@@ -4,8 +4,8 @@
 # one fails, 77 when it cannot run here (no AZURE2 binary).  AZURE2_ROOT names this source tree, whose pyazr/ is the
 # package the tests import, with the engine module the build made (in pyazr/, or in PYAZR_OUTPUT_DIR, which
 # PYAZR_ENGINE_DIR then names), so the tests exercise this build and not a pyazr elsewhere on the machine.
-# rmfit's engine pin (enginepin.py) fingerprints the module in $AZURE2_ROOT/pyazr only, the file its job scripts
-# check: rmfit_enginepin fails in a build whose module is not in pyazr/ (open; docs/upgrade/HANDOFF.md, 2026-11-17).
+# rmfit's engine pin (enginepin.py) looks for the module the same way: $AZURE2_ROOT/pyazr first, then
+# $PYAZR_ENGINE_DIR, which it then records and its job-script guards check (2026-11-19).
 #
 # rmfit runs on pyazr 2 and pyazr 3 (rmfit/backend.py).  A script that is the same on both is test_<name>.py; where the
 # two differ, test_<name>.py is the pyazr 2 version and test_p3_<name>.py the pyazr 3 one, and each exits 77 (skipped)
@@ -26,7 +26,7 @@ set(RMFIT_FAST
     flip_floor keys ledger_signs new_level_cap nudge_zero_widths pair_family patterns_signs_memory point_weights
     sanity_same_jpi scoring_segments separate_close_levels sign_distance site_mail site_shell site_slurm
     split_evidence template_channels total_width_floor uq_rerun width_bound width_bound_pins width_floor window_delta
-    window_patterns threshold_guard azure2_root spec_decisions seed_omitted audit_subagent py_compat)
+    window_patterns threshold_guard azure2_root spec_decisions seed_omitted audit_subagent py_compat drive_ensdf_flags)
 
 file(GLOB RMFIT_TEST_SCRIPTS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.py)
 foreach(script ${RMFIT_TEST_SCRIPTS})

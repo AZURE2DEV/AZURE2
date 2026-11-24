@@ -147,6 +147,8 @@ class                     also a                                    raised for
 ``MissingFile``           ``FileNotFoundError``                     a project, directory or ``param.sav`` missing
 ``FormatRefused``         ``ValueError``                            an ENDF-6 file, or a part of it, that
                                                                     ``pyazr.endf`` does not read (:doc:`endf`)
+``SpinOperatorError``     ``ValueError``                            a literature name of a spin observable that
+                                                                    ``spin_operator`` cannot turn into one operator
 ========================  ========================================  ================================================
 
 A message says what was wrong with the value given, what is allowed, and which call shows or fixes it, for example::
@@ -1539,6 +1541,26 @@ fit or a sampler moves at every call, and evaluates the external part of each ra
 functions within the call but leaves none in the memo afterwards, so a sampler that transforms at every step (physical
 priors, a fixed total gamma width) keeps a constant footprint.
 
+Literature names of spin observables
+------------------------------------
+
+A ``spin`` record names its observable by an operator (``b:y``, ``b:y*t:y``, ``b:yy``, ``b:y>e1:y``; the grammar is
+``spin_operator`` of :doc:`../reference/format3`).  ``pyazr.spin_operator(name, beam_spin, target_spin)`` gives the
+operator of a name of the papers::
+
+   pyazr.spin_operator("Ay")                    # 'b:y'
+   pyazr.spin_operator("A0y")                   # 't:y'      the target's analysing power
+   pyazr.spin_operator("Kyy")                   # 'b:y>e1:y' the transfer to the light exit particle
+   pyazr.spin_operator("Ayy", 1.0, 0.5)         # 'b:yy'     tensor analysing power of a spin-1 beam
+   pyazr.spin_operator("Ayy", 0.5, 0.5)         # 'b:y*t:y'  spin correlation of spin 1/2 on spin 1/2
+   pyazr.spin_operator("Cyy")                   # 'b:y*t:y'
+
+The names it knows are ``Ay``, ``Ay0``, ``A0y``, ``Py``, ``Kyy``, ``iT11``, ``T20``, ``T21``, ``T22``
+(``pyazr.spin.LITERATURE_NAMES``) and ``Aij``, ``Cij`` with i, j of x, y, z.  ``Aij`` is two different observables,
+so it needs the spins, and where they do not decide (no spins given, or a spin-1 target under a spin-1/2 beam) the
+call raises ``SpinOperatorError`` instead of guessing.  An operator is returned unchanged; the engine checks it
+against the particles when the project is read.
+
 The names of the package
 ------------------------
 
@@ -1561,7 +1583,7 @@ lists): the classes and functions above, the libraries' functions of ``pyazr.sou
    records_from_csv ProjectLevel ProjectChannel ProjectPair DescribedDataset DescribedDatasets DescribedExtrapolation
    DescribedExtrapolations kinds Error ParameterError ParameterKeyError ParameterIndexError ParameterVectorError
    EngineError AZURE2Error DomainError DomainZeroDivision SessionClosed MissingFile FormatRefused EngineWarning
-   Objective Evaluation EvaluatedData endf
+   Objective Evaluation EvaluatedData endf SpinOperatorError spin_operator
 
 Earlier names
 -------------

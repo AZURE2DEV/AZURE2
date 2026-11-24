@@ -56,6 +56,17 @@ namespace front = azure2::front;
 
 namespace {
 
+/// std::system for a command line that may start with a quoted program and name /dev/null: cmd.exe drops the first
+/// and the last quote of a line that starts with one (an outer pair keeps the inner ones) and calls the sink NUL.
+int Shell(std::string command) {
+#ifdef _WIN32
+  for (std::size_t at = command.find("/dev/null"); at != std::string::npos; at = command.find("/dev/null"))
+    command.replace(at, 9, "NUL");
+  if (!command.empty() && command[0] == '"') command = "\"" + command + "\"";
+#endif
+  return std::system(command.c_str());
+}
+
 int failures = 0;
 
 void Check(bool ok, const std::string &what) {
@@ -232,7 +243,8 @@ int main(int argc, char **argv) {
   Settle();
 
   // (d) the stale mark
-  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  // above one second: the file times of some C++ libraries (MinGW's) are whole seconds
+  std::this_thread::sleep_for(std::chrono::milliseconds(1200));
   front::Record r = w.holder()->records("data")[0];
   for (front::Field &f : r.fields)
     if (f.key == "norm") f.value = "1.01 fixed";
@@ -332,7 +344,7 @@ int main(int argc, char **argv) {
     const QString before = page->tileText("chi2");
     const std::string line = "\"" + std::string(argv[2]) + "\" calculate --threads=2 \"" + file.string() + "\" > \"" +
                              (work / "outside.txt").string() + "\" 2>&1";
-    Check(std::system(line.c_str()) == 0, "an outside run of the program");
+    Check(Shell(line) == 0, "an outside run of the program");
     const bool read = WaitFor([&]() { return page->tileText("chi2") != before && !page->staleShown(); }, 15000);
     Check(read, "the outside run's chi^2 shown without a click: " + before.toStdString() + " -> " +
                     page->tileText("chi2").toStdString());
@@ -343,7 +355,7 @@ int main(int argc, char **argv) {
       std::ifstream in(dataFile, std::ios::binary);
       content.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
     {
       std::ofstream out(dataFile, std::ios::binary);
       out << content;

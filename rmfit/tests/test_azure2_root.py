@@ -6,7 +6,10 @@
       engine, the order the job templates write): pyazr comes from $AZURE2_ROOT, not from the tree rmfit sits in;
   (c) rmfit beside AZURE2 (a directory that is not an AZURE2 tree, as in a development archive), $AZURE2_ROOT set:
       pyazr from it; without $AZURE2_ROOT: ~/AZURE2;
-  (d) the job scripts' import guard (rmfit first, then pyazr) passes in case (b).
+  (d) the job scripts' import guard (rmfit first, then pyazr) passes in case (b);
+  (e) $AZURE2_ROOT names a tree with its OWN rmfit/ (every clone of the upgrade branch tracks an old copy): the parent
+      and a multiprocessing "spawn" child (how Sharded / SingleSession start their workers) both import THIS rmfit and
+      $AZURE2_ROOT's pyazr (workers on a frozen engine copy imported its old rmfit).
 Engine-free (fake pyazr packages), seconds.  Run:  python3 rmfit/tests/test_azure2_root.py"""
 import os, shutil, subprocess, sys, tempfile
 
@@ -60,6 +63,19 @@ def main():
                  "print('import guard ok', pyazr.__file__)")
         rc, out, err = probe(os.pathsep.join((A, B)), azure2_root=B, code=guard)
         check("(d) the job scripts' import guard passes in case (b)", rc == 0 and "import guard ok" in out[0], err or out)
+        C = os.path.join(tmp, "C")
+        fake_tree(C, "C")
+        os.makedirs(os.path.join(C, "rmfit"))
+        open(os.path.join(C, "rmfit", "__init__.py"), "w").write("STALE = True\n")
+        spawn = ("import multiprocessing as mp, rmfit, pyazr\n"
+                 "with mp.get_context('spawn').Pool(1) as p:\n"
+                 "    r = p.apply(eval, (\"(__import__('rmfit').__file__, __import__('pyazr').NAME)\",))\n"
+                 "print(rmfit.__file__); print(pyazr.NAME); print(r[0]); print(r[1])")
+        rc, out, err = probe(os.pathsep.join((arch, C)), azure2_root=C, code=spawn)
+        check("(e) $AZURE2_ROOT tree with its own rmfit/: parent gets this rmfit and $AZURE2_ROOT's pyazr",
+              rc == 0 and out[0].startswith(arch) and out[1] == "C", err or out)
+        check("(e) ... and so does a spawned worker",
+              rc == 0 and len(out) > 3 and out[2].startswith(arch) and out[3] == "C", err or out)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     if FAILS:

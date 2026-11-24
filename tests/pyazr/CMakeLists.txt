@@ -1121,6 +1121,13 @@ add_test(NAME pyazr_errors
                  ${CMAKE_CURRENT_SOURCE_DIR}/errors_test.py)
 set_tests_properties(pyazr_errors PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.spin_operator (pyazr/spin.py): the operator of a spin observable for its name in the literature; A_ij by the
+# spins or refused; every operator the table gives validates in tests/spin_observables_p3He and _dd.
+add_test(NAME pyazr_spin_names
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/spin_names_test.py)
+set_tests_properties(pyazr_spin_names PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77)
+
 # The package describes itself from the engine's tables: pyazr.describe(), pyazr.kinds() (record, data and parameter
 # kinds against AZURE2 --schema / --describe, options against the binding's RuntimeOptions and AZURE2 --help),
 # Session.describe() on tests/upgrade/T1, and the session of the package docstring runs.

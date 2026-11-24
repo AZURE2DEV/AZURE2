@@ -133,7 +133,8 @@ class Campaign:
         if missing:
             raise ValueError(f"vector lacks {len(missing)} base parameters: " + ", ".join(str(k) for k in list(missing)[:5]))
         xb = take(x, keys, base_keys, self._base_x0())
-        sc, _ = verify(self.base_azr, xb, self.flags, workdir=self.vdir, name="verify", objective=self.objective)
+        sc, _ = verify(self.base_azr, xb, self.flags, workdir=self.vdir, name="verify", objective=self.objective,
+                       keys=base_keys)
         cid = self.ledger.add_candidate(self.structure_id, xb, base_keys, move=move, parent=parent, status="verified")
         self.ledger.record(cid, sc, "verified", evaluator="single")
         self.log(f"verified candidate {cid}: objective {sc.objective:.3f} (chi2 {sc.chi2:.3f} + pen {sc.penalty:.3f}) {note}"
@@ -946,7 +947,9 @@ class Campaign:
             try:
                 var = deactivate_level_variant(azr_inc, os.path.join(cdir, "base.azr"), jpi, e_true,
                                                output_dir=os.path.join(cdir, "output"))
-                child = Campaign.init(cdir, var["path"], flags=self.flags, nshards=self.nshards, policy=self.cfg.get("policy"),
+                # with the incumbent's .sav: the baked .azr carries the levels but every free norm and shift at its nominal
+                # value (bake writes those to the .sav only; campaigns initialised from the .azr alone started at nominal norms)
+                child = Campaign.init(cdir, var["path"], sav=sav_inc, flags=self.flags, nshards=self.nshards, policy=self.cfg.get("policy"),
                                       search=self.cfg.get("search"), objective=obj_cfg or None, cov_reference=covref,
                                       note=f"recall child of {self.dir}: {label} removed")
                 try:
@@ -1089,6 +1092,9 @@ class Campaign:
             os.makedirs(wdir, exist_ok=True)
             var = template_variant(self.base_azr, os.path.join(wdir, f"templates_{tag}.azr"), c["ex"],
                                    jpis=jpis, output_dir=os.path.join(wdir, "output"))
+            if var.get("skipped"):
+                self.log(f"  J^pi not screened at Ex {c['ex']:.4f}: no particle channel with Gamma_W >= "
+                         f"{var['min_open_ev']:g} eV (" + ", ".join(f"{j} {g:.2g} eV" for j, g in var["skipped"].items()) + ")")
             if grid:
                 nchg = self.set_grid_setting(var["path"], float(grid[0]), float(grid[1]))
                 if nchg:
@@ -1407,10 +1413,18 @@ class Campaign:
 
     def _run_level_add(self, cand: LevelCandidate, jpis=None, half_width=0.5, pinned_nfev=60,
                        global_nfev=150, note="", near_same_jpi_kev: float = 20.0,
-                       dead_channel_ev: float = 1.0, local_release: float = 0.0, local_nfev: int = 80) -> dict:
+                       dead_channel_ev: float = 1.0, local_release: float = 0.0, local_nfev: int = 80,
+                       seed_omitted: Optional[bool] = None) -> dict:
         """Test one candidate level: J^pi scan on a window (pinned energy,
         sign patterns), then the best J^pi on the full model (pinned polish,
         released polish, verification), then classification.
+
+        ``seed_omitted``: passed to ``add_level_variant`` for the full model -- the J^pi group's other open, alive
+        particle channels are written FREE with a tiny seed instead of gamma 0 FIXED (None: the RMFIT_SEED_OMITTED
+        environment variable, off by default).  A candidate that names no channels (an ENSDF level) otherwise gets only
+        the lowest wave of the group's first two open pairs, and its other open channels stay fixed at zero in every
+        later structure (2026-11-22: a recovered level in a benchmark lacked four of its open channels; freeing them
+        was worth 1,305 of chi2).  Seeded channels count in tau only if the fit uses them (structure.effective_k).
 
         Accepting means the new structure becomes the base model.
         """
@@ -1456,7 +1470,10 @@ class Campaign:
         release_energy = bool(getattr(cand, "release_energy", True))
         cand_full = dataclasses.replace(cand, energy_fixed=not release_energy)
         info = add_level_variant(self.base_azr, path, cand_full, best.jpi,
-                                 output_dir=os.path.join(self.vdir, f"output_add_{tag}"))
+                                 output_dir=os.path.join(self.vdir, f"output_add_{tag}"), seed_omitted=seed_omitted)
+        if info.get("seeded_omitted"):
+            self.log(f"  {len(info['seeded_omitted'])} omitted open channel(s) of the {best.jpi} group seeded free: "
+                     + ", ".join(f"p{q['pair']} L{q['L']}" for q in info["seeded_omitted"]))
         lvl = info["level"]
         self.log(f"full model with {best.jpi} @ {cand.energy} MeV as {lvl}: {os.path.basename(path)}")
         ev2 = Sharded(path, os.path.join(self.vdir, f"shards_add_{tag}"), nshards=self.nshards, flags=self.flags,
@@ -1609,7 +1626,7 @@ class Campaign:
                         policy=self.policy, max_nfev=global_nfev, log=self.log)
             self.log(f"control polish (level off): {fC.start_objective:.3f} -> {fC.objective:.3f} ({fC.status})")
             # 4. verify on a single session of the variant
-            sc, keys2 = verify(path, take(fB.x, ev2.keys, ev2.keys, ev2.x0), self.flags, objective=self.objective,
+            sc, keys2 = verify(path, fB.x, self.flags, objective=self.objective, keys=ev2.keys,
                                workdir=self.vdir, name=f"verify_add_{tag}")
             ncid = self.ledger.add_candidate(sid2, take(fB.x, ev2.keys, keys2, np.zeros(len(keys2))), keys2,
                                              move=dict(kind="level_add", jpi=best.jpi, energy=cand.energy), parent=cid,
@@ -1871,7 +1888,7 @@ class Campaign:
             s0 = ev2.score(x2)
             fr = polish(ev2, x2, bounds=default_bounds(ev2, x2, self.policy), policy=self.policy,
                         max_nfev=nfev, log=self.log)
-            sc, keys2 = verify(path, take(fr.x, ev2.keys, ev2.keys, ev2.x0), self.flags, objective=self.objective,
+            sc, keys2 = verify(path, fr.x, self.flags, objective=self.objective, keys=ev2.keys,
                                workdir=self.vdir, name=f"verify_off_{tag}")
             rest_before = obj - own_chi2
             extra = rest_before - sc.objective
@@ -1928,6 +1945,14 @@ class Campaign:
             for k in ev.keys:
                 if k.kind == "width" and k.level:
                     n_by_jpi.setdefault(level_group(k.level), set()).add(str(k.level))
+            # the hard-sphere term is carried by ANY active level of the group, fixed ones included: counting only the
+            # levels with free widths called a spurious added 6+ "the only level of 6+" on a windowed model whose other
+            # 6+ levels are fixed.  Single-nucleus labels only ("J^pi#n"); a
+            # multi-nucleus label ("...@23Ne") keeps the free-level count.
+            from .backend import AzrModel
+            n_active = {}
+            for lv in AzrModel.from_file(self.base_azr).active_levels:
+                n_active[lv.jpi] = n_active.get(lv.jpi, 0) + 1
             npts = max(sum(b - a for _, (a, b) in ev.row_ranges), 1)
             s2 = obj / npts
         finally:
@@ -1944,7 +1969,7 @@ class Campaign:
             xC = take(x, keys, evC.keys, evC.x0)
             frC = polish(evC, xC, bounds=default_bounds(evC, xC, self.policy), policy=self.policy,
                          max_nfev=nfev, log=self.log)
-            scC, _ = verify(self.base_azr, frC.x, self.flags, objective=self.objective,
+            scC, _ = verify(self.base_azr, frC.x, self.flags, objective=self.objective, keys=evC.keys,
                             workdir=self.vdir, name="verify_rm_control")
         finally:
             evC.close()
@@ -1954,7 +1979,11 @@ class Campaign:
         for row in rows[:max(top, 0)]:
             lvl = str(row["level"])
             jpi = lvl.split("#")[0]
-            if keep_last_of_jpi and len(n_by_jpi.get(level_group(lvl), ())) <= 1:
+            grp = level_group(lvl)
+            n_grp = len(n_by_jpi.get(grp, ()))
+            if "@" not in str(lvl):
+                n_grp = max(n_grp, n_active.get(str(grp), 0))
+            if keep_last_of_jpi and n_grp <= 1:
                 self.log(f"  {lvl}: the only level of {jpi}; kept (it carries the group's hard-sphere term)")
                 continue
             energy = self._level_energy(lvl)
@@ -1976,7 +2005,7 @@ class Campaign:
                 x2 = take(x, keys, ev2.keys, ev2.x0)
                 fr = polish(ev2, x2, bounds=default_bounds(ev2, x2, self.policy), policy=self.policy,
                             max_nfev=nfev, log=self.log)
-                sc, _ = verify(path, fr.x, self.flags, objective=self.objective,
+                sc, _ = verify(path, fr.x, self.flags, objective=self.objective, keys=ev2.keys,
                                workdir=self.vdir, name=f"verify_rm_{tag}")
             finally:
                 ev2.close()
@@ -2042,6 +2071,9 @@ class Campaign:
         out_dir = os.path.abspath(out_dir)
         os.makedirs(out_dir, exist_ok=True)
         from .model import link_data_dirs
+        # from the base model's own directory first (a base outside the campaign directory
+        # has its data/ there, not in the campaign), then from the campaign directory as before
+        link_data_dirs(self.base_azr, out_dir)
         link_data_dirs(self.base_azr, out_dir, src_dir=self.dir)
         base_name = os.path.basename(self.base_azr)
         base_copy = os.path.join(out_dir, base_name)
@@ -2094,6 +2126,12 @@ class Campaign:
                                                else "a different sign basin"))
         # the new campaign: same config, its baseline = the perturbed, polished vector (verified there)
         cfg = dict(self.cfg); cfg["base_azr"] = base_name
+        # a fixed relvector covariance model travels with the objective: the sibling must score with the SAME reference
+        # (campaign.json named cov_reference.npz, the file stayed behind and the
+        # sibling's first session stopped with FileNotFoundError)
+        if self.objective.cov_reference:
+            shutil.copy2(self.objective.cov_reference, os.path.join(out_dir, "cov_reference.npz"))
+            cfg["objective"] = dict(cfg.get("objective") or {}, cov_reference="cov_reference.npz")
         cfg["perturbation"] = dict(parent=self.dir, parent_candidate=cid, parent_objective=obj,
                                    flips=[m.description for m in chosen], seed=seed, jitter=jitter, e_kick=e_kick)
         with open(os.path.join(out_dir, "campaign.json"), "w") as f:

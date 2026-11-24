@@ -658,11 +658,9 @@ void OverviewChecks(const fs::path &source, const std::string &binary) {
               run.parameterFile.find("param.par") != std::string::npos,
           "overview: T1: total " + std::to_string(run.totalChiSquared) + " over " + std::to_string(run.points) +
               " points, " + run.parameterFile);
-    // the stale mark: an edit saved after the run.  The save has to land on a later file time than chiSquared.out's,
-    // and a file's time has whole seconds where the library reads it with stat (MinGW's libstdc++, the Windows
-    // runner: project and run in the same second, "project newer 0", on every run with a 20 ms wait): 1.1 s.
-    // A failure says which part and the two times.
-    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    // the stale mark: an edit saved after the run
+    // above one second: the file times of some C++ libraries (MinGW's) are whole seconds
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
     front::Record r = p.Records("data")[0];
     for (front::Field &f : r.fields)
       if (f.key == "norm") f.value = "1.01 fixed";

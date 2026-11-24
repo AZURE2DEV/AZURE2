@@ -37,7 +37,7 @@ import difflib
 
 __all__ = ["Error", "FormatError", "ParameterError", "ParameterKeyError", "ParameterIndexError",
            "ParameterVectorError", "EngineError", "AZURE2Error", "DomainError", "DomainZeroDivision", "SessionClosed",
-           "MissingFile", "FormatRefused", "EngineWarning"]
+           "MissingFile", "FormatRefused", "SpinOperatorError", "EngineWarning"]
 
 
 class Error(Exception):
@@ -156,6 +156,11 @@ class FormatRefused(Error, ValueError):
         text += f"; allowed: {allowed}" if allowed and allowed not in text else ""
         text += f"; {fix}" if fix and fix not in text else ""
         super().__init__(text, what=what, allowed=allowed, fix=fix)
+
+
+class SpinOperatorError(Error, ValueError):
+    """A literature name of a spin observable that ``pyazr.spin_operator`` cannot turn into one operator: a name it
+    does not know, or ``Aij`` where the spins of the beam and the target do not decide."""
 
 
 class EngineWarning(UserWarning):

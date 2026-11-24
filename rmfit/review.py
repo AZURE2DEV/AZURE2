@@ -63,6 +63,31 @@ class Level:
         return f"{self.jpi} {self.energy:.4f}{g}"
 
 
+_LEVEL_SUBJECT = re.compile(r"^(?P<jpi>\S+)\s+(?P<ex>-?\d+(?:\.\d+)?)(?:\s+G=(?P<g>[0-9.eE+-]+)\s*(?P<u>meV|eV|keV|MeV))?$")
+
+
+def _level_subject(subject):
+    """(J^pi, Ex MeV, Gamma MeV or None) of a flag subject written by :attr:`Level.label`; None for any other subject."""
+    m = _LEVEL_SUBJECT.match((subject or "").strip())
+    if not m:
+        return None
+    g = float(m.group("g")) * UNIT_MEV[m.group("u")] if m.group("g") else None
+    return m.group("jpi"), float(m.group("ex")), g
+
+
+def same_flag_subject(a: str, b: str, e_tol: float = 0.05) -> bool:
+    """True when two review flags' subjects (the message up to the first colon) name the same thing: equal text, or
+    the same J^pi level that moved by no more than max(e_tol, half the larger width).  A refit moves every free level a
+    little, and the exact text made an inherited flag look new: a base model's 2 MeV wide level flagged again after the
+    polish had moved it by 0.2 MeV, and the drive stopped to ask about a flag it already carried."""
+    if a == b:
+        return True
+    la, lb = _level_subject(a), _level_subject(b)
+    if not la or not lb or la[0] != lb[0]:
+        return False
+    return abs(la[1] - lb[1]) <= max(e_tol, 0.5 * max(la[2] or 0.0, lb[2] or 0.0))
+
+
 def _fmt_width(g_mev):
     if g_mev is None or not np.isfinite(g_mev):
         return "?"
