@@ -103,6 +103,9 @@ void BuildEffects(Context &c);
 /// The refusals of the set-up's external capture (BuildFinalStates.cpp): a final state that is not one level of
 /// <levels> (E_FINAL_STATE_NOT_LEVEL) or that two photon pairs share (E_FINAL_STATE_SHARED).  BuildOptions::setUpChecks.
 void CheckFinalStates(Context &c, const LevelTables &levels);
+/// A final state of external capture in a partial wave with an interior background (E_POTENTIAL_WAVE): the set-up's
+/// refusal, said by the build.  After the potentials are built.  BuildOptions::setUpChecks.
+void CheckFinalStateBackgrounds(Context &c, const LevelTables &levels);
 /// A capture into a final state above a particle threshold (E_FINAL_STATE_UNBOUND, FinalStates.h UnboundFinalStates):
 /// in every build.  After the data sets and extrapolations are built.
 void CheckUnboundFinalStates(Context &c, const LevelTables &levels);

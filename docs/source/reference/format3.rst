@@ -2366,7 +2366,7 @@ Diagnostic codes
      - a potential record on a photon or beta pair (a potential belongs to a particle pair)
    * - ``E_POTENTIAL_WAVE``
      - error
-     - a wave field of a potential record: background without boundary, boundary, subtract, capture or an interior charge without background, an interior charge without capture interior, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, a radius or diffuseness with a Gaussian term, or one (l, J) twice
+     - a wave field of a potential record: background without boundary, boundary, subtract, capture or an interior charge without background, an interior charge without capture interior, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, a radius or diffuseness with a Gaussian term, one (l, J) twice, or an interior background in the partial wave of an external capture's final state
    * - ``E_CHANNEL_RADIUS_TWICE``
      - error
      - two channel_radius records for one selection of channels (pair, l, s, J)

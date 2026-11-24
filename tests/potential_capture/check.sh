@@ -294,6 +294,13 @@ if [ "$rc" = 1 ] && grep -q '^ERROR: the partial wave l = 1, 2J = 1 of a hybrid 
 else
   bad "a bound final state in a background wave: exit $rc, expected 1 with the refusal"; tail -3 "$WORK/bgfinal/run.log"
 fi
+rc=0; "$AZURE2_BIN" --validate "$WORK/models/bgfinal.azr" > "$WORK/vbg.log" 2>&1 || rc=$?
+if [ "$rc" = 2 ] && grep -q 'error E_POTENTIAL_WAVE: the final state of photon pair 3 ' "$WORK/vbg.log" &&
+   "$AZURE2_BIN" --validate "$WORK/models/a40.azr" > "$WORK/va40.log" 2>&1; then
+  ok "a bound final state in a background wave: --validate refuses it (E_POTENTIAL_WAVE), and accepts the model without it"
+else
+  bad "a bound final state in a background wave: --validate exit $rc, expected 2 with E_POTENTIAL_WAVE"; tail -2 "$WORK/vbg.log" "$WORK/va40.log"
+fi
 
 # ---- 8. a narrow resonance of the background's potential (review 2026-11-20, finding 1): the s1/2 depth 100 MeV puts
 #         an s-wave resonance about 20 keV wide at E_cm = 0.30 MeV; the energy table, which tabulated a quotient of the
