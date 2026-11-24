@@ -46,6 +46,7 @@
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
 #include "MCMCTab.h"
+#include "NotesBar.h"
 #include "OverviewPage.h"
 #include "PlotWidget.h"
 #include "ProjectWatcher.h"
@@ -298,6 +299,14 @@ AZURESetup::AZURESetup() {
     addToolBarBreak();
     addToolBar(bar);
     bar->hide();
+    // The notes about the project just opened (qt_gui.md section 19.2): one bar, not modal, shown once per open.
+    addToolBarBreak();
+    notes_ = new NotesBar(this);
+    addToolBar(notes_);
+    connect(notes_, &NotesBar::diagnosticsRequested, this, [this]() {
+      diagnosticsDock->show();
+      diagnosticsDock->raise();
+    });
     auto reloadProject = [this, bar]() {
       const int tab = tabWidget->currentIndex();
       QMap<RecordsPanel *, QString> shown;
@@ -610,6 +619,7 @@ void AZURESetup::editOptions() {
 void AZURESetup::validate() {
   QString why;
   commitTabs(why);
+  validateRequested_ = true;
   diagnostics->validate();
 }
 
@@ -626,9 +636,20 @@ void AZURESetup::diagnosticsDone(bool ok, int errors, int warnings) {
     statusValidity_->setToolTip(diagnostics->summary() + "\n" + tr("Click to show the Diagnostics."));
     statusValidity_->setVisible(hasProject_);
   }
-  // nothing to show: the dock out of the way; a problem: the dock opens
   if (!hasProject_) return;
-  diagnosticsDock->setVisible(!ok || errors > 0 || warnings > 0);
+  const bool asked = validateRequested_;
+  validateRequested_ = false;
+  // The check of a project just opened is one note of the notes bar, never a box (qt_gui.md section 19.2).
+  if (openValidation_) {
+    openValidation_ = false;
+    if (!ok || errors > 0 || warnings > 0)
+      notes_->addNote(tr("The engine's check: %1").arg(statusValidity_ ? statusValidity_->text() : diagnostics->summary()),
+                      diagnostics->summary() + "\n\n" + diagnostics->listing(30), true);
+  }
+  // An error (the project would not run) opens the Diagnostics; warnings open them only when the user asked for the
+  // check (Validate): otherwise they are counted in the status bar, whose click opens them.  Nothing to show: hidden.
+  if (!ok || errors > 0 || (asked && warnings > 0)) diagnosticsDock->setVisible(true);
+  else if (warnings == 0) diagnosticsDock->setVisible(false);
 }
 
 void AZURESetup::showRecord(const QString &section, const QString &record) {
@@ -794,6 +815,7 @@ void AZURESetup::showProject(bool open) {
 
 bool AZURESetup::closeProject() {
   if (running_ || !maybeSave()) return false;
+  notes_->clearNotes();
   holder_->setProject(azure2::front::Project::Empty(QDir::current().filePath("untitled.azr").toStdString()));
   showProject(false);
   return true;
@@ -857,6 +879,7 @@ void AZURESetup::restoreWindowState() {
   // the dock's visibility is the validation's (diagnosticsDone), not the last session's
   if (settings.contains("window/state")) restoreState(settings.value("window/state").toByteArray());
   diagnosticsDock->hide();
+  if (notes_) notes_->clearNotes();  // the notes are those of a project opened in this session
 }
 
 void AZURESetup::saveWindowState() {

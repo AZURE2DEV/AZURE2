@@ -4,6 +4,9 @@
 //      tests/13N) open through the window's own open path with no modal dialog at all; the pairs read from <levels>
 //      keep their keys (c12c12_tumino2018 names one pair under two keys: each key keeps its pair, and the rows the
 //      Levels tab would write back carry the masses and charges of the file);
+//  (b) the notes bar: 13N (valid, 50 warnings) opens with one note of the engine's check and the Diagnostics dock
+//      closed; Details shows every note in a window that is not modal; Dismiss hides the bar; a valid project opens
+//      with no bar; opening another project clears the notes;
 // PASS/FAIL per check; exit 1 on a failure.
 #include <algorithm>
 #include <filesystem>
@@ -20,6 +23,9 @@
 #include <QTimer>
 
 #include "AZURESetup.h"
+#include "NotesBar.h"
+#include <QAction>
+#include <QDockWidget>
 #include "LevelsTab.h"
 #include "PairsModel.h"
 #include "PairsTab.h"
@@ -133,6 +139,36 @@ int main(int argc, char **argv) {
     for (std::size_t i = 0; same && i < file.size(); i++)
       for (int c : {kIr, kM1, kM2, kZ1, kZ2}) same = same && Num(file[i].tokens, c) == Num(back[i].tokens, c);
     Check(same, name + ": the rows written back keep each channel's pair (key, masses, charges)");
+  }
+
+  // (b) the notes bar
+  {
+    const fs::path n13 = CopyProject(source / "tests/13N/13N.azr", work / "notes_13N");
+    const fs::path t1 = CopyProject(source / "tests/upgrade/T1/T1.azr", work / "notes_T1");
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    ModalWatch watch;
+    w.open(QString::fromStdString(n13.string()));
+    Settle(800);
+    NotesBar *bar = w.notesBar();
+    Check(bar && bar->isVisible() && bar->notes().size() == 1 && bar->notes().first().contains("warning"),
+          "13N: one note of the engine's check (" + (bar ? bar->notes().join(" / ").toStdString() : std::string()) + ")");
+    Check(!w.diagnosticsDockWidget()->isVisible(), "13N: warnings only, the Diagnostics dock stays closed");
+    w.grab().save(shots + "/notes_13N_1280x720.png");
+    bar->detailsAction()->trigger();
+    Settle(200);
+    Check(bar->detailsWindow() && bar->detailsWindow()->isVisible() && !bar->detailsWindow()->isModal() &&
+              !QApplication::activeModalWidget(),
+          "Details: a window that does not block the main one");
+    bar->dismissAction()->trigger();
+    Settle(100);
+    Check(!bar->isVisible() && w.hasProject(), "Dismiss hides the bar");
+    w.open(QString::fromStdString(t1.string()));
+    Settle(800);
+    Check(!bar->isVisible() && bar->notes().isEmpty(), "T1 (valid): no notes bar; the notes of 13N are gone");
+    Check(watch.seen.isEmpty(), "no modal dialog in (b)");
   }
 
   std::cout << (failures ? "FAILED: " : "ALL PASSED") << (failures ? std::to_string(failures) : "") << std::endl;

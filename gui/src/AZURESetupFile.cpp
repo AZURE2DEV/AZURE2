@@ -15,6 +15,7 @@
 #include "PairsTab.h"
 #include "RecordTabs.h"
 #include "MCMCTab.h"
+#include "NotesBar.h"
 #include "PlotTab.h"
 #include "RunTab.h"
 #include "ThmTab.h"
@@ -57,8 +58,13 @@ void AZURESetup::open(QString filename) {
       QMessageBox::warning(this, tr("Not converted"), QString::fromStdString(report));
       return;
     }
-    if (!report.empty()) QMessageBox::information(this, tr("Converted"), QString::fromStdString(report));
-    if (!readProjectFile(to, why)) QMessageBox::warning(this, tr("Can't open the project"), why);
+    if (!readProjectFile(to, why)) {
+      QMessageBox::warning(this, tr("Can't open the project"), why);
+      return;
+    }
+    // what the converter assumed is a note of the notes bar, not a box
+    if (!report.empty())
+      notes_->addNote(tr("Converted from %1 to project format 3").arg(QFileInfo(filename).fileName()), QString::fromStdString(report));
     return;
   }
   QMessageBox::warning(this, tr("Can't open the project"), why);
@@ -108,8 +114,11 @@ bool AZURESetup::loadLevels(QString &why) {
 }
 
 void AZURESetup::projectOpened() {
+  // the notes of this project only, shown once (the bar is cleared when another project opens)
+  notes_->clearNotes();
   QString why;
-  if (!loadLevels(why)) QMessageBox::warning(this, tr("Levels"), why);
+  if (!loadLevels(why)) notes_->addNote(tr("The Levels tab could not read <levels>: %1").arg(why.section('\n', 0, 0)), why);
+  openValidation_ = true;
   const QString amatrix = holder_->configValue("amatrix", "true");
   (amatrix == "false" ? rMatrixAction : aMatrixAction)->setChecked(true);
   runTab->clearLog();

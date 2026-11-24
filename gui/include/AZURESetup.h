@@ -20,6 +20,7 @@ class PythonTools;
 class MCMCTab;
 class DiagnosticsPanel;
 class StartPage;
+class NotesBar;
 
 QT_BEGIN_NAMESPACE
 class QAction;
@@ -96,6 +97,8 @@ class AZURESetup : public QMainWindow {
   QLabel *statusJob() const { return jobLabel_; }
   QProgressBar *statusProgress() const { return jobBar_; }
   QDockWidget *diagnosticsDockWidget() const { return diagnosticsDock; }
+  /// The notes about the project just opened (one bar, never a modal box: qt_gui.md section 19.2).
+  NotesBar *notesBar() const { return notes_; }
   /// Close the project (after asking to save) and show the start page.
   bool closeProject();
   /// Run `command` (calculate, fit, ...) from the tool bar: the Calculate tab's command set, then startRun.
@@ -190,6 +193,9 @@ class AZURESetup : public QMainWindow {
   PythonTools *tools_ = nullptr;
   DiagnosticsPanel *diagnostics;
   QDockWidget *diagnosticsDock;
+  NotesBar *notes_ = nullptr;
+  bool openValidation_ = false;      ///< the next validation is the one of a project just opened (its notes)
+  bool validateRequested_ = false;   ///< the next validation was asked for by the user (Validate)
 
   QStackedWidget *central_ = nullptr;
   StartPage *startPage_ = nullptr;
