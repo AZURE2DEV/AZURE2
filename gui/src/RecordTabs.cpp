@@ -117,13 +117,13 @@ void SectionsTab::applyText() {
 
 QList<SectionsTab::Part> SegmentsParts() {
   return {{"data", QObject::tr("Segments From Data"),
-           QObject::tr("The data sets (<data>), one per data file: \"Use\" and \"Fit?\" in the table, a cell "
+           QObject::tr("The data sets, one per data file: \"Use\" and \"Fit?\" in the table, a cell "
                        "changed in place by a double click, the whole record in the form below.")},
           {"extrapolations", QObject::tr("Segments Without Data"),
-           QObject::tr("The extrapolations (<extrapolations>): a quantity of a reaction on a grid of energies and "
+           QObject::tr("The extrapolations: a quantity of a reaction on a grid of energies and "
                        "angles, calculated without data (the command extrapolate).")},
           {"modelData", QObject::tr("Model Data"),
-           QObject::tr("Model data (<modelData>): measured numbers of the model itself (a resonance strength, a width, "
+           QObject::tr("Model data: measured numbers of the model itself (a resonance strength, a width, "
                        "an ANC, a scattering length) compared in the chi-squared."),
            false, false, true}};
 }
@@ -137,7 +137,7 @@ QList<SectionsTab::Part> EffectsParts() {
 
 QList<SectionsTab::Part> PotentialParts() {
   return {{"potentials", QObject::tr("Nuclear Potential"),
-           QObject::tr("Hybrid-potential channels (<potentials>): the nuclear potential of a pair whose channels are "
+           QObject::tr("Hybrid-potential channels: the nuclear potential of a pair whose channels are "
                        "computed with it instead of hard-sphere functions.")}};
 }
 

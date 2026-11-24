@@ -47,8 +47,12 @@ namespace {
 QString Q(const std::string &s) { return QString::fromStdString(s); }
 
 QString ToolTip(const front::FieldInfo &f) {
-  QString t = "<b>" + Q(f.title).toHtmlEscaped() + "</b> (<tt>" + Q(f.key).toHtmlEscaped() + "</tt>) &mdash; " +
-              Q(f.doc).toHtmlEscaped() + "<br><tt>" + Q(f.grammar).toHtmlEscaped() + "</tt>";
+  // the file's key and the value's grammar in the expert view; in standard view the title and what it is
+  // (qt_gui.md section 19.9)
+  const bool expert = expert::Enabled();
+  QString t = "<b>" + Q(f.title).toHtmlEscaped() + "</b>" +
+              (expert ? " (<tt>" + Q(f.key).toHtmlEscaped() + "</tt>)" : QString()) + " &mdash; " + Q(f.doc).toHtmlEscaped() +
+              (expert ? "<br><tt>" + Q(f.grammar).toHtmlEscaped() + "</tt>" : QString());
   if (f.required) t += "<br>Required.";
   if (!f.requiredWhen.empty()) t += "<br>Required when " + Q(f.requiredWhen).toHtmlEscaped() + ".";
   if (!f.appliesWhen.empty()) t += "<br>Applies when " + Q(f.appliesWhen).toHtmlEscaped() + ".";
@@ -402,6 +406,9 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
                              "opens the record in its own window)."));
   connect(formToggle_, &QToolButton::toggled, this, &RecordsPanel::setFormShown);
   buttons->addWidget(formToggle_);
+  // "?" and "Form" on the buttons' line at the buttons' height (they were smaller and sat higher)
+  for (QToolButton *b : findChildren<QToolButton *>())
+    if (b->objectName() == "sectionHelp" || b == formToggle_) b->setFixedHeight(addButton_->sizeHint().height());
 
   QWidget *top = new QWidget;
   QVBoxLayout *topLayout = new QVBoxLayout(top);
@@ -840,8 +847,11 @@ void RecordsPanel::addFieldRows(const front::KindInfo &kind, const front::Record
       QToolButton *remove = new QToolButton;
       remove->setText(QString::fromUtf8("−"));
       remove->setToolTip(tr("Remove this %1").arg(Q(field.title)));
-      h->addWidget(e, 1);
+      remove->setFixedSize(22, 22);
+      // the remove button left of the entry: every field's text button stays in one column at the right edge
+      // (qt_gui.md section 19.9)
       h->addWidget(remove, 0, Qt::AlignTop);
+      h->addWidget(e, 1);
       v->insertWidget(v->count() - 1, entry);
       connect(remove, &QToolButton::clicked, this, [this, entry, e, key]() {
         editors_[key].removeAll(e);
@@ -890,6 +900,7 @@ void RecordsPanel::buildForm(const front::Record &record) {
 
   QFormLayout *basic = new QFormLayout;
   basic->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  basic->setContentsMargins(0, 0, 0, 0);  // the same right edge as the boxes' forms (the text buttons in one column)
   QWidget *basicHost = new QWidget;
   basicHost->setLayout(basic);
   formLayout_->addWidget(basicHost);

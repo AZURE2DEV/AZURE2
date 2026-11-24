@@ -58,8 +58,7 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   priorCovariance_ = new QLineEdit;
   priorCovariance_->setObjectName("priorCovariance");
   priorCovariance_->setPlaceholderText(tr("none"));
-  priorCovariance_->setToolTip(tr("The prior parameter covariance file, relative to the project (<config> "
-                                  "priorCovariance): a correlated Gaussian prior on named parameters."));
+  priorCovariance_->setToolTip(tr("The prior parameter covariance file, relative to the project: a correlated Gaussian prior on named parameters."));
   QToolButton *browse = new QToolButton;
   browse->setText("...");
   connect(browse, &QToolButton::clicked, this, [this]() {
@@ -84,10 +83,10 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
 
   parameterSettings_ = new SectionTextPanel(
       holder, "parameterSettings",
-      tr("Parameter settings (<parameterSettings>): per parameter, by its name, the limits and whether it is fixed, "
+      tr("Parameter settings: per parameter, by its name, the limits and whether it is fixed, "
          "overriding the levels' and records' flags."));
   mcmc_ = new SectionTextPanel(holder, "mcmc",
-                               tr("The sampler's priors and settings (<mcmc>), read by the command mcmc where the build "
+                               tr("The sampler's priors and settings, read by the command mcmc where the build "
                                   "has the sampler."));
   // the parameter table
   table_ = new QTableWidget(0, 11);
@@ -100,7 +99,7 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   table_->verticalHeader()->setVisible(false);
   table_->setToolTip(tr("Every parameter of a fit as the engine sets it up.  Start, Fitted and Fit Error are in the "
                         "fit's units (as param.sav: a width as its reduced-width amplitude, MeV^1/2).  Limits and "
-                        "the prior are the parameter's <parameterSettings> row: a level width's in eV (partial "
+                        "the prior are the parameter's row of the parameter settings: a level width's in eV (partial "
                         "width), converted by the engine; empty limits: none.  Fixed or free is set where the "
                         "parameter is written (the Levels tab, a record's 'fixed'/'fit')."));
   connect(table_, &QTableWidget::itemChanged, this, [this](QTableWidgetItem *item) {
@@ -123,7 +122,7 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   });
   QPushButton *take = new QPushButton(tr("&Take the Fitted Values as the New Start"));
   take->setObjectName("takeFitted");
-  take->setToolTip(tr("Copy the last fit's param.sav beside the project (<project>.start.sav) and start the next "
+  take->setToolTip(tr("Copy the last fit's param.sav beside the project (as <i>name</i>.start.sav) and start the next "
                       "run from it (--parameter-file).  The project's own values are not changed."));
   connect(take, &QPushButton::clicked, this, [this]() {
     QString why;
@@ -275,7 +274,7 @@ bool FittingTab::readParameters(const QString &projectFile, QString &why) {
   }
   filling_ = false;
   table_->resizeColumnsToContents();
-  tableNote_->setText(tr("%1 parameters, %2 free.  Limits and prior: the parameter's <parameterSettings> row (a level "
+  tableNote_->setText(tr("%1 parameters, %2 free.  Limits and prior: the parameter's row of the parameter settings (a level "
                          "width's in eV); they apply to free parameters.")
                           .arg(params.size())
                           .arg(free));

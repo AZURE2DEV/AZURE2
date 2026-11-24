@@ -108,17 +108,17 @@ AZURESetup::AZURESetup() {
   pairsTab->addExtraPanel(
       tr("Per-channel radii"),
       new RecordsPanel(holder_, "channelRadii",
-                       tr("A channel's own radius (<channelRadii>): a record per pair and, optionally, l, s and J; every "
+                       tr("A channel's own radius: a record per pair and, optionally, l, s and J; every "
                           "channel it does not name keeps its pair's radius (the column a of the pairs).")));
   levelsTab->addExtraPanel(
       tr("Gamma Decays"),
       new RecordsPanel(holder_, "gammaDecays",
-                       tr("A level's gamma decay written as its total radiative width and branchings (<gammaDecays>) "
+                       tr("A level's gamma decay written as its total radiative width and branchings "
                           "in place of its photon amplitudes; fitted as such.")));
   levelsTab->addExtraPanel(
       tr("Isospin"),
       new RecordsPanel(holder_, "isospin",
-                       tr("Isospin-labelled levels (<isospin>): a level of one ID over the nuclei of an isospin "
+                       tr("Isospin-labelled levels: a level of one ID over the nuclei of an isospin "
                           "multiplet, its isospin, the Coulomb shifts and mixing, the reference and factors.")));
 
   segmentsTab = new SectionsTab(holder_, SegmentsParts());

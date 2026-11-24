@@ -57,7 +57,7 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
     rowNumber++;
     if (row.tokens.empty()) continue;
     if ((int)row.tokens.size() < kE1) {
-      why = tr("<levels> row %1 has %2 columns").arg(rowNumber).arg(row.tokens.size());
+      why = tr("Level row %1 has %2 columns").arg(rowNumber).arg(row.tokens.size());
       return false;
     }
     const std::vector<std::string> &t = row.tokens;
@@ -76,7 +76,7 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
                       Number(t, kE1)};
     const int pairIndex = ir - 1;
     if (pairIndex < 0) {
-      why = tr("<levels> row %1: pair key %2").arg(rowNumber).arg(ir);
+      why = tr("Level row %1: pair key %2").arg(rowNumber).arg(ir);
       return false;
     }
     // The pair goes to its own key, whatever the other keys hold: a project may name the same pair under two keys

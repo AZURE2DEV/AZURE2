@@ -17,6 +17,7 @@
 
 #include "ExpertMode.h"
 #include "SectionTextPanel.h"
+#include "ValueEditor.h"
 
 namespace {
 
@@ -63,7 +64,8 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
         presentWith_.insert(QString::fromStdString(f.key),
                             QString::fromStdString(f.appliesWhen.substr(0, f.appliesWhen.find(' '))));
     }
-  QGroupBox *optionsBox = new QGroupBox(kinds_.empty() ? tr("Options") : QString::fromStdString(kinds_[0].title));
+  // the schema titles the section by its tag ("<thm>"): plain words here (qt_gui.md section 19.9)
+  QGroupBox *optionsBox = new QGroupBox(tr("THM options"));
   optionsBox->setToolTip(kinds_.empty() ? QString() : QString::fromStdString(kinds_[0].doc));
   optionsBox->setLayout(optionsForm);
 
@@ -101,7 +103,7 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
   experimentSplit->addWidget(experimentScroll);
   experimentSplit->setStretchFactor(1, 3);
   QGroupBox *experimentBox =
-      new QGroupBox(kinds_.size() > 1 ? QString::fromStdString(kinds_[1].title) : tr("Experiments"));
+      new QGroupBox(tr("Experiments"));
   experimentBox->setToolTip(kinds_.size() > 1 ? QString::fromStdString(kinds_[1].doc) : QString());
   (new QVBoxLayout(experimentBox))->addWidget(experimentSplit);
 
@@ -111,7 +113,7 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
   fp->addWidget(experimentBox, 1);
   fp->addWidget(message_);
   text_ = new SectionTextPanel(holder_, "thm",
-                               tr("The whole <thm> section as text (the Trojan horse experiments: one line per "
+                               tr("The whole THM section as text (the Trojan horse experiments: one line per "
                                   "experiment, key=value).  The form and this text edit the same lines."));
   QTabWidget *pages = new QTabWidget;
   pages->setObjectName("thmPages");
@@ -128,7 +130,7 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
 QWidget *ThmTab::editorFor(const azure2::front::FieldInfo &f, bool experiment) {
   const QString key = QString::fromStdString(f.key);
   QString tip = key + ": " + QString::fromStdString(f.doc);
-  if (!f.grammar.empty()) tip += "\n" + QString::fromStdString(f.grammar);
+  if (!f.grammar.empty() && expert::Enabled()) tip += "\n" + QString::fromStdString(f.grammar);
   if (!f.appliesWhen.empty()) tip += "\n" + tr("Applies when %1.").arg(QString::fromStdString(f.appliesWhen));
   QWidget *editor;
   if (f.type == "enum") {
@@ -146,7 +148,7 @@ QWidget *ThmTab::editorFor(const azure2::front::FieldInfo &f, bool experiment) {
   } else {
     QLineEdit *e = new QLineEdit;
     e->setPlaceholderText(!f.defaultText.empty() ? tr("default %1").arg(QString::fromStdString(f.defaultText))
-                                                  : QString::fromStdString(f.grammar));
+                                                  : PlainHint(f.grammar));
     connect(e, &QLineEdit::editingFinished, this, [this, key, experiment, e]() {
       if (filling_) return;
       QString why;

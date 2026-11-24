@@ -815,7 +815,7 @@ ThmPage::ThmPage(PhysicsContext *context, QWidget *parent) : ProjectPage(context
 void ThmPage::infoChanged() {
   const PhysicsContext::Info &info = context_->info();
   if (info.ok && info.experiments.empty()) {
-    setNeeds(tr("The project has no THM experiment (<thm> experiment[...]): the THM tab adds one."));
+    setNeeds(tr("The project has no THM experiment: the THM tab adds one."));
     return;
   }
   const QSignalBlocker block(experiment_);

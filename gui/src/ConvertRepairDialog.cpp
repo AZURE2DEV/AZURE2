@@ -16,10 +16,17 @@ ConvertRepairDialog::ConvertRepairDialog(const QString &file, const azure2::fron
   setWindowTitle(tr("A line the converter cannot read"));
   resize(820, 360);
   QVBoxLayout *v = new QVBoxLayout(this);
-  QLabel *where = new QLabel(tr("<b>%1</b>, line %2, in &lt;%3&gt;:")
+  // the old section in words (its tag in the tip)
+  const QString section = QString::fromStdString(problem.section);
+  const QString inWords = section == "segmentsData"   ? tr("the data segments")
+                          : section == "segmentsTest" ? tr("the extrapolation segments")
+                          : section == "targetInt"    ? tr("the target effects")
+                                                      : section;
+  QLabel *where = new QLabel(tr("<b>%1</b>, line %2, in %3:")
                                  .arg(QFileInfo(file).fileName().toHtmlEscaped())
                                  .arg(problem.line)
-                                 .arg(QString::fromStdString(problem.section)));
+                                 .arg(inWords.toHtmlEscaped()));
+  where->setToolTip(tr("The old section %1").arg(section));
   v->addWidget(where);
   // the line exactly as in the file (its blanks, also inside quotes, kept): "Convert again" without an edit writes the
   // same line into the copy (qt_gui.md section 19.8)

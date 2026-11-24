@@ -120,6 +120,13 @@ class FieldEditor : public QWidget {
 bool IsQuantityField(const azure2::front::FieldInfo &field, const std::string &kind);
 /// The names of the records of `kinds` in the project (each kind read in the sections the schema puts it).
 QStringList RecordNamesOfKinds(const ProjectHolder *holder, const std::vector<std::string> &kinds);
+/// A value's grammar as a hint a user reads (qt_gui.md section 19.9): "<A><Symbol>" as "e.g. 20Ne", a single
+/// "<word>" as the word, anything with alternatives or optional parts ("fixed|fit [prior ...]") as "" (the grammar
+/// stays in the expert view's tips and the text mode).
+QString PlainHint(const std::string &grammar);
+/// The text with each number written with more than 12 significant digits shown with 12 (shortest form: "5.5" for
+/// "5.4999999999999997", "0.3" for "0.30000000000000004"); other tokens as they are.  Display only (qt_gui.md 19.9).
+QString RoundedNumbers(const QString &text);
 /// The value with one blank between tokens outside quotes.
 QString OneBlank(const QString &text);
 
