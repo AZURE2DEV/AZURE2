@@ -31,6 +31,7 @@ add_library(azure2_convert STATIC
   src/BuildSections.cpp
   src/Convert.cpp
   src/Format2.cpp
+  src/LineRepair.cpp
   src/OldProject.cpp
   src/PotentialRecords.cpp)
 add_library(azure2::convert ALIAS azure2_convert)
@@ -53,6 +54,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/constructs_scratch)
 add_test(NAME convert_constructs COMMAND convert_constructs_test ${CMAKE_CURRENT_BINARY_DIR}/constructs_scratch)
+# Variants of old lines (docs/upgrade/qt_gui.md section 19.5): the unambiguous ones converted with a note, the others
+# refused with the line's number, the fields expected and the readings proposed (convert_line_repair).
+add_executable(convert_line_repair_test tests/line_repair_test.cpp)
+target_link_libraries(convert_line_repair_test PRIVATE azure2_convert)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(convert_line_repair_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/line_repair_scratch)
+add_test(NAME convert_line_repair COMMAND convert_line_repair_test ${CMAKE_CURRENT_BINARY_DIR}/line_repair_scratch)
 add_executable(convert_fixtures_test tests/fixtures_test.cpp)
 target_link_libraries(convert_fixtures_test PRIVATE azure2_convert)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

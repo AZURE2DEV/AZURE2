@@ -8,12 +8,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <map>
 #include <stdexcept>
 #include <sstream>
 #include <vector>
 
 #include "azure2/io/LevelRows.h"  // the <levels> line (format 3 keeps that grammar); the converter reads only the pair columns
+#include "azure2/convert/LineRepair.h"
 #include "azure2/convert/PriorCentreRow.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 #include "azure2/convert/ThmLines.h"
@@ -59,6 +61,44 @@ std::string UnreadTail(const std::string &tail) {
   return " ends with '" + Trim(tail) + "', which no keyword block of this program's grammar reads (the old engine "
          "stopped reading the line there without a word; a newer AZURE2 may read it).  Correct the keyword, or delete "
          "it from a copy of the project if the program that wrote it ignored it too, and convert the copy";
+}
+
+/// A line whose first word starts with '#': a comment, which the old engine could not read (it refused the file).
+bool CommentLine(const std::string &line) {
+  const std::size_t a = line.find_first_not_of(" \t\r");
+  return a != std::string::npos && line[a] == '#';
+}
+
+/// The line with the blanks inside its double-quoted tokens removed ("8, 9" -> "8,9"); the old GUI wrote the segment
+/// list and the equations of a <targetInt> line without blanks, and the old reader read each as one token.
+std::string QuotedBlanksRemoved(const std::string &line) {
+  std::string out;
+  bool inside = false;
+  for (char c : line) {
+    if (c == '"') inside = !inside;
+    if (inside && (c == ' ' || c == '\t')) continue;
+    out += c;
+  }
+  return out;
+}
+
+/// A data line whose data file's name holds blanks, unquoted: the line with the name quoted when the words from the
+/// file's place to the next number name a file that exists under `dir` (and the first word alone does not), else "".
+std::string QuotedDataFile(const std::string &line, const std::string &dir) {
+  if (dir.empty()) return "";
+  const std::vector<LineReading> readings = ProposeReadings("segmentsData", line);
+  for (const LineReading &r : readings) {
+    const std::size_t a = r.line.find('"');
+    const std::size_t b = a == std::string::npos ? a : r.line.find('"', a + 1);
+    if (b == std::string::npos || r.label.compare(0, 23, "the data file's name ho") != 0) continue;
+    const std::string name = r.line.substr(a + 1, b - a - 1);
+    std::error_code ec;
+    const std::string first = name.substr(0, name.find(' '));
+    if (std::filesystem::is_regular_file(std::filesystem::path(dir) / name, ec) &&
+        !std::filesystem::exists(std::filesystem::path(dir) / first, ec))
+      return r.line;
+  }
+  return "";
 }
 
 }  // namespace
@@ -110,7 +150,7 @@ std::string SpinText(double j) {
   return std::to_string(twice) + "/2";
 }
 
-std::string ReadOldProject(const io::Document &doc, OldProject &out) {
+std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::string &projectDir) {
   for (const char *name : {"levels", "segmentsData", "segmentsTest", "targetInt", "abundances", "scatteringLengths", "thm",
                            "parameterSettings", "config", "potential"})
     if (const io::Document::Section *s = doc.Find(name))
@@ -153,8 +193,23 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
   if (const io::Document::Section *s = doc.Find("segmentsData")) {
     int key = 0;
     for (std::size_t i = s->open + 1; i < s->close; i++) {
-      const std::string &line = doc.Line(i);
+      std::string line = doc.Line(i);
       if (BlankLine(line)) continue;
+      if (CommentLine(line)) {
+        out.repairs.push_back({"<segmentsData> line", "file line " + std::to_string(i + 1) + ", a comment in <segmentsData> (\"" +
+                                                          Trim(line) + "\"), is skipped: the old engine could not read it"});
+        continue;
+      }
+      out.refusedSection = "segmentsData";
+      out.refusedLine = i;
+      if (!OldLineReads("segmentsData", line)) {
+        const std::string quoted = QuotedDataFile(line, projectDir);
+        if (!quoted.empty()) {
+          out.repairs.push_back({"<segmentsData> line", "file line " + std::to_string(i + 1) + ": the data file's name holds a "
+                                 "blank and was not quoted; read as the file that exists: " + quoted.substr(quoted.find('"'))});
+          line = quoted;
+        }
+      }
       std::istringstream stm(line);
       auto parsed = std::make_shared<SegLine>(stm);
       key++;
@@ -167,6 +222,10 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       }
       if (!parsed->unreadTail().empty())
         return "data segment #" + std::to_string(key) + UnreadTail(parsed->unreadTail());
+      if (parsed->dataFile().empty()) return "data segment #" + std::to_string(key) + " names no data file";
+      if (DecimalCommaNumber(parsed->dataFile()))
+        return "data segment #" + std::to_string(key) + ": '" + parsed->dataFile() + "' stands where the data file's name "
+               "is: a number written with a decimal comma ends the numbers of the line there";
       const int d = parsed->isDiff();
       if (d == 19) return "data segment #" + std::to_string(key) + " uses isDiff 19 (THM angular-distribution coefficients), which the old engine refused";
       if (d == 8 || d == 18) return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
@@ -188,6 +247,13 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     for (std::size_t i = s->open + 1; i < s->close; i++) {
       const std::string &line = doc.Line(i);
       if (BlankLine(line)) continue;
+      if (CommentLine(line)) {
+        out.repairs.push_back({"<segmentsTest> line", "file line " + std::to_string(i + 1) + ", a comment in <segmentsTest> (\"" +
+                                                          Trim(line) + "\"), is skipped: the old engine could not read it"});
+        continue;
+      }
+      out.refusedSection = "segmentsTest";
+      out.refusedLine = i;
       std::istringstream stm(line);
       auto parsed = std::make_shared<ExtrapLine>(stm);
       key++;
@@ -220,8 +286,32 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
   if (const io::Document::Section *s = doc.Find("targetInt")) {
     int index = 0, active = 0;
     for (std::size_t i = s->open + 1; i < s->close; i++) {
-      const std::string &line = doc.Line(i);
+      std::string line = doc.Line(i);
       if (BlankLine(line)) continue;
+      if (CommentLine(line)) {
+        out.repairs.push_back({"<targetInt> line", "file line " + std::to_string(i + 1) + ", a comment in <targetInt> (\"" + Trim(line) +
+                                                       "\"), is skipped: the old engine could not read it"});
+        continue;
+      }
+      out.refusedSection = "targetInt";
+      out.refusedLine = i;
+      const std::string unblanked = QuotedBlanksRemoved(line);
+      if (unblanked != line && !OldLineReads("targetInt", line) && OldLineReads("targetInt", unblanked)) {
+        out.repairs.push_back({"<targetInt> line", "file line " + std::to_string(i + 1) + ": blanks inside a quoted token removed "
+                               "(the old reader read a quoted list or equation as one word): " + unblanked});
+        line = unblanked;
+      }
+      {
+        // the nine fields end with an empty stopping equation and no parameter count: the count can only be 0
+        std::istringstream words(line);
+        std::vector<std::string> w;
+        for (std::string t; words >> t;) w.push_back(t);
+        if (w.size() == 8 && w[7] == "\"\"" && !OldLineReads("targetInt", line) && OldLineReads("targetInt", line + " 0")) {
+          out.repairs.push_back({"<targetInt> line", "file line " + std::to_string(i + 1) + " ends after an empty stopping-power "
+                                 "equation: its parameter count, the ninth field, is 0"});
+          line += " 0";
+        }
+      }
       std::istringstream stm(line);
       OldEffectLine e;
       ReadTargetIntLine(stm, e.line);
@@ -245,6 +335,7 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
     }
   }
 
+  out.refusedSection.clear();  // the refusals below are not about one line of those three sections
   // <abundances>
   if (const io::Document::Section *s = doc.Find("abundances")) {
     for (const std::string &line : doc.Body(*s)) {

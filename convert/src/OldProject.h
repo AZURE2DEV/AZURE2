@@ -123,10 +123,19 @@ struct OldProject {
   /// <config> useAdaptiveGrid= (format 2 has it there; the last line wins): "" when absent, else its value.  Format 3
   /// has no such key: 0 chose a uniform sub-point grid of its own, which no longer exists.
   std::string adaptiveGridText;
+  /// What the reader accepted that the old engine did not read, each unambiguous (docs/upgrade/qt_gui.md section
+  /// 19.5): the construct and the note (a comment line skipped, blanks inside a quoted token, a file name with blanks
+  /// quoted, an empty stopping equation's missing parameter count).
+  std::vector<std::pair<std::string, std::string>> repairs;
+  /// The line a refusal is about (refusals of a <segmentsData>, <segmentsTest> or <targetInt> line): its section and
+  /// its index in the document read (doc.Line); "" when the refusal is about no such line.
+  std::string refusedSection;
+  std::size_t refusedLine = 0;
 };
 
-/// Reads the old sections of `doc` (format 2).  Returns "" or the reason the old engine refused the file.
-std::string ReadOldProject(const io::Document &doc, OldProject &out);
+/// Reads the old sections of `doc` (format 2).  Returns "" or the reason the old engine refused the file.  `projectDir`:
+/// where the data files are (a data file whose name holds blanks is recognised by its presence there).
+std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::string &projectDir = std::string());
 
 /// The text of `value` as written in `line` when a whole blank-separated token of it parses to the same double
 /// (bit for bit; the longest such token), else the shortest decimal that reads back to it.

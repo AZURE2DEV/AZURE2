@@ -227,8 +227,18 @@ bool OldGslCoulombBoxTicked(const io::Document &doc) {
 
 }  // namespace
 
-ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions &options) {
+ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOptions &options) {
   ConvertResult res;
+  // A UTF-8 byte-order mark (written by some Windows editors) before the first tag: no AZURE2 wrote one, and the
+  // section reader would not see the first tag behind it.  Removed with a note; the lines keep their numbers.
+  const bool bom = givenText.compare(0, 3, "\xEF\xBB\xBF") == 0;
+  const std::string oldText = bom ? givenText.substr(3) : givenText;
+  if (bom) {
+    res.notes.push_back({"byte-order mark", "", "the file begins with a UTF-8 byte-order mark (a Windows editor's): removed"});
+    res.constructs["byte-order mark"].converted++;
+    res.constructs["byte-order mark"].notes++;
+  }
+  const io::Document given = io::Document::Parse(oldText);  // the lines as numbered in the file (for a refusal)
   io::Document doc = io::Document::Parse(oldText);
   if (io::FormatOf(doc) == 3) {
     res.refusal = "already format 3";
@@ -244,9 +254,30 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   res.format2Changes = ConvertToFormat2(doc);
 
   OldProject old;
-  std::string why = ReadOldProject(doc, old);
+  std::string why = ReadOldProject(doc, old, options.projectDir);
+  for (const auto &r : old.repairs) {
+    res.notes.push_back({r.first, "", r.second});
+    res.constructs[r.first].converted++;
+    res.constructs[r.first].notes++;
+  }
   if (!why.empty()) {
     res.refusal = why;
+    // The refused line as numbered in the file: format 2's edits (ConvertToFormat2) leave these sections alone, so the
+    // line keeps its place in its section.
+    const io::Document::Section *now = old.refusedSection.empty() ? nullptr : doc.Find(old.refusedSection);
+    const io::Document::Section *then = now ? given.Find(old.refusedSection) : nullptr;
+    if (now && then && old.refusedLine > now->open) {
+      LineProblem &p = res.lineProblem;
+      p.section = old.refusedSection;
+      const std::size_t at = then->open + (old.refusedLine - now->open);
+      p.fileLine = (int)at + 1;
+      p.text = given.Line(at);
+      if (!p.text.empty() && p.text.back() == '\r') p.text.pop_back();
+      p.problem = why;
+      p.expected = ExpectedFields(p.section);
+      p.readings = ProposeReadings(p.section, p.text);
+      res.refusal += "\n" + p.Text();
+    }
     return res;
   }
   Built built;
