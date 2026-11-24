@@ -4,6 +4,53 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-24 (second review of gui-casual) — `feature/upgrade-gui-casual`: a reviewer's and a casual user's pass
+
+On top of `991118ca`.  **Design** `docs/upgrade/qt_gui.md` section 19.8; working list `work/gui-casual/AUDIT.md`
+(items 31-47).  Only `gui/`, `tests/gui/` and docs changed; no engine, facade or converter file.
+
+**Bugs found in the first pass and fixed.**  (1) Holes in "an expert item is hidden only at its default": the gamma
+multipolarity limits stayed hidden after a photon pair was added in standard view (its channels made with a limit
+the user could not see); the Fitting tab's Parameter Settings page stayed hidden while the Parameters table wrote
+`<parameterSettings>`.  Both now follow the edit.  (2) A field required only for some records of a kind
+(`RequiredWhen`) was marked required on every record: natural_neon's valid target of kind none showed red
+"Required:" lines; `RecordsPanel::applyConditions`.  (3) A `<levels>` read failure had become an ordinary note:
+now a warning of the bar (first, icon, "do not save edits of the levels").  (4) The kernel preview showed an engine
+message about another record ("Not drawn: ... dataset 'skowronski_fels' ...") on 13N's detector.  Checked and
+found right: the pair-key fix (writes the file's pairs back, gui_casual (a)); the converter: the 181 old projects of
+`tests/` and `examples/` that convert give byte-identical output with the old converter (`b-u8-polish`, same
+`convert/`, `io/`, `experiment/`), also as CRLF copies; 287 format-3 files refused by both; empty, binary, BOM-only,
+short and quoted-blank inputs refused without a crash; `.repaired.azr` never overwrites (numbered copies) and sits
+beside the old file (relative data paths resolve).  The three changed expectations of gui_window, gui_levels and
+gui_polish follow text changed on purpose; gui_window's File > Convert now checks the note it lost.
+
+**Casual-user items.**  natural_neon's target form without red lines; data tables fit 1280 px (`fitColumns`);
+Tumino's grids shown rounded in tables ("... 5.5 MeV lab"; file and form unchanged; the shortest round-trip form of
+that double has 15 digits, so only display rounding helps); the Levels channel Value column 93 px (was ~25); THM
+experiment keys classified (standard: beam, target, spectator, Ebeam, ps, background; others when given); Physics
+Functions without the blank band; Tumino's R-matrix phase of channel 2 was a display wrap ([0,180) for identical
+particles around 0): drawn continuous; start page: test projects in expert view only, natural_neon with its README
+title; New Project's steps start with the pairs; Calculate/Fit once on the Overview; a plot after the first run (first
+data set ticked); extra chi² totals in words, zeros dropped.
+
+**Run** (`work/b-gui-casual`, Release, GUI on, Qt 6.11 of the conda env): every source changed since `43ac5acd` in
+`gui/`, `tests/gui/`, `convert/` and `api/front/` recompiled (83 compiles): 0 warnings; `ctest -LE slow -j2`: 405 of
+405 passed (6 rmfit tests skipped as before); `tests/run_tests.sh` with this build's AZURE2: 185 passed, 0 failed.
+An intermediate `ctest -LE slow` failed gui_physqt (the first phase unwrapping changed T1's drawn delta); fixed in
+`e02ce4ab`, gui_physqt unchanged.  Final screenshots, taken after the last code change: `work/gui-casual/shots/review2/`
+`final_m{0,1}_{1280x720,1440x900}/` (start page, New Project, all 14 projects, every tab, sub-tab and Physics page;
+0 modal dialogs, 0 Qt warnings), `final_run_calc/`, `final_run_fit/` (Overview, Plot, Calculate, Fitting after a
+Calculate of o18_lacognata2008 and Tumino and a 200-call fit of o18); before: `pre_m0_1280x720/`.
+
+**Not run / open.**  No sanitizer build (a separate ASan configuration of the GUI and its libraries was not made);
+`ctest -L slow`; a real display; Qt 6.4; macOS/Windows.  Left for the PI: the red "Not calculated (no level)" line
+on the Levels tab (Tumino: J^pi no level carries; a fact of the model, red by design); the R-matrix page's E_x fields cut their
+values ("769448" for 14.769448); the repair dialog collapses
+runs of blanks in the refused line (also inside quotes); the Tools menu and minos as expert items (first pass's
+choice).
+
+
+
 ## 2026-11-24 (agent gui-casual) — `feature/upgrade-gui-casual`: the Qt program for an occasional user
 
 Cut from `origin/feature/upgrade` at `43ac5acd`.  **Design** `docs/upgrade/qt_gui.md` section 19; user guide

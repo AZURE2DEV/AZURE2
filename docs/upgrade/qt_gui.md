@@ -949,3 +949,66 @@ at their keys; (b) the notes bar; (c) the data-set table at 1280x720 shows at le
 the choice is kept, the Levels list at least ten rows, empty extras hidden; (d) the converter's repair path, byte for
 byte against the unmodified old file's conversion; (e) the expert switch hides and shows, an in-use item is shown in
 standard view, the file is unchanged.  `convert/tests/line_repair_test.cpp` (ctest `convert_line_repair`).
+
+### 19.8 Second review: a reviewer's pass and a casual user's (2026-11-24)
+
+The PI: "Review it again, both for a casual user and for bugs and fix them."  A review of the diff `43ac5acd..991118ca`
+and a pass through every tab, sub-tab and Physics page of the 14 projects of the start page, New Project and the start
+page (harness `work/gui-casual/audit/`, now also START, NEW and a run: `AUDIT_RUN=calculate|fit`), at 1280x720 and
+1440x900, standard and expert view, before and after a Calculate and a short Fit.
+
+**Holes in the rule "hidden only at its default".**  (1) The gamma multipolarity limits were hidden without a photon
+pair and re-checked only on opening and on the switch: a photon pair added in standard view generated its channels
+with a limit the user could not see (1, read from a file without photon channels).  They follow the pairs now
+(`LevelsTab::updateChannelsPairAddedEdited`, `...PairRemoved`).  (2) The Fitting tab's Parameter Settings and
+Sampler pages were re-checked only on opening and on the switch, while a row of the Parameters table writes
+`<parameterSettings>`: the page now follows `sectionEdited`.  (3) The THM tab's keys are classified (open item of the
+first pass): in standard view an experiment shows beam, target, spectator, Ebeam, ps and background, and every other
+key (psNodes, distortion, opticalAA/SF, the vertex model and its ff keys, spectator angles, cbackground, ...) only
+when the experiment gives it; a `<thm>` option only when the section gives it.
+
+**Forms and tables.**  A field the schema requires only for some records of its kind (`RequiredWhen`: a target's
+active nucleus and areal density for kinds layer, infinite and sample; its stopping and straggling for layer and
+infinite) was marked required on every record: natural_neon's valid target of kind `none` showed red "Required:"
+lines.  `RecordsPanel::applyConditions` reads the field's condition (the words of `experiment::Describe` for the two
+simple kinds, "<field> is <word> or ..." and "<field> is given"; any other condition is taken to hold) with the
+validator's rule against the form's values; a field that does not apply is not marked (`FieldEditor::setApplies`)
+and its row or box is hidden while empty (shown with "Every field").  A table's columns are fitted to its width when it
+is shown and when its width changes (`fitColumns`: the widest narrowed to one width, no narrower than 12 characters;
+the whole text is in the row's tip; a column the user drags keeps its width until the next reload): natural_neon's data sets no longer scroll sideways at 1280 px.  A number written with more than 12
+significant digits is shown with 12 in a table cell ("list 1.5 ... 5.5 MeV lab" for Tumino's grid
+`... 5.49999999999997`); the field, the form, the row's tip and the file keep the text as written (the shortest
+round-trip form of that double is itself 15 digits, so only a rounding of the display helps).  The Levels tab's
+middle column is wider (stretch 4:5:3): the channel table's Value column is 93 px at 1280x720 instead of about 25
+("2...").  The kernel preview of a record says "Not drawn: <reason>" only when the reason names the record (13N's
+detector showed an engine message about a data set's quadrature field).
+
+**Notes and the Overview.**  A `<levels>` the Levels tab could not read is a warning of the notes bar (first, warning
+icon, "do not save edits of the levels before fixing it"), not an ordinary note.  New Project's first step is "No
+particle pair yet" (then levels, then a data set or extrapolation), not "calculate or fit"; Calculate and Fit appear
+once on the page before a run (in "The last run"), in "What to look at next" once there is one.
+
+**After a run.**  The Plot tab showed empty axes ("calculated column (engine units)") after the first Calculate: no
+data set was ticked.  When the list of curves changes (the first run, another project) and nothing was ticked, the
+first data set (or extrapolation) is ticked; with nothing ticked the axis says "tick a data set on the left".  The
+Overview's run card listed the extra totals of `chiSquared.out` under their file labels, zeros included
+("Total-Norm-Chi-Squared 0"): now only non-zero ones, in words ("Norm chi² 3.2"), the labels in the tip.
+
+**Physics.**  The Functions page kept an eight-line scroll area for the function's text after the text was moved to
+its tip: a blank band under the title.  The R-matrix page draws a phase shift continuous (`UnwrappedPhaseDegrees`):
+the engine gives arg(U_cc)/2 in [0, 180) for identical particles, and Tumino's channel 2 (12C+12C, key 6, l = 4) lies
+just below 0 between its narrow levels, so it was drawn as a comb between 0 and 180.  A display wrap, not physics:
+the engine's numbers are unchanged; a step of more than 90 degrees between a point near 0 (within 45 degrees) and its
+neighbour near 180 is taken as the wrap of [0, 180) and removed.  A jump at +-90 degrees (a resonance through 90 in
+the range (-90, 90]) and the first value are drawn as the engine gives them, so gui_physqt's check that the drawn
+curve is Block's own values holds unchanged.
+
+**Start page.**  The list comes from `StartPage::findExamples` (the checkout the program was built from,
+`AZURE2_SOURCE_DIR`, or `AZURE2_EXAMPLES`): `examples/*/`, `tests/upgrade/T1-T3` and `tests/13N`.  The test suite's
+projects are listed in expert view only, marked "[test project]"; an example is listed by its name, its folder when
+that differs, and the first heading of its folder's README.md when there is one (natural_neon only today).  No
+description is invented.
+
+**Tests.**  gui_casual (f) checks each item above; gui_window's File > Convert now checks that the converter's report
+is a note of the bar (the box it replaced was answered without being checked).  No expectation of an existing test
+changed in this pass.
