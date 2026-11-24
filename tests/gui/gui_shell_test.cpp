@@ -170,7 +170,11 @@ int main(int argc, char **argv) {
   const QStringList examples = StartPage::findExamples();
   bool t1Listed = false;
   for (const QString &e : examples) t1Listed = t1Listed || e.endsWith("tests/upgrade/T1/T1.azr");
-  Check(examples.size() >= 4 && t1Listed && w.startPage()->exampleList()->count() == examples.size(),
+  // the list's project lines (its group headings, qt_gui.md section 19.9, carry no file)
+  int projectLines = 0;
+  for (int i = 0; i < w.startPage()->exampleList()->count(); i++)
+    projectLines += !w.startPage()->exampleList()->item(i)->data(Qt::UserRole).toString().isEmpty();
+  Check(examples.size() >= 4 && t1Listed && projectLines == examples.size(),
         "the start page lists " + std::to_string(examples.size()) + " example projects, T1 among them");
   QImage startLight = w.grab().toImage();
   startLight.save(shots + "/shell_start_light.png");

@@ -70,6 +70,11 @@
 #include "PhysicsTab.h"
 #include "PlotWidget.h"
 #include "StartPage.h"
+#include "OverviewCharts.h"
+#include <QRegularExpression>
+#include <QTextDocument>
+#include <QGroupBox>
+#include <QSet>
 #include "ThmTab.h"
 #include "ValueEditor.h"
 #include <QListWidget>
@@ -121,6 +126,28 @@ struct ModalWatch {
   }
 };
 
+/// The visible labels and placeholders under `root` that show a file's tag or a grammar ("<thm>", "<A><Symbol>",
+/// "<value> <unit> ..."): what a user of the standard view should never read (qt_gui.md section 19.9).
+QStringList AngleTexts(QWidget *root) {
+  QStringList out;
+  const QRegularExpression tag("<[A-Za-z][A-Za-z0-9_ ]*>");
+  for (QLabel *l : root->findChildren<QLabel *>()) {
+    if (!l->isVisibleTo(root) || l->text().isEmpty()) continue;
+    QString plain = l->text();
+    if (Qt::mightBeRichText(plain)) {
+      QTextDocument d;
+      d.setHtml(plain);
+      plain = d.toPlainText();
+    }
+    if (tag.match(plain).hasMatch()) out << plain.left(60);
+  }
+  for (QLineEdit *e : root->findChildren<QLineEdit *>())
+    if (e->isVisibleTo(root) && tag.match(e->placeholderText()).hasMatch()) out << "placeholder " + e->placeholderText().left(60);
+  for (QGroupBox *b : root->findChildren<QGroupBox *>())
+    if (b->isVisibleTo(root) && tag.match(b->title()).hasMatch()) out << "box " + b->title().left(60);
+  return out;
+}
+
 double Num(const std::vector<std::string> &t, int c) {
   return c >= 0 && c < (int)t.size() && !t[c].empty() ? std::stod(t[c]) : 0.0;
 }
@@ -151,6 +178,25 @@ int main(int argc, char **argv) {
         if (f.path().extension() == ".azr") projects.push_back(f.path());
   for (const char *t : {"tests/upgrade/T1/T1.azr", "tests/upgrade/T2/T2.azr", "tests/upgrade/T3/T3.azr", "tests/13N/13N.azr"})
     projects.push_back(source / t);
+  // every project of the examples' manifest (qt_gui.md section 19.9), read where the start page reads it
+  std::vector<fs::path> manifest;
+  const QList<StartPage::Example> listed = StartPage::readManifest(QString::fromStdString(source.string()));
+  int entries = 0;
+  QSet<QString> reactions;
+  bool unique = true;
+  for (const StartPage::Example &e : listed) {
+    if (e.project.isEmpty()) continue;
+    manifest.push_back(fs::path(e.project.toStdString()));
+    if (!e.variant) {
+      entries++;
+      unique = unique && !reactions.contains(e.reaction);
+      reactions.insert(e.reaction);
+    }
+    if (std::find(projects.begin(), projects.end(), manifest.back()) == projects.end()) projects.push_back(manifest.back());
+  }
+  Check(entries >= 10 && unique, "(a) the manifest lists " + std::to_string(entries) + " reactions, each once, and " +
+                                     std::to_string(manifest.size() - entries) + " variants");
+  for (const fs::path &m : manifest) Check(fs::exists(m), "(a) manifest: " + m.string() + " exists");
   std::sort(projects.begin(), projects.end());
   Check(projects.size() >= 14, "the examples and test projects found (" + std::to_string(projects.size()) + ")");
   const int kIr = azure2::front::LevelColumnIndex("ir"), kM1 = azure2::front::LevelColumnIndex("m1"),
@@ -186,6 +232,15 @@ int main(int argc, char **argv) {
     for (std::size_t i = 0; same && i < file.size(); i++)
       for (int c : {kIr, kM1, kM2, kZ1, kZ2}) same = same && Num(file[i].tokens, c) == Num(back[i].tokens, c);
     Check(same, name + ": the rows written back keep each channel's pair (key, masses, charges)");
+    if (std::find(manifest.begin(), manifest.end(), p) != manifest.end()) {
+      // a project the start page offers: no note at all (no warning of the check), and it validates clean
+      const azure2::front::Validation v = w.holder()->project().Validate();
+      int problems = 0;
+      for (const azure2::front::Diagnostic &d : v.diagnostics) problems += d.severity == "error" || d.severity == "warning";
+      Check(w.notesBar()->notes().isEmpty() && v.ok && problems == 0,
+            name + " (manifest): no note on opening, validates with no error or warning (" +
+                w.notesBar()->notes().join(" / ").toStdString() + ")");
+    }
   }
 
   // (b) the notes bar
@@ -464,6 +519,8 @@ int main(int argc, char **argv) {
       for (QLabel *l : targets->findChildren<QLabel *>())
         isotopeDocs += l->isVisibleTo(targets) && l->text().contains("abundance weight of a target nucleus");
     Check(isotopeDocs <= 1, "(f) natural_neon: the isotope's help line shown " + std::to_string(isotopeDocs) + " time(s) (at most once)");
+    const QStringList angles = targets ? AngleTexts(targets) : QStringList{"no panel"};
+    Check(angles.isEmpty(), "(f) natural_neon target form, standard view: no tag or grammar shown (" + angles.join(" | ").toStdString() + ")");
     w.grab().save(shots + "/review_neon_target.png");
     // the data-set table at 1280 px: no sideways scrolling
     w.tabs()->setCurrentWidget(w.getSegmentsTab());
@@ -506,6 +563,18 @@ int main(int argc, char **argv) {
       if (r.name == "x1") stored = QString::fromStdString(r.Value("energies"));
     Check(shown.contains(" 5.5 MeV") && !shown.contains("5.4999"),
           "(f) Tumino: the grid is shown \"" + shown.toStdString() + "\"");
+    // the form of x1: the grid's line shows the rounded numbers, the field still gives the file's text
+    if (extrap) {
+      extrap->selectRecord("x1");
+      Settle(200);
+    }
+    FieldEditor *energies = extrap ? extrap->fieldEditor("energies") : nullptr;
+    bool roundedLine = false;
+    if (energies)
+      for (QLineEdit *l : energies->findChildren<QLineEdit *>())
+        roundedLine = roundedLine || (l->isVisibleTo(energies) && l->text().contains(" 5.5") && !l->text().contains("5.4999"));
+    Check(energies && roundedLine && energies->text() == stored,
+          "(f) Tumino x1 form: the grid shown rounded, the field's value the file's text until edited");
     Check(stored.endsWith("5.49999999999997 MeV lab"),
           "(f) Tumino: the record keeps the grid as written (" + stored.right(30).toStdString() + ")");
     w.grab().save(shots + "/review_tumino_levels.png");
@@ -518,6 +587,12 @@ int main(int argc, char **argv) {
     w.setExpertMode(true);
     Settle(100);
     Check(thm && thm->rowShown("psNodes", true) && thm->rowShown("opticalAA", true), "(f) THM, expert view: every key");
+    w.setExpertMode(false);
+    Settle(100);
+    const QStringList thmAngles = thm ? AngleTexts(thm) : QStringList{"no tab"};
+    Check(thmAngles.isEmpty(), "(f) THM tab, standard view: no tag or grammar shown (" + thmAngles.join(" | ").toStdString() + ")");
+    w.setExpertMode(true);
+    Settle(100);
     w.setExpertMode(false);
     Settle(100);
     // Physics > R-matrix: the E_x fields show their whole value
@@ -569,6 +644,13 @@ int main(int argc, char **argv) {
     plot.setMarkers({});
     plot.grab();
     Check(!plot.legendRect().isEmpty() && !plot.legendBelowAxes(), "(f) plot: a free corner, the legend inside the panel");
+    // the chi^2/N bars: one outlier cuts the scale at ten times the median, the others keep their lengths
+    bool capped = false;
+    const double scale = BarChart::ScaleTop({1.0, 1.2, 0.8, 0.9, 500.0}, &capped);
+    bool plain = true;
+    const double top = BarChart::ScaleTop({1.0, 1.2, 0.8, 2.0}, &plain);
+    Check(capped && std::fabs(scale - 10.0) < 1e-12 && !plain && std::fabs(top - 2.0) < 1e-12,
+          "(f) chi^2/N bars: an outlier caps the scale at ten times the median (" + std::to_string(scale) + "), else the largest");
   }
   {
     // a phase near 0 that the convention [0, 180) wraps to 180: drawn continuous
@@ -612,28 +694,32 @@ int main(int argc, char **argv) {
           "(f) Fitting Settings: the text page hidden while empty, shown once <parameterSettings> holds a line");
   }
   {
-    // the start page: the repository's examples by name (a README's title), the test suite's projects in expert view
+    // the start page: the manifest's groups as headings, one line per reaction with its source, the variants
+    // indented under it, every project line openable (qt_gui.md section 19.9)
     AZURESetup w;
     w.resize(1280, 720);
     w.show();
     Settle(200);
     QListWidget *list = w.startPage()->exampleList();
-    int tests = 0, hiddenTests = 0;
-    bool neonTitle = false;
+    int headings = 0, lines = 0, variants = 0;
+    bool tumino = false, o18variant = false;
     for (int i = 0; i < list->count(); i++) {
-      const bool test = list->item(i)->data(Qt::UserRole).toString().contains("/tests/");
-      tests += test;
-      hiddenTests += test && list->item(i)->isHidden();
-      neonTitle = neonTitle || (list->item(i)->text().startsWith("natural_neon") && list->item(i)->text().contains("worked example"));
+      const QListWidgetItem *it = list->item(i);
+      const QString file = it->data(Qt::UserRole).toString();
+      if (file.isEmpty()) {
+        headings += it->flags() == Qt::NoItemFlags;
+        continue;
+      }
+      lines++;
+      const bool variant = it->text().trimmed().startsWith(QChar(0x21B3));
+      variants += variant;
+      tumino = tumino || (it->text().contains("Tumino et al. 2018") && file.endsWith("c12c12_tumino2018.azr"));
+      o18variant = o18variant || (variant && file.endsWith("o18_lacognata2008.azr"));
     }
-    Check(tests >= 4 && hiddenTests == tests && neonTitle,
-          "(f) start page, standard view: " + std::to_string(tests) + " test projects hidden, natural_neon with its README title");
+    Check(headings == 4 && lines == (int)StartPage::findExamples().size() && variants >= 5 && tumino && o18variant,
+          "(f) start page: " + std::to_string(headings) + " groups, " + std::to_string(lines) + " project lines (" +
+              std::to_string(variants) + " variants under their reaction), names from the manifest");
     w.grab().save(shots + "/review_start.png");
-    w.setExpertMode(true);
-    hiddenTests = 0;
-    for (int i = 0; i < list->count(); i++) hiddenTests += list->item(i)->isHidden();
-    Check(hiddenTests == 0, "(f) start page, expert view: the test projects listed too");
-    w.setExpertMode(false);
     // New Project: the next step is a particle pair, not a run
     QMetaObject::invokeMethod(&w, "newProject");
     Settle(500);
@@ -657,6 +743,52 @@ int main(int argc, char **argv) {
     QLabel *doc = w.findChild<QLabel *>("functionsDoc");
     Check(doc && doc->height() <= 3 * doc->fontMetrics().height(),
           "(f) Physics > Functions: the title line is " + std::to_string(doc ? doc->height() : -1) + " px high (no gap)");
+  }
+
+  // (g) a project the start page offers, saved after every tab, sub-tab and record form was shown, is byte for byte the
+  //     save made right after opening it: showing a value (rounded numbers, qt_gui.md section 19.9) never edits it
+  {
+    for (const StartPage::Example &e : StartPage::readManifest(QString::fromStdString(source.string()))) {
+      if (e.project.isEmpty()) continue;
+      const fs::path p = e.project.toStdString();
+      const std::string name = p.stem().string();
+      const fs::path copy = CopyProject(p, work / ("visit_" + name));
+      AZURESetup w;
+      w.resize(1280, 720);
+      w.show();
+      Settle(100);
+      ModalWatch watch;
+      QString why;
+      w.open(QString::fromStdString(copy.string()));
+      Settle(600);
+      const QString a = QString::fromStdString((copy.parent_path() / "a.azr").string());
+      const QString b = QString::fromStdString((copy.parent_path() / "b.azr").string());
+      const bool savedA = w.writeProjectFile(a, why);
+      int forms = 0;
+      for (int i = 0; i < w.tabs()->count(); i++) {
+        if (!w.tabs()->isTabVisible(i)) continue;
+        w.tabs()->setCurrentIndex(i);
+        Settle(80);
+        for (QTabWidget *inner : w.tabs()->widget(i)->findChildren<QTabWidget *>())
+          for (int j = 0; j < inner->count(); j++) {
+            inner->setCurrentIndex(j);
+            Settle(40);
+          }
+        for (RecordsPanel *r : w.tabs()->widget(i)->findChildren<RecordsPanel *>())
+          for (const QString &record : r->recordNames()) {
+            forms += r->selectRecord(record);
+            Settle(20);
+          }
+      }
+      const bool savedB = w.writeProjectFile(b, why);
+      std::ifstream fa(a.toStdString(), std::ios::binary), fb(b.toStdString(), std::ios::binary);
+      std::stringstream sa, sb;
+      sa << fa.rdbuf();
+      sb << fb.rdbuf();
+      Check(savedA && savedB && !sa.str().empty() && sa.str() == sb.str() && watch.seen.isEmpty(),
+            "(g) " + name + ": saved after showing every tab and " + std::to_string(forms) +
+                " record forms, byte for byte the save made on opening " + why.toStdString());
+    }
   }
 
   std::cout << (failures ? "FAILED: " : "ALL PASSED") << (failures ? std::to_string(failures) : "") << std::endl;
