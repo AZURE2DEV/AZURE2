@@ -126,6 +126,7 @@
   "population_gain_rel_min": 0.001
  },
  "structure": {
+  "seed_omitted": true,
   "broad_first_kev": 10.0,
   "narrow_phase": true,
   "levelscan_per_cycle": 1,

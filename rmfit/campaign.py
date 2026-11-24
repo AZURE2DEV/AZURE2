@@ -1413,10 +1413,18 @@ class Campaign:
 
     def _run_level_add(self, cand: LevelCandidate, jpis=None, half_width=0.5, pinned_nfev=60,
                        global_nfev=150, note="", near_same_jpi_kev: float = 20.0,
-                       dead_channel_ev: float = 1.0, local_release: float = 0.0, local_nfev: int = 80) -> dict:
+                       dead_channel_ev: float = 1.0, local_release: float = 0.0, local_nfev: int = 80,
+                       seed_omitted: Optional[bool] = None) -> dict:
         """Test one candidate level: J^pi scan on a window (pinned energy,
         sign patterns), then the best J^pi on the full model (pinned polish,
         released polish, verification), then classification.
+
+        ``seed_omitted``: passed to ``add_level_variant`` for the full model -- the J^pi group's other open, alive
+        particle channels are written FREE with a tiny seed instead of gamma 0 FIXED (None: the RMFIT_SEED_OMITTED
+        environment variable, off by default).  A candidate that names no channels (an ENSDF level) otherwise gets only
+        the lowest wave of the group's first two open pairs, and its other open channels stay fixed at zero in every
+        later structure (2026-11-22: a recovered level in a benchmark lacked four of its open channels; freeing them
+        was worth 1,305 of chi2).  Seeded channels count in tau only if the fit uses them (structure.effective_k).
 
         Accepting means the new structure becomes the base model.
         """
@@ -1462,7 +1470,10 @@ class Campaign:
         release_energy = bool(getattr(cand, "release_energy", True))
         cand_full = dataclasses.replace(cand, energy_fixed=not release_energy)
         info = add_level_variant(self.base_azr, path, cand_full, best.jpi,
-                                 output_dir=os.path.join(self.vdir, f"output_add_{tag}"))
+                                 output_dir=os.path.join(self.vdir, f"output_add_{tag}"), seed_omitted=seed_omitted)
+        if info.get("seeded_omitted"):
+            self.log(f"  {len(info['seeded_omitted'])} omitted open channel(s) of the {best.jpi} group seeded free: "
+                     + ", ".join(f"p{q['pair']} L{q['L']}" for q in info["seeded_omitted"]))
         lvl = info["level"]
         self.log(f"full model with {best.jpi} @ {cand.energy} MeV as {lvl}: {os.path.basename(path)}")
         ev2 = Sharded(path, os.path.join(self.vdir, f"shards_add_{tag}"), nshards=self.nshards, flags=self.flags,
