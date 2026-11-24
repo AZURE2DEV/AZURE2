@@ -68,6 +68,7 @@
 #include "RecordTableModel.h"
 #include "OverviewPage.h"
 #include "PhysicsTab.h"
+#include "PlotWidget.h"
 #include "StartPage.h"
 #include "ThmTab.h"
 #include "ValueEditor.h"
@@ -376,7 +377,8 @@ int main(int argc, char **argv) {
                                         QString::fromStdString((dir / "13N.f3.azr").string()), report);
     driver.stop();
     (void)lineNumber;
-    Check(dialogs == 1 && readings == 2 && shown.contains("0.005 data/meyer_84.dat"),
+    // the line as in the file, its runs of blanks kept (the window showed it collapsed before qt_gui.md 19.8)
+    Check(dialogs == 1 && readings == 2 && shown.contains(QString::fromStdString(bad)),
           "(d) one repair window: the line as written, two readings (" + std::to_string(dialogs) + " window(s), " +
               std::to_string(readings) + " readings)");
     Check(taken.contains("0.005 0 data/meyer_84.dat"), "(d) the first reading (the shift fixed) put into the line");
@@ -392,6 +394,42 @@ int main(int argc, char **argv) {
     Check(so.str() == broken, "(d) the old file is unchanged");
     Check(fs::exists(dir / "13N.repaired.azr"), "(d) the repaired copy beside it");
     Check(w.notesBar()->notes().join(" ").contains("repaired"), "(d) a note says which line was repaired");
+
+    // "Convert again" with the line unedited: the copy holds the line exactly as the file (tabs and runs of blanks)
+    const fs::path dir2 = work / "repair_13N_unedited";
+    fs::remove_all(dir2);
+    fs::create_directories(dir2);
+    fs::copy(source / "tests/13N/data", dir2 / "data", fs::copy_options::recursive);
+    std::string tabbed = original;
+    const std::size_t at2 = tabbed.find(good);
+    const std::string badTab = "0.005  \t  data/meyer_84.dat";
+    if (at2 != std::string::npos) tabbed.replace(at2, good.size(), badTab);
+    std::ofstream(dir2 / "13N.azr", std::ios::binary) << tabbed;
+    int rounds = 0;
+    QString shownTab;
+    QTimer driver2;
+    driver2.setInterval(50);
+    QObject::connect(&driver2, &QTimer::timeout, [&]() {
+      ConvertRepairDialog *d = qobject_cast<ConvertRepairDialog *>(QApplication::activeModalWidget());
+      if (!d) return;
+      if (++rounds == 1) {
+        shownTab = d->lineText();
+        d->retryButton()->click();  // unedited
+      } else {
+        d->reject();
+      }
+    });
+    driver2.start();
+    QString report2;
+    const bool ok2 = w.convertOldProject(QString::fromStdString((dir2 / "13N.azr").string()),
+                                         QString::fromStdString((dir2 / "13N.f3.azr").string()), report2);
+    driver2.stop();
+    std::ifstream c(dir2 / "13N.repaired.azr", std::ios::binary);
+    std::stringstream sc;
+    sc << c.rdbuf();
+    Check(shownTab.contains(QString::fromStdString(badTab)), "(d) the line shown with its tab and blanks as in the file");
+    Check(!ok2 && rounds == 2 && sc.str() == tabbed,
+          "(d) Convert again unedited: the copy is byte for byte the old file (" + std::to_string(rounds) + " rounds)");
   }
 
   // (f) the second review (qt_gui.md section 19.8)
@@ -421,6 +459,11 @@ int main(int argc, char **argv) {
               red.join(" / ").toStdString() + ")");
     Check(targets && !targets->fieldRowShown("active") && !targets->fieldRowShown("areal_density"),
           "(f) natural_neon: the rows that do not apply are not shown while empty");
+    int isotopeDocs = 0;  // the isotope's doc once (its box), not on every entry
+    if (targets)
+      for (QLabel *l : targets->findChildren<QLabel *>())
+        isotopeDocs += l->isVisibleTo(targets) && l->text().contains("abundance weight of a target nucleus");
+    Check(isotopeDocs <= 1, "(f) natural_neon: the isotope's help line shown " + std::to_string(isotopeDocs) + " time(s) (at most once)");
     w.grab().save(shots + "/review_neon_target.png");
     // the data-set table at 1280 px: no sideways scrolling
     w.tabs()->setCurrentWidget(w.getSegmentsTab());
@@ -477,6 +520,55 @@ int main(int argc, char **argv) {
     Check(thm && thm->rowShown("psNodes", true) && thm->rowShown("opticalAA", true), "(f) THM, expert view: every key");
     w.setExpertMode(false);
     Settle(100);
+    // Physics > R-matrix: the E_x fields show their whole value
+    w.tabs()->setCurrentIndex(w.tabs()->count() - 1);
+    if (PhysicsTab *physics = w.findChild<PhysicsTab *>()) physics->showPage(PhysicsTab::RMatrix);
+    Settle(4000);
+    int cut = 0, fields = 0;
+    for (QLineEdit *e : w.findChildren<QLineEdit *>()) {
+      if (!e->isVisible() || (e->objectName() != "sweepFrom" && e->objectName() != "sweepTo") || e->text().isEmpty()) continue;
+      fields++;
+      cut += e->fontMetrics().horizontalAdvance(e->text()) + 6 > e->width();
+    }
+    Check(fields == 2 && cut == 0, "(f) Tumino, Physics > R-matrix: the E_x fields show their values whole (" +
+                                       std::to_string(fields) + " fields, " + std::to_string(cut) + " cut)");
+    w.grab().save(shots + "/review_tumino_rmatrix.png");
+  }
+  {
+    // the legend where it hides no point, else below the axes; pole labels that never overlap
+    PlotWidget plot;
+    plot.resize(700, 420);
+    plot.show();
+    QList<PlotSeries> full, corner;
+    for (int k = 0; k < 6; k++) {
+      PlotSeries a;
+      a.label = QString("channel %1 (pair 6, l 4, s 0) -> channel %1 (pair 6, l 4, s 0)").arg(k + 1);
+      for (int i = 0; i <= 100; i++) {
+        a.modelX << 14.0 + 0.035 * i;
+        a.modelY << (k % 2 ? 1.0 : -1.0) * (i % 2 ? 1.0 : 0.2);  // fills the panel, every corner
+      }
+      full << a;
+    }
+    plot.setSeries(full);
+    plot.setMarkers({14.7694, 15.1080, 15.1445, 15.1640, 15.2316, 15.3549, 15.3866, 15.8883, 16.2731, 16.3362},
+                    {"14.769448 MeV", "15.108045 MeV", "15.144539 MeV", "15.164 MeV", "15.2316 MeV", "15.3549 MeV",
+                     "15.3866 MeV", "15.888346 MeV", "16.273096 MeV", "16.336232 MeV"});
+    plot.grab();
+    Check(plot.legendBelowAxes(), "(f) plot: curves in every corner, the legend below the axes");
+    const QList<QRect> labels = plot.markerLabelRects();
+    bool apart = !labels.isEmpty();
+    for (int i = 0; i < labels.size(); i++)
+      for (int j = i + 1; j < labels.size(); j++) apart = apart && !labels[i].intersects(labels[j]);
+    Check(apart, "(f) plot: " + std::to_string(labels.size()) + " pole labels drawn, none over another");
+    plot.grab().save(shots + "/review_plot_legend_below.png");
+    PlotSeries low;
+    low.label = "low";
+    for (int i = 0; i <= 50; i++) low.modelX << i, low.modelY << (i < 10 ? 1.0 : 0.0);
+    corner << low;
+    plot.setSeries(corner);
+    plot.setMarkers({});
+    plot.grab();
+    Check(!plot.legendRect().isEmpty() && !plot.legendBelowAxes(), "(f) plot: a free corner, the legend inside the panel");
   }
   {
     // a phase near 0 that the convention [0, 180) wraps to 180: drawn continuous
