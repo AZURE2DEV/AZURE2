@@ -106,26 +106,34 @@ class NumberItem : public QTableWidgetItem {
   }
 };
 
-/// The chi^2/N column: a horizontal bar under the number, its length chi^2/N over the column's largest.
+/// The chi^2/N column: a small bar left of the number, never under it, its length chi^2/N over the column's scale
+/// (BarChart::ScaleTop: the largest, or ten times the median when one value is far above the others; a bar beyond
+/// the scale is drawn full with a break).  The bar takes only the room the number leaves (qt_gui.md section 19.9).
 class RatioBarDelegate : public QStyledItemDelegate {
  public:
   using QStyledItemDelegate::QStyledItemDelegate;
   double top = 1;
   void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
-    const double v = index.data(Qt::UserRole).toDouble();
-    if (std::isfinite(v) && top > 0) {
-      p->save();
-      QColor c = v > kHighChiPerPoint ? BarChart::warningColor() : option.palette.color(QPalette::Highlight);
-      c.setAlpha(150);
-      // a strip along the cell's foot, so that the number above it stays readable on both looks
-      const QRect cell = option.rect.adjusted(3, 2, -3, -2);
-      const QRect r(cell.left(), cell.bottom() - std::max(3, cell.height() / 4), cell.width(), std::max(3, cell.height() / 4));
-      p->setPen(Qt::NoPen);
-      p->setBrush(c);
-      p->drawRect(QRect(r.left(), r.top(), std::max(2, (int)std::lround(r.width() * std::min(1.0, v / top))), r.height()));
-      p->restore();
-    }
     QStyledItemDelegate::paint(p, option, index);
+    const double v = index.data(Qt::UserRole).toDouble();
+    if (!std::isfinite(v) || top <= 0) return;
+    const QRect cell = option.rect.adjusted(4, 0, -4, 0);
+    const int text = option.fontMetrics.horizontalAdvance(index.data(Qt::DisplayRole).toString());
+    const int room = cell.width() - text - 8;  // the bar's room: what the right-aligned number leaves
+    if (room < 10) return;
+    p->save();
+    QColor c = v > kHighChiPerPoint ? BarChart::warningColor() : option.palette.color(QPalette::Highlight);
+    c.setAlpha(170);
+    const int h = std::max(4, cell.height() / 3);
+    const QRect r(cell.left(), cell.center().y() - h / 2, std::max(2, (int)std::lround(room * std::min(1.0, v / top))), h);
+    p->setPen(Qt::NoPen);
+    p->setBrush(c);
+    p->drawRect(r);
+    if (v > top) {
+      p->setPen(QPen(option.palette.color(QPalette::Base), 2));
+      p->drawLine(QPoint(r.right() - 7, r.bottom() + 1), QPoint(r.right() - 3, r.top() - 1));
+    }
+    p->restore();
   }
 };
 
@@ -294,7 +302,8 @@ void OverviewPage::build() {
   table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
   table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
   table_->horizontalHeader()->setSectionResizeMode(kColumnChiPerPoint, QHeaderView::Fixed);
-  table_->horizontalHeader()->resizeSection(kColumnChiPerPoint, table_->fontMetrics().horizontalAdvance("M") * 9);
+  table_->horizontalHeader()->resizeSection(kColumnChiPerPoint, table_->fontMetrics().horizontalAdvance("M") * 11);
+  table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);  // the names: at most 18 characters, elided
   table_->setTextElideMode(Qt::ElideRight);
   table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   table_->setItemDelegateForColumn(kColumnChiPerPoint, new RatioBarDelegate(table_));
@@ -642,7 +651,13 @@ void OverviewPage::fillRun() {
   QVector<double> sorted = ratios;
   std::sort(sorted.begin(), sorted.end(), [](double a, double b) { return a > b; });
   const double third = sorted.size() >= 3 ? sorted[2] : sorted.isEmpty() ? 0 : sorted.last();
-  static_cast<RatioBarDelegate *>(table_->itemDelegateForColumn(kColumnChiPerPoint))->top = top;
+  bool capped = false;
+  const double scale = BarChart::ScaleTop(ratios, &capped);
+  static_cast<RatioBarDelegate *>(table_->itemDelegateForColumn(kColumnChiPerPoint))->top = scale;
+  if (QTableWidgetItem *head = table_->horizontalHeaderItem(kColumnChiPerPoint))
+    head->setToolTip(capped ? tr("chi²/N; the bars on a scale cut at ten times the median (%1): a bar with a break is "
+                                 "longer").arg(Number(scale, 3))
+                            : tr("chi²/N; the bars on a linear scale up to the largest"));
   for (int i = 0; i < (int)run_.dataSets.size(); i++) {
     const front::DataSetResult &d = run_.dataSets[i];
     const QString name = d.record.empty() ? tr("data set %1").arg(d.key) : QString::fromStdString(d.record);
@@ -670,6 +685,8 @@ void OverviewPage::fillRun() {
     }
   }
   table_->setSortingEnabled(true);
+  table_->resizeColumnToContents(0);
+  table_->setColumnWidth(0, std::min(table_->columnWidth(0), table_->fontMetrics().horizontalAdvance(QString(18, 'n')) + 12));
   const int rows = std::min(16, std::max(3, table_->rowCount()));
   table_->setMinimumHeight(table_->horizontalHeader()->sizeHint().height() + rows * table_->verticalHeader()->defaultSectionSize() + 4);
 
