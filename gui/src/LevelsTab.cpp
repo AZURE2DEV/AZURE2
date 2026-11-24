@@ -284,6 +284,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   configLayout->addWidget(maxNumMultLabel, 2, 1);
   configLayout->addWidget(includeAllJPiCheck, 3, 0, 1, 2);
   configLayout->addWidget(missingJPiLabel, 4, 0, 1, 2);
+  configLayout->setRowStretch(5, 1);  // the rows at the top, the spare height below them (rows hidden in standard view)
   configLayout->setColumnStretch(0, 0);
   configLayout->setColumnStretch(1, 1);
   configBox->setLayout(configLayout);

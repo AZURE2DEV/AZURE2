@@ -538,8 +538,8 @@ void RecordsPanel::setExpertMode(bool on) {
 }
 
 void RecordsPanel::updateColumns() {
-  // standard view: the Kind column when every row is of one kind, and the columns empty in every row, hidden; a
-  // column that holds a value in any row stays (nothing in effect is hidden)
+  // standard view: the Kind column when every row is of one kind, and the columns empty in every row (a "Fit?" column
+  // without a box in any row too), hidden; a column that holds a value in any row stays (nothing in effect is hidden)
   const int rows = model_->rowCount();
   for (int c = 0; c < model_->columnCount(); c++) {
     const RecordTableModel::Column &col = model_->column(c);
@@ -551,6 +551,10 @@ void RecordsPanel::updateColumns() {
     } else if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Field) {
       hide = true;
       for (int r = 0; r < rows && hide; r++) hide = model_->data(model_->index(r, c)).toString().trimmed().isEmpty();
+    } else if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Fit) {
+      // a "Fit?" column whose field no row has (no box in any row)
+      hide = true;
+      for (int r = 0; r < rows && hide; r++) hide = !model_->data(model_->index(r, c), Qt::CheckStateRole).isValid();
     }
     table_->setColumnHidden(c, hide);
   }
