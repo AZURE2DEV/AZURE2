@@ -498,7 +498,8 @@ int main(int argc, char **argv) {
     if (recent) recent->trigger();
     Check(recent && w.holder()->path() == QFileInfo(QString::fromStdString(copy.string())).absoluteFilePath(),
           "File > Open Recent: the T1 copy opened from its item");
-    // Convert through its dialogs: the old file, the new name, the converter's report, then the new file opens
+    // Convert through its dialogs: the old file, the new name, then the new file opens (the converter's report is a
+    // note of the notes bar since qt_gui.md section 19.2, no box to answer)
     const fs::path conv = work / "convert_13N";
     fs::remove_all(conv);
     fs::create_directories(conv / "output");
@@ -508,7 +509,6 @@ int main(int argc, char **argv) {
     DialogDriver driver;
     driver.file(QString::fromStdString((conv / "13N.azr").string()));
     driver.file(QString::fromStdString((conv / "13N.f3.azr").string()));
-    driver.button(QMessageBox::Ok);
     QMetaObject::invokeMethod(&w, "convertProject");
     const azure2::front::Validation v = w.holder()->project().Validate();
     std::string errors;

@@ -9,6 +9,7 @@
 #include <QStatusBar>
 
 #include "AZURESetup.h"
+#include "ConvertRepairDialog.h"
 #include "DiagnosticsPanel.h"
 #include "FittingTab.h"
 #include "LevelsTab.h"
@@ -52,19 +53,8 @@ void AZURESetup::open(QString filename) {
     const QString to = QFileDialog::getSaveFileName(this, tr("The converted project"), suggested,
                                                     tr("AZURE2 projects (*.azr)"));
     if (to.isEmpty()) return;
-    std::string report;
-    const bool ok = azure2::front::ConvertProject(filename.toStdString(), to.toStdString(), report);
-    if (!ok) {
-      QMessageBox::warning(this, tr("Not converted"), QString::fromStdString(report));
-      return;
-    }
-    if (!readProjectFile(to, why)) {
-      QMessageBox::warning(this, tr("Can't open the project"), why);
-      return;
-    }
-    // what the converter assumed is a note of the notes bar, not a box
-    if (!report.empty())
-      notes_->addNote(tr("Converted from %1 to project format 3").arg(QFileInfo(filename).fileName()), QString::fromStdString(report));
+    QString report;
+    if (!convertOldProject(filename, to, report) && !report.isEmpty()) QMessageBox::warning(this, tr("Not converted"), report);
     return;
   }
   QMessageBox::warning(this, tr("Can't open the project"), why);
@@ -79,10 +69,66 @@ void AZURESetup::convertProject() {
                                                   info.dir().filePath(info.completeBaseName() + ".f3.azr"),
                                                   tr("AZURE2 projects (*.azr)"));
   if (to.isEmpty()) return;
-  std::string report;
-  const bool ok = azure2::front::ConvertProject(from.toStdString(), to.toStdString(), report);
-  QMessageBox::information(this, ok ? tr("Converted") : tr("Not converted"), QString::fromStdString(report));
-  if (ok && maybeSave()) open(to);
+  if (!maybeSave()) return;
+  QString report;
+  if (!convertOldProject(from, to, report) && !report.isEmpty()) QMessageBox::warning(this, tr("Not converted"), report);
+}
+
+bool AZURESetup::convertOldProject(const QString &from, const QString &to, QString &report) {
+  report.clear();
+  QString source = from;  // the old file, then the copy with the lines the user repaired
+  const QFileInfo info(from);
+  QString copy = info.dir().filePath(info.completeBaseName() + ".repaired." + info.suffix());
+  for (int n = 2; QFileInfo::exists(copy); n++)  // a copy of an earlier repair is kept too
+    copy = info.dir().filePath(info.completeBaseName() + QString(".repaired%1.").arg(n) + info.suffix());
+  QStringList repaired;
+  for (int round = 0; round < 50; round++) {
+    std::string text;
+    azure2::front::ConvertLineProblem problem;
+    if (azure2::front::ConvertProject(source.toStdString(), to.toStdString(), text, problem)) {
+      report.clear();
+      QString why;
+      if (!readProjectFile(to, why)) {
+        report = why;
+        return false;
+      }
+      // what the converter assumed and what the user repaired: notes of the notes bar, not boxes
+      if (!repaired.isEmpty())
+        notes_->addNote(tr("%n line(s) of %1 repaired before the conversion (in the copy %2)", nullptr, repaired.size())
+                            .arg(info.fileName(), QFileInfo(copy).fileName()),
+                        repaired.join("\n"));
+      if (!text.empty())
+        notes_->addNote(tr("Converted from %1 to project format 3").arg(info.fileName()), QString::fromStdString(text));
+      return true;
+    }
+    report = QString::fromStdString(text);
+    if (problem.line <= 0) return false;  // a refusal about no single line: the report says why
+    ConvertRepairDialog dialog(source, problem, this);
+    if (dialog.exec() != QDialog::Accepted) {
+      report.clear();  // cancelled: nothing to say
+      return false;
+    }
+    // the copy holds every repair so far; the old file is never written
+    const QString next = copy + ".new";
+    QFile::remove(next);
+    std::string why;
+    if (!azure2::front::WriteRepairedCopy(source.toStdString(), problem.line, dialog.lineText().toStdString(),
+                                          next.toStdString(), why)) {
+      report = QString::fromStdString(why);
+      return false;
+    }
+    if (source == copy) QFile::remove(copy);
+    if (QFileInfo::exists(copy) || !QFile::rename(next, copy)) {
+      report = tr("%1 exists: nothing is overwritten").arg(copy);
+      QFile::remove(next);
+      return false;
+    }
+    repaired << tr("line %1: \"%2\" -> \"%3\"").arg(problem.line).arg(QString::fromStdString(problem.text).simplified(),
+                                                       dialog.lineText());
+    source = copy;
+  }
+  report = tr("too many repairs");
+  return false;
 }
 
 bool AZURESetup::readProjectFile(const QString &filename, QString &why) {

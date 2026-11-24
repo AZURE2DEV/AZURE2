@@ -58,6 +58,10 @@ class AZURESetup : public QMainWindow {
 
   /// Open a project: a format-3 file, or an old one after asking to convert it (the converter of --convert).
   void open(QString filename);
+  /// Convert the old project `from` to `to` (AZURE2 --convert) and open the result.  A line the converter cannot read
+  /// is shown with its number, the fields expected and the readings proposed (ConvertRepairDialog), to be edited and
+  /// converted again from a copy (`from` is kept): qt_gui.md section 19.5.  False with the converter's report.
+  bool convertOldProject(const QString &from, const QString &to, QString &report);
   /// Read / write a project without any dialog (the headless tests); false with the reason.
   bool readProjectFile(const QString &filename, QString &why);
   bool writeProjectFile(const QString &filename, QString &why);

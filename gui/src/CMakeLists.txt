@@ -19,7 +19,7 @@ set(AZURESETUP_SOURCES
     IAEALevelData.cpp IAEALevelDialog.cpp
     LevelsTabEdits.cpp LevelsTabNavigation.cpp LevelsUndo.cpp LevelsViews.cpp
     ChooseFileButton.cpp RichTextDelegate.cpp InfoDialog.cpp InTabDocs.cpp AboutAZURE2Dialog.cpp
-    AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp NotesBar.cpp
+    AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp NotesBar.cpp ConvertRepairDialog.cpp
     PhysicsTab.cpp PhysicsSessionPages.cpp PhysicsForms.cpp PhysicsWorker.cpp HeatmapWidget.cpp
     AZURESetup.qrc ShellIcons.qrc)
 

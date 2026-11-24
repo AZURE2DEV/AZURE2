@@ -7,6 +7,10 @@
 //  (b) the notes bar: 13N (valid, 50 warnings) opens with one note of the engine's check and the Diagnostics dock
 //      closed; Details shows every note in a window that is not modal; Dismiss hides the bar; a valid project opens
 //      with no bar; opening another project clears the notes;
+//  (d) the converter's repair of an old line: the old 13N with one data line short of its shift's vary flag; the
+//      window shows the line, its number and the two readings; the first taken and converted again gives the project
+//      the unmodified old 13N gives, byte for byte; the old file is unchanged, the repaired copy beside it, a note says
+//      so;
 // PASS/FAIL per check; exit 1 on a failure.
 #include <algorithm>
 #include <filesystem>
@@ -24,6 +28,12 @@
 
 #include "AZURESetup.h"
 #include "NotesBar.h"
+#include "ConvertRepairDialog.h"
+#include <QFile>
+#include <QLineEdit>
+#include <QPushButton>
+#include <fstream>
+#include <sstream>
 #include <QAction>
 #include <QDockWidget>
 #include "LevelsTab.h"
@@ -169,6 +179,71 @@ int main(int argc, char **argv) {
     Settle(800);
     Check(!bar->isVisible() && bar->notes().isEmpty(), "T1 (valid): no notes bar; the notes of 13N are gone");
     Check(watch.seen.isEmpty(), "no modal dialog in (b)");
+  }
+
+  // (d) the converter's repair of a line
+  {
+    const fs::path dir = work / "repair_13N";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    fs::copy(source / "tests/13N/data", dir / "data", fs::copy_options::recursive);
+    std::ifstream in(source / "tests/convert/fixtures/tests/13N/13N.azr", std::ios::binary);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    const std::string original = buffer.str();
+    // the data line of meyer_84: "... 0 0.005 0 data/meyer_84.dat" -> without the shift's vary flag
+    const std::string good = "0.005          0               data/meyer_84.dat", bad = "0.005          data/meyer_84.dat";
+    std::string broken = original;
+    const std::size_t at = broken.find(good);
+    Check(at != std::string::npos, "(d) the meyer_84 line found in the old 13N");
+    if (at != std::string::npos) broken.replace(at, good.size(), bad);
+    std::ofstream(dir / "13N.azr", std::ios::binary) << broken;
+    std::ofstream(dir / "ref.azr", std::ios::binary) << original;
+    std::string refReport;
+    const bool refOk = azure2::front::ConvertProject((dir / "ref.azr").string(), (dir / "ref.f3.azr").string(), refReport);
+    Check(refOk, "(d) the unmodified old 13N converts");
+
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    int dialogs = 0, readings = 0, lineNumber = 0;
+    QString shown, taken;
+    QTimer driver;
+    driver.setInterval(50);
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+      ConvertRepairDialog *d = qobject_cast<ConvertRepairDialog *>(QApplication::activeModalWidget());
+      if (!d) return;
+      dialogs++;
+      readings = d->readingButtons().size();
+      shown = d->lineText();
+      d->grab().save(shots + "/convert_repair_dialog.png");
+      if (!d->readingButtons().isEmpty()) d->readingButtons().first()->click();
+      taken = d->lineText();
+      d->retryButton()->click();
+    });
+    driver.start();
+    QString report;
+    const bool ok = w.convertOldProject(QString::fromStdString((dir / "13N.azr").string()),
+                                        QString::fromStdString((dir / "13N.f3.azr").string()), report);
+    driver.stop();
+    (void)lineNumber;
+    Check(dialogs == 1 && readings == 2 && shown.contains("0.005 data/meyer_84.dat"),
+          "(d) one repair window: the line as written, two readings (" + std::to_string(dialogs) + " window(s), " +
+              std::to_string(readings) + " readings)");
+    Check(taken.contains("0.005 0 data/meyer_84.dat"), "(d) the first reading (the shift fixed) put into the line");
+    Check(ok && w.hasProject() && w.holder()->path().endsWith("13N.f3.azr"), "(d) converted again and opened: " + report.toStdString());
+    std::ifstream a(dir / "13N.f3.azr", std::ios::binary), b(dir / "ref.f3.azr", std::ios::binary);
+    std::stringstream sa, sb;
+    sa << a.rdbuf();
+    sb << b.rdbuf();
+    Check(!sa.str().empty() && sa.str() == sb.str(), "(d) the converted project is byte for byte that of the unmodified old 13N");
+    std::ifstream o(dir / "13N.azr", std::ios::binary);
+    std::stringstream so;
+    so << o.rdbuf();
+    Check(so.str() == broken, "(d) the old file is unchanged");
+    Check(fs::exists(dir / "13N.repaired.azr"), "(d) the repaired copy beside it");
+    Check(w.notesBar()->notes().join(" ").contains("repaired"), "(d) a note says which line was repaired");
   }
 
   std::cout << (failures ? "FAILED: " : "ALL PASSED") << (failures ? std::to_string(failures) : "") << std::endl;

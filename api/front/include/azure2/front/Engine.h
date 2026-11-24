@@ -460,6 +460,21 @@ RunResult Run(const RunRequest &request, RunObserver &observer, const std::atomi
 /// `report` holds the converter's notes and questions either way.
 bool ConvertProject(const std::string &from, const std::string &to, std::string &report);
 
+/// A line of the old project the converter could not read (convert::LineProblem, docs/upgrade/qt_gui.md section 19.5):
+/// its 1-based line number in the file (0: the refusal is about no such line), its section and text, the refusal, the
+/// fields the old grammar expects there and the readings proposed (label, line).  None is applied by the converter.
+struct ConvertLineProblem {
+  int line = 0;
+  std::string section, text, problem, expected;
+  std::vector<std::pair<std::string, std::string>> readings;
+};
+/// ConvertProject, with the line a refusal is about in `problem` (line 0 when none).
+bool ConvertProject(const std::string &from, const std::string &to, std::string &report, ConvertLineProblem &problem);
+/// A copy of the text file `from` with its line `line` (1-based) replaced by `text`, written to `to`, which must not
+/// exist (the repair of one line of an old project before it is converted again; the original is kept).  Its line
+/// ends (LF or CRLF) are kept.  False with `why`.
+bool WriteRepairedCopy(const std::string &from, int line, const std::string &text, const std::string &to, std::string &why);
+
 // ---- What the last run wrote, as data (the Plot tab; docs/upgrade/qt_gui.md section 5) ----
 
 /// One point of a curve: one row of an AZUREOut_* file (src/DataOutputFiles.cpp writes them; c.m. frame, or lab
