@@ -34,9 +34,43 @@ While no project is open the window shows a start page: ``New Project`` and
 ``Open Project``, the recent projects, the example projects found on this
 computer (``examples/`` and ``tests/upgrade/T1``-``T3`` of the checkout the
 program was built from, an installed ``share/azure2``, or the directory named
-by ``AZURE2_EXAMPLES``), and one line per tab saying what it is for. A click on
-a project opens it; an ``.azr`` file dropped on the window is opened too.
-``File > Close Project`` returns to the start page.
+by ``AZURE2_EXAMPLES``), and the switch ``Show expert options``. A click on a
+project opens it; an ``.azr`` file dropped on the window is opened too.
+``File > Close Project`` returns to the start page. What each tab is for is its
+tab's tool tip.
+
+Opening a project never shows a box: what there is to know about it (the
+engine's check: errors and warnings; what the converter assumed for an older
+project; a ``<levels>`` the Levels tab could not read) is one bar under the tool
+bar with the number of notes and the first one, ``Details`` (a window that does
+not block the main one, with ``Show Diagnostics``) and ``Dismiss``. The
+Diagnostics panel opens by itself only for errors (a project that would not
+run) or after ``Validate``; warnings are counted in the status bar, whose click
+opens the panel.
+
+**Standard and expert view.** ``View > Show Expert Options`` (also on the start
+page and as ``Standard view`` / ``Expert view`` in the status bar; off at first,
+kept between sessions) shows the options an occasional user does not need. In
+standard view these are hidden: the tabs Nuclear Potential, THM and MCMC, the
+sub-tabs Model Data, Per-channel radii, Gamma Decays and Isospin, the Kind
+column of a table of one kind and the columns empty in every row, the gamma
+multipolarity limits of a project without a photon pair, Export LaTeX, the call
+limit, the covariance refreeze passes, the prior covariance file and the text
+pages of ``<parameterSettings>`` and ``<mcmc>``, the commands MINOS and MCMC of
+the Calculate tab's list and its options other than the parameter file, the
+band, the rate's pairs and temperatures, MINOS's chi-squared rise and the
+sampler's walkers and steps, the Physics tab's pole map (and its THM page
+without THM data), and the Tools menu. The switch changes what is shown, never
+the project or what the engine computes, and an expert option the project uses
+(a record, a section, a value set) is shown in either view, marked as such in
+its tool tip.
+
+**Tables and forms.** A tab of records (data sets, extrapolations, targets,
+beams, detectors, ...) shows the table above and the selected record's form
+below, split by a handle: the table keeps at least five rows, ``Form`` closes
+and opens the form (a double click on a row opens the record in a window of its
+own), and the sizes you set are kept per table between sessions. The ``?``
+beside the buttons says what the section is.
 
 The tool bar holds the main actions, each with its shortcut in its tool tip:
 New (Ctrl+N), Open (Ctrl+O), Save (Ctrl+S), Validate (F7), Calculate (F5), Fit

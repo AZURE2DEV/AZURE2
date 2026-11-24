@@ -42,6 +42,48 @@ results of the converted project are those of the old one: every converted test
 project of the repository gives the old engine's outputs file for file
 (``docs/upgrade/format3_tree.md``).
 
+A line the old grammar cannot read
+----------------------------------
+
+Old files were often edited by hand or written by other versions of AZURE2.  The
+converter reads, each with a note in the report saying what it assumed, the
+variants whose meaning is unambiguous: a UTF-8 byte-order mark before the first
+tag, Windows line ends, tabs between the fields, a comment line starting with
+``#`` in ``<segmentsData>``, ``<segmentsTest>`` or ``<targetInt>`` (skipped), a
+``<targetInt>`` segment list or equation with blanks inside its quotes
+(``"8, 9"``), an unquoted data-file name with a blank when that file exists
+beside the project, and a ``<targetInt>`` line that ends after its empty
+stopping-power equation (its parameter count can only be 0).
+
+Any other line it cannot read stops the conversion, and the refusal says where
+the line is and what could be meant, for example::
+
+   ERROR: --convert: p.azr is not converted: data segment #3 ends with 'data/meyer_84.dat 0 0', ...
+   line 69 of the file, in <segmentsData>:
+       1 1 1 0 5 84.3 84.3 1 1 0 5 0 0.005 data/meyer_84.dat 0 0
+     expected: isActive entranceKey exitKey minE maxE minAngle maxAngle isDiff [J l, for isDiff 2] norm varyNorm
+               normError [energyShift [shiftError varyShift]] dataFile [keyword blocks]
+     possible readings (none is applied by itself; take one, or edit the line, in a copy of the project and convert the copy):
+       1) the energy shift's vary flag is missing: 0 (the shift fixed):
+          1 1 1 0 5 84.3 84.3 1 1 0 5 0 0.005 0 data/meyer_84.dat 0 0
+       2) the normalization's error is missing: 0 (no prior); the next three numbers are the energy shift, its error and its vary flag:
+          1 1 1 0 5 84.3 84.3 1 1 0 0 5 0 0.005 data/meyer_84.dat 0 0
+
+The readings the converter proposes are a missing normalization error or shift
+vary flag written as 0, a missing ``isDiff`` of a test line as 0 or 1, decimal
+commas read as points, and an unquoted file name with blanks quoted.  None is
+taken without you: a normalization, an energy shift or a data type changes the
+fit.  A data line without a data file, or with a number such as ``0,005`` where
+the file's name stands, is refused (it has no reading the converter can
+propose).
+
+The Qt program (:doc:`graphical_interface`) shows such a line in a window: the
+file and line number, the line itself in an editable field, the fields expected
+and one button per reading.  ``Convert again`` writes a copy of the old project
+beside it with the line as edited (``<name>.repaired.azr``; the old file is
+kept) and converts the copy; the lines repaired and the converter's notes are
+listed in the window's notes bar.
+
 What the report says
 --------------------
 

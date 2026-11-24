@@ -845,3 +845,107 @@ unsaved edits the bar appears, the window keeps its value and the disk its own, 
 Keep mine hides the bar and changes nothing, a Save then writes the window's version without a reload; a run of the
 program outside changes the Overview's chi^2 without a click; a data file rewritten makes the stale mark name its data
 set; following off, an outside edit is not read and the choice is kept.
+
+## 19. For an occasional user: no boxes on opening, tables that fit, an expert switch, old lines repaired, less prose (agent gui-casual, 2026-11-24)
+
+The PI (2026-11-24): "it is still full of options that people might not need if they are not experts ... the data
+[tab] does not work very well because the bottom part covers everything ... errors when opening the examples ... like
+20 pop ups ... the conversion not always works due to some differences in the segment lines or target effect lines
+... some parts of the GUI are too verbose".  The audit (work/gui-casual/AUDIT.md, scratch: every example and test
+project of the start page opened through `AZURESetup::open` by a harness that records and closes each modal dialog,
+grabs each tab and sub-tab at 1280x720, 1280x800 and 1440x900, lists visible labels above 140 characters and each
+table's visible rows) gave the list this section answers.
+
+### 19.1 The pop-ups on opening (root cause)
+
+`examples/c12c12_tumino2018` raised 26 modal "Duplicate Pair" boxes, one per `<levels>` row of pair key 6.  The
+project names 12C+12C under key 1 (the THM data's widths) and key 6 (the direct data's widths) on purpose.  The
+Levels tab's reader (`LevelsTab::readLevels`) sent each new key through `PairsTab::addPair`, whose duplicate check is
+for a pair the user types: it refused key 6 with a box per row and never added it, so the channels of key 6 showed
+"n+?" and a save after a Levels edit would have written them with an empty pair.  Now a pair read from the file goes
+to its own key (`PairsModel::pairAt`, `addPair(..., fromFile)`); the check of a typed pair is unchanged.  The other
+16 projects opened with no box.
+
+### 19.2 The notes bar
+
+What there is to know about a project just opened is one bar under the tool bar (`NotesBar`): the engine's check
+("The engine's check: Valid, 50 warning(s)"), a `<levels>` the Levels tab could not read (was a modal box), the
+converter's report and the lines repaired (was a modal "Converted" box).  The bar shows the count and the first note;
+"Details" opens a window that is not modal (all notes; "Show Diagnostics" for the check); "Dismiss" hides it until
+the next project.  The Diagnostics dock opens by itself only for errors or after Validate; warnings no longer open
+it on every open (13N: 150 of 720 px).
+
+### 19.3 Tables that fit
+
+Every records panel (`RecordsPanel`: data sets, extrapolations, model data, targets, beams, detectors, potentials,
+channel radii, gamma decays, isospin) is a vertical splitter: the table keeps at least five rows (minimum height), its
+first height is its rows up to ten (at most 60 % of the panel), the form below can be closed (the "Form" button or
+dragging the handle to the bottom; a double click on a row opens the record's own window as before), and the
+splitter's state is kept per panel in QSettings (`layout/split_<section>`).  Before: stretch 2:5 and sizes {220, 550},
+so 13N's 16 data sets showed 2 rows at 1280x720; now 11 (12 at 800 px, 16 at 900 px).  The Pairs tab's per-channel
+radii and the Levels tab's gamma decays and isospin sit in a splitter below the tab's content (`RecordExtras`), a
+quarter of the height at most at first; their sub-tabs carry the record count.  The Levels list shows 11-12 rows at
+720 px (7-9 before).
+
+### 19.4 Standard and expert view
+
+One switch: View > Show Expert Options, the start page's box "Show expert options" and the status bar's "Standard
+view / Expert view"; off by default, kept in QSettings `view/expertOptions` (`ExpertMode.h`).  The window calls each
+tab's `setExpertMode(bool)`.  The rule: an expert item is hidden in standard view only while it is at its default
+(no record, no line other than comments, no value set); otherwise it is shown in either view and its tool tip says
+"An expert option, shown because the project sets it", so nothing hidden is in effect.  Project files and the
+engine's behaviour do not change with the switch (gui_casual (e) saves before and after and compares the bytes).
+
+| Where | Hidden in standard view (unless in use) |
+|---|---|
+| Tabs | Nuclear Potential (no potential record), THM (no `<thm>` line), MCMC (no `<mcmc>` line) |
+| Particle Pairs | Per-channel radii |
+| Levels and Channels | Gamma Decays, Isospin; the two gamma multipolarity limits (no photon pair); Export LaTeX |
+| Segments | Model Data |
+| Every records table | the Kind column when all rows are of one kind; columns empty in every row |
+| Fitting Settings | call limit, covariance refreeze passes (0), the Priors box (no prior covariance file), the text pages Parameter Settings and Sampler (MCMC) |
+| Calculate | the commands minos and mcmc in the list (the MCMC tab runs mcmc); every option but --parameter-file, --covariance-band, --rate-entrance/exit, --temperature-*, --delta-chi2, --walkers, --steps; each option's help line (its tool tip stays) |
+| Physics | the pole map page; the THM page without `<thm>` |
+| Menus | Tools (pyazr's child processes) |
+
+Not classified as expert (kept): Experimental Effects (targets, beams, detectors are needed for most data), the
+record forms' "Every field" (the forms already hide rare fields), the Configure menu, the Plot tab, Physics'
+Functions, Channels, R-matrix and Stopping pages.
+
+### 19.5 Old lines the converter could not read
+
+The repository's 182 old projects and the public 12C(p,g) project converted already; the failures came from lines
+written by hand or by other versions.  Constructed variants of the old 13N fixture (27, scratch `conv/variants.py`)
+gave: refused although unambiguous (BOM; a `#` comment line; a quoted segment list with a blank; an unquoted file
+name with a blank when the file exists; a target line ending after its empty stopping equation), a crash (a data line
+without a file: an uncaught exception), a silent misreading (a decimal-comma shift taken for the data file's name)
+and refusals without the file line or a way out (a data line short of a field, a test line short of isDiff, a decimal
+comma).  `convert/` now reads the unambiguous variants with a note each, refuses the no-file and decimal-comma lines,
+and attaches to a line refusal a `LineProblem` (`LineRepair.h`): the file line number (the format-2 step does not move
+these sections), the text, the fields expected and the readings proposed, each checked to read with the old
+grammar (`OldLineReads`); none is applied by the converter.  The refusal text ends with the same diagnosis, so
+`AZURE2 --convert` and `pyazr.convert_azr` print it.  The facade passes it as `ConvertLineProblem`; the window's
+`ConvertRepairDialog` shows the line editable, the readings as buttons and "Convert again", which converts a copy
+`<name>.repaired.azr` (`WriteRepairedCopy`; the old file is never written).  Tests: `convert_line_repair`, gui_casual
+(d).
+
+### 19.6 Less prose
+
+Explanations moved to tool tips or a "?" button; numbers and states stay: the records panels' help sentence (a "?"
+beside the buttons), the text panels' paragraph, the Fitting tab's prior paragraph, the Calculate options' help lines
+(standard view), the Levels tab's missing-J^pi paragraph (one red line, the explanation in its tip), the Overview's
+"No run yet" paragraph, project path, pair thresholds and chart note, the Physics function's formula and source and
+the pole map's paragraph (one line each, the rest in the tip), the start page's eleven lines about the tabs (now the
+tabs' tool tips), the R-matrix page's list of every level energy (the pole table lists them), the Physics session line.
+The plot's pole labels are no longer drawn over each other.  GUI tests whose expectations changed on purpose:
+gui_window's File > Convert no longer answers a report box (a note now); gui_levels reads "switch the option on" from
+the missing-J^pi label's tool tip; gui_polish finds the pairs table by its name `pairsView` (the radii table shares the
+Pairs tab's splitter now).
+
+### 19.7 Tests
+
+`tests/gui/gui_casual_test.cpp` (label gui): (a) every example and test project opens with no modal dialog, the pairs
+at their keys; (b) the notes bar; (c) the data-set table at 1280x720 shows at least eight rows, Form closes the form,
+the choice is kept, the Levels list at least ten rows, empty extras hidden; (d) the converter's repair path, byte for
+byte against the unmodified old file's conversion; (e) the expert switch hides and shows, an in-use item is shown in
+standard view, the file is unchanged.  `convert/tests/line_repair_test.cpp` (ctest `convert_line_repair`).
