@@ -4,6 +4,72 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-24 (agent gui-casual) — `feature/upgrade-gui-casual`: the Qt program for an occasional user
+
+Cut from `origin/feature/upgrade` at `43ac5acd`.  **Design** `docs/upgrade/qt_gui.md` section 19; user guide
+`graphical_interface.rst` (the window) and `older_projects.rst` (a line the old grammar cannot read).
+
+**What was wrong, root causes.**  (1) `examples/c12c12_tumino2018` opened with 26 modal "Duplicate Pair" boxes: the
+project names 12C+12C under keys 1 (THM widths) and 6 (direct widths); the Levels tab's reader sent key 6 through the
+Pairs tab's interactive duplicate check, which refused it per row and never added it (its channels showed "n+?", and
+a save after a Levels edit would have written them with an empty pair).  The other 16 projects of the start page
+opened with no box.  (2) 13N's 50 validation warnings opened the Diagnostics dock on every open (150 of 720 px).
+(3) Every records panel gave its form 5/7 of the height: 13N's data-set table showed 2 of 16 rows at 1280x720;
+the Levels tab's empty Gamma Decays/Isospin and the Pairs tab's empty per-channel radii took the lower third/half.
+(4) Converter: unambiguous variants refused (BOM, `#` comment lines, quoted list with a blank, unquoted file name
+with a blank, target line ending after an empty stopping equation), a data line without a file crashed `--convert`
+(uncaught exception), a decimal-comma shift was read as the data file's name (silently, the shift lost), and
+refusals named the segment but not the file line, the fields expected or a way out.
+
+**Changes.**  Loader fix (pair at its key); `NotesBar` (one non-modal bar of notes per open: the engine's check, a
+Levels read failure, the converter's report; Details not modal; the dock opens by itself only for errors or after
+Validate); `RecordsPanel` splitter (table at least 5 rows, first height its rows up to 10, Form button, sizes kept per
+panel in QSettings `layout/split_<section>`), `RecordExtras` (Pairs/Levels lower panels in a splitter, counts on
+their tabs); one expert switch (`ExpertMode.h`, View > Show Expert Options, start page, status bar; QSettings
+`view/expertOptions`, off by default; an expert item is hidden only while at its default, else shown and marked);
+converter (`convert/src/LineRepair.cpp`, `OldProject.cpp`, `Convert.cpp`): the unambiguous variants read with a note
+each, no-file and decimal-comma lines refused, a line refusal carries `ConvertResult::lineProblem` (file line,
+text, fields expected, readings proposed and checked, none applied) and ends with that diagnosis as text (CLI,
+pyazr); facade `ConvertProject(..., ConvertLineProblem&)`, `WriteRepairedCopy`; `ConvertRepairDialog` (the line
+editable, readings as buttons, "Convert again" on a copy `<name>.repaired.azr`); prose moved to tool tips or a "?"
+(records panels, text panels, Fitting priors, Calculate option help in standard view, Levels missing-J^pi, Overview
+no-run/path/thresholds/chart note, Physics function doc, Channels page, R-matrix level list, pole map paragraph,
+session line, start page's tab lines -> tab tool tips); plot marker labels no longer drawn over each other.  No
+engine (src/, include/, physics/) file touched; `convert/` only as stated.
+
+**Expert classification (the PI may move items; `qt_gui.md` 19.4 has the table).**  Hidden in standard view unless
+in use: tabs Nuclear Potential, THM, MCMC; Per-channel radii; Gamma Decays, Isospin; the two gamma multipolarity
+limits (no photon pair); Export LaTeX; Model Data; the Kind column of a one-kind table and columns empty in every row;
+call limit, covariance refreeze passes, Priors box (prior covariance file), Parameter Settings (text), Sampler (MCMC)
+pages; commands minos and mcmc in the Calculate list; Calculate options other than --parameter-file,
+--covariance-band, --rate-entrance/exit, --temperature-*, --delta-chi2, --walkers, --steps; the options' help lines;
+Physics pole map (and THM page without THM); Tools menu.  Unsure, decided as kept: Experimental Effects, the record
+forms' "Every field", Configure menu.  Unsure, decided as expert: the Tools menu (EXFOR/ENSDF imports may be wanted
+by casual users), minos.
+
+**Tests.**  New `gui_casual` (label gui): (a) zero modal dialogs on opening each of the 10 examples and T1-T3, 13N,
+pairs at their keys (fails on the old loader: 26 dialogs, 5 pairs, rows changed); (b) notes bar; (c) 13N data table
+>= 8 rows at 1280x720 (11), Form closes/opens, kept for the next window, Levels list >= 10 rows (11), empty extras
+hidden; (d) converter repair path byte for byte against the unmodified file's conversion; (e) expert switch hides and
+shows, in-use items shown, the saved file unchanged.  New `convert_line_repair` (every accepted variant, the
+refusals with their file lines, the readings).  `gui_window`'s File > Convert check no longer answers a report box
+(changed on purpose: the report is a note).
+**Run** (`work/b-gui-casual`, Release, GUI on, Qt 6.11 of the conda env, `-j4`): build 0 warnings (the touched
+sources recompiled); `ctest -LE slow -j4`: 405 of 405 passed, 6 rmfit tests skipped (rmfit_enginepin passed with
+PYAZR_ENGINE_DIR set); `ctest -L gui`: 8 of 8; `tests/run_tests.sh` (this build's AZURE2): 185 passed, 0 failed.  Audit harness (scratch
+`work/gui-casual/audit/`): all 17 start-page projects, standard and expert view, 1280x720 / 1280x800 / 1440x900: 0 modal
+dialogs; visible labels above 140 characters 241 -> 44 (standard) / 61 (expert); data-set rows in sight 1-2 -> 8-12
+(720 px), 10-14 (800 px), 12-17 (900 px).  Screenshots: `work/gui-casual/shots/before/`, `final_m0_*`, `final_m1_*`,
+`final_misc*`, `test/`.
+**Not run**: `ctest -L slow`, a real display, Qt 6.4 (CI's), macOS/Windows.
+**Open.**  The THM tab's experiment fields (ps, psNodes, distortion, opticalAA/SF, ...) are shown in either view (not
+classified); Tumino's extrapolation grids read "list 1.5 ... 5.4999999999999997 MeV" (the example's converted exact
+grid, cosmetic); the Levels channel table's Value column is cut at every size; natural_neon's data table still
+scrolls horizontally at 1280 (its Target and Beam columns hold values); pyazr gets the converter's diagnosis as the
+refusal's text only (no structured `lineProblem` in the binding).
+
+
+
 ## 2026-11-20 (director) — round 8 joined: the Physics tab, the polish, the Overview page, changes on disk
 
 Merged into `feature/upgrade-6` after `0bab4c51`: `feature/upgrade-8-physqt`, `-polish`, `-overview` (their entries
