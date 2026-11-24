@@ -404,7 +404,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     complex spinTerm = -sqrt((2. * theInitialSValue + 1.) * (2. * theFinalSValue + 1.)) *
         AngCoeff::Racah(1, theInitialSValue, theFinalJValue, theInitialLValue, theFinalSValue, theInitialJValue) * tau;
     ecAmplitude = complex(0.0, 1.0) *
-        sqrt(fstruc) * pow(hbarc, 1.5) / (2 * 1.00727638 * uconv) * sqrt(16 / 3) * sqrt(2 * theFinalJValue + 1.) *
+        sqrt(fstruc) * pow(hbarc, 1.5) / (2 * 1.00727638 * uconv) * sqrt(16. / 3.) * sqrt(2 * theFinalJValue + 1.) *
         (orbitalTerm + spinTerm);
   }
 
