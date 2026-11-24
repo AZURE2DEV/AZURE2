@@ -154,6 +154,11 @@ FittingTab::FittingTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent)
   layout->addLayout(top);
   layout->addWidget(texts, 1);
   connect(holder_, &ProjectHolder::opened, this, &FittingTab::reload);
+  // a row of the Parameters table writes <parameterSettings>: its text page shown at once in standard view (a hidden
+  // page must never hold lines in effect)
+  connect(holder_, &ProjectHolder::sectionEdited, this, [this](const QString &s) {
+    if (s == "parameterSettings" || s == "mcmc" || s == "config") updateExpertRows();
+  });
   reload();
 }
 

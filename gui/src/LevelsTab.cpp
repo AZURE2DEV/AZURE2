@@ -91,6 +91,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   maxLSpin->setValue(2);
   QLabel *maxLLabel = new QLabel(tr("Maximum Orbital Momentum"));
   maxMultSpin = new QSpinBox;
+  maxMultSpin->setObjectName("maxMultSpin");
   maxMultSpin->setMinimum(1);
   maxMultSpin->setMaximum(10);
   maxMultSpin->setSingleStep(1);
@@ -314,9 +315,11 @@ LevelsTab::LevelsTab(QWidget *parent) :
   mainLayout->addWidget(channelsBox, 0, 1, 2, 1);
   mainLayout->addWidget(configBox, 0, 2, 1, 1);
   mainLayout->addLayout(detailsBox, 1, 2, 1, 1);
-  mainLayout->setColumnStretch(0, 1);
-  mainLayout->setColumnStretch(1, 1);
-  mainLayout->setColumnStretch(2, 1);
+  // the channel table holds nine columns, the configuration a few lines: the middle column wider, so that the Value
+  // column (the width or ANC) is not cut to "2..." (qt_gui.md section 19.8)
+  mainLayout->setColumnStretch(0, 4);
+  mainLayout->setColumnStretch(1, 5);
+  mainLayout->setColumnStretch(2, 3);
   mainLayout->setRowStretch(0, 3);
   mainLayout->setRowStretch(1, 4);
   // the records that belong to the level scheme (gamma decays, isospin): sub-tabs below the levels in a splitter, a
@@ -783,6 +786,7 @@ void LevelsTab::updateChannelsPairAddedEdited() {
   }
   channelsView->resizeRowsToContents();
   updateMissingSpinParities();
+  updateExpertRows();  // a photon pair added in standard view: its multipolarity limits shown at once
 }
 
 void LevelsTab::updateChannelsPairRemoved(int pairIndex) {
@@ -802,6 +806,7 @@ void LevelsTab::updateChannelsPairRemoved(int pairIndex) {
     }
   }
   channelsView->resizeRowsToContents();
+  updateExpertRows();
 }
 
 void LevelsTab::updateDetails(const QItemSelection &selection) {

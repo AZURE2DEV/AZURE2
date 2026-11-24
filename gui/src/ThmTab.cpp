@@ -15,6 +15,7 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+#include "ExpertMode.h"
 #include "SectionTextPanel.h"
 
 namespace {
@@ -46,8 +47,11 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
   message_->setObjectName("thmMessage");
   message_->setWordWrap(true);
 
+  expert_ = expert::Enabled();
   QFormLayout *optionsForm = new QFormLayout;
   QFormLayout *experimentForm = new QFormLayout;
+  optionsForm_ = optionsForm;
+  experimentForm_ = experimentForm;
   for (int k = 0; k < 2 && k < (int)kinds_.size(); k++)
     for (const azure2::front::FieldInfo &f : kinds_[k].fields) {
       QWidget *editor = editorFor(f, k == 1);
@@ -180,10 +184,23 @@ void ThmTab::reload() {
   QMap<QString, QString> options;
   for (const azure2::front::ThmEntry &e : azure2::front::ThmEntries(holder_->project()))
     if (e.experiment.empty()) options[QString::fromStdString(e.key)] = QString::fromStdString(e.value);
-  for (auto it = optionEditors_.constBegin(); it != optionEditors_.constEnd(); ++it)
+  for (auto it = optionEditors_.constBegin(); it != optionEditors_.constEnd(); ++it) {
     SetEditorText(it.value(), options.value(it.key()));
+    // an option the project gives is shown in either view; the others are expert options (qt_gui.md section 19.4)
+    optionsForm_->setRowVisible(it.value(), expert_ || options.contains(it.key()));
+  }
   filling_ = false;
   fill();
+}
+
+void ThmTab::setExpertMode(bool on) {
+  expert_ = on;
+  reload();
+}
+
+bool ThmTab::rowShown(const QString &key, bool experiment) const {
+  QWidget *e = (experiment ? experimentEditors_ : optionEditors_).value(key, nullptr);
+  return e && !e->isHidden();
 }
 
 void ThmTab::fill() {
@@ -194,6 +211,9 @@ void ThmTab::fill() {
     if (!name.empty() && e.experiment == name) values[QString::fromStdString(e.key)] = QString::fromStdString(e.value);
   for (auto it = experimentEditors_.constBegin(); it != experimentEditors_.constEnd(); ++it) {
     SetEditorText(it.value(), values.value(it.key()));
+    // the keys an occasional THM user sets, and any key the experiment gives, in either view; the rest in expert view
+    const bool standard = QStringList{"beam", "target", "spectator", "Ebeam", "ps", "background"}.contains(it.key());
+    experimentForm_->setRowVisible(it.value(), expert_ || standard || values.contains(it.key()));
     const QString needs = presentWith_.value(it.key());
     it.value()->setEnabled(!name.empty() && (needs.isEmpty() || values.contains(needs)));
   }

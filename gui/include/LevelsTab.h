@@ -64,8 +64,8 @@ class LevelsTab : public QWidget {
   std::vector<azure2::front::LevelRow> levelRows();
   /*! A panel shown below the levels (gamma decays, isospin; AZURESetup). */
   void addExtraPanel(const QString &title, RecordsPanel *panel);
-  /// Standard or expert view (qt_gui.md section 19.4): the gamma multipolarity limits (unless a pair is a photon pair
-  /// or they are set above 1), Export LaTeX and the panels without records hidden in standard view.
+  /// Standard or expert view (qt_gui.md section 19.4): the gamma multipolarity limits (unless a pair is a photon pair:
+  /// without one they select no channel), Export LaTeX and the panels without records hidden in standard view.
   void setExpertMode(bool on);
   RecordExtras *extraPanels() const { return extras; }
   /*! Model rows of the levels in the order writeNuclearFile writes them: compound nuclei in order of first

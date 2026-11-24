@@ -274,7 +274,12 @@ AZURESetup::AZURESetup() {
     });
     connect(overview, &OverviewPage::recordRequested, this, &AZURESetup::showRecord);
     connect(overview, &OverviewPage::tabRequested, this, [this](const QString &name) {
-      tabWidget->setCurrentWidget(name == "fitting" ? static_cast<QWidget *>(fittingTab) : static_cast<QWidget *>(runTab));
+      QWidget *to = name == "fitting"    ? static_cast<QWidget *>(fittingTab)
+                    : name == "pairs"    ? static_cast<QWidget *>(pairsTab)
+                    : name == "levels"   ? static_cast<QWidget *>(levelsTab)
+                    : name == "segments" ? static_cast<QWidget *>(segmentsTab)
+                                         : static_cast<QWidget *>(runTab);
+      tabWidget->setCurrentWidget(to);
     });
     if (QComboBox *fitter = fittingTab->findChild<QComboBox *>("fitterCombo")) {
       connect(fitter, &QComboBox::currentTextChanged, overview, &OverviewPage::setFitterChoice);
@@ -805,6 +810,7 @@ void AZURESetup::setExpertMode(bool on) {
   for (SectionsTab *t : {segmentsTab, effectsTab, potentialTab}) t->setExpertMode(on);
   fittingTab->setExpertMode(on);
   runTab->setExpertMode(on);
+  thmTab->setExpertMode(on);
   static_cast<PhysicsTab *>(physicsTab_)->setExpertMode(on);
   toolsMenu_->menuAction()->setVisible(on);
   updateExpertTabs();
