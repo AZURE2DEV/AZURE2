@@ -1586,6 +1586,12 @@ void FieldEditor::typeText(const QString &text) {
   emit changed();
 }
 
+void FieldEditor::setApplies(bool on) {
+  if (applies_ == on) return;
+  applies_ = on;
+  check();
+}
+
 void FieldEditor::showMessage(const QString &message, bool error) {
   message_->setText(message);
   message_->setStyleSheet(error ? "color: #c0392b;" : "color: palette(mid);");
@@ -1597,8 +1603,9 @@ QString FieldEditor::message() const { return message_->text(); }
 bool FieldEditor::check() {
   const QString t = text();
   if (t.trimmed().isEmpty()) {
-    showMessage(field_.required ? tr("Required: %1").arg(Q(field_.grammar)) : QString(), field_.required);
-    return !field_.required;
+    const bool required = field_.required && applies_;  // required where it applies (qt_gui.md section 19.8)
+    showMessage(required ? tr("Required: %1").arg(Q(field_.grammar)) : QString(), required);
+    return !required;
   }
   front::ValueParts parts;
   std::string why;

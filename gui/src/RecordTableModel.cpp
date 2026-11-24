@@ -24,6 +24,33 @@ QString RecordText(const front::Record &r) {
   return t + "</pre>";
 }
 
+/// The cell's text with each number written with more than 12 significant digits shown with 12 ("5.4999999999999997"
+/// as "5.5"): a grid accumulated in floating point reads as the grid it is.  Display only: the field, the form, the
+/// row's tip and the file keep the text as written (qt_gui.md section 19.8).
+QString DisplayRounded(const QString &text) {
+  const QStringList words = text.split(' ');
+  QStringList out;
+  out.reserve(words.size());
+  for (const QString &w : words) {
+    int digits = 0;
+    bool started = false, plain = !w.isEmpty();
+    for (const QChar ch : w) {
+      if (ch == 'e' || ch == 'E') break;
+      if (ch.isDigit()) {
+        started = started || ch != '0';
+        if (started) digits++;
+      } else if (ch != '.' && ch != '-' && ch != '+') {
+        plain = false;
+        break;
+      }
+    }
+    bool ok = false;
+    const double v = plain && digits > 12 ? w.toDouble(&ok) : 0.0;
+    out << (ok ? QString::number(v, 'g', 12) : w);
+  }
+  return out.join(' ');
+}
+
 bool InPlace(const front::FieldInfo &f) {
   if (f.repeatable) return false;
   const std::string &t = f.value.type;
@@ -143,7 +170,7 @@ QVariant RecordTableModel::data(const QModelIndex &index, int role) const {
   switch (role) {
     case Qt::DisplayRole:
       if (c.type == Column::Include || c.type == Column::Fit) return QVariant();
-      return cells_[row][index.column()];
+      return c.type == Column::Field ? DisplayRounded(cells_[row][index.column()]) : cells_[row][index.column()];
     case Qt::EditRole:
       return editText(index);
     case Qt::CheckStateRole:

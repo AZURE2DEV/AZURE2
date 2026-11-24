@@ -90,6 +90,10 @@ class FieldEditor : public QWidget {
   void prefill();
   /// Give or leave out an optional structured field (its "use" switch); an edit.
   void setUsed(bool on);
+  /// Whether the field applies to the record as the form holds it (its schema condition, "kind is layer or ..."): a
+  /// required field that does not apply is not marked missing (RecordsPanel::applyConditions).
+  void setApplies(bool on);
+  bool applies() const { return applies_; }
 
  signals:
   void changed();
@@ -109,6 +113,7 @@ class FieldEditor : public QWidget {
   bool edited_ = false;
   bool textMode_ = false;
   bool loading_ = false;
+  bool applies_ = true;
 };
 
 /// Is `field` the record's quantity (an enum whose words are the quantities of its kind)?
