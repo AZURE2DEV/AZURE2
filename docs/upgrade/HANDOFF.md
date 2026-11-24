@@ -4,6 +4,22 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-24 (third pass of gui-casual) — the display faults left in the final screenshots
+
+On top of `61aabb81`; `qt_gui.md` section 19.8, "Third pass".  `gui/` and `tests/gui/` only.  Fixed: the Physics
+sweep fields cut ("769448" for 14.769448; now whole, the sweep in two rows); the plot legend over the curves (now in a
+free corner, else below the axes in columns) and pole labels over each other (now in x order in the lowest free of
+four rows, translucent; a label without room left out, its line kept); the repair dialog collapsing blanks (now the
+line as in the file; unedited "Convert again" gives a byte-identical copy; gui_casual (d)'s expectation read the
+collapsed text and was changed with it); natural_neon's isotope help line on every entry (now once) and a beam
+spread's doc twice; the Levels tab's J^pi filter, search and energy hints and Value/θ² columns cut (filter sized to
+its text, shorter hints, hard-sphere box in two lines, columns 4:6:2).  **Run**: every changed source recompiled (83 compiles), 0 warnings; `ctest -LE slow -j2` (run beside `run_tests.sh` so that at most four threads ran) 405 of 405 passed (6 rmfit skipped as before); `tests/run_tests.sh` 185 passed, 0 failed.  Screenshots after the last
+code change: `work/gui-casual/shots/review3/final_m0_1280x720/` (all 14 projects, START, NEW, every tab, sub-tab and
+Physics page) and `final_run_calc/`; the pass that was looked at: `pass1_m0_1280x720/`.  Not run: `ctest -L slow`, a
+sanitizer build, a real display, Qt 6.4, macOS/Windows.
+
+
+
 ## 2026-11-24 (second review of gui-casual) — `feature/upgrade-gui-casual`: a reviewer's and a casual user's pass
 
 On top of `991118ca`.  **Design** `docs/upgrade/qt_gui.md` section 19.8; working list `work/gui-casual/AUDIT.md`

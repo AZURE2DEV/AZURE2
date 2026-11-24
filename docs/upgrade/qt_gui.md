@@ -979,7 +979,7 @@ the whole text is in the row's tip; a column the user drags keeps its width unti
 significant digits is shown with 12 in a table cell ("list 1.5 ... 5.5 MeV lab" for Tumino's grid
 `... 5.49999999999997`); the field, the form, the row's tip and the file keep the text as written (the shortest
 round-trip form of that double is itself 15 digits, so only a rounding of the display helps).  The Levels tab's
-middle column is wider (stretch 4:5:3): the channel table's Value column is 93 px at 1280x720 instead of about 25
+middle column is wider (stretch 4:5:3, then 4:6:2 in the third pass below): the channel table's Value column is 93 px at 1280x720 instead of about 25
 ("2...").  The kernel preview of a record says "Not drawn: <reason>" only when the reason names the record (13N's
 detector showed an engine message about a data set's quadrature field).
 
@@ -1012,3 +1012,22 @@ description is invented.
 **Tests.**  gui_casual (f) checks each item above; gui_window's File > Convert now checks that the converter's report
 is a note of the bar (the box it replaced was answered without being checked).  No expectation of an existing test
 changed in this pass.
+
+**Third pass (the coordinator, on the final screenshots).**  (1) The sweep fields of the Physics pages (E_x from/to
+of the R-matrix page, E_c of Channels, the Functions and THM sweeps) are wide enough for a value such as 14.769448
+(they showed "769448"); the sweep takes two rows (range and unit; points and log) so that the form column still fits.
+(2) `PlotWidget` places its legend in the first corner of the panel (top right, top left, bottom right, bottom left)
+that covers no point of a curve or of the data, and below the axes, in as many columns as fit, when every corner
+covers some (Tumino's 4+ phases: below); the pole labels are placed in x order in the lowest of four rows where they
+overlap no other label, on a translucent background; a label with no room is left out, its dashed line kept (the
+energies are in the pole table).  (3) The repair window shows the refused line exactly as in the file (runs of blanks
+and tabs, also inside quotes); "Convert again" without an edit writes the copy byte for byte as the old file.
+gui_casual (d) read the collapsed text before ("0.005 data/meyer_84.dat"): changed with the dialog, on purpose.
+(4) A structured value's alternative doc beside its choice is shown only when there is a choice and the alternative
+has a keyword: natural_neon's isotopes no longer repeat "abundance weight of a target nucleus" on every entry, and a
+beam's spread no longer shows "a constant Gaussian sigma" twice.  (5) A look at every standard-view screenshot at
+1280x720 found, and fixed: the Levels tab's J^pi filter cut ("All Jπ (34"), its search and energy hints cut, θ² and
+Value cut again by the wider controls; the hard-sphere box now takes two lines and the columns stretch 4:6:2.  Left as
+they are: T2's data-set table (19 columns) still scrolls sideways at 1280 px (its narrowest width is 12 characters per
+column; T2 is a test project, listed in expert view only); a function's name and summary in the Physics drop-downs
+is elided (the whole text is in its tip); with six long legend entries the legend below the axes takes six rows.
