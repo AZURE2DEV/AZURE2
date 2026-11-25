@@ -4,6 +4,33 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-25 (third round of gui-casual) — the PI's look at the screenshots; the examples from a manifest
+
+On top of `ed52efcc`; `qt_gui.md` section 19.9 (with the table of every candidate example and its check numbers);
+user guide `getting_started/examples.rst`.  `gui/`, `tests/gui/`, `examples/index.json` and docs only.
+
+**Display.**  The Overview's chi²/N bars beside their numbers, on a scale an outlier does not flatten (capped at ten
+times the median, said in the tips); no file tag or grammar in the standard view (plain hints, "Required", words for
+the sections; the expert view and text mode keep them); the forms' text buttons in one column, one size; numbers with
+more than 12 significant digits shown with 12 in tables and forms while the file's text is written back unless the
+user edits the number (gui_casual (g): every manifest project saved after visiting every tab and record form is byte
+for byte the save made on opening).
+
+**Examples.**  `examples/index.json` drives the start page: 4 groups, 11 reactions (one line each), 5 variants under
+their reaction (o18 2008, o17_guardo, T1/T3 start values, T2 true parameters).  Left out, with reasons in 19.9:
+tests/13N (50 validation warnings), 18O_p_a_thm (2 warnings), 15N_p_a, 17O, 6Li_d, 7Li_p_a (reactions already listed;
+regression pins), tests/natural_neon (reduced copy), 7Li_p_ay and the code-path tests, screening_6li (PI's decision).
+Install rule in `gui/src/CMakeLists.txt` (components gui and examples).  **Proposals for the PI**: rename the example
+folders after the reaction (references: docs/source/getting_started/examples.rst, theory/thm_implementation.rst,
+user_guide/chi_squared.rst, tests/upgrade/CMakeLists.txt and predictions.txt, tests/thm_* check.sh, tests/pyazr
+thm_nonbrune_grid_test.py, tests/gui/gui_casual_test.cpp, gui/src/PhysicsSessionPages.cpp, the manifest); re-measure
+the "file alone" numbers of examples.rst (c12c12 117.516 not 112.086, f19 77.635 not 79.408); decide on
+screening_6li.
+
+**Run.**  Every source changed since `43ac5acd` in `gui/`, `tests/gui/`, `convert/`, `api/front/` recompiled (84 compiles): 0 warnings.  `ctest -LE slow -j2` beside `tests/run_tests.sh` (four threads in all): 405 of 405 passed (6 rmfit skipped as before); `run_tests.sh` 185 passed, 0 failed.  Screenshots after the last code change: `work/gui-casual/shots/review3/final_m{0,1}_{1280x720,1440x900}/` (start page, New Project, every manifest project), `final_run_calc/`, `final_run_fit/` (three examples each), `scenario/` (Calculate, Fit, Stop, expert, Save As).  Not run: `ctest -L slow`, a sanitizer build, the installed program itself (only `cmake --install --component examples`: with this machine's `GUI_LINK_OPTIONS` the rpath rewrite of `AZURESetup` at install fails, a build-environment matter), a real display, Qt 6.4, macOS/Windows.
+
+
+
 ## 2026-11-24 (third pass of gui-casual) — the display faults left in the final screenshots
 
 On top of `61aabb81`; `qt_gui.md` section 19.8, "Third pass".  `gui/` and `tests/gui/` only.  Fixed: the Physics

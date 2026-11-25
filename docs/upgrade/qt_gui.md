@@ -1031,3 +1031,73 @@ Value cut again by the wider controls; the hard-sphere box now takes two lines a
 they are: T2's data-set table (19 columns) still scrolls sideways at 1280 px (its narrowest width is 12 characters per
 column; T2 is a test project, listed in expert view only); a function's name and summary in the Physics drop-downs
 is elided (the whole text is in its tip); with six long legend entries the legend below the axes takes six rows.
+
+### 19.9 Third round: the PI's look at the screenshots; the examples (2026-11-25)
+
+The PI: "Chi2 small bar overflow in the overview page, the small ones in the column, there are some sparse "<" like
+the <thm> and in other places, some small buttons are not aligned. Review again for bugs, whenever possible
+approximate to not have 9999999 numbers. Reduce the number of examples, or at least do not replicate the reactions
+and structure them nicely renaming them, and only the ones that checks out. Add also other examples ..."
+
+**Display.**  (1) The Overview table's chi²/N bars sit left of their numbers, never under them, and both the column
+and the chart use `BarChart::ScaleTop`: the largest value, or ten times the median when one value exceeds ten times
+the median (a cut bar is drawn full with a break; the header's and the chart's tips say which).  Names at most 18
+characters, elided.  (2) No file tag or grammar in the standard view: tips and notes say "the data sets", "the
+parameter settings", "THM options"; a field's placeholder is a plain hint (`PlainHint`: "e.g. 20Ne" for
+"<A><Symbol>", one "<word>" as the word, nothing for a grammar with alternatives); a missing required field says
+"Required"; the file key and the grammar remain in the expert view's tips and in a field's text mode, and the text
+pages keep the section's own name.  The engine's messages (Diagnostics, a refused value) are the engine's and keep
+its words.  (3) The forms' text buttons have one size and stand in one column at the right edge (the basic form lost
+its extra margin; a repeatable entry's remove button moved to its left); "?" and "Form" have the buttons' height.
+(4) Numbers written with more than 12 significant digits are shown with 12 (`RoundedNumbers`, one implementation for
+the record tables and the forms); a form's number line keeps the exact text and gives it back while it shows what it
+was given, so a field the user did not touch writes the file's text.  gui_casual (g) saves every manifest project on
+opening and again after every tab, sub-tab and record form was shown: the two files are identical byte for byte.
+
+**Review.**  Driven in the harness (`AUDIT_SCENARIO=1`, `shots/review3/scenario/`): Calculate, Fit, Stop after 4 s
+(Tumino: stopped after 1,411 calls, status "stopped" on the Overview, the step "The fit ended with status stopped"),
+the expert switch after the run, Save As and reopening the copy: no dialog, no note, the run's outputs shown.  The
+condition parser of 19.8 reads only the two forms `experiment::Describe` writes and takes any other as holding (the
+field stays marked); the phase unwrapping touches only steps across 0/180; the first data set is ticked only when
+the list of curves changed and nothing was ticked; File > Open and the start page are disabled while a run goes on.
+
+**Examples.**  The start page lists `examples/index.json` (format 1): groups, one entry per reaction (`reaction`,
+`source`, `what`, `project`, `variants`), paths relative to the folder holding `examples/`.  `StartPage::readManifest`
+reads the first place that has one ($AZURE2_EXAMPLES, a `share/azure2` or checkout above the program, the checkout the
+program was built from); without a manifest the projects of `examples/*/` are listed as before.  Installed: the
+program (component `gui`), the manifest, `examples/` and the manifest's other folders under `share/azure2`
+(component `examples`; tested with `cmake --install . --component examples`: 1.6 MB, every entry present).
+
+Every candidate was checked in this build (`work/gui-casual/examples_check/`: `AZURE2 --validate`, `AZURE2
+calculate`, two threads; then the window: gui_casual (a)):
+
+| project | reaction | validate | χ² total (data) / N | time | listed |
+|---|---|---|---|---|---|
+| examples/c12c12_tumino2018 | 12C+12C → 20Ne+α, 23Na+p | clean | 117.516 / 247 | 1.4 s | entry |
+| examples/f19_pag_thm | 19F(p,αγ)16O | clean | 77.635 / 59 | 0.2 s | entry |
+| examples/o18_lacognata2010 | 18O(p,α)15N | clean | 330.065 (329.703) / 161 | 3.4 s | entry |
+| examples/o18_lacognata2008 | 18O(p,α)15N, THM only | clean | 35.876 / 30 | 0.1 s | variant |
+| examples/o17_guardo2017_fit | 17O(n,α)14C | clean | 12.996 / 23 | 0.1 s | entry |
+| examples/o17_guardo | 17O(n,α)14C, first input | clean | 67.597 / 23 | 0.1 s | variant |
+| examples/n15_lacognata2007 | 15N(p,α0)12C | clean | 224.425 (223.414) / 208 | 0.1 s | entry |
+| examples/li7_tumino2006 | 7Li(p,α)4He | clean | 448.620 (439.149) / 294 | 0.3 s | entry |
+| examples/li6_pizzone2011 | 6Li(d,α)4He | clean | 158.967 (157.040) / 132 | 0.1 s | entry |
+| examples/natural_neon | n + 20,21,22Ne | clean | 36347.4 / 6328 | 5.3 s | entry |
+| tests/upgrade/T1, T1_start | p + 12C → 13N (synthetic) | clean | 482.275 / 442; 15387.2 | 2.1 s | entry, variant |
+| tests/upgrade/T2, T2_true | p + 15N → 16O (synthetic) | clean | 10910.1 (10905.2) / 330; 330.835 | 0.2 s | entry, variant |
+| tests/upgrade/T3, T3_start | 8Be (synthetic) | clean | 518.713 (509.684) / 494; 15550.3 | 0.1 s | entry, variant |
+| tests/13N | 12C(p,γ), 12C(p,p) | 50 warnings | 336480 / 593 | 5.7 s | no: a warning note on opening, χ²/N 567 |
+| tests/18O_p_a_thm | 18O(p,α)15N | 2 warnings (zero and negative errors) | 2228.79 / 118 | 0.1 s | no: warnings; reaction listed |
+| tests/15N_p_a | 15N(p,α)12C | clean | 4601.32 / 157 | 0.1 s | no: reaction listed, χ²/N 29 |
+| tests/17O | 17O(n,α)14C | clean | 96.906 / 23 | 0.1 s | no: reaction listed (a regression pin) |
+| tests/6Li_d, tests/7Li_p_a | 6Li(d,α), 7Li(p,α) | clean | 682.148 / 62; 2138.46 / 66 | 0.2 s | no: reactions listed; "a regression pin, not a physics benchmark" (README) |
+| tests/natural_neon | n + Ne | clean | 3342.70 / 1308 | 0.8 s | no: a reduced copy of the example |
+| tests/7Li_p_ay | 7Li(p,p) A_y | clean | 3955.41 / 72 | 0.1 s | no: χ²/N 55 (a code-path test) |
+| tests/13N_capture_ay, identical_pp_res, spin_observables_* | code-path tests | clean | finite | 0.1-1.2 s | no: tests of one code path |
+| tests/screening_6li (bare, scr, fit) | 6Li(p,α)3He screening | clean | scr 23.707 / 23 (the README's 23.70) | 0.1 s | no: the PI's decision (built on the PI's 7Be evaluation) |
+
+Every regression project of `tests/` reproduces its `expected/` values (`tests/run_tests.sh`, 185 passed).  The
+examples' totals differ from the numbers of `docs/source/getting_started/examples.rst` for c12c12_tumino2018 (117.516
+against 112.086), f19_pag_thm (77.635 against 79.408), o18_lacognata2010 (330.065 against 330.054) and o17_guardo
+(67.597 against 67.594); the per-data-set predictions of `tests/upgrade/predictions.txt` (ctest `upgrade_predictions`)
+are reproduced, so the page's numbers predate the format-3 files (to be re-measured; not changed here).
