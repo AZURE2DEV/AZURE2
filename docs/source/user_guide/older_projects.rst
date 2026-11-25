@@ -84,6 +84,49 @@ beside it with the line as edited (``<name>.repaired.azr``; the old file is
 kept) and converts the copy; the lines repaired and the converter's notes are
 listed in the window's notes bar.
 
+Files of every AZURE2 version
+-----------------------------
+
+The converter reads the forms the project file has had since before 2020; each
+form below converts with the meaning the program of its era gave it, or is
+refused with the reason (the timeline and the fixtures:
+``tests/convert/fixtures/history/README.md``).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Form (era)
+     - What the converter does
+   * - ``<levels>`` rows of 30 columns and an ``<externalCapture>`` section
+       (before 2020)
+     - Converts: the external-capture mask of each active line set on its
+       exit pair, as the 2020 setup program imported such files (``minJ`` and
+       ``maxJ`` were not used by that import).  An inactive line is refused.
+   * - The 2020 file (``origin/qt5``): eleven ``<config>`` lines with full
+       paths, ``<lastRun>``, data lines whose file name is the rest of the line
+     - Converts; also with Windows line ends, tabs, blank lines, empty
+       sections, paths with blanks or backslashes, an unclosed ``<lastRun>``
+       at the end of the file.
+   * - Target lines with convolution coefficients but no equation
+       (2025-01-26 to 01-30)
+     - Converts: sigma(E) = c0 + c1 E + ... written as the equation.
+   * - Energy shifts (2025-08), composite (component) segments with two,
+       three or four numbers per component, secondary decays, scalings
+       (2025-08 to 2026-05)
+     - Converts, the layout read as the setup program of the era read it.
+   * - A number as wide as its column run into the next (written by the
+       setup program between 2026-09-25 and 10-07)
+     - Refused: two readings; a data, test or target line shows the split as
+       a proposed reading.
+   * - Polarization times cross section, isDiff 8 (2026-09-17 to 09-28);
+       dev's ``mixture`` block (2026-10-12)
+     - Refused: format 3 has no quantity or record for them; the reason says
+       what to do instead.
+   * - dev's spin observables written as type 9 with an operator (until
+       2026-11-11)
+     - Converts as type 10.
+
 What the report says
 --------------------
 
