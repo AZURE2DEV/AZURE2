@@ -389,6 +389,11 @@ bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out, CoulombT
   out.P = std::exp(lp + LogGamow(eta));
   out.S = sv;
   out.phi = ph + rho;
+  // The sheet holds phi - rho, so the sum is good to the rounding of rho (about 1e-16 rad) and no better.  Deep
+  // below the barrier phi itself is far smaller than that (phi ~ P), and the elastic amplitude exp(-2i phi) - 1
+  // would be rounding noise: there the phase comes from the exact routine.  phi is monotonic from phi(0) = 0, so
+  // a small value is met nowhere else, and below the limit the continuous phase and atan2's are the same.
+  if (std::abs(out.phi) < kSmallPhase) out.phi = ExactOpen(l, eta, rho).phi;
   return true;
 }
 
