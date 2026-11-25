@@ -126,6 +126,20 @@ refused with the reason (the timeline and the fixtures:
    * - dev's spin observables written as type 9 with an operator (until
        2026-11-11)
      - Converts as type 10.
+   * - External capture into a final state that is no level of
+       ``<levels>`` (run by AZURE2 before 2026-10-26, which added a hidden
+       level with a free width)
+     - Refused at conversion: add the level to a copy of the old project (or
+       switch that pair's external capture off) and convert the copy.
+   * - Data files not at the path the project names (another computer, a
+       moved folder)
+     - Converts with a note per file; the Qt program lists them in one note
+       with **Locate Data Files...**, which finds each file by its name in a
+       folder you choose.
+
+The conversion and the reading of a project do not depend on the language
+settings of the computer: a decimal-comma locale (German, Italian, Polish, ...)
+gives the same files as any other.
 
 What the report says
 --------------------

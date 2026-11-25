@@ -1101,3 +1101,34 @@ examples' totals differ from the numbers of `docs/source/getting_started/example
 against 112.086), f19_pag_thm (77.635 against 79.408), o18_lacognata2010 (330.065 against 330.054) and o17_guardo
 (67.597 against 67.594); the per-data-set predictions of `tests/upgrade/predictions.txt` (ctest `upgrade_predictions`)
 are reproduced, so the page's numbers predate the format-3 files (to be re-measured; not changed here).
+
+### 19.10 Old projects of real users: the numeric locale, missing data files, unlisted final states (2026-11-25)
+
+The PI: old projects of a colleague (19F + p) and his own 12C + p fit "fail".  On this build the command line converted
+376 of 377 projects of that corpus (the one refusal a macOS `._` resource file); the window and the facade refused two
+of them with E_NOT_A_NUMBER, E_REACTION_SYNTAX and E_PRIOR_SYNTAX when LC_NUMERIC was a decimal-comma language.
+
+**The numeric locale.**  The engine's readers and writers parse and print numbers with strtod, std::stod,
+std::to_string and printf, which follow LC_NUMERIC (about a hundred parses and several hundred printf-style writes
+across io/, experiment/, convert/, src/, physics/, stopping/); the command line never sets the locale, a Qt
+application sets it from the environment.  258e3760 resets LC_NUMERIC in the window; at the root the facade now takes
+`support::ClassicNumericScope` (`support/include/azure2/support/ClassicNumeric.h`) at each of its 62 calls that read,
+check, edit, convert, save or run: the calling thread's locale with LC_NUMERIC "C" (POSIX newlocale/uselocale from a
+duplicate of the thread's locale; Windows a per-thread locale), nothing else changed, nothing changed in the C locale.
+The run's OpenMP threads keep the process's locale (the window sets it to C); pyazr does not set the locale and has
+no such scope (a Python program that calls locale.setlocale with a decimal-comma language would see the fault).
+Test `api_front_locale`: three projects opened, validated, edited, saved and an old project of each era converted,
+and T1 calculated, under C and de_DE.utf8 without a window: byte for byte equal; without the scope the validation and
+the conversion differ, and without it in Run the run's files differ.  `convert_cli_locale`: the command line under
+de_DE.utf8 gives the C bytes.  `gui_casual` (h): conversion from the window under the comma locale.
+
+**Data files not on this computer.**  58 converted projects of the corpus did not validate only because their data
+files are elsewhere (absolute paths of another computer, placeholder names, moved folders); the 2020 engine refused a
+run with a missing active data file as well, so the converter keeps its note.  The window now says it in one note,
+"N data file(s) not found on this computer" (Details: record and path), with **Locate Data Files...**: a folder,
+each file looked for by its name there, the data set pointed to it (relative to the project; the project is modified,
+not saved); the Diagnostics dock stays closed when those are the only errors.  `gui_casual` (i).
+
+**Unlisted final states.**  Two projects captured into a photon pair whose final state is no level of <levels>; the
+engine ran such projects until 2026-10-26 (35793eb3) with a hidden level and refuses them since.  The converter now
+refuses them at conversion with that reason (project_format3.md 8.6) instead of writing a file whose first run fails.

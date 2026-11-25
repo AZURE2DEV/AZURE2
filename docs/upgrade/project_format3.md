@@ -1353,6 +1353,13 @@ rebuilt from the writers of their era (`make_fixtures.py` there).  What the conv
 - **Refused with an accurate reason**: isDiff 8 (2026-09-17 .. 09-28, no format-3 quantity), `mixture` (dev,
   2026-10-12 .. 13, no format-3 record).
 
+- **A final state of external capture that is no level of <levels>** (E_FINAL_STATE_NOT_LEVEL, _SHARED, _UNBOUND,
+  checked by the engine's build of the converted text, data files not required): refused at conversion.  The engine
+  before 2026-10-26 (35793eb3) created it as a hidden level at the pair's E_x with a free reduced width of 0.1 MeV^1/2
+  in each particle channel; that level is not written by guess.  The two refusal models of
+  `tests/ec_final_state_listed` (their originals in `tests/convert/fixtures/`) are refused here now instead of at
+  their run.
+
 Truly ambiguous (two meanings in two eras or writers, not guessed): glued numbers; an inactive `<externalCapture>`
 line; a component list of n components followed by between 2n and 3n numbers that a hand edit produced (the setup
 program never wrote two-number components with the secondary-decay field: the field came on 2026-03-09, after the
@@ -1360,10 +1367,13 @@ angles of 2025-12-22); the converter keeps the reading of the setup program of t
 
 Checks (`convert_history`): each converted form against the same project in a later era's form (records equal; the
 pre-2020 file's calculation gives the 2020 file's output files byte for byte); every historical `.azr` blob of every
-ref (678 blobs, 291 old-format) converted with the converter of 43ac5acd and with this one: the 265 that converted
-give the same bytes, 4 more convert (the type-9 spin observables, the target of inactive lines), 22 stay refused
-(intentional bad fixtures, record fragments without `<levels>`, `mixture`, isDiff 8, a toy whose pair breaks charge
-conservation).  `convert_cli_locale` and `gui_casual` (h): the same bytes under a decimal-comma locale.
+ref (678 blobs, 291 old-format) converted with the converter of 43ac5acd and with this one: of the 265 that converted,
+263 give the same bytes and 2 (the final-state refusal models above) are refused; 4 more convert (the type-9 spin
+observables, the target of inactive lines); 24 are refused (7 record fragments without `<levels>`, 7 intentional bad
+fixtures, 2 final-state models, 6 `mixture`, 1 isDiff 8, a THM toy whose pair breaks charge conservation).  A corpus
+of 377 old projects of real users (read-only, not in the repository): 376 convert (one is a macOS resource file), 316
+validate, 58 lack only their data files (absolute paths of another computer, placeholders, moved folders: notes, and
+the window's Locate Data Files...), 2 are now refused at conversion for an unlisted final state.  `convert_cli_locale` and `gui_casual` (h): the same bytes under a decimal-comma locale.
 
 ## 9. Worked user stories
 
