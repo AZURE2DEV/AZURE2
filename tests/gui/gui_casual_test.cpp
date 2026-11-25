@@ -13,6 +13,7 @@
 //      empty Gamma Decays / Isospin panels are not shown in standard view;
 //  (h) an old project of each era converted from the window under a decimal-comma locale: the bytes of the
 //      conversion under "C";
+//  (i) a converted project whose data files are elsewhere: one note with Locate Data Files..., located by name;
 //  (d) the converter's repair of an old line: the old 13N with one data line short of its shift's vary flag; the
 //      window shows the line, its number and the two readings; the first taken and converted again gives the project
 //      the unmodified old 13N gives, byte for byte; the old file is unchanged, the repaired copy beside it, a note says
@@ -862,6 +863,45 @@ int main(int argc, char **argv) {
                   ": the bytes of the conversion under C");
       }
     }
+  }
+
+  // (i) a converted project whose data files are not where it says (an old project from another computer, a moved
+  //     folder): one note naming them with "Locate Data Files...", no Diagnostics dock, no box; the folder chosen, each
+  //     file found by its name, its data set pointed to it, the project valid
+  {
+    const fs::path dir = work / "locate_2020";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    fs::copy(source / "tests/convert/fixtures/history/gui_2020", dir, fs::copy_options::recursive);
+    std::string report;
+    const bool converted = azure2::front::ConvertProject((dir / "gui_2020.azr").string(), (dir / "gui_2020.f3.azr").string(), report);
+    fs::create_directories(dir / "elsewhere");
+    fs::rename(dir / "data", dir / "elsewhere" / "measured");
+    fs::create_directories(dir / "output");
+    fs::create_directories(dir / "checks");
+    AZURESetup w;
+    w.resize(1280, 720);
+    w.show();
+    Settle(100);
+    ModalWatch watch;
+    w.open(QString::fromStdString((dir / "gui_2020.f3.azr").string()));
+    Settle(800);
+    const QStringList missing = w.missingDataFiles();
+    Check(converted && missing.size() == 2, "(i) the converted 2020 project, its data folder moved: 2 data files missing (" +
+                                                std::to_string(missing.size()) + ")");
+    Check(w.notesBar()->isVisible() && w.notesBar()->notes().join(" ").contains("2 data file(s) not found") &&
+              w.notesBar()->locateAction()->isVisible(),
+          "(i) one note names them, with Locate Data Files...");
+    Check(!w.diagnosticsDockWidget()->isVisible() && watch.seen.isEmpty(), "(i) no Diagnostics dock and no box for missing data files");
+    w.grab().save(shots + "/locate_data_files_note.png");
+    QStringList still;
+    const int found = w.locateDataFiles(QString::fromStdString((dir / "elsewhere").string()), &still);
+    Check(found == 2 && still.isEmpty() && w.missingDataFiles().isEmpty() && w.holder()->project().Modified(),
+          "(i) located under the chosen folder: both data sets pointed to their files, the project modified");
+    const azure2::front::Validation v = w.holder()->project().Validate();
+    bool dataError = false;
+    for (const azure2::front::Diagnostic &d : v.diagnostics) dataError = dataError || d.code == "E_DATA_FILE";
+    Check(!dataError, "(i) after locating: no E_DATA_FILE");
   }
 
   std::cout << (failures ? "FAILED: " : "ALL PASSED") << (failures ? std::to_string(failures) : "") << std::endl;

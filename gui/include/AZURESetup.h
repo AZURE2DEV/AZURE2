@@ -106,6 +106,13 @@ class AZURESetup : public QMainWindow {
   void setExpertMode(bool on);
   bool expertMode() const;
   QAction *expertAction() const { return expertAction_; }
+  /// The data files the active data sets name that this computer does not have at that path (as written in the
+  /// records), "record: file" each (qt_gui.md section 19.10).
+  QStringList missingDataFiles() const;
+  /// Look for each missing data file by its name under `folder` (four levels deep) and point its data set to the file
+  /// found (a path relative to the project when it is below the project's folder's parent, else absolute); returns how
+  /// many were pointed, `still` gets those not found.  The project is modified, not saved.
+  int locateDataFiles(const QString &folder, QStringList *still = nullptr);
   /// The notes about the project just opened (one bar, never a modal box: qt_gui.md section 19.2).
   NotesBar *notesBar() const { return notes_; }
   /// Close the project (after asking to save) and show the start page.

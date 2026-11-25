@@ -16,6 +16,7 @@
 #include <QDockWidget>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMimeData>
@@ -320,6 +321,17 @@ AZURESetup::AZURESetup() {
     addToolBarBreak();
     notes_ = new NotesBar(this);
     addToolBar(notes_);
+    connect(notes_, &NotesBar::locateRequested, this, [this]() {
+      const QString folder = QFileDialog::getExistingDirectory(this, tr("Where are the data files?"), holder_->directory());
+      if (folder.isEmpty()) return;
+      QStringList still;
+      const int found = locateDataFiles(folder, &still);
+      statusBar()->showMessage(still.isEmpty() ? tr("%n data file(s) located; save the project to keep the new paths.", nullptr, found)
+                                               : tr("%1 data file(s) located, %2 still not found (Details lists them).").arg(found).arg(still.size()),
+                               30000);
+      if (still.isEmpty()) notes_->showLocate(false);
+      validate();
+    });
     connect(notes_, &NotesBar::diagnosticsRequested, this, [this]() {
       diagnosticsDock->show();
       diagnosticsDock->raise();
@@ -673,10 +685,24 @@ void AZURESetup::diagnosticsDone(bool ok, int errors, int warnings) {
   // The check of a project just opened is one note of the notes bar, never a box (qt_gui.md section 19.2).
   if (openValidation_) {
     openValidation_ = false;
+    // data files this computer does not have: one note naming them, with "Locate Data Files..." (not a wall of errors)
+    const QStringList missing = missingDataFiles();
+    if (!missing.isEmpty()) {
+      notes_->addNote(tr("%n data file(s) not found on this computer", nullptr, missing.size()),
+                      tr("The data sets name these files, which are not at that path here:\n") + missing.join("\n") +
+                          tr("\n\nLocate Data Files... looks for them by name in a folder you choose."),
+                      false, true);
+      notes_->showLocate(true);
+    }
     if (!ok || errors > 0 || warnings > 0)
       notes_->addNote(tr("The engine's check: %1").arg(statusValidity_ ? statusValidity_->text() : diagnostics->summary()),
                       diagnostics->summary() + "\n\n" + diagnostics->listing(30), true);
   }
+  // errors that are only missing data files: the note above says so; the Diagnostics stay closed until asked for
+  bool onlyDataFiles = errors > 0;
+  for (const QString &c : diagnostics->codes())
+    if (c.startsWith("E_") && c != "E_DATA_FILE") onlyDataFiles = false;
+  if (onlyDataFiles && !asked && !missingDataFiles().isEmpty()) return;
   // An error (the project would not run) opens the Diagnostics; warnings open them only when the user asked for the
   // check (Validate): otherwise they are counted in the status bar, whose click opens them.  Nothing to show: hidden.
   if (!ok || errors > 0 || (asked && warnings > 0)) diagnosticsDock->setVisible(true);
@@ -989,4 +1015,57 @@ void AZURESetup::closeEvent(QCloseEvent *event) {
   }
   saveWindowState();
   event->accept();
+}
+
+QStringList AZURESetup::missingDataFiles() const {
+  QStringList out;
+  const QDir dir(holder_->directory());
+  for (const azure2::front::Record &r : holder_->records("data")) {
+    const QString active = QString::fromStdString(r.Value("active"));
+    if (active == "no") continue;
+    QString file = QString::fromStdString(r.Value("file")).trimmed();
+    if (file.size() >= 2 && file.startsWith('"') && file.endsWith('"')) file = file.mid(1, file.size() - 2);
+    if (file.isEmpty()) continue;
+    if (!QFileInfo(dir.filePath(file)).isFile()) out << QString::fromStdString(r.name) + ": " + file;
+  }
+  return out;
+}
+
+int AZURESetup::locateDataFiles(const QString &folder, QStringList *still) {
+  int found = 0;
+  const QDir dir(holder_->directory());
+  for (azure2::front::Record r : holder_->records("data")) {
+    if (QString::fromStdString(r.Value("active")) == "no") continue;
+    QString file = QString::fromStdString(r.Value("file")).trimmed();
+    if (file.size() >= 2 && file.startsWith('"') && file.endsWith('"')) file = file.mid(1, file.size() - 2);
+    if (file.isEmpty() || QFileInfo(dir.filePath(file)).isFile()) continue;
+    // the name as written (a Windows path's name too), looked for under the folder, nearest first
+    const QString name = QString(file).replace('\\', '/').section('/', -1);
+    QString hit;
+    QStringList level = {folder};
+    for (int depth = 0; depth < 5 && hit.isEmpty() && !level.isEmpty(); depth++) {
+      QStringList next;
+      for (const QString &d : level) {
+        if (QFileInfo(QDir(d).filePath(name)).isFile()) {
+          hit = QDir(d).filePath(name);
+          break;
+        }
+        for (const QString &sub : QDir(d).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) next << QDir(d).filePath(sub);
+      }
+      level = next;
+    }
+    if (hit.isEmpty()) {
+      if (still) *still << QString::fromStdString(r.name) + ": " + file;
+      continue;
+    }
+    QString path = dir.relativeFilePath(hit);
+    if (path.startsWith("../../")) path = QFileInfo(hit).absoluteFilePath();
+    if (path.contains(' ')) path = '"' + path + '"';
+    for (azure2::front::Field &f : r.fields)
+      if (f.key == "file") f.value = path.toStdString();
+    QString why;
+    if (holder_->setRecord("data", r, why)) found++;
+    else if (still) *still << QString::fromStdString(r.name) + ": " + why;
+  }
+  return found;
 }

@@ -22,6 +22,12 @@ NotesBar::NotesBar(QWidget *parent) : QToolBar(tr("Notes about the project"), pa
   text_->setObjectName("notesText");
   text_->setContentsMargins(0, 0, 12, 0);
   addWidget(text_);
+  locateAction_ = addAction(tr("Locate Data Files..."));
+  locateAction_->setObjectName("notesLocate");
+  locateAction_->setToolTip(tr("Choose a folder: each data file the project names but this computer does not have at "
+                               "that path is looked for there by its name, and the data set is pointed to it."));
+  locateAction_->setVisible(false);
+  connect(locateAction_, &QAction::triggered, this, &NotesBar::locateRequested);
   detailsAction_ = addAction(tr("Details"));
   detailsAction_->setObjectName("notesDetails");
   connect(detailsAction_, &QAction::triggered, this, &NotesBar::showDetails);
@@ -31,7 +37,10 @@ NotesBar::NotesBar(QWidget *parent) : QToolBar(tr("Notes about the project"), pa
   hide();
 }
 
+void NotesBar::showLocate(bool on) { locateAction_->setVisible(on); }
+
 void NotesBar::clearNotes() {
+  locateAction_->setVisible(false);
   summaries_.clear();
   texts_.clear();
   aboutDiagnostics_ = false;

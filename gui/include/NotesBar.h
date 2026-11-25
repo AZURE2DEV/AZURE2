@@ -36,9 +36,13 @@ class NotesBar : public QToolBar {
   QDialog *detailsWindow() const { return details_; }
   QAction *detailsAction() const { return detailsAction_; }
   QAction *dismissAction() const { return dismissAction_; }
+  /// "Locate data files...": shown while a note says that data files are not found (the window answers it).
+  QAction *locateAction() const { return locateAction_; }
+  void showLocate(bool on);
 
  signals:
   void diagnosticsRequested();
+  void locateRequested();
 
  private:
   void showDetails();
@@ -52,6 +56,7 @@ class NotesBar : public QToolBar {
   QLabel *text_ = nullptr;
   QAction *detailsAction_ = nullptr;
   QAction *dismissAction_ = nullptr;
+  QAction *locateAction_ = nullptr;
   QDialog *details_ = nullptr;
   QPlainTextEdit *detailsText_ = nullptr;
   QPushButton *diagnosticsButton_ = nullptr;
