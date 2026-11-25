@@ -384,7 +384,7 @@ ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOption
     res.refusal = "the converted project does not validate (" + std::to_string(check.diagnostics.size()) + " diagnostic(s))";
     return res;
   }
-  // The final states of external capture, as the run's set-up checks them (experiment::ExternalCaptureFinalStates through
+  // The final state of external capture, as the run's set-up checks it (experiment::ExternalCaptureFinalStates through
   // the engine's build; data files not required): a project the old program ran can be one this program refuses at
   // its first run.  Before 2026-10-26 (35793eb3) the engine created a final state that is not a level of <levels> as a
   // hidden level at the pair's E_x, with a free reduced width of 0.1 MeV^1/2 in each particle channel that no line of
@@ -396,9 +396,9 @@ ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOption
     const experiment::Format3Project built = experiment::ReadFormat3Text(res.text, build);
     for (const experiment::Diagnostic &d : built.diagnostics) {
       const std::string code = d.code;
-      if (code != experiment::codes::kFinalStateNotLevel && code != experiment::codes::kFinalStateShared &&
-          code != experiment::codes::kFinalStateUnbound)
-        continue;
+      // only the final state that is no level: the one the old engine gave a meaning (a shared or an unbound final
+      // state is refused by the run with its own reason, as before)
+      if (code != experiment::codes::kFinalStateNotLevel) continue;
       res.diagnostics.push_back(d);
       res.refusal = d.message + " (" + code + ").  An AZURE2 before 2026-10-26 (35793eb3) ran such a project: it created "
                     "the final state as a hidden level at the pair's E_x, with a free reduced width of 0.1 MeV^1/2 in "

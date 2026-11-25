@@ -1353,8 +1353,9 @@ rebuilt from the writers of their era (`make_fixtures.py` there).  What the conv
 - **Refused with an accurate reason**: isDiff 8 (2026-09-17 .. 09-28, no format-3 quantity), `mixture` (dev,
   2026-10-12 .. 13, no format-3 record).
 
-- **A final state of external capture that is no level of <levels>** (E_FINAL_STATE_NOT_LEVEL, _SHARED, _UNBOUND,
-  checked by the engine's build of the converted text, data files not required): refused at conversion.  The engine
+- **A final state of external capture that is no level of <levels>** (E_FINAL_STATE_NOT_LEVEL, checked by the engine's
+  build of the converted text, data files not required): refused at conversion (a shared or an unbound final state
+  stays the run's refusal, with its own reason).  The engine
   before 2026-10-26 (35793eb3) created it as a hidden level at the pair's E_x with a free reduced width of 0.1 MeV^1/2
   in each particle channel; that level is not written by guess.  The two refusal models of
   `tests/ec_final_state_listed` (their originals in `tests/convert/fixtures/`) are refused here now instead of at
