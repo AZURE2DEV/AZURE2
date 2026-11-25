@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "Build.h"
+#include "OldEra.h"
 #include "OldProject.h"
 #include "azure2/experiment/Json.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -232,7 +233,9 @@ ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOption
   // A UTF-8 byte-order mark (written by some Windows editors) before the first tag: no AZURE2 wrote one, and the
   // section reader would not see the first tag behind it.  Removed with a note; the lines keep their numbers.
   const bool bom = givenText.compare(0, 3, "\xEF\xBB\xBF") == 0;
-  const std::string oldText = bom ? givenText.substr(3) : givenText;
+  std::string oldText = bom ? givenText.substr(3) : givenText;
+  std::vector<std::pair<std::string, std::string>> eraNotes;  // forms of earlier eras brought to a later one (OldEra.h)
+  CloseOldLastRun(oldText, eraNotes);
   if (bom) {
     res.notes.push_back({"byte-order mark", "", "the file begins with a UTF-8 byte-order mark (a Windows editor's): removed"});
     res.constructs["byte-order mark"].converted++;
@@ -247,6 +250,15 @@ ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOption
   for (const std::string &p : doc.Problems()) {
     res.refusal = "the project's sections cannot be read: " + p;
     return res;
+  }
+  if (io::FormatOf(doc) == 1) {
+    res.refusal = FoldOldExternalCapture(doc, eraNotes);
+    if (!res.refusal.empty()) return res;
+  }
+  for (const auto &n : eraNotes) {
+    res.notes.push_back({n.first, "", n.second});
+    res.constructs[n.first].converted++;
+    res.constructs[n.first].notes++;
   }
   res.refusal = UnconvertedSection(doc);
   if (!res.refusal.empty()) return res;

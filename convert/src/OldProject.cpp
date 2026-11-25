@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "azure2/io/LevelRows.h"  // the <levels> line (format 3 keeps that grammar); the converter reads only the pair columns
+#include "OldEra.h"
 #include "azure2/convert/LineRepair.h"
 #include "azure2/convert/PriorCentreRow.h"
 #include "azure2/convert/SpecsFromOldLines.h"
@@ -58,6 +59,13 @@ std::string NewerLineType(const std::string &line, std::size_t typeAt) {
 // The refusal of a line's end that no keyword block of the old grammar reads: the old engine stopped reading there
 // without a word, a newer program may read it; converted, it would be lost.
 std::string UnreadTail(const std::string &tail) {
+  // dev's "mixture" block (a38494e8, 2026-10-12; reverted by a60577f6 the next day): a tabulated cross section added to
+  // the model; format 3 has no record for such a term.
+  if (Trim(tail).compare(0, 8, "mixture ") == 0)
+    return " ends with '" + Trim(tail) + "': a \"mixture\" block of AZURE2's dev branch of 2026-10-12, removed the next day "
+           "(a60577f6, replaced by the samples of <abundances>); format 3 has no record for a tabulated cross section added "
+           "to the model, so the line cannot be converted with its meaning.  Write the natural-abundance sum with samples, "
+           "or delete the block from a copy of the project if its weight was 0, and convert the copy";
   return " ends with '" + Trim(tail) + "', which no keyword block of this program's grammar reads (the old engine "
          "stopped reading the line there without a word; a newer AZURE2 may read it).  Correct the keyword, or delete "
          "it from a copy of the project if the program that wrote it ignored it too, and convert the copy";
@@ -83,15 +91,26 @@ std::string QuotedBlanksRemoved(const std::string &line) {
 }
 
 /// A data line whose data file's name holds blanks, unquoted: the line with the name quoted when the words from the
-/// file's place to the next number name a file that exists under `dir` (and the first word alone does not), else "".
-std::string QuotedDataFile(const std::string &line, const std::string &dir) {
-  if (dir.empty()) return "";
+/// file's place to the next number name a file that exists under `dir` (and the first word alone does not), or when
+/// those words run to the end of the line (the rule of the 2020 and 2025-08 engines, SegLine of 6ecaee22 and dcfdb344:
+/// the data file is the rest of the line; no later writer put a word other than a keyword after the file), else "".
+/// `restOfLine` says which rule applied.
+std::string QuotedDataFile(const std::string &line, const std::string &dir, bool &restOfLine) {
+  restOfLine = false;
   const std::vector<LineReading> readings = ProposeReadings("segmentsData", line);
   for (const LineReading &r : readings) {
     const std::size_t a = r.line.find('"');
     const std::size_t b = a == std::string::npos ? a : r.line.find('"', a + 1);
     if (b == std::string::npos || r.label.compare(0, 23, "the data file's name ho") != 0) continue;
     const std::string name = r.line.substr(a + 1, b - a - 1);
+    std::istringstream after(r.line.substr(b + 1));
+    std::string word;
+    const bool nothingAfter = !(after >> word);
+    if (nothingAfter && name.find('"') == std::string::npos) {
+      restOfLine = true;
+      return r.line;
+    }
+    if (dir.empty()) continue;
     std::error_code ec;
     const std::string first = name.substr(0, name.find(' '));
     if (std::filesystem::is_regular_file(std::filesystem::path(dir) / name, ec) &&
@@ -99,6 +118,28 @@ std::string QuotedDataFile(const std::string &line, const std::string &dir) {
       return r.line;
   }
   return "";
+}
+
+/// dev's general spin observables written as type 9 followed by the operator (8f80abde, 2026-10-18 .. 2026-11-11): in
+/// this program type 9 is Legendre-coefficient data, which has no operator token, so the operator decides: the line
+/// with the type written as 10 (`typeAt`: the type's word number), else the line itself.
+std::string SpinObservableAsType10(const std::string &line, std::size_t typeAt, std::string &note) {
+  std::istringstream in(line);
+  std::vector<std::string> w;
+  for (std::string t; in >> t;) w.push_back(t);
+  if (w.size() <= typeAt + 1 || w[typeAt] != "9" || w[typeAt + 1].find(':') == std::string::npos) return line;
+  std::size_t at = 0;
+  for (std::size_t n = 0;; n++) {
+    const std::size_t a = line.find_first_not_of(" \t", at);
+    const std::size_t b = line.find_first_of(" \t\r", a);
+    if (n == typeAt) {
+      note = "type 9 followed by the spin operator '" + w[typeAt + 1] + "' is the general spin observable AZURE2's dev "
+             "branch wrote as type 9 until 2026-11-11 (type 10 since; type 9 is Legendre-coefficient data, which has no "
+             "operator): read as type 10";
+      return line.substr(0, a) + "10" + line.substr(b);
+    }
+    at = b;
+  }
 }
 
 }  // namespace
@@ -159,6 +200,15 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::
   if (const io::Document::Section *s = doc.Find("levels")) {
     for (const std::string &line : doc.Body(*s)) {
       if (BlankLine(line)) continue;
+      {
+        // a number run into its neighbour by the 2026-09 writer: the columns after it would be read shifted
+        std::istringstream words(line);
+        for (std::string w; words >> w;)
+          if (GluedNumbers(w))
+            return "a <levels> line holds '" + w + "', two numbers run together (the setup program of 2026-09-25 .. "
+                   "09-29 wrote a number as wide as its column with no space after it; 2887d991): the columns after it "
+                   "would be read shifted.  Separate the two numbers in a copy of the project and convert the copy: \"" + line + "\"";
+      }
       std::istringstream stm(line);
       io::LevelRow nl(stm);
       if (stm.rdstate() & (std::ios::failbit | std::ios::badbit)) return "a <levels> line the old engine cannot read: \"" + line + "\"";
@@ -202,11 +252,19 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::
       }
       out.refusedSection = "segmentsData";
       out.refusedLine = i;
+      {
+        std::string note;
+        line = SpinObservableAsType10(line, 7, note);
+        if (!note.empty()) out.repairs.push_back({"<segmentsData> line", "file line " + std::to_string(i + 1) + ": " + note});
+      }
       if (!OldLineReads("segmentsData", line)) {
-        const std::string quoted = QuotedDataFile(line, projectDir);
+        bool restOfLine = false;
+        const std::string quoted = QuotedDataFile(line, projectDir, restOfLine);
         if (!quoted.empty()) {
           out.repairs.push_back({"<segmentsData> line", "file line " + std::to_string(i + 1) + ": the data file's name holds a "
-                                 "blank and was not quoted; read as the file that exists: " + quoted.substr(quoted.find('"'))});
+                                 "blank and was not quoted; read as " +
+                                 std::string(restOfLine ? "the rest of the line, as the engines of 2020 and 2025-08 read it: "
+                                                        : "the file that exists: ") + quoted.substr(quoted.find('"'))});
           line = quoted;
         }
       }
@@ -228,7 +286,12 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::
                "is: a number written with a decimal comma ends the numbers of the line there";
       const int d = parsed->isDiff();
       if (d == 19) return "data segment #" + std::to_string(key) + " uses isDiff 19 (THM angular-distribution coefficients), which the old engine refused";
-      if (d == 8 || d == 18) return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
+      if (d == 8 || d == 18)
+        return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross "
+               "section), which existed from 2026-09-17 to 2026-09-28 (922c0537 .. 330dc1eb) and was removed: format 3 has "
+               "no quantity for the product.  By time reversal the polarization is the analyzing power of the inverse "
+               "reaction: divide the data by the differential cross section and enter them as an analyzing power of the "
+               "inverse channel";
       if (parsed->isAdvanced() == 1 && parsed->operationType() != 0 && parsed->operationType() != 1)
         return "data segment #" + std::to_string(key) + ": its composite block has operation type " +
                std::to_string(parsed->operationType()) + ", which is neither 0 (sum) nor 1 (ratio)";
@@ -254,11 +317,14 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::
       }
       out.refusedSection = "segmentsTest";
       out.refusedLine = i;
-      std::istringstream stm(line);
+      std::string spinNote;
+      const std::string read = SpinObservableAsType10(line, 9, spinNote);
+      if (!spinNote.empty()) out.repairs.push_back({"<segmentsTest> line", "file line " + std::to_string(i + 1) + ": " + spinNote});
+      std::istringstream stm(read);
       auto parsed = std::make_shared<ExtrapLine>(stm);
       key++;
       // a newer program's type first: its operator token can leave the old parser's reading intact (a test line)
-      const std::string newer = NewerLineType(line, 9);
+      const std::string newer = NewerLineType(read, 9);
       if (!newer.empty()) return "test segment #" + std::to_string(key) + newer;
       if (stm.rdstate() & (std::ios::failbit | std::ios::badbit)) {
         return "test segment #" + std::to_string(key) + " cannot be read" +
@@ -269,14 +335,17 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::
       const int d = parsed->isDiff();
       if (parsed->hasCovariance()) return "test segment #" + std::to_string(key) + " carries a covariance block, which the old engine refused";
       if (d == 9 || d == 19) return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (angular coefficients, a data-segment type), which the old engine refused";
-      if (d == 8 || d == 18) return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
+      if (d == 8 || d == 18)
+        return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross "
+               "section), which existed from 2026-09-17 to 2026-09-28 (922c0537 .. 330dc1eb) and was removed: format 3 has "
+               "no quantity for the product (the analyzing power of the inverse reaction is the polarization)";
       if (parsed->isAdvanced() == 1 && parsed->operationType() != 0 && parsed->operationType() != 1)
         return "test segment #" + std::to_string(key) + ": its composite block has operation type " +
                std::to_string(parsed->operationType()) + ", which is neither 0 (sum) nor 1 (ratio)";
       OldTestLine tl;
       tl.key = key;
       tl.docLine = (int)i + 1;
-      tl.text = line;
+      tl.text = read;
       tl.parsed = parsed;
       out.tests.push_back(tl);
     }
@@ -310,6 +379,14 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out, const std::
           out.repairs.push_back({"<targetInt> line", "file line " + std::to_string(i + 1) + " ends after an empty stopping-power "
                                  "equation: its parameter count, the ninth field, is 0"});
           line += " 0";
+        }
+      }
+      {
+        std::string note;
+        const std::string era = TargetLineOfFirstEra(line, note);
+        if (!note.empty()) {
+          out.repairs.push_back({"<targetInt> line", "file line " + std::to_string(i + 1) + ": " + note});
+          line = era;
         }
       }
       std::istringstream stm(line);

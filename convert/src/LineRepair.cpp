@@ -43,6 +43,21 @@ bool DecimalCommaNumber(const std::string &t) {
          std::isdigit((unsigned char)t[comma + 1]) && Number(dotted);
 }
 
+bool GluedNumbers(const std::string &t) {
+  if (!Number(t)) return false;
+  std::size_t i = (t[0] == '-' || t[0] == '+') ? 1 : 0;
+  if (i + 1 < t.size() && t[i] == '0' && std::isdigit((unsigned char)t[i + 1])) return true;
+  int digits = 0;
+  bool leading = true;
+  for (; i < t.size() && t[i] != 'e' && t[i] != 'E'; i++) {
+    if (!std::isdigit((unsigned char)t[i])) continue;
+    if (leading && t[i] == '0') continue;
+    leading = false;
+    digits++;
+  }
+  return digits > 17;
+}
+
 namespace {
 
 std::vector<std::string> Insert(std::vector<std::string> t, std::size_t at, const std::vector<std::string> &what) {
@@ -115,6 +130,21 @@ std::vector<LineReading> ProposeReadings(const std::string &section, const std::
         s[s.find(',')] = '.';
       }
     if (!which.empty()) offer("decimal commas read as decimal points (" + which + ")", dotted);
+  }
+
+  // A number as wide as its 15-character column run into the next field (the setup program of 2026-09-25 .. 10-07):
+  // the token split after its first 15 or more characters where both parts are numbers.
+  for (std::size_t i = 0; i < t.size(); i++) {
+    if (t[i].size() < 16 || !Number(t[i])) continue;
+    for (std::size_t k = 15; k < t[i].size(); k++) {
+      const std::string a = t[i].substr(0, k), b = t[i].substr(k);
+      if (!Number(a) || !Number(b)) continue;
+      std::vector<std::string> split = t;
+      split[i] = a;
+      split.insert(split.begin() + (long)i + 1, b);
+      offer("'" + t[i] + "' is two numbers run together by the setup program of 2026-09 (a number as wide as its "
+            "column): " + a + " and " + b, split);
+    }
   }
 
   if (section == "segmentsData") {

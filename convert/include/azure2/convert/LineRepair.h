@@ -36,6 +36,12 @@ struct LineProblem {
 /// read by the old grammar as the data file's name (the numbers before it end there), so the line is refused.
 bool DecimalCommaNumber(const std::string &token);
 
+/// Whether `token` is two numbers run together by a fixed-width writer: a number with more than 17 significant digits
+/// (more than any double needs, so no writer of a single number produced it) or with a leading zero before a digit
+/// ("013.0057").  The setup program of 2026-09-25 .. 2026-10-07 wrote a round-trip number as wide as its column with no
+/// space after it (fixed by 2887d991 and 3e7bd976): "114.918600000000001" for J = 1 and E = 14.918600000000001.
+bool GluedNumbers(const std::string &token);
+
 /// The fields the old grammar reads on a line of `section`, in order, optional parts in brackets.
 std::string ExpectedFields(const std::string &section);
 
