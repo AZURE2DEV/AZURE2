@@ -32,6 +32,7 @@ add_library(azure2_convert STATIC
   src/Convert.cpp
   src/Format2.cpp
   src/LineRepair.cpp
+  src/OldEra.cpp
   src/OldProject.cpp
   src/PotentialRecords.cpp)
 add_library(azure2::convert ALIAS azure2_convert)
@@ -63,6 +64,19 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/line_repair_scratch)
 add_test(NAME convert_line_repair COMMAND convert_line_repair_test ${CMAKE_CURRENT_BINARY_DIR}/line_repair_scratch)
+# The forms of the old project file through its history (tests/convert/fixtures/history/README.md): each era's form
+# converted with its meaning (records equal to the same project in a later era's form), the others refused with
+# their reason (convert_history).
+add_executable(convert_history_test tests/history_test.cpp)
+target_link_libraries(convert_history_test PRIVATE azure2_convert)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(convert_history_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME convert_history COMMAND convert_history_test ${CMAKE_CURRENT_SOURCE_DIR}/..)
+# AZURE2 --convert under a decimal-comma locale gives the bytes it gives under "C" (skipped without such a locale).
+add_test(NAME convert_cli_locale COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/../tests/convert/locale_check.sh
+         $<TARGET_FILE:AZURE2> ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set_tests_properties(convert_cli_locale PROPERTIES SKIP_RETURN_CODE 77)
 add_executable(convert_fixtures_test tests/fixtures_test.cpp)
 target_link_libraries(convert_fixtures_test PRIVATE azure2_convert)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
