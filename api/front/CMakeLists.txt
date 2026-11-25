@@ -21,5 +21,7 @@ if(BUILD_TESTING)
   add_executable(front_test tests/front_test.cpp)
   target_link_libraries(front_test PRIVATE azure2_front)
   add_test(NAME api_front COMMAND front_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:AZURE2>)
-  set_tests_properties(api_front PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
+  # The limit is a guard against a hang, twice what the slow runner needs and more: the macOS runner took 165 to
+  # 320 s in five runs of 2026-11-24.
+  set_tests_properties(api_front PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1200)
 endif()

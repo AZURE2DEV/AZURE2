@@ -271,6 +271,7 @@ if(NOT AZURE2_PHYSICS_STANDALONE)
                    -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/physics_standalone.cmake)
   # The test is a build of its own.  On the macOS runner it took 168 to 266 s and once ran into a 300 s limit
   # (run 44419023869); run alone it still took 233 s (run 44481897997), so the runner's speed varies as much as
-  # a neighbouring test costs.  Hence the 600 s of experiment_standalone and inference_standalone, and RUN_SERIAL.
-  set_tests_properties(physics_standalone PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)
+  # a neighbouring test costs.  Hence RUN_SERIAL, and a limit well above the time: 300 s was reached again on
+  # 2026-11-24 (run 45437604720; 135 to 230 s in the four macOS runs beside it), so 1200 s.
+  set_tests_properties(physics_standalone PROPERTIES TIMEOUT 1200 RUN_SERIAL TRUE)
 endif()

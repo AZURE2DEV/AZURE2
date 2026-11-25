@@ -62,8 +62,10 @@ run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; 
 PY="$(command -v python3 || command -v python)"
 # The gradient checks (d) and (j) in DIR, their exit status and wall time in DIR/status: the rows are printed only at the
 # end of the run, so a run stopped by the limit lists none, and the message must say so (the macOS job of 0c6167c1
-# listed 0 rows in (j) and nothing else).  GRAD_LIMIT: the limit in seconds.
-GRAD_LIMIT="${GRAD_LIMIT:-1200}"
+# listed 0 rows in (j) and nothing else).  GRAD_LIMIT: the limit in seconds.  (j) is about 47 chi2 evaluations: 757 s
+# at 16.3 s each on a cluster node with two threads; the macOS runner of 2a43561e needed 33.7 s each, about 1570 s, and
+# was stopped at the 1200 s this limit was until 2026-11-25.  3600 s is a guard against a hang, not a budget.
+GRAD_LIMIT="${GRAD_LIMIT:-3600}"
 grad_run() {
   local t0=$SECONDS rc=0
   (cd "$1" && AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \

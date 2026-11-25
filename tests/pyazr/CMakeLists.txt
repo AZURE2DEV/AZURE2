@@ -1357,4 +1357,5 @@ set_tests_properties(pyazr_parameter_settings PROPERTIES ENVIRONMENT "OMP_NUM_TH
 add_test(NAME pyazr_record_fit
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/record_fit_test.py)
-set_tests_properties(pyazr_record_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77 TIMEOUT 900)
+# 466 to 538 s on the macOS runner (2026-11-24): the limit, a guard against a hang, is 1800 s.
+set_tests_properties(pyazr_record_fit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" SKIP_RETURN_CODE 77 TIMEOUT 1800)

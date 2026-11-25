@@ -246,7 +246,8 @@ if(USE_MCMC)
                    ${CMAKE_SOURCE_DIR}/tests/stopping_yield/models/fit.azr
                    ${CMAKE_SOURCE_DIR}/tests/rectangular_resolution/models/fit.azr
            WORKING_DIRECTORY ${_sampler_objective_dir})
-  set_tests_properties(sampler_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
+  # 248 to 526 s on the macOS runner (five runs of 2026-11-24): the limit, a guard against a hang, is 1800 s.
+  set_tests_properties(sampler_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 1800)
 endif()
 
 # MigradSeed: the bounded curvature of MIGRAD's seed against hand-computed values, and the watch of the first step
