@@ -2,7 +2,73 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-25 (agent gui-casual, second task) — `feature/upgrade-gui-casual`: old projects convert; the numeric locale
 
+On top of `258e3760`.  **Design** `docs/upgrade/project_format3.md` 8.6; timeline and table
+`tests/convert/fixtures/history/README.md`; user guide `older_projects.rst` ("Files of every AZURE2 version").
+
+**First, the PI's failing files** (a corpus of 377 old projects of real users, read-only, counts only): the command
+line converted them; the window/facade refused two under a decimal-comma LC_NUMERIC (strtod and printf follow the
+locale; a Qt program sets it from the environment).  Fix at the root of the facade: `support::ClassicNumericScope`
+(`support/include/azure2/support/ClassicNumeric.h`, the calling thread's LC_NUMERIC "C" through uselocale; Windows a
+per-thread locale) taken by 62 facade calls (read, check, edit, convert, save, run); no engine file changed (making
+every parser locale-free would edit ~750 engine call sites).  Corpus now: 376 not counting a macOS resource file;
+374 convert (2 refused at conversion: external capture into a final state that is no level, which the engine before
+2026-10-26 ran with a hidden level and refuses since, 35793eb3), 316 validate, 58 lack only their data files (absolute
+paths of another computer, placeholders, moved folders; the old engine refused those runs too): the window now shows
+them in one note with "Locate Data Files...".  Through the facade under C and de_DE.utf8 the 377 results are
+identical.  Calculations of a sample (4 copies of the 12C(p,g) project, 14 19F+p projects): all run to the end (3
+without data: extrapolate); 12c_pg's total chi^2 109805 against 108501 of the old program's calculation next to it
+(same 11 data sets and 532 points, +1.2 %; GSL box not ticked); the other old outputs were a fit or older than their
+project.
+
+**What was found in the history** (read-only git over every ref: origin/qt5, main, master, dev and their branches; the history starts on
+2020-07-03, the first project file is test/13N.azr of 2026-04-22): the converter of 43ac5acd refused the pre-2020 form
+(30-column <levels>, <externalCapture>), an unclosed <lastRun>, dev's type-9 spin observables and a target of inactive
+lines (question), and converted two forms wrongly without a word: a target line of 2025-01-26 .. 01-30 with convolution
+coefficients (the count read as the equation) and a <levels> row with two numbers run together by the 2026-09 writer
+(columns shifted).  The "component segments" (2025-08-30 two numbers per component, 2025-12-22 + angle, 2026-03-09 +
+secondary-decay field, 2026-05-21 -1 marker + scaling) already converted with the setup program's reading.
+
+**Changes** (`convert/` only): `OldEra.cpp` (pre-2020 fold, unclosed <lastRun>, 2025-01 target lines), `OldProject.cpp`
+(type 9 + operator -> 10, a file name with blanks to the end of the line, glued numbers in <levels>, the isDiff 8 and
+mixture reasons), `BuildApparatus.cpp` (the nucleus of a target of inactive lines), `LineRepair.cpp` (`GluedNumbers`,
+the split as a reading).
+
+**Tests**: `convert_history` (46 checks; fixtures `tests/convert/fixtures/history/`), `convert_cli_locale`, `gui_casual`
+(h) (conversion from the window under LC_NUMERIC de_DE.UTF-8 = the bytes under C; without the window's reset the
+converter refuses the 2025-08 file, checked in scratch).  All 678 historical .azr blobs (291 old-format) converted with
+43ac5acd's converter (`work/b-u8-polish`) and this build: the 265 that converted give the same bytes; 269 convert now,
+22 refused (7 record fragments without <levels> under experiment/tests/data, 7 intentional bad fixtures, 6 mixture,
+1 isDiff 8, 1 THM toy whose pair breaks charge conservation).
+**Run** (`work/b-gui-casual`): build 0 warnings; `ctest -LE slow -j4` 408 of 408 (6 rmfit skipped) before the button
+fix; after it `ctest` of gui_*, api_front, api_front_locale, convert_*, io_level_row_text, repo_consistency: 19 of 19;
+final run on `3da5bf9d` below.  Small buttons (the PI's "NDS"): `ButtonSizes.h`, `gui_casual` (j), qt_gui.md 19.11.
+Expectations changed on purpose: convert_constructs (type 9 + operator now converts; the isDiff 3/5/6 case gets its
+final-state level and its refusal without it is checked), convert_line_repair (a name with blanks to the end of the
+line converts), io_level_row_text is untouched (the glued-row fixture is `.old`).
+**Not run**: `ctest -L slow`, a real display, Qt 6.4, macOS/Windows, pyazr under a decimal-comma locale (the binding
+has no locale scope).
+**Open**: no engine before 2020 is in the history, so the pre-2020 meaning rests on the 2020 setup program's import
+(`minJ`, `maxJ` of <externalCapture> not used, as there); isDiff 8 and mixture have no format-3 record; a PI file that
+still fails: send it (and which program wrote it) — the refusal now names the line, the fields expected and readings.
+
+**Then the Coulomb table** (the PI: "Makes sense, go for it"; qt_gui.md 19.12): a quiet line with Build... on the
+start page and the Overview while runs have no usable table (or the reason a file there is not read); Run > Build the
+Coulomb Table... / Check the Coulomb Table... in standard view (Tools' entry opens the same dialog, no Python); the
+build through the facade (`front::BuildCoulombTable` = `CoulombTable::BuildFile`, the CLI's routine; threads
+`CoulombTable::DefaultBuildThreads()`, a new accessor the CLI uses too, capped at 4; `ForgetMissing` after success,
+which existed), progress bar, Cancel leaves no file, no build during a run.  The engine's stderr line now names Run >
+Build the Coulomb Table...; calculate.rst's "Create New / Use" choices replaced by what the window does (intEC.dat
+computed each run, `--capture-amplitudes` in expert view reads an earlier one checked by its .sig; pyazr reuses it
+by itself); installation.rst, graphical_interface.rst, configure_menu.rst, command_line.rst.  Test `gui_coulomb`
+(37 checks, temporary HOME, small table; fails without ForgetMissing); `ctest -L gui` with an empty HOME (as CI): 9 of 9.
+**Final run** (`3da5bf9d`, `work/b-gui-casual`): build 0 warnings; `ctest -LE slow -j4` 408 of 409 (6 rmfit skipped),
+`tests/run_tests.sh` 184 of 185.  The two failures (`pyazr_park_dsde`, `thm_distortion` (g) "a warning for ancai06")
+come from this machine's `~/.azure2/coulomb_table.bin` (2026-10-26, table format 1; this build reads format 2 since
+`48fb454f`): the loader refuses it with a WARNING, park_dsde's guard only asks that the file exist, thm_distortion's
+(g) greps any WARNING.  Both pass with a format-2 table in `AZURE2_COULOMB_TABLE`; the file was not touched (rule).
+Rebuild it with `AZURE2 --build-coulomb-table` (or Run > Build the Coulomb Table...).
 
 ## 2026-11-25 (third round of gui-casual) — the PI's look at the screenshots; the examples from a manifest
 
