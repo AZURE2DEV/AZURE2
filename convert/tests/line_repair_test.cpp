@@ -133,8 +133,14 @@ int main(int argc, char **argv) {
     check("file name with a blank, the file there: converted with a note",
           r.ok && HasNote(r, "the data file's name holds a blank"));
     check("file name with a blank: the record reads that file", r.text.find("my data.dat") != std::string::npos);
-    const ConvertResult missing = Convert(Project("1 1 2 0.2 1.4 0 180 0 1 0 0 no such.dat\n"));
-    check("file name with a blank, no such file: refused (no guess)", !missing.ok && missing.lineProblem.Found());
+    // the 2020 and 2025-08 engines read the data file as the rest of the line: a name with blanks at the end of the
+    // line is that name, file there or not
+    const ConvertResult rest = Convert(Project("1 1 2 0.2 1.4 0 180 0 1 0 0 no such.dat\n"));
+    check("file name with a blank to the end of the line, no such file: read as that name (the 2020 rule)",
+          rest.ok && rest.text.find("\"no such.dat\"") != std::string::npos && HasNote(rest, "the rest of the line"));
+    // followed by the later flags, with no such file: no era read it as one name: refused, the quoted name proposed
+    const ConvertResult missing = Convert(Project("1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 no such.dat 0 0\n"));
+    check("file name with a blank, later flags after it, no such file: refused (no guess)", !missing.ok && missing.lineProblem.Found());
     bool quoted = false;
     for (const LineReading &g : missing.lineProblem.readings) quoted = quoted || g.line.find("\"no such.dat\"") != std::string::npos;
     check("file name with a blank, no such file: the quoted name proposed", quoted);

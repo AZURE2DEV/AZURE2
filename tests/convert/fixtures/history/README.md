@@ -9,7 +9,8 @@ on 2020-07-03 (`6ecaee22`, a mature code base); the first project file in it is 
 
 `make_fixtures.py` writes the constructed forms (the 13N model of `tests/convert/fixtures/tests/13N`, two data files of
 `tests/13N/data`) as each era's writer wrote them; `revisions/` holds project files of the repository as they were at
-the revision in their name; `glued_*` are the two forms of the 2026-09 writer described below.  The ctest
+the revision in their name; `glued_*` are the two forms of the 2026-09 writer described below (the `<levels>` one is `glued_levels_2026_09.old`, not
+`.azr`: `io_level_row_text` reads every `<levels>` row of the tree's `.azr` files as a valid row).  The ctest
 `convert_history` (`convert/tests/history_test.cpp`) converts each and checks the meaning against the same project in
 a later era's form; `convert_cli_locale` (`tests/convert/locale_check.sh`) and `gui_casual` (g) convert three of them
 under a decimal-comma locale.

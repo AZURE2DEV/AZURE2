@@ -33,9 +33,9 @@ std::string Slurp(const std::string &path) {
 
 std::string Dir(const std::string &form) { return root + "/tests/convert/fixtures/history/" + form; }
 
-std::string Text(const std::string &form) {
+std::string Text(const std::string &form, const std::string &extension = ".azr") {
   const std::string name = form.substr(form.find_last_of('/') + 1);
-  return Slurp(Dir(form) + "/" + name + ".azr");
+  return Slurp(Dir(form) + "/" + name + extension);
 }
 
 ConvertResult Convert(const std::string &text, const std::string &form) {
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
     check("glued norm and vary flag: refused with the split as the first reading",
           !d.ok && !d.lineProblem.readings.empty() &&
               d.lineProblem.readings[0].line.find("3.659747237e-06 1 5 0 0.005 1") != std::string::npos);
-    const ConvertResult l = Convert(Text("glued_levels_2026_09"), "glued_levels_2026_09");
+    const ConvertResult l = Convert(Text("glued_levels_2026_09", ".old"), "glued_levels_2026_09");
     check("glued J^pi and E_x in a <levels> row: refused, naming the token",
           !l.ok && l.refusal.find("114.918600000000001") != std::string::npos);
   }
