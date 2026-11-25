@@ -1920,7 +1920,7 @@ class Campaign:
 
 
     def run_remove(self, top: int = 3, nfev: int = 100, keep_last_of_jpi: bool = True,
-                   note: str = "") -> dict:
+                   note: str = "", only=None, adopt: bool = False, e_tol: float = 0.05) -> dict:
         """Backward elimination, the plan's Phase 4(a).  Rank every level by the
         frozen cost of switching it off, then HONESTLY refit the cheapest
         ``top`` of them and keep a removal whose refitted objective is no worse
@@ -1930,7 +1930,13 @@ class Campaign:
         the whole point of the honest refit is that the rest of the model
         compensates, and that can turn a level's apparent cost of
         millions into a few thousand.  Never removes the last level of a J^pi
-        group: that one carries the group's hard-sphere term."""
+        group: that one carries the group's hard-sphere term.
+
+        ``only``: a list of ``{"jpi", "energy"[, "energy_fit"]}`` -- refit only those levels, each matched to the active
+        level of its J^pi with the nearest file energy within ``e_tol`` MeV.  The drive's PRUNE step passes the levels the
+        same run added: backward elimination over the whole model would also take out
+        known levels the data do not constrain (removal cost 0).  ``adopt``: adopt the cheapest
+        REMOVE verdict as the new base model (one level per call; the caller re-runs on the new structure)."""
         from .structure import frozen_removal_screen, deactivate_level_variant
         cid, x, obj, keys = self.incumbent()
         rid = self.ledger.start_round(self.structure_id, "remove", note)
@@ -1952,6 +1958,8 @@ class Campaign:
             from .backend import AzrModel
             n_active = {}
             for lv in AzrModel.from_file(self.base_azr).active_levels:
+                if lv.channels and all(bool(ch.channel_fixed) and float(ch.gamma) == 0.0 for ch in lv.channels):
+                    continue       # a removed level (deactivate_level_variant: widths 0, fixed) carries nothing
                 n_active[lv.jpi] = n_active.get(lv.jpi, 0) + 1
             npts = max(sum(b - a for _, (a, b) in ev.row_ranges), 1)
             s2 = obj / npts
@@ -1976,7 +1984,30 @@ class Campaign:
         control = float(scC.objective)
         self.log(f"control polish of the full model, same budget: {obj:.1f} -> {control:.1f} "
                  f"({control - obj:+.1f}); removals are judged against this")
-        for row in rows[:max(top, 0)]:
+        if only is not None:
+            sel = []
+            for o in only:
+                best = None
+                for row in rows:
+                    lvl = str(row["level"])
+                    if lvl.split("#")[0] != str(o.get("jpi")):
+                        continue
+                    e = self._level_energy(lvl)
+                    if e is None:
+                        continue
+                    d = min(abs(e - float(o[k])) for k in ("energy", "energy_fit") if o.get(k) is not None)
+                    if d <= e_tol and (best is None or d < best[0]):
+                        best = (d, row)
+                if best is None:
+                    self.log(f"  {o.get('jpi')} @ {o.get('energy')} MeV: no active level of that J^pi within {e_tol} MeV; skipped")
+                elif best[1] not in sel:
+                    sel.append(best[1])
+            rows_sel = [r for r in rows if r in sel]          # keep the frozen ranking's order
+            self.log(f"removal restricted to {len(rows_sel)} of {len(rows)} levels: " + ", ".join(str(r["level"]) for r in rows_sel))
+        else:
+            rows_sel = rows
+        fits = {}
+        for row in rows_sel[:max(top, 0)]:
             lvl = str(row["level"])
             jpi = lvl.split("#")[0]
             grp = level_group(lvl)
@@ -1990,7 +2021,9 @@ class Campaign:
             if energy is None:
                 self.log(f"  {lvl}: could not resolve its energy from the model; skipped")
                 continue
-            tag = "".join(ch if ch.isalnum() else "_" for ch in lvl)[:24]
+            # the structure id in the name: an adopted removal becomes a ledger structure, and add_structure returns an
+            # existing row of the same name
+            tag = f"s{self.structure_id}_" + "".join(ch if ch.isalnum() else "_" for ch in lvl)[:24]
             path = os.path.join(self.vdir, f"rm_{tag}.azr")
             try:
                 info = deactivate_level_variant(self.base_azr, path, jpi, energy,
@@ -2005,8 +2038,9 @@ class Campaign:
                 x2 = take(x, keys, ev2.keys, ev2.x0)
                 fr = polish(ev2, x2, bounds=default_bounds(ev2, x2, self.policy), policy=self.policy,
                             max_nfev=nfev, log=self.log)
-                sc, _ = verify(path, fr.x, self.flags, objective=self.objective, keys=ev2.keys,
-                               workdir=self.vdir, name=f"verify_rm_{tag}")
+                sc, keys2 = verify(path, fr.x, self.flags, objective=self.objective, keys=ev2.keys,
+                                   workdir=self.vdir, name=f"verify_rm_{tag}")
+                fits[lvl] = (fr.x, list(ev2.keys), keys2, sc, getattr(ev2, "fixed_amplitudes", ()))
             finally:
                 ev2.close()
             k_free = int(row["n_free"]) + 1          # its widths plus its energy
@@ -2023,7 +2057,20 @@ class Campaign:
         stats = dict(screened=len(rows), refitted=len(results), control=control,
                      control_gain=control - obj,
                      removable=[r["level"] for r in results if r["verdict"] == "REMOVE"],
-                     results=results, s2=s2, wall_min=(time.time() - t0) / 60)
+                     results=results, s2=s2, wall_min=(time.time() - t0) / 60, adopted=None)
+        rem = [r for r in results if r["verdict"] == "REMOVE"]
+        if adopt and rem:
+            r = min(rem, key=lambda r: r["cost"])
+            xr, k_ev, k2, scr, fixed = fits[r["level"]]
+            sid2 = self.ledger.add_structure(os.path.basename(r["variant"]), r["variant"], k_ev, parent=self.structure_id,
+                                             note=f"-{r['level']} @ {r['energy']:.4f} MeV (removed: cost {r['cost']:+.1f} "
+                                                  f"<= threshold {r['threshold']:.1f}) {note}", fixed=fixed)
+            ncid = self.ledger.add_candidate(sid2, take(xr, k_ev, k2, np.zeros(len(k2))), k2,
+                                             move=dict(kind="level_remove", level=r["level"], jpi=r["jpi"], energy=r["energy"]),
+                                             parent=cid, status="verified")
+            self.ledger.record(ncid, scr, "verified", evaluator="single")
+            stats["adopted"] = dict(level=r["level"], jpi=r["jpi"], energy=r["energy"], cost=r["cost"], threshold=r["threshold"],
+                                    structure=sid2, candidate=ncid, objective=float(scr.objective))
         self.ledger.finish_round(rid, **stats)
         if results:
             self.note(f"backward elimination ({len(rows)} levels screened, {len(results)} refitted; "
@@ -2034,6 +2081,11 @@ class Campaign:
         else:
             self.note(f"backward elimination: {len(rows)} levels screened, none refitted "
                       f"(all candidates were the last level of their J^pi group, or unresolvable).")
+        if stats["adopted"]:
+            a = stats["adopted"]
+            self.adopt_structure(a["structure"], note=f"level {a['level']} @ {a['energy']:.4f} MeV removed")
+            self.note(f"removal of {a['level']} at {a['energy']:.4f} MeV adopted as the base model (structure {a['structure']}, "
+                      f"objective {a['objective']:.3f})")
         self.ledger.write_status_md()
         return stats
 
