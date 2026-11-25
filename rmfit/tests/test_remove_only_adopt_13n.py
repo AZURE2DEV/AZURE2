@@ -19,7 +19,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
 if _PYAZR3:
-    print("SKIP: a pyazr 2 test; this process runs pyazr 3")
+    print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_remove_only_adopt_13n.py)")
     sys.exit(77)
 from rmfit import AZURE2_ROOT
 from rmfit.campaign import Campaign

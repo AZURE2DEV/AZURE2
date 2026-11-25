@@ -10,16 +10,14 @@ model.  The rules: "prune-own" (backward elimination over the levels this run ad
   (b) LEVELSCAN does not re-append a level this run pruned, nor a J^pi the bank entry was already tested with.
   (c) CYCLE with no clean scan -> LEVELSCAN (forced: runs even with the level-test budget used up); after a clean scan
       on the same structure -> DONE; a structure change after the scan -> another final scan; final_scans_max caps it.
-Engine-free, seconds.  Run:  python3 rmfit/tests/test_drive_prune_scan.py"""
+Engine-free, seconds; runs on pyazr 2 and pyazr 3 (helpers from test_drive_dry / test_p3_drive_dry).
+Run:  python3 rmfit/tests/test_drive_prune_scan.py"""
 import json, os, shutil, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 sys.path.insert(0, HERE)
 os.environ.pop("JOB_ID", None)
 from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
-if _PYAZR3:
-    print("SKIP: a pyazr 2 test; this process runs pyazr 3")
-    sys.exit(77)
 
 FAILS = []
 
@@ -32,7 +30,11 @@ def check(name, ok, info=""):
 
 
 def main():
-    import test_drive_dry as tdd
+    # shared by both backends: the stub campaign and test directory come from the backend's drive_dry script
+    if _PYAZR3:
+        import test_p3_drive_dry as tdd
+    else:
+        import test_drive_dry as tdd
     from rmfit import drive as dv
     tmp = tempfile.mkdtemp(prefix="rmfit_prune_scan_")
     try:

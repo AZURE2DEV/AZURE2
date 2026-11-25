@@ -14,6 +14,7 @@ near-singular Jacobian directions; a trust-region step inside a box cannot
 leave the box, and a converged fit sitting *on* a bound is reported as such
 so the modeler can decide whether the bound is physics or a nuisance.
 """
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
@@ -693,6 +694,36 @@ def _ev_residuals(ev, x, jac, cols):
             return ev.residuals(x, jac=True, cols=cols)
     return ev.residuals(x, jac=jac)
 
+def write_checkpoint(path, x, keys, objective, njev, nfev, start_objective, say=None):
+    """Write polish's current iterate to ``path`` (.npz), atomically (2026-11-22: a folded polish can run
+    ~20 h and its vector otherwise lives only in memory until least_squares returns).  Opt-in: ``polish`` calls it every
+    10th Jacobian when the environment variable RMFIT_POLISH_CHECKPOINT names the file.  The Jacobian is evaluated at
+    TRF's accepted iterate, so ``x`` is the current best point.  Read back with :func:`load_checkpoint`; register it
+    with ``Ledger.add_candidate`` and score it with ``verify``.  A failed write only logs: it never stops the fit."""
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "wb") as fh:
+            np.savez(fh, x=np.asarray(x, float), keys=np.array([str(k) for k in keys]),
+                     objective=float(objective), njev=int(njev), nfev=int(nfev),
+                     start_objective=float(start_objective), time=time.time())
+        os.replace(tmp, path)
+    except OSError as err:
+        if say:
+            say(f"    checkpoint write failed ({err})")
+
+
+def load_checkpoint(path, keys=None):
+    """(x, info) from a :func:`write_checkpoint` file; with ``keys`` (an evaluator's) the stored key list must match."""
+    with np.load(path) as z:
+        x = np.asarray(z["x"], float)
+        stored = [str(k) for k in z["keys"]]
+        info = {k: z[k].item() for k in ("objective", "njev", "nfev", "start_objective", "time")}
+    if keys is not None and stored != [str(k) for k in keys]:
+        raise ValueError(f"{path}: parameter keys differ from the evaluator's ({len(stored)} vs {len(keys)})")
+    info["keys"] = stored
+    return x, info
+
+
 def polish(ev: Evaluator, x0, free: Optional[np.ndarray] = None,
            bounds: Optional[Bounds] = None, policy: BoundsPolicy = BoundsPolicy(),
            max_nfev=200, ftol=1e-9, xtol=1e-9, gtol=1e-10, x_scale="jac",
@@ -758,6 +789,7 @@ def polish(ev: Evaluator, x0, free: Optional[np.ndarray] = None,
 
     cache = {"x": x0.copy(), "r": r0, "J": J0}
     counts = {"f": 1, "j": 1}
+    ckpt = os.environ.get("RMFIT_POLISH_CHECKPOINT", "")
 
     def full(z):
         x = x0.copy()
@@ -789,7 +821,10 @@ def polish(ev: Evaluator, x0, free: Optional[np.ndarray] = None,
             return np.zeros((r0.size, cols.size))
         cache.update(x=x.copy(), r=r, J=J)
         if counts["j"] % 10 == 0:
-            say(f"    iteration {counts['j']}: objective {ev.rows_objective(r):.3f} ({time.time()-t0:.0f}s)")
+            obj_j = ev.rows_objective(r)
+            say(f"    iteration {counts['j']}: objective {obj_j:.3f} ({time.time()-t0:.0f}s)")
+            if ckpt:
+                write_checkpoint(ckpt, x, ev.keys, obj_j, counts["j"], counts["f"], start_obj, say)
         return J[:, cols]
 
     lb, ub = bounds.lb[cols], bounds.ub[cols]
