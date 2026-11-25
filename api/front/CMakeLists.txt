@@ -30,5 +30,7 @@ if(BUILD_TESTING)
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/locale_scratch)
   add_test(NAME api_front_locale COMMAND front_locale_test ${CMAKE_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/locale_scratch)
   set_tests_properties(api_front_locale PROPERTIES SKIP_RETURN_CODE 77)
-  set_tests_properties(api_front PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
+  # The limit is a guard against a hang, twice what the slow runner needs and more: the macOS runner took 165 to
+  # 320 s in five runs of 2026-11-24.
+  set_tests_properties(api_front PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1200)
 endif()
