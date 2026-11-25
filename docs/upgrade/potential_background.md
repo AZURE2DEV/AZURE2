@@ -774,7 +774,7 @@ figure.py` from `results/radius_scan.json` and `results/window.json`.
 - **Two spinning particles** in a background wave: as the spin-orbit term, only one spinning particle is supported
   (the background is diagonal in the channels then); not checked against a coupled case.
 - **No web UI form, no pyazr keyword** beyond the record (pyazr edits it as any record).  The Qt program has a panel
-  (section 13.3, `qt_gui.md` section 19) and the user guide a paragraph (`graphical_interface.rst`); the option stays
+  (section 13.3, `qt_gui.md` section 20) and the user guide a paragraph (`graphical_interface.rst`); the option stays
   research.
 - The VD p₃/₂ depth of Tursunov et al. binds the 1p state at 1.455 MeV with the engine's atomic masses and e² = αħc,
   not at the paper's 1.5866 MeV; scipy and the engine agree on 1.4549 MeV. The cause (masses, ħ²/2u = 20.7343 MeV fm²
@@ -1068,7 +1068,7 @@ fm⁻¹ᐟ² (scipy 4.0931604450).
   `AZUREAPI::GetPotentialDepthFor`.  The arguments of the three potential calls of
   the session are one function, `PotentialWaveOf` (`api/include/PotentialWave.h`).
 - The Qt program: the Potential panel of the Particle Pairs tab and the Levels tab's check of the partial waves
-  (`qt_gui.md` section 19), through the facade (`api/front/src/FrontPotential.cpp`: the record as edited is built by the
+  (`qt_gui.md` section 20), through the facade (`api/front/src/FrontPotential.cpp`: the record as edited is built by the
   engine's reader on a copy of the project; the box states and a₀ equal the session's bit for bit, api_front (h)).
 - Not built: the Coulomb-modified function for l > 0; a depth as a fit parameter (section 6: a scan with refits); the
   radius or diffuseness of a Woods-Saxon term (13.4 solves a Gaussian's width).

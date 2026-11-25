@@ -77,6 +77,12 @@ class RunTab : public QWidget {
   ChiSquaredTrace *trace() const { return trace_; }
   /// The editor of an option ("--steps="), nullptr when the command has none.
   QWidget *editor(const QString &option) const { return editors_.value(option, nullptr); }
+  /// Standard or expert view (qt_gui.md section 19.4): in standard view the commands minos and mcmc (the MCMC tab runs
+  /// it) are not offered in the drop-down, the options outside a short list are hidden unless set, and each option's
+  /// help is its tool tip only.
+  void setExpertMode(bool on);
+  /// Whether an option's row is shown (the tests).
+  bool optionShown(const QString &option) const;
   /// Lines of the log shown as a warning or an error (the highlighter's rule), for the tests.
   static int lineSeverity(const QString &line);
 
@@ -106,6 +112,9 @@ class RunTab : public QWidget {
   QMap<QString, QWidget *> editors_;  ///< option ("--covariance-band", "--steps=") -> editor
   QMap<QString, QString> needs_;      ///< option -> the flag it applies with
   QList<QWidget *> rowWidgets_;       ///< the grid's widgets, removed on a command change
+  QMap<QString, QList<QWidget *>> rowOf_;  ///< option -> its label, editor and help of the grid
+  bool expert_ = false;
+  void updateExpertRows();
   QMap<QString, QString> kept_;       ///< the values typed, kept across command changes
   QPushButton *runButton_, *stopButton_, *plotButton_;
   QLabel *progress_;

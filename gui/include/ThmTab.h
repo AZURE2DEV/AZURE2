@@ -38,6 +38,11 @@ class ThmTab : public QWidget {
   QWidget *experimentEditor(const QString &key) const { return experimentEditors_.value(key, nullptr); }
   /// Write the text view into the project (before a save).
   void applyText();
+  /// Standard or expert view (qt_gui.md section 19.4): in standard view the experiment's beam, target, spectator,
+  /// Ebeam, ps and background are shown, every other key (and every <thm> option) only when the project gives it.
+  void setExpertMode(bool on);
+  /// Whether a key's row is shown on the form (the tests).
+  bool rowShown(const QString &key, bool experiment) const;
 
  public slots:
   void reload();
@@ -55,6 +60,8 @@ class ThmTab : public QWidget {
   QLabel *message_;
   SectionTextPanel *text_;
   bool filling_ = false;
+  bool expert_ = false;
+  QFormLayout *optionsForm_ = nullptr, *experimentForm_ = nullptr;
 };
 
 #endif

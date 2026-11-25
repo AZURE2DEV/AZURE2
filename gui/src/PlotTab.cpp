@@ -182,6 +182,9 @@ void PlotTab::refresh() {
   QStringList selected;
   for (QListWidget *l : {dataList_, extrapList_})
     for (QListWidgetItem *i : Checked(l)) selected << i->data(Qt::UserRole).toString();
+  QStringList before;  // the curves listed until now (another project's, or none before the first run)
+  for (QListWidget *l : {dataList_, extrapList_})
+    for (int i = 0; i < l->count(); i++) before << l->item(i)->data(Qt::UserRole).toString();
   curves_ = azure2::front::ReadCurves(holder_->project());
   for (QListWidget *l : {dataList_, extrapList_}) {
     l->blockSignals(true);
@@ -205,6 +208,15 @@ void PlotTab::refresh() {
     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
     item->setCheckState(selected.contains(id) ? Qt::Checked : Qt::Unchecked);
     (c.section == "data" ? dataList_ : extrapList_)->addItem(item);
+  }
+  // the first curves of a project (after its first run, or on opening one with outputs): the first data set ticked,
+  // or the first extrapolation, so that the tab shows a plot and not empty axes (qt_gui.md section 19.8)
+  QStringList now;
+  for (QListWidget *l : {dataList_, extrapList_})
+    for (int i = 0; i < l->count(); i++) now << l->item(i)->data(Qt::UserRole).toString();
+  if (selected.isEmpty() && now != before) {
+    QListWidget *l = dataList_->count() ? dataList_ : extrapList_;
+    if (l->count()) l->item(0)->setCheckState(Qt::Checked);
   }
   for (QListWidget *l : {dataList_, extrapList_}) l->blockSignals(false);
   QStringList notes;
@@ -337,7 +349,7 @@ void PlotTab::draw() {
     }
   const QString xTitle = x == 0 ? tr("E (c.m.) [MeV]") : x == 1 ? tr("E_x [MeV]") : tr("theta (c.m.) [deg]");
   // the output files' columns are in the engine's units: sigma (b), dsigma/dOmega (b/sr), S (MeV b)
-  QString yTitle = tr("calculated column (engine units)");
+  QString yTitle = series.isEmpty() ? tr("tick a data set on the left") : tr("calculated column (engine units)");
   if (anyS && !anyOther) yTitle = tr("S factor [MeV b]");
   else if (observables.size() == 1) {
     const QString o = *observables.begin();

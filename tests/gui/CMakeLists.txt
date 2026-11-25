@@ -58,8 +58,26 @@ target_link_libraries(gui_overview_test PRIVATE AZURESetupLib)
 add_test(NAME gui_overview COMMAND gui_overview_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:AZURE2> ${AZURE2_QT_SHOTS}/u8-overview)
 set_tests_properties(gui_overview PROPERTIES LABELS gui TIMEOUT 1200 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
 
+# The window for an occasional user (docs/upgrade/qt_gui.md section 19): every example opened with no modal dialog,
+# the notes bar, the record tabs' tables usable at 1280x720, the expert switch (hides, shows, never changes the file),
+# the converter's repair of an old line.  Screenshots in AZURE2_QT_SHOTS/casual.
+add_executable(gui_casual_test gui_casual_test.cpp)
+target_link_libraries(gui_casual_test PRIVATE AZURESetupLib)
+add_test(NAME gui_casual COMMAND gui_casual_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/casual)
+set_tests_properties(gui_casual PROPERTIES LABELS gui TIMEOUT 900 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+
+# The Coulomb table in the window (docs/upgrade/qt_gui.md section 19.12): with an empty HOME of the build tree and
+# AZURE2_COULOMB_TABLE unset (as on CI; the test sets both itself, before the engine reads the environment) the start
+# page and the Overview show the quiet line and its Build... button; Run > Build / Check the Coulomb Table...; a build
+# through the facade advances, is cancelled leaving no file, and a small table built from the dialog is taken by the
+# engine's loader and the line goes.  Never the full 88 MB table.  Screenshots in AZURE2_QT_SHOTS/coulomb.
+add_executable(gui_coulomb_test gui_coulomb_test.cpp)
+target_link_libraries(gui_coulomb_test PRIVATE AZURESetupLib)
+add_test(NAME gui_coulomb COMMAND gui_coulomb_test ${CMAKE_SOURCE_DIR} ${AZURE2_QT_SHOTS}/coulomb)
+set_tests_properties(gui_coulomb PROPERTIES LABELS gui TIMEOUT 600 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;OMP_NUM_THREADS=2")
+
 # The Potential panel of the Pairs tab and the Levels tab's check of the partial waves (docs/upgrade/qt_gui.md section
-# 19): each mode, off/on byte for byte, the poles against the facade, the tuning against scipy, the check's two
+# 20): each mode, off/on byte for byte, the poles against the facade, the tuning against scipy, the check's two
 # remedies; screenshots AZURE2_QT_SHOTS/u9-potential.
 add_executable(gui_potential_test gui_potential_test.cpp)
 target_link_libraries(gui_potential_test PRIVATE AZURESetupLib)

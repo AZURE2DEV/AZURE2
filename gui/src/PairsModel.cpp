@@ -296,31 +296,18 @@ bool PairsModel::removeRows(int position, int rows, const QModelIndex &index) {
   return true;
 }
 
+bool PairsModel::samePair(const PairsData &a, const PairsData &b) {
+  return a.lightJ == b.lightJ && a.lightPi == b.lightPi && a.lightZ == b.lightZ && a.lightM == b.lightM &&
+         a.lightG == b.lightG && a.heavyJ == b.heavyJ && a.heavyPi == b.heavyPi && a.heavyZ == b.heavyZ &&
+         a.heavyM == b.heavyM && a.heavyG == b.heavyG && a.seperationEnergy == b.seperationEnergy &&
+         a.excitationEnergy == b.excitationEnergy && a.channelRadius == b.channelRadius && a.pairType == b.pairType &&
+         a.ecMultMask == b.ecMultMask && a.lightExcitation == b.lightExcitation;
+}
+
 int PairsModel::isPair(const PairsData &pair) const {
-  int foundPair = -1;
-  for (int i = 0; i < pairsList.size(); i++) {
-    PairsData tempPair = pairsList.value(i);
-    if (tempPair.lightJ == pair.lightJ &&
-        tempPair.lightPi == pair.lightPi &&
-        tempPair.lightZ == pair.lightZ &&
-        tempPair.lightM == pair.lightM &&
-        tempPair.lightG == pair.lightG &&
-        tempPair.heavyJ == pair.heavyJ &&
-        tempPair.heavyPi == pair.heavyPi &&
-        tempPair.heavyZ == pair.heavyZ &&
-        tempPair.heavyM == pair.heavyM &&
-        tempPair.heavyG == pair.heavyG &&
-        tempPair.seperationEnergy == pair.seperationEnergy &&
-        tempPair.excitationEnergy == pair.excitationEnergy &&
-        tempPair.channelRadius == pair.channelRadius &&
-        tempPair.pairType == pair.pairType &&
-        tempPair.ecMultMask == pair.ecMultMask &&
-        tempPair.lightExcitation == pair.lightExcitation) {
-      foundPair = i;
-      break;
-    }
-  }
-  return foundPair;
+  for (int i = 0; i < pairsList.size(); i++)
+    if (samePair(pairsList.value(i), pair)) return i;
+  return -1;
 }
 
 QString PairsModel::getParticleLabel(const PairsData &pair, int which) const {

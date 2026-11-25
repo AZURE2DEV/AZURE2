@@ -5,6 +5,7 @@
 // implementation of a particle channel's functions), physics::wigner_limit and single_particle_width
 // (physics/Widths.h), experiment::ChannelRadiusFor and the engine's build of the records.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <cmath>
 #include <limits>
@@ -58,6 +59,7 @@ const std::vector<std::string> &LevelColumnNames() { return io::LevelColumnNames
 int LevelColumnIndex(const std::string &name) { return io::LevelColumnIndex(name); }
 
 ChannelQuantities ChannelAtLevel(const LevelRow &row, double radius_fm, bool relativistic) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   ChannelQuantities q;
   q.channelEnergy = q.P = q.S = q.dSdE = q.wignerLimit = q.singleParticleWidth = q.reducedWidth = q.wignerRatio = kNaN;
   std::unique_ptr<io::LevelRow> line;
@@ -126,6 +128,7 @@ ChannelQuantities ChannelAtLevel(const LevelRow &row, double radius_fm, bool rel
 }
 
 ChannelRadiusInfo ChannelRadius(const Project &project, int pairKey, int l, int twoS, int twoJ, double pairRadius) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   ChannelRadiusInfo out;
   out.radius = pairRadius;
   if (project.Records("channelRadii").empty()) return out;
@@ -147,6 +150,7 @@ ChannelRadiusInfo ChannelRadius(const Project &project, int pairKey, int l, int 
 }
 
 std::vector<std::string> PairUses(const Project &project, int pairKey) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::string> out;
   experiment::Format3ReadOptions read;
   read.fileName = project.Path();

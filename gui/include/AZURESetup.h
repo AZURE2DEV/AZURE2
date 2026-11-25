@@ -17,9 +17,11 @@ class RunTab;
 class PlotTab;
 class ThmTab;
 class PythonTools;
+class CoulombTableControl;
 class MCMCTab;
 class DiagnosticsPanel;
 class StartPage;
+class NotesBar;
 
 QT_BEGIN_NAMESPACE
 class QAction;
@@ -59,6 +61,10 @@ class AZURESetup : public QMainWindow {
 
   /// Open a project: a format-3 file, or an old one after asking to convert it (the converter of --convert).
   void open(QString filename);
+  /// Convert the old project `from` to `to` (AZURE2 --convert) and open the result.  A line the converter cannot read
+  /// is shown with its number, the fields expected and the readings proposed (ConvertRepairDialog), to be edited and
+  /// converted again from a copy (`from` is kept): qt_gui.md section 19.5.  False with the converter's report.
+  bool convertOldProject(const QString &from, const QString &to, QString &report);
   /// Read / write a project without any dialog (the headless tests); false with the reason.
   bool readProjectFile(const QString &filename, QString &why);
   bool writeProjectFile(const QString &filename, QString &why);
@@ -92,6 +98,8 @@ class AZURESetup : public QMainWindow {
   /// The MCMC tab, null when the engine has no mcmc command.
   MCMCTab *getMCMCTab() const { return mcmcTab; }
   PythonTools *tools() const { return tools_; }
+  /// The Coulomb table of this computer: its notices (start page, Overview) and its dialog (qt_gui.md section 19.12).
+  CoulombTableControl *coulombTable() const { return coulomb_; }
   DiagnosticsPanel *getDiagnostics() const { return diagnostics; }
   QTabWidget *tabs() const { return tabWidget; }
   StartPage *startPage() const { return startPage_; }
@@ -106,6 +114,20 @@ class AZURESetup : public QMainWindow {
   QLabel *statusJob() const { return jobLabel_; }
   QProgressBar *statusProgress() const { return jobBar_; }
   QDockWidget *diagnosticsDockWidget() const { return diagnosticsDock; }
+  /// Standard or expert view (qt_gui.md section 19.4): View > Show Expert Options, the start page's box and the status
+  /// bar's switch; kept in QSettings.  It changes what is shown, never the project.
+  void setExpertMode(bool on);
+  bool expertMode() const;
+  QAction *expertAction() const { return expertAction_; }
+  /// The data files the active data sets name that this computer does not have at that path (as written in the
+  /// records), "record: file" each (qt_gui.md section 19.10).
+  QStringList missingDataFiles() const;
+  /// Look for each missing data file by its name under `folder` (four levels deep) and point its data set to the file
+  /// found (a path relative to the project when it is below the project's folder's parent, else absolute); returns how
+  /// many were pointed, `still` gets those not found.  The project is modified, not saved.
+  int locateDataFiles(const QString &folder, QStringList *still = nullptr);
+  /// The notes about the project just opened (one bar, never a modal box: qt_gui.md section 19.2).
+  NotesBar *notesBar() const { return notes_; }
   /// Close the project (after asking to save) and show the start page.
   bool closeProject();
   /// Run `command` (calculate, fit, ...) from the tool bar: the Calculate tab's command set, then startRun.
@@ -176,6 +198,7 @@ class AZURESetup : public QMainWindow {
   int loadedMaxL_ = 0;                ///< the Levels tab's maximum l as read
   bool includeAllJPiSwitchedOn_ = false;  ///< includeAllJPi switched on in this window since the project was read
   bool running_ = false;
+  CoulombTableControl *coulomb_ = nullptr;
   QThread runThread_;
   RunWorker *worker_ = nullptr;
 
@@ -202,6 +225,16 @@ class AZURESetup : public QMainWindow {
   PythonTools *tools_ = nullptr;
   DiagnosticsPanel *diagnostics;
   QDockWidget *diagnosticsDock;
+  NotesBar *notes_ = nullptr;
+  QAction *expertAction_ = nullptr;
+  QToolButton *statusExpert_ = nullptr;
+  QWidget *physicsTab_ = nullptr;
+  QMenu *toolsMenu_ = nullptr;
+  QMap<QWidget *, QString> tabTips_;  ///< what each tab is for (its tool tip)
+  /// The expert tabs (Nuclear Potential, THM, MCMC) shown in standard view only when the project uses them.
+  void updateExpertTabs();
+  bool openValidation_ = false;      ///< the next validation is the one of a project just opened (its notes)
+  bool validateRequested_ = false;   ///< the next validation was asked for by the user (Validate)
 
   QStackedWidget *central_ = nullptr;
   StartPage *startPage_ = nullptr;

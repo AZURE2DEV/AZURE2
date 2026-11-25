@@ -18,6 +18,8 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSortFilterProxyModel;
+class QSplitter;
+class QToolButton;
 class QTableView;
 class QVBoxLayout;
 QT_END_NAMESPACE
@@ -87,12 +89,28 @@ class RecordsPanel : public QWidget {
   QStringList hiddenByQuantity() const { return hiddenByQuantity_; }
   /// Whether a field's row is shown on the form (the tests).
   bool fieldRowShown(const QString &key) const;
+  /// Whether a field applies to the record as the form holds it (its schema condition; the tests).
+  bool fieldApplies(const QString &key) const { return !notApplying_.contains(key); }
+  /// The table above, the form below (qt_gui.md section 19.3): the table keeps at least five rows, the form can be
+  /// closed (the Form button, or the splitter dragged to the bottom), the sizes are kept per panel in QSettings.
+  QSplitter *splitter() const { return splitter_; }
+  void setFormShown(bool on);
+  bool formShown() const;
+  /// The table's rows a user sees without scrolling (the tests).
+  int visibleRows() const;
+  /// Standard or expert view (qt_gui.md section 19.4): in standard view the Kind column of a one-kind table and the
+  /// columns empty in every row are hidden (a column with a value in any row is shown).
+  void setExpertMode(bool on);
 
  signals:
   void edited();
 
  public slots:
   void reload();
+
+ protected:
+  void showEvent(QShowEvent *event) override;
+  bool eventFilter(QObject *watched, QEvent *event) override;
 
  private slots:
   void selectionChanged();
@@ -166,6 +184,12 @@ class RecordsPanel : public QWidget {
     azure2::front::FieldInfo field;
   };
   QMap<QString, QuantityRow> quantityRows_;
+  /// Every field's row on the form (key -> form, label, widget), for the schema's conditions (applyConditions).
+  QMap<QString, QuantityRow> fieldRows_;
+  /// The fields whose schema condition does not hold for the record as the form holds it (a target of kind none: its
+  /// active nucleus, areal density, stopping, straggling): not marked required, their rows hidden while empty.
+  QStringList notApplying_;
+  void applyConditions();
   QStringList hiddenByQuantity_;
   QMap<QString, QList<FieldEditor *>> editors_;  ///< field key -> its editors (several for a repeatable field)
   QMap<QString, QWidget *> boxes_;               ///< field key -> its box (a structured field and its group)
@@ -175,6 +199,19 @@ class RecordsPanel : public QWidget {
   bool reloading_ = false;
   bool previewPending_ = false;
   QString quantityKey_;
+  QSplitter *splitter_ = nullptr;
+  QToolButton *formToggle_ = nullptr;
+  int formHeight_ = 0;       ///< the form's height before it was closed (to open it again at that size)
+  bool sized_ = false;       ///< the splitter's sizes were set (saved ones, or the first ones on show)
+  bool expert_ = false;
+  bool columnsFitted_ = false;  ///< the columns fitted to the table's width (fitColumns), until the next reload
+  bool fitting_ = false;        ///< fitColumns is setting the widths (a column resized meanwhile is not the user's)
+  bool userWidths_ = false;     ///< the user resized a column: the table's width no longer refits them
+  int fittedWidth_ = 0;         ///< the viewport's width the columns were fitted to
+  void initialSizes();
+  void fitColumns();
+  void updateColumns();
+  int tableRowsHeight(int rows) const;
 };
 
 #endif

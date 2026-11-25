@@ -15,7 +15,9 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+#include "ExpertMode.h"
 #include "SectionTextPanel.h"
+#include "ValueEditor.h"
 
 namespace {
 
@@ -46,8 +48,11 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
   message_->setObjectName("thmMessage");
   message_->setWordWrap(true);
 
+  expert_ = expert::Enabled();
   QFormLayout *optionsForm = new QFormLayout;
   QFormLayout *experimentForm = new QFormLayout;
+  optionsForm_ = optionsForm;
+  experimentForm_ = experimentForm;
   for (int k = 0; k < 2 && k < (int)kinds_.size(); k++)
     for (const azure2::front::FieldInfo &f : kinds_[k].fields) {
       QWidget *editor = editorFor(f, k == 1);
@@ -59,7 +64,8 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
         presentWith_.insert(QString::fromStdString(f.key),
                             QString::fromStdString(f.appliesWhen.substr(0, f.appliesWhen.find(' '))));
     }
-  QGroupBox *optionsBox = new QGroupBox(kinds_.empty() ? tr("Options") : QString::fromStdString(kinds_[0].title));
+  // the schema titles the section by its tag ("<thm>"): plain words here (qt_gui.md section 19.9)
+  QGroupBox *optionsBox = new QGroupBox(tr("THM options"));
   optionsBox->setToolTip(kinds_.empty() ? QString() : QString::fromStdString(kinds_[0].doc));
   optionsBox->setLayout(optionsForm);
 
@@ -97,7 +103,7 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
   experimentSplit->addWidget(experimentScroll);
   experimentSplit->setStretchFactor(1, 3);
   QGroupBox *experimentBox =
-      new QGroupBox(kinds_.size() > 1 ? QString::fromStdString(kinds_[1].title) : tr("Experiments"));
+      new QGroupBox(tr("Experiments"));
   experimentBox->setToolTip(kinds_.size() > 1 ? QString::fromStdString(kinds_[1].doc) : QString());
   (new QVBoxLayout(experimentBox))->addWidget(experimentSplit);
 
@@ -107,7 +113,7 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
   fp->addWidget(experimentBox, 1);
   fp->addWidget(message_);
   text_ = new SectionTextPanel(holder_, "thm",
-                               tr("The whole <thm> section as text (the Trojan horse experiments: one line per "
+                               tr("The whole THM section as text (the Trojan horse experiments: one line per "
                                   "experiment, key=value).  The form and this text edit the same lines."));
   QTabWidget *pages = new QTabWidget;
   pages->setObjectName("thmPages");
@@ -124,7 +130,7 @@ ThmTab::ThmTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), holder
 QWidget *ThmTab::editorFor(const azure2::front::FieldInfo &f, bool experiment) {
   const QString key = QString::fromStdString(f.key);
   QString tip = key + ": " + QString::fromStdString(f.doc);
-  if (!f.grammar.empty()) tip += "\n" + QString::fromStdString(f.grammar);
+  if (!f.grammar.empty() && expert::Enabled()) tip += "\n" + QString::fromStdString(f.grammar);
   if (!f.appliesWhen.empty()) tip += "\n" + tr("Applies when %1.").arg(QString::fromStdString(f.appliesWhen));
   QWidget *editor;
   if (f.type == "enum") {
@@ -142,7 +148,7 @@ QWidget *ThmTab::editorFor(const azure2::front::FieldInfo &f, bool experiment) {
   } else {
     QLineEdit *e = new QLineEdit;
     e->setPlaceholderText(!f.defaultText.empty() ? tr("default %1").arg(QString::fromStdString(f.defaultText))
-                                                  : QString::fromStdString(f.grammar));
+                                                  : PlainHint(f.grammar));
     connect(e, &QLineEdit::editingFinished, this, [this, key, experiment, e]() {
       if (filling_) return;
       QString why;
@@ -180,10 +186,23 @@ void ThmTab::reload() {
   QMap<QString, QString> options;
   for (const azure2::front::ThmEntry &e : azure2::front::ThmEntries(holder_->project()))
     if (e.experiment.empty()) options[QString::fromStdString(e.key)] = QString::fromStdString(e.value);
-  for (auto it = optionEditors_.constBegin(); it != optionEditors_.constEnd(); ++it)
+  for (auto it = optionEditors_.constBegin(); it != optionEditors_.constEnd(); ++it) {
     SetEditorText(it.value(), options.value(it.key()));
+    // an option the project gives is shown in either view; the others are expert options (qt_gui.md section 19.4)
+    optionsForm_->setRowVisible(it.value(), expert_ || options.contains(it.key()));
+  }
   filling_ = false;
   fill();
+}
+
+void ThmTab::setExpertMode(bool on) {
+  expert_ = on;
+  reload();
+}
+
+bool ThmTab::rowShown(const QString &key, bool experiment) const {
+  QWidget *e = (experiment ? experimentEditors_ : optionEditors_).value(key, nullptr);
+  return e && !e->isHidden();
 }
 
 void ThmTab::fill() {
@@ -194,6 +213,9 @@ void ThmTab::fill() {
     if (!name.empty() && e.experiment == name) values[QString::fromStdString(e.key)] = QString::fromStdString(e.value);
   for (auto it = experimentEditors_.constBegin(); it != experimentEditors_.constEnd(); ++it) {
     SetEditorText(it.value(), values.value(it.key()));
+    // the keys an occasional THM user sets, and any key the experiment gives, in either view; the rest in expert view
+    const bool standard = QStringList{"beam", "target", "spectator", "Ebeam", "ps", "background"}.contains(it.key());
+    experimentForm_->setRowVisible(it.value(), expert_ || standard || values.contains(it.key()));
     const QString needs = presentWith_.value(it.key());
     it.value()->setEnabled(!name.empty() && (needs.isEmpty() || values.contains(needs)));
   }

@@ -10,8 +10,6 @@
 SectionTextPanel::SectionTextPanel(ProjectHolder *holder, const QString &section, const QString &help, QWidget *parent)
     : QWidget(parent), holder_(holder), section_(section) {
   setObjectName("section_" + section);
-  QLabel *label = new QLabel(help);
-  label->setWordWrap(true);
   edit_ = new QPlainTextEdit;
   edit_->setObjectName("sectionText_" + section);
   edit_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
@@ -21,12 +19,15 @@ SectionTextPanel::SectionTextPanel(ProjectHolder *holder, const QString &section
   connect(revert, &QPushButton::clicked, this, &SectionTextPanel::reload);
   connect(applyButton, &QPushButton::clicked, this, &SectionTextPanel::apply);
   QHBoxLayout *buttons = new QHBoxLayout;
-  buttons->addWidget(new QLabel(QString("&lt;%1&gt; ... &lt;/%1&gt;").arg(section)));
+  // what the section is: the tip of its name, not a paragraph above the text (qt_gui.md section 19.6)
+  QLabel *name = new QLabel(QString("&lt;%1&gt; ... &lt;/%1&gt;").arg(section));
+  name->setToolTip(help);
+  edit_->setToolTip(help);
+  buttons->addWidget(name);
   buttons->addStretch(1);
   buttons->addWidget(revert);
   buttons->addWidget(applyButton);
   QVBoxLayout *layout = new QVBoxLayout(this);
-  layout->addWidget(label);
   layout->addWidget(edit_, 1);
   layout->addLayout(buttons);
   connect(holder_, &ProjectHolder::opened, this, &SectionTextPanel::reload);

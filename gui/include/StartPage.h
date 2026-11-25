@@ -6,6 +6,7 @@
 
 QT_BEGIN_NAMESPACE
 class QListWidget;
+class QCheckBox;
 class QListWidgetItem;
 class QPushButton;
 QT_END_NAMESPACE
@@ -28,23 +29,42 @@ class StartPage : public QWidget {
   QListWidget *exampleList() const { return examples_; }
   QPushButton *newButton() const { return new_; }
   QPushButton *openButton() const { return open_; }
+  /// "Show expert options" (qt_gui.md section 19.4): the same switch as View > Show Expert Options.
+  QCheckBox *expertBox() const { return expert_; }
+  void setExpertChecked(bool on);
+  /// A line under the New and Open buttons (the Coulomb table's notice, qt_gui.md section 19.12).
+  void addNotice(QWidget *notice);
 
-  /// The example projects (*.azr) of the directories examplePlaces() finds, sorted by folder.
+  /// One line of the examples' manifest (examples/index.json, qt_gui.md section 19.9): a group's heading (project
+  /// empty), an entry (one reaction) or a variant of the entry before it.
+  struct Example {
+    QString group, reaction, source, what, project;  ///< project: absolute path ("" for a heading)
+    bool variant = false;
+  };
+  /// The manifest of the first place (examplePlaces()) that has one, in its order; empty when none has one.  `why`:
+  /// what could not be read.
+  static QList<Example> readManifest(QString *why = nullptr);
+  static QList<Example> readManifest(const QString &root, QString *why = nullptr);
+  /// The example projects: the manifest's entries and variants in its order, or, where there is no manifest, the
+  /// *.azr of examples/*/ (and of $AZURE2_EXAMPLES/*/), sorted by folder.
   static QStringList findExamples();
-  /// Where examples are looked for: $AZURE2_EXAMPLES; examples/ and tests/upgrade/ beside or above the program (an
-  /// installed share/azure2/examples or a build directory inside a checkout); the checkout the program was built from.
+  /// Where examples are looked for: $AZURE2_EXAMPLES; a folder holding examples/ beside or above the program (an
+  /// installed share/azure2 or a build directory inside a checkout); the checkout the program was built from.
   static QStringList examplePlaces();
 
  signals:
   void newRequested();
   void openRequested();
   void openFile(const QString &file);
+  void expertToggled(bool on);
 
  private:
   QListWidget *recent_;
   QListWidget *examples_;
   QWidget *tabNotes_;
   QPushButton *new_, *open_;
+  QCheckBox *expert_ = nullptr;
+  class QVBoxLayout *notices_ = nullptr;
 };
 
 #endif

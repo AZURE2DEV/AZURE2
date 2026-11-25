@@ -2,6 +2,7 @@
 // the program's run (RunProgram) with a stream that hands each line to the caller's observer, the stop request and the
 // sinks of ProgramObserver, and the program's own tables of commands, options, fitters and <config> keys.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <algorithm>
 #include <cctype>
@@ -81,6 +82,7 @@ class LineBuffer : public std::streambuf {
 }  // namespace
 
 RunResult Run(const RunRequest &request, RunObserver &observer, const std::atomic<bool> *stop) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   // The calling thread's x87 precision (FloatingPointPrecision.h), as main's; the regions of the run take their own.
   const azure2::support::ExtendedPrecisionScope fpPrecision;
   gsl_set_error_handler(&GSLException::GSLErrorHandler);  // as main: the engine catches GSL's errors as exceptions
@@ -291,6 +293,61 @@ std::vector<Fitter> Fitters() {
 }
 
 bool ConvertProject(const std::string &from, const std::string &to, std::string &report) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
+  ConvertLineProblem ignored;
+  return ConvertProject(from, to, report, ignored);
+}
+
+bool WriteRepairedCopy(const std::string &from, int line, const std::string &text, const std::string &to, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
+  std::ifstream in(from, std::ios::binary);
+  if (!in) {
+    why = "cannot read " + from;
+    return false;
+  }
+  std::ostringstream bytes;
+  bytes << in.rdbuf();
+  const std::string all = bytes.str();
+  std::error_code ec;
+  if (std::filesystem::exists(to, ec)) {
+    why = to + " exists: nothing is overwritten";
+    return false;
+  }
+  std::string out;
+  std::size_t start = 0;
+  int number = 0;
+  bool replaced = false;
+  while (start < all.size()) {
+    std::size_t end = all.find('\n', start);
+    const bool last = end == std::string::npos;
+    end = last ? all.size() : end + 1;
+    number++;
+    if (number == line) {
+      // the line's own end kept (CRLF or LF)
+      const std::string eol = last ? "" : (end >= 2 && all[end - 2] == '\r' ? "\r\n" : "\n");
+      out += text + eol;
+      replaced = true;
+    } else {
+      out += all.substr(start, end - start);
+    }
+    start = end;
+  }
+  if (!replaced) {
+    why = from + " has no line " + std::to_string(line);
+    return false;
+  }
+  std::ofstream o(to, std::ios::binary);
+  o << out;
+  if (!o) {
+    why = "cannot write " + to;
+    return false;
+  }
+  return true;
+}
+
+bool ConvertProject(const std::string &from, const std::string &to, std::string &report, ConvertLineProblem &problem) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
+  problem = ConvertLineProblem();
   // AZURE2 --convert OLD NEW: the same converter, the same refusals of an existing output
   std::ifstream in(from, std::ios::binary);
   if (!in) {
@@ -315,6 +372,14 @@ bool ConvertProject(const std::string &from, const std::string &to, std::string 
     for (const azure2::experiment::Diagnostic &d : r.diagnostics) text << d.ToText() << "\n";
     text << from << " is not converted: " << r.refusal << "\n";
     report = text.str();
+    if (r.lineProblem.Found()) {
+      problem.line = r.lineProblem.fileLine;
+      problem.section = r.lineProblem.section;
+      problem.text = r.lineProblem.text;
+      problem.problem = r.lineProblem.problem;
+      problem.expected = r.lineProblem.expected;
+      for (const azure2::convert::LineReading &g : r.lineProblem.readings) problem.readings.push_back({g.label, g.line});
+    }
     return false;
   }
   const std::string outDir = azure2::experiment::ProjectDirectoryOf(to);

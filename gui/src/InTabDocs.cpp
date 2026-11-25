@@ -37,7 +37,7 @@ const std::vector<QString> LevelsTab::infoText =
                    "<ul><li><p>The user needs to be careful that the maximum orbital momentum is high enough to have at least one channels for each particle pair for each level if it allowed or the code will crash. </p></ul>");
 
 
-// The Potential panel of the Particle Pairs tab (docs/upgrade/qt_gui.md section 19; the physics:
+// The Potential panel of the Particle Pairs tab (docs/upgrade/qt_gui.md section 20; the physics:
 // docs/upgrade/potential_background.md).
 const QString PotentialPanel::helpText = QObject::tr(
     "<p>A pair with a <b>potential</b> record takes its channel functions from the radial equation with that nuclear "

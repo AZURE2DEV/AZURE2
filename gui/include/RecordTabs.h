@@ -29,6 +29,7 @@ class SectionsTab : public QWidget {
     QString help;
     bool text = false;  ///< a section of its own grammar (SectionTextPanel)
     bool perKind = false;  ///< one sub-tab per record kind of the section (targets, beams, detectors)
+    bool expert = false;   ///< an expert part: its sub-tab hidden in standard view while it holds no record
   };
   SectionsTab(ProjectHolder *holder, const QList<Part> &parts, QWidget *parent = nullptr);
   /// The (first) panel of a section (nullptr when this tab has none).
@@ -41,11 +42,18 @@ class SectionsTab : public QWidget {
   bool show(const QString &section, const QString &record);
   /// Write the text panels into the project (before a save).
   void applyText();
+  /// Standard or expert view (qt_gui.md section 19.4): the records panels' columns, the expert parts' sub-tabs.
+  void setExpertMode(bool on);
+  /// Whether this tab holds any record (the window shows an expert tab that does).
+  bool hasRecords() const;
 
  private:
   QTabWidget *tabs_ = nullptr;
   QList<RecordsPanel *> records_;
   QList<SectionTextPanel *> texts_;
+  QList<RecordsPanel *> expertPanels_;
+  bool expert_ = false;
+  void updateExpertTabs();
 };
 
 /// The parts of the window's tabs, in the old program's order.

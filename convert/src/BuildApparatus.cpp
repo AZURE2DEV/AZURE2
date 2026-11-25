@@ -81,6 +81,28 @@ void Builder::BuildApparatus() {
         if (thick) {
           Count(Construct::kThick);
         }
+        if (active.empty()) {
+          // A line that applies to no active data or test line changed no result of the old engine; the lines it lists
+          // (inactive) say which nucleus it was written for, when they agree.
+          std::string listed;
+          bool agree = true;
+          for (int k : e.segments) {
+            int ent = 0;
+            for (const OldDataLine &d : old_.data)
+              if (d.key == k) ent = d.parsed->entranceKey();
+            if (const OldPair *p = Pair(ent)) {
+              const std::string nucleus = Nuclide(p->z2, p->A2());
+              agree = agree && (listed.empty() || listed == nucleus);
+              if (listed.empty()) listed = nucleus;
+            }
+          }
+          if (!listed.empty() && agree) {
+            active = listed;
+            Note(Construct::kEffectLine, "", "<targetInt> line " + std::to_string(e.index) + " applies to no active line "
+                 "(it changed no result of the old engine); its target nucleus " + active + " is that of the inactive data "
+                 "line(s) it lists");
+          }
+        }
         if (active.empty()) active = Ask(Construct::kEffectLine, "line" + n + ".active", "the target nucleus of <targetInt> line " + std::to_string(e.index) + " (it applies to no line)", "");
         Add(a.target, "active", active);
         if (!thick) {

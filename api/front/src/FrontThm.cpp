@@ -2,6 +2,7 @@
 // engine's parser) and the engine's edits of the section's lines (ThmBlockEdits.h), as pyazr's Project edits them
 // (api/src/pybind_nuclear_part.cpp: thm_keys, thm_entries, thm_option_edits, thm_experiment_edits).
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <sstream>
 
@@ -43,6 +44,7 @@ int ThmLine(const Project &project) {
 }  // namespace
 
 std::vector<KindInfo> ThmKinds() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<KindInfo> out(2);
   out[0].kind = ThmOptionKind().name;
   out[0].title = ThmOptionKind().title;
@@ -58,6 +60,7 @@ std::vector<KindInfo> ThmKinds() {
 }
 
 std::vector<ThmEntry> ThmEntries(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<ThmEntry> out;
   const int first = ThmLine(project);
   for (const ::ThmEntry &e : ThmBlockEntries(project.SectionBody("thm")))
@@ -66,6 +69,7 @@ std::vector<ThmEntry> ThmEntries(const Project &project) {
 }
 
 bool SetThmOption(Project &project, const std::string &key, const std::string &value, std::string &why, bool remove) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const std::vector<std::string> body = project.SectionBody("thm");
   std::vector<ThmLineEdit> edits;
   if (!ThmOptionEdits(body, key, value, remove ? ThmChange::Remove : ThmChange::Set, edits, why)) return false;

@@ -1,4 +1,6 @@
 #include "RunTab.h"
+#include "ExpertMode.h"
+#include <QListView>
 
 #include <algorithm>
 #include <cmath>
@@ -155,6 +157,7 @@ int RunTab::lineSeverity(const QString &line) {
 }
 
 RunTab::RunTab(QWidget *parent) : QWidget(parent) {
+  expert_ = expert::Enabled();
   command_ = new QComboBox;
   command_->setObjectName("calcType");
   for (const azure2::front::Command &c : azure2::front::Commands()) {
@@ -298,6 +301,7 @@ void RunTab::commandChanged() {
   for (auto it = editors_.constBegin(); it != editors_.constEnd(); ++it) kept_[it.key()] = valueOf(it.key());
   for (QWidget *w : rowWidgets_) delete w;
   rowWidgets_.clear();
+  rowOf_.clear();
   editors_.clear();
   needs_.clear();
   const QString command = this->command();
@@ -392,12 +396,61 @@ void RunTab::commandChanged() {
     optionsGrid_->addWidget(editor, row, 1, Qt::AlignLeft | Qt::AlignVCenter);
     optionsGrid_->addWidget(hint, row, 2);
     rowWidgets_ << labelWidget << editor << hint;
+    rowOf_.insert(option, {labelWidget, editor, hint});
     editors_.insert(option, editor);
     if (!o.needs.empty()) needs_.insert(option, QString::fromStdString(o.needs));
     row++;
   }
   optionsBox_->setVisible(!editors_.isEmpty());
   updateDependents();
+  updateExpertRows();
+}
+
+namespace {
+
+/// The options a casual user meets (qt_gui.md section 19.4): the start file, the band, the rate's pairs and
+/// temperatures, MINOS's chi^2 rise and the sampler's walkers and steps.  The others are expert options.
+bool StandardOption(const QString &option) {
+  const char *const kStandard[] = {"--parameter-file=", "--covariance-band", "--rate-entrance=", "--rate-exit=",
+                                          "--temperature-file=", "--temperature-min=", "--temperature-max=",
+                                          "--temperature-step=", "--delta-chi2=", "--walkers=", "--steps="};
+  for (const char *o : kStandard)
+    if (option == o) return true;
+  return false;
+}
+
+}  // namespace
+
+void RunTab::setExpertMode(bool on) {
+  expert_ = on;
+  updateExpertRows();
+}
+
+bool RunTab::optionShown(const QString &option) const {
+  const QList<QWidget *> row = rowOf_.value(option);
+  return !row.isEmpty() && !row[1]->isHidden();
+}
+
+void RunTab::updateExpertRows() {
+  // the commands of an expert (MINOS; the sampler, which its own tab runs) out of the drop-down in standard view,
+  // unless chosen
+  if (QListView *list = qobject_cast<QListView *>(command_->view()))
+    for (int i = 0; i < command_->count(); i++) {
+      const QString c = command_->itemData(i).toString();
+      list->setRowHidden(i, !expert_ && i != command_->currentIndex() && (c == "minos" || c == "mcmc"));
+    }
+  for (auto it = rowOf_.constBegin(); it != rowOf_.constEnd(); ++it) {
+    const QString value = valueOf(it.key());
+    const bool set = !value.isEmpty() && !(qobject_cast<QCheckBox *>(it.value()[1]) && value == "0");
+    const bool shown = expert_ || StandardOption(it.key()) || set;  // a set option is shown in either view
+    it.value()[0]->setVisible(shown);
+    it.value()[1]->setVisible(shown);
+    it.value()[2]->setVisible(shown && expert_);  // the help line: the tool tip in standard view
+    QWidget *editor = it.value()[1];
+    if (!editor->property("baseTip").isValid()) editor->setProperty("baseTip", editor->toolTip());
+    const bool marked = shown && !expert_ && !StandardOption(it.key());
+    editor->setToolTip(editor->property("baseTip").toString() + (marked ? "\n" + expert::ShownBecauseSet() : QString()));
+  }
 }
 
 void RunTab::updateDependents() {

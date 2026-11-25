@@ -1,6 +1,6 @@
 // azure2-coulomb-table: build, validate and describe the universal Coulomb tables
 // (CoulombTable).  AZURE2 itself builds the default table with --build-coulomb-table
-// (and the GUI from Configure > Build Coulomb Table...); this tool adds the build
+// (and the setup program from Run > Build the Coulomb Table...); this tool adds the build
 // options, validation and info.
 //
 //   azure2-coulomb-table build FILE [--lmax 10] [--eta 1e-3 100] [--rho 1e-3 100]

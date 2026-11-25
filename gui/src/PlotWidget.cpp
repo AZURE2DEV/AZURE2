@@ -19,6 +19,40 @@
 
 namespace {
 
+/// A pole label placed at the bottom of a panel (PlotWidget::render, markerLabelRects).
+struct MarkerLabel {
+  QRect box;
+  QString text;
+};
+
+/// The labels in x order, each in the lowest of four rows where its box (with a 4 px gap) overlaps none already
+/// placed; a label with no free row, or outside the panel, is left out.
+template <typename MapX>
+QList<MarkerLabel> MarkerLabelsOf(const QVector<double> &xs, const QStringList &labels, const QRect &r,
+                                  const QFontMetrics &fm, MapX mapX, bool logX) {
+  QVector<int> order;
+  for (int i = 0; i < xs.size(); i++)
+    if (std::isfinite(xs[i]) && !(logX && xs[i] <= 0) && !labels.value(i).isEmpty()) order << i;
+  std::sort(order.begin(), order.end(), [&xs](int a, int b) { return xs[a] < xs[b]; });
+  const int kRows = 4, h = fm.height() + 2;
+  double rowEnd[kRows] = {-1e300, -1e300, -1e300, -1e300};
+  QList<MarkerLabel> out;
+  for (int i : order) {
+    const double px = mapX(xs[i]);
+    const int w = fm.horizontalAdvance(labels[i]) + 6;
+    const int left = (int)std::lround(px) + 2;
+    if (px < r.left() || px > r.right() || left + w > r.right()) continue;
+    for (int row = 0; row < kRows; row++)
+      if (left > rowEnd[row]) {
+        out.push_back({QRect(left, r.bottom() - 3 - (row + 1) * h, w, h), labels[i]});
+        rowEnd[row] = left + w + 4;
+        break;
+      }
+  }
+  return out;
+}
+
+
 const int kLeft = 78, kRight = 16, kTop = 14, kBottom = 44, kGap = 30;
 
 double Log(double v) { return std::log10(v); }
@@ -174,6 +208,51 @@ double PlotWidget::unmapY(double py, const QRect &r) const {
 }
 
 PlotWidget::Frame PlotWidget::framesOf(const QRect &area) const {
+  Frame f = framesOfInner(area);
+  // The legend (qt_gui.md section 19.8): in the first corner of the main panel (top right, top left, bottom right,
+  // bottom left) where it covers no point of a curve or of the data; when every corner covers some, below the axes in
+  // as many columns as fit, the panels made shorter to give it room.
+  if (legend_ && !series_.isEmpty()) {
+    const QFontMetrics fm = fontMetrics();
+    int width = 0;
+    for (const PlotSeries &s : series_) width = std::max(width, fm.horizontalAdvance(s.label));
+    const int row = fm.height() + 2, boxW = width + 40, n = (int)series_.size();
+    const QRect m = f.main;
+    const QList<QRect> corners = {QRect(m.right() - boxW - 6, m.top() + 6, boxW, row * n + 8),
+                                  QRect(m.left() + 6, m.top() + 6, boxW, row * n + 8),
+                                  QRect(m.right() - boxW - 6, m.bottom() - row * n - 14, boxW, row * n + 8),
+                                  QRect(m.left() + 6, m.bottom() - row * n - 14, boxW, row * n + 8)};
+    auto covers = [&](const QRect &box) {
+      if (!m.contains(box)) return true;
+      for (const PlotSeries &s : series_) {
+        for (int i = 0; i < s.modelX.size(); i++)
+          if (usable(s.modelX[i], s.modelY[i]) &&
+              box.contains(QPoint((int)mapX(s.modelX[i], m), (int)mapY(s.modelY[i], m, view_, logY_))))
+            return true;
+        for (int i = 0; i < s.dataX.size(); i++)
+          if (usable(s.dataX[i], s.dataY[i]) &&
+              box.contains(QPoint((int)mapX(s.dataX[i], m), (int)mapY(s.dataY[i], m, view_, logY_))))
+            return true;
+      }
+      return false;
+    };
+    for (const QRect &c : corners)
+      if (f.legend.isEmpty() && !covers(c)) f.legend = c;
+    if (f.legend.isEmpty()) {
+      f.legendColumns = std::max(1, std::min(n, (area.width() - 2 * kRight) / std::max(1, boxW)));
+      const int rows = (n + f.legendColumns - 1) / f.legendColumns;
+      const int height = rows * row + 8;
+      const QRect shorter = area.adjusted(0, 0, 0, -(height + 4));
+      Frame g = framesOfInner(shorter);
+      g.legendColumns = f.legendColumns;
+      g.legend = QRect(area.left() + kRight, area.bottom() - height - 2, f.legendColumns * boxW, height);
+      return g;
+    }
+  }
+  return f;
+}
+
+PlotWidget::Frame PlotWidget::framesOfInner(const QRect &area) const {
   bool anyResidual = false;
   for (const PlotSeries &s : series_) anyResidual = anyResidual || !s.residual.isEmpty();
   const QRect inner = area.adjusted(kLeft, kTop, -kRight, -kBottom);
@@ -186,6 +265,21 @@ PlotWidget::Frame PlotWidget::framesOf(const QRect &area) const {
     f.main = inner;
   }
   return f;
+}
+
+bool PlotWidget::legendBelowAxes() const {
+  const Frame f = framesOf(rect());
+  return !f.legend.isEmpty() && f.legend.top() > (f.lower.isEmpty() ? f.main : f.lower).bottom();
+}
+
+QList<QRect> PlotWidget::markerLabelRects() const {
+  QList<QRect> out;
+  const Frame f = framesOf(rect());
+  const QFontMetrics fm = fontMetrics();
+  for (const MarkerLabel &l : MarkerLabelsOf(markersX_, markerLabels_, f.main, fm, [this, &f](double x) { return mapX(x, f.main); },
+                                              logX_))
+    out << l.box;
+  return out;
 }
 
 int PlotWidget::dataPointsDrawn() const {
@@ -307,7 +401,9 @@ void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
     }
     p.setBrush(Qt::NoBrush);
   }
-  // vertical markers (the Physics tab's poles): dashed lines with their labels at the top
+  // vertical markers (the Physics tab's poles): dashed lines, every one drawn; their labels at the bottom of the panel in
+  // up to four rows, each label in the lowest row where it covers no other, on the paper's colour (a label that finds
+  // no row is left out: its line stays, its energy is in the pole table)
   if (!markersX_.isEmpty()) {
     QColor mark = ink;
     mark.setAlpha(150);
@@ -317,11 +413,13 @@ void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
       const double px = mapX(x, r);
       p.setPen(QPen(mark, 1, Qt::DashLine));
       p.drawLine(QPointF(px, r.top()), QPointF(px, r.bottom()));
-      const QString label = markerLabels_.value(i);
-      if (!label.isEmpty()) {
-        p.setPen(mark);
-        p.drawText(QPointF(px + 3, r.bottom() - 4 - (i % 3) * fm.height()), label);
-      }
+    }
+    QColor back = paper;
+    back.setAlpha(170);  // the label readable over a dashed line, a curve still visible through it
+    for (const MarkerLabel &l : MarkerLabelsOf(markersX_, markerLabels_, r, fm, [this, &r](double x) { return mapX(x, r); }, logX_)) {
+      p.fillRect(l.box, back);
+      p.setPen(mark);
+      p.drawText(l.box, Qt::AlignCenter, l.text);
     }
   }
   p.restore();
@@ -367,27 +465,26 @@ void PlotWidget::render(QPainter &p, const QRect &area, bool onScreen) const {
     p.setBrush(Qt::NoBrush);
   }
 
-  // the legend
-  if (legend_ && !series_.isEmpty()) {
-    int width = 0;
-    for (const PlotSeries &s : series_) width = std::max(width, fm.horizontalAdvance(s.label));
+  // the legend, in the box framesOf chose (a free corner of the panel, or below the axes in columns)
+  if (!f.legend.isEmpty()) {
     const int row = fm.height() + 2;
-    QRect box(r.right() - width - 46, r.top() + 6, width + 40, row * (int)series_.size() + 8);
+    const int columnWidth = f.legend.width() / std::max(1, f.legendColumns);
     p.setPen(QColor(0x99, 0x99, 0x99));
     QColor legendPaper = paper;
     legendPaper.setAlpha(225);
     p.setBrush(legendPaper);
-    p.drawRect(box);
+    p.drawRect(f.legend);
     for (int i = 0; i < series_.size(); i++) {
       const PlotSeries &s = series_[i];
-      const int y = box.top() + 4 + i * row + row / 2;
+      const int left = f.legend.left() + (i % f.legendColumns) * columnWidth;
+      const int y = f.legend.top() + 4 + (i / f.legendColumns) * row + row / 2;
       p.setPen(QPen(s.color, 2));
-      p.drawLine(box.left() + 6, y, box.left() + 26, y);
+      p.drawLine(left + 6, y, left + 26, y);
       p.setBrush(s.color);
-      if (!s.dataX.isEmpty()) Marker(p, s.marker, QPointF(box.left() + 16, y), 3);
+      if (!s.dataX.isEmpty()) Marker(p, s.marker, QPointF(left + 16, y), 3);
       p.setBrush(Qt::NoBrush);
       p.setPen(ink);
-      p.drawText(QPointF(box.left() + 32, y + fm.ascent() / 2.0 - 1), s.label);
+      p.drawText(QPointF(left + 32, y + fm.ascent() / 2.0 - 1), s.label);
     }
   }
   // the cursor's coordinates, on screen only

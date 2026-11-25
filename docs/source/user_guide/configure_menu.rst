@@ -530,8 +530,10 @@ faster: the natural-neon example (:doc:`../examples/natural_neon`) takes about
 The dialog has no switch for the table: the GUI uses it whenever it finds
 the file. The file is ``~/.azure2/coulomb_table.bin``, or the file named by
 the environment variable ``AZURE2_COULOMB_TABLE``. It is not part of the
-download. Build it once, either with **Configure → Build Coulomb Table...**,
-which shows the progress and can be cancelled, or from the command line:
+download. Build it once, either in the setup program with **Run → Build the
+Coulomb Table...** (the same as the ``Build...`` button of the line the start
+page and the Overview show while there is no table), which shows the progress
+and can be cancelled, or from the command line:
 
 .. code-block:: console
 

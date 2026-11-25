@@ -9,6 +9,15 @@ the ``.azr`` from the command line or with ``pyazr``. The THM options are descri
 :doc:`../theory/thm_implementation`. The Python scripts of ``pyazr/examples/``, one task each, are listed in
 :doc:`../user_guide/pyazr_examples`.
 
+In the Qt program (``AZURESetup``) the start page lists the examples from the manifest ``examples/index.json``: one
+line per reaction, grouped (Trojan Horse evaluations, on-shell THM points, direct measurements, tutorials), each with
+its source and a short phrase on what it shows, and the variants of a reaction indented under it (the two 18O(p,α)15N
+projects, the two 17O(n,α)14C projects, the start or true parameters of the tutorials). The tutorials are the
+synthetic test projects ``tests/upgrade/T1``–``T3``, whose data were made from known parameters (each folder's
+``README.md``). A new example is one entry of the manifest; ``gui_casual`` checks that every entry exists, opens with no
+dialog and no warning, and validates. An installed program finds the manifest in ``share/azure2/examples`` (the
+``examples`` and ``gui`` install components).
+
 "File alone" is the CLI calculation of the file as stored,
 
 .. code-block:: bash

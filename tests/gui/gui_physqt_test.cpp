@@ -11,6 +11,7 @@
 //  (c) T2: THM (LC09's vertex against ThmVertex);
 //  (d) the tab in the window; screenshots of every page in the light and the dark look.
 // PASS/FAIL per check; exit 1 on a failure.
+#include <clocale>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -108,6 +109,8 @@ int main(int argc, char **argv) {
     return 2;
   }
   QApplication app(argc, argv);
+  // as the program does after making its application: this test builds the Physics pages without the main window
+  std::setlocale(LC_NUMERIC, "C");
   QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, true);
   const fs::path source = argv[1];
   const QString shots = QString::fromLocal8Bit(argv[2]);

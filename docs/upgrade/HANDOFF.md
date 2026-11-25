@@ -2,6 +2,228 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-25 (agent gui-casual, second task) — `feature/upgrade-gui-casual`: old projects convert; the numeric locale
+
+On top of `258e3760`.  **Design** `docs/upgrade/project_format3.md` 8.6; timeline and table
+`tests/convert/fixtures/history/README.md`; user guide `older_projects.rst` ("Files of every AZURE2 version").
+
+**First, the PI's failing files** (a corpus of 377 old projects of real users, read-only, counts only): the command
+line converted them; the window/facade refused two under a decimal-comma LC_NUMERIC (strtod and printf follow the
+locale; a Qt program sets it from the environment).  Fix at the root of the facade: `support::ClassicNumericScope`
+(`support/include/azure2/support/ClassicNumeric.h`, the calling thread's LC_NUMERIC "C" through uselocale; Windows a
+per-thread locale) taken by 62 facade calls (read, check, edit, convert, save, run); no engine file changed (making
+every parser locale-free would edit ~750 engine call sites).  Corpus now: 376 not counting a macOS resource file;
+374 convert (2 refused at conversion: external capture into a final state that is no level, which the engine before
+2026-10-26 ran with a hidden level and refuses since, 35793eb3), 316 validate, 58 lack only their data files (absolute
+paths of another computer, placeholders, moved folders; the old engine refused those runs too): the window now shows
+them in one note with "Locate Data Files...".  Through the facade under C and de_DE.utf8 the 377 results are
+identical.  Calculations of a sample (4 copies of the 12C(p,g) project, 14 19F+p projects): all run to the end (3
+without data: extrapolate); 12c_pg's total chi^2 109805 against 108501 of the old program's calculation next to it
+(same 11 data sets and 532 points, +1.2 %; GSL box not ticked); the other old outputs were a fit or older than their
+project.
+
+**What was found in the history** (read-only git over every ref: origin/qt5, main, master, dev and their branches; the history starts on
+2020-07-03, the first project file is test/13N.azr of 2026-04-22): the converter of 43ac5acd refused the pre-2020 form
+(30-column <levels>, <externalCapture>), an unclosed <lastRun>, dev's type-9 spin observables and a target of inactive
+lines (question), and converted two forms wrongly without a word: a target line of 2025-01-26 .. 01-30 with convolution
+coefficients (the count read as the equation) and a <levels> row with two numbers run together by the 2026-09 writer
+(columns shifted).  The "component segments" (2025-08-30 two numbers per component, 2025-12-22 + angle, 2026-03-09 +
+secondary-decay field, 2026-05-21 -1 marker + scaling) already converted with the setup program's reading.
+
+**Changes** (`convert/` only): `OldEra.cpp` (pre-2020 fold, unclosed <lastRun>, 2025-01 target lines), `OldProject.cpp`
+(type 9 + operator -> 10, a file name with blanks to the end of the line, glued numbers in <levels>, the isDiff 8 and
+mixture reasons), `BuildApparatus.cpp` (the nucleus of a target of inactive lines), `LineRepair.cpp` (`GluedNumbers`,
+the split as a reading).
+
+**Tests**: `convert_history` (46 checks; fixtures `tests/convert/fixtures/history/`), `convert_cli_locale`, `gui_casual`
+(h) (conversion from the window under LC_NUMERIC de_DE.UTF-8 = the bytes under C; without the window's reset the
+converter refuses the 2025-08 file, checked in scratch).  All 678 historical .azr blobs (291 old-format) converted with
+43ac5acd's converter (`work/b-u8-polish`) and this build: the 265 that converted give the same bytes; 269 convert now,
+22 refused (7 record fragments without <levels> under experiment/tests/data, 7 intentional bad fixtures, 6 mixture,
+1 isDiff 8, 1 THM toy whose pair breaks charge conservation).
+**Run** (`work/b-gui-casual`): build 0 warnings; `ctest -LE slow -j4` 408 of 408 (6 rmfit skipped) before the button
+fix; after it `ctest` of gui_*, api_front, api_front_locale, convert_*, io_level_row_text, repo_consistency: 19 of 19;
+final run on `3da5bf9d` below.  Small buttons (the PI's "NDS"): `ButtonSizes.h`, `gui_casual` (j), qt_gui.md 19.11.
+Expectations changed on purpose: convert_constructs (type 9 + operator now converts; the isDiff 3/5/6 case gets its
+final-state level and its refusal without it is checked), convert_line_repair (a name with blanks to the end of the
+line converts), io_level_row_text is untouched (the glued-row fixture is `.old`).
+**Not run**: `ctest -L slow`, a real display, Qt 6.4, macOS/Windows, pyazr under a decimal-comma locale (the binding
+has no locale scope).
+**Open**: no engine before 2020 is in the history, so the pre-2020 meaning rests on the 2020 setup program's import
+(`minJ`, `maxJ` of <externalCapture> not used, as there); isDiff 8 and mixture have no format-3 record; a PI file that
+still fails: send it (and which program wrote it) — the refusal now names the line, the fields expected and readings.
+
+**Then the Coulomb table** (the PI: "Makes sense, go for it"; qt_gui.md 19.12): a quiet line with Build... on the
+start page and the Overview while runs have no usable table (or the reason a file there is not read); Run > Build the
+Coulomb Table... / Check the Coulomb Table... in standard view (Tools' entry opens the same dialog, no Python); the
+build through the facade (`front::BuildCoulombTable` = `CoulombTable::BuildFile`, the CLI's routine; threads
+`CoulombTable::DefaultBuildThreads()`, a new accessor the CLI uses too, capped at 4; `ForgetMissing` after success,
+which existed), progress bar, Cancel leaves no file, no build during a run.  The engine's stderr line now names Run >
+Build the Coulomb Table...; calculate.rst's "Create New / Use" choices replaced by what the window does (intEC.dat
+computed each run, `--capture-amplitudes` in expert view reads an earlier one checked by its .sig; pyazr reuses it
+by itself); installation.rst, graphical_interface.rst, configure_menu.rst, command_line.rst.  Test `gui_coulomb`
+(37 checks, temporary HOME, small table; fails without ForgetMissing); `ctest -L gui` with an empty HOME (as CI): 9 of 9.
+**Final run** (`3da5bf9d`, `work/b-gui-casual`): build 0 warnings; `ctest -LE slow -j4` 408 of 409 (6 rmfit skipped),
+`tests/run_tests.sh` 184 of 185.  The two failures (`pyazr_park_dsde`, `thm_distortion` (g) "a warning for ancai06")
+come from this machine's `~/.azure2/coulomb_table.bin` (2026-10-26, table format 1; this build reads format 2 since
+`48fb454f`): the loader refuses it with a WARNING, park_dsde's guard only asks that the file exist, thm_distortion's
+(g) greps any WARNING.  Both pass with a format-2 table in `AZURE2_COULOMB_TABLE`; the file was not touched (rule).
+Rebuild it with `AZURE2 --build-coulomb-table` (or Run > Build the Coulomb Table...).
+
+## 2026-11-25 (third round of gui-casual) — the PI's look at the screenshots; the examples from a manifest
+
+On top of `ed52efcc`; `qt_gui.md` section 19.9 (with the table of every candidate example and its check numbers);
+user guide `getting_started/examples.rst`.  `gui/`, `tests/gui/`, `examples/index.json` and docs only.
+
+**Display.**  The Overview's chi²/N bars beside their numbers, on a scale an outlier does not flatten (capped at ten
+times the median, said in the tips); no file tag or grammar in the standard view (plain hints, "Required", words for
+the sections; the expert view and text mode keep them); the forms' text buttons in one column, one size; numbers with
+more than 12 significant digits shown with 12 in tables and forms while the file's text is written back unless the
+user edits the number (gui_casual (g): every manifest project saved after visiting every tab and record form is byte
+for byte the save made on opening).
+
+**Examples.**  `examples/index.json` drives the start page: 4 groups, 11 reactions (one line each), 5 variants under
+their reaction (o18 2008, o17_guardo, T1/T3 start values, T2 true parameters).  Left out, with reasons in 19.9:
+tests/13N (50 validation warnings), 18O_p_a_thm (2 warnings), 15N_p_a, 17O, 6Li_d, 7Li_p_a (reactions already listed;
+regression pins), tests/natural_neon (reduced copy), 7Li_p_ay and the code-path tests, screening_6li (PI's decision).
+Install rule in `gui/src/CMakeLists.txt` (components gui and examples).  **Proposals for the PI**: rename the example
+folders after the reaction (references: docs/source/getting_started/examples.rst, theory/thm_implementation.rst,
+user_guide/chi_squared.rst, tests/upgrade/CMakeLists.txt and predictions.txt, tests/thm_* check.sh, tests/pyazr
+thm_nonbrune_grid_test.py, tests/gui/gui_casual_test.cpp, gui/src/PhysicsSessionPages.cpp, the manifest); re-measure
+the "file alone" numbers of examples.rst (c12c12 117.516 not 112.086, f19 77.635 not 79.408); decide on
+screening_6li.
+
+**Run.**  Every source changed since `43ac5acd` in `gui/`, `tests/gui/`, `convert/`, `api/front/` recompiled (84 compiles): 0 warnings.  `ctest -LE slow -j2` beside `tests/run_tests.sh` (four threads in all): 405 of 405 passed (6 rmfit skipped as before); `run_tests.sh` 185 passed, 0 failed.  Screenshots after the last code change: `work/gui-casual/shots/review3/final_m{0,1}_{1280x720,1440x900}/` (start page, New Project, every manifest project), `final_run_calc/`, `final_run_fit/` (three examples each), `scenario/` (Calculate, Fit, Stop, expert, Save As).  Not run: `ctest -L slow`, a sanitizer build, the installed program itself (only `cmake --install --component examples`: with this machine's `GUI_LINK_OPTIONS` the rpath rewrite of `AZURESetup` at install fails, a build-environment matter), a real display, Qt 6.4, macOS/Windows.
+
+
+
+## 2026-11-24 (third pass of gui-casual) — the display faults left in the final screenshots
+
+On top of `61aabb81`; `qt_gui.md` section 19.8, "Third pass".  `gui/` and `tests/gui/` only.  Fixed: the Physics
+sweep fields cut ("769448" for 14.769448; now whole, the sweep in two rows); the plot legend over the curves (now in a
+free corner, else below the axes in columns) and pole labels over each other (now in x order in the lowest free of
+four rows, translucent; a label without room left out, its line kept); the repair dialog collapsing blanks (now the
+line as in the file; unedited "Convert again" gives a byte-identical copy; gui_casual (d)'s expectation read the
+collapsed text and was changed with it); natural_neon's isotope help line on every entry (now once) and a beam
+spread's doc twice; the Levels tab's J^pi filter, search and energy hints and Value/θ² columns cut (filter sized to
+its text, shorter hints, hard-sphere box in two lines, columns 4:6:2).  **Run**: every changed source recompiled (83 compiles), 0 warnings; `ctest -LE slow -j2` (run beside `run_tests.sh` so that at most four threads ran) 405 of 405 passed (6 rmfit skipped as before); `tests/run_tests.sh` 185 passed, 0 failed.  Screenshots after the last
+code change: `work/gui-casual/shots/review3/final_m0_1280x720/` (all 14 projects, START, NEW, every tab, sub-tab and
+Physics page) and `final_run_calc/`; the pass that was looked at: `pass1_m0_1280x720/`.  Not run: `ctest -L slow`, a
+sanitizer build, a real display, Qt 6.4, macOS/Windows.
+
+
+
+## 2026-11-24 (second review of gui-casual) — `feature/upgrade-gui-casual`: a reviewer's and a casual user's pass
+
+On top of `991118ca`.  **Design** `docs/upgrade/qt_gui.md` section 19.8; working list `work/gui-casual/AUDIT.md`
+(items 31-47).  Only `gui/`, `tests/gui/` and docs changed; no engine, facade or converter file.
+
+**Bugs found in the first pass and fixed.**  (1) Holes in "an expert item is hidden only at its default": the gamma
+multipolarity limits stayed hidden after a photon pair was added in standard view (its channels made with a limit
+the user could not see); the Fitting tab's Parameter Settings page stayed hidden while the Parameters table wrote
+`<parameterSettings>`.  Both now follow the edit.  (2) A field required only for some records of a kind
+(`RequiredWhen`) was marked required on every record: natural_neon's valid target of kind none showed red
+"Required:" lines; `RecordsPanel::applyConditions`.  (3) A `<levels>` read failure had become an ordinary note:
+now a warning of the bar (first, icon, "do not save edits of the levels").  (4) The kernel preview showed an engine
+message about another record ("Not drawn: ... dataset 'skowronski_fels' ...") on 13N's detector.  Checked and
+found right: the pair-key fix (writes the file's pairs back, gui_casual (a)); the converter: the 181 old projects of
+`tests/` and `examples/` that convert give byte-identical output with the old converter (`b-u8-polish`, same
+`convert/`, `io/`, `experiment/`), also as CRLF copies; 287 format-3 files refused by both; empty, binary, BOM-only,
+short and quoted-blank inputs refused without a crash; `.repaired.azr` never overwrites (numbered copies) and sits
+beside the old file (relative data paths resolve).  The three changed expectations of gui_window, gui_levels and
+gui_polish follow text changed on purpose; gui_window's File > Convert now checks the note it lost.
+
+**Casual-user items.**  natural_neon's target form without red lines; data tables fit 1280 px (`fitColumns`);
+Tumino's grids shown rounded in tables ("... 5.5 MeV lab"; file and form unchanged; the shortest round-trip form of
+that double has 15 digits, so only display rounding helps); the Levels channel Value column 93 px (was ~25); THM
+experiment keys classified (standard: beam, target, spectator, Ebeam, ps, background; others when given); Physics
+Functions without the blank band; Tumino's R-matrix phase of channel 2 was a display wrap ([0,180) for identical
+particles around 0): drawn continuous; start page: test projects in expert view only, natural_neon with its README
+title; New Project's steps start with the pairs; Calculate/Fit once on the Overview; a plot after the first run (first
+data set ticked); extra chi² totals in words, zeros dropped.
+
+**Run** (`work/b-gui-casual`, Release, GUI on, Qt 6.11 of the conda env): every source changed since `43ac5acd` in
+`gui/`, `tests/gui/`, `convert/` and `api/front/` recompiled (83 compiles): 0 warnings; `ctest -LE slow -j2`: 405 of
+405 passed (6 rmfit tests skipped as before); `tests/run_tests.sh` with this build's AZURE2: 185 passed, 0 failed.
+An intermediate `ctest -LE slow` failed gui_physqt (the first phase unwrapping changed T1's drawn delta); fixed in
+`e02ce4ab`, gui_physqt unchanged.  Final screenshots, taken after the last code change: `work/gui-casual/shots/review2/`
+`final_m{0,1}_{1280x720,1440x900}/` (start page, New Project, all 14 projects, every tab, sub-tab and Physics page;
+0 modal dialogs, 0 Qt warnings), `final_run_calc/`, `final_run_fit/` (Overview, Plot, Calculate, Fitting after a
+Calculate of o18_lacognata2008 and Tumino and a 200-call fit of o18); before: `pre_m0_1280x720/`.
+
+**Not run / open.**  No sanitizer build (a separate ASan configuration of the GUI and its libraries was not made);
+`ctest -L slow`; a real display; Qt 6.4; macOS/Windows.  Left for the PI: the red "Not calculated (no level)" line
+on the Levels tab (Tumino: J^pi no level carries; a fact of the model, red by design); the R-matrix page's E_x fields cut their
+values ("769448" for 14.769448); the repair dialog collapses
+runs of blanks in the refused line (also inside quotes); the Tools menu and minos as expert items (first pass's
+choice).
+
+
+
+## 2026-11-24 (agent gui-casual) — `feature/upgrade-gui-casual`: the Qt program for an occasional user
+
+Cut from `origin/feature/upgrade` at `43ac5acd`.  **Design** `docs/upgrade/qt_gui.md` section 19; user guide
+`graphical_interface.rst` (the window) and `older_projects.rst` (a line the old grammar cannot read).
+
+**What was wrong, root causes.**  (1) `examples/c12c12_tumino2018` opened with 26 modal "Duplicate Pair" boxes: the
+project names 12C+12C under keys 1 (THM widths) and 6 (direct widths); the Levels tab's reader sent key 6 through the
+Pairs tab's interactive duplicate check, which refused it per row and never added it (its channels showed "n+?", and
+a save after a Levels edit would have written them with an empty pair).  The other 16 projects of the start page
+opened with no box.  (2) 13N's 50 validation warnings opened the Diagnostics dock on every open (150 of 720 px).
+(3) Every records panel gave its form 5/7 of the height: 13N's data-set table showed 2 of 16 rows at 1280x720;
+the Levels tab's empty Gamma Decays/Isospin and the Pairs tab's empty per-channel radii took the lower third/half.
+(4) Converter: unambiguous variants refused (BOM, `#` comment lines, quoted list with a blank, unquoted file name
+with a blank, target line ending after an empty stopping equation), a data line without a file crashed `--convert`
+(uncaught exception), a decimal-comma shift was read as the data file's name (silently, the shift lost), and
+refusals named the segment but not the file line, the fields expected or a way out.
+
+**Changes.**  Loader fix (pair at its key); `NotesBar` (one non-modal bar of notes per open: the engine's check, a
+Levels read failure, the converter's report; Details not modal; the dock opens by itself only for errors or after
+Validate); `RecordsPanel` splitter (table at least 5 rows, first height its rows up to 10, Form button, sizes kept per
+panel in QSettings `layout/split_<section>`), `RecordExtras` (Pairs/Levels lower panels in a splitter, counts on
+their tabs); one expert switch (`ExpertMode.h`, View > Show Expert Options, start page, status bar; QSettings
+`view/expertOptions`, off by default; an expert item is hidden only while at its default, else shown and marked);
+converter (`convert/src/LineRepair.cpp`, `OldProject.cpp`, `Convert.cpp`): the unambiguous variants read with a note
+each, no-file and decimal-comma lines refused, a line refusal carries `ConvertResult::lineProblem` (file line,
+text, fields expected, readings proposed and checked, none applied) and ends with that diagnosis as text (CLI,
+pyazr); facade `ConvertProject(..., ConvertLineProblem&)`, `WriteRepairedCopy`; `ConvertRepairDialog` (the line
+editable, readings as buttons, "Convert again" on a copy `<name>.repaired.azr`); prose moved to tool tips or a "?"
+(records panels, text panels, Fitting priors, Calculate option help in standard view, Levels missing-J^pi, Overview
+no-run/path/thresholds/chart note, Physics function doc, Channels page, R-matrix level list, pole map paragraph,
+session line, start page's tab lines -> tab tool tips); plot marker labels no longer drawn over each other.  No
+engine (src/, include/, physics/) file touched; `convert/` only as stated.
+
+**Expert classification (the PI may move items; `qt_gui.md` 19.4 has the table).**  Hidden in standard view unless
+in use: tabs Nuclear Potential, THM, MCMC; Per-channel radii; Gamma Decays, Isospin; the two gamma multipolarity
+limits (no photon pair); Export LaTeX; Model Data; the Kind column of a one-kind table and columns empty in every row;
+call limit, covariance refreeze passes, Priors box (prior covariance file), Parameter Settings (text), Sampler (MCMC)
+pages; commands minos and mcmc in the Calculate list; Calculate options other than --parameter-file,
+--covariance-band, --rate-entrance/exit, --temperature-*, --delta-chi2, --walkers, --steps; the options' help lines;
+Physics pole map (and THM page without THM); Tools menu.  Unsure, decided as kept: Experimental Effects, the record
+forms' "Every field", Configure menu.  Unsure, decided as expert: the Tools menu (EXFOR/ENSDF imports may be wanted
+by casual users), minos.
+
+**Tests.**  New `gui_casual` (label gui): (a) zero modal dialogs on opening each of the 10 examples and T1-T3, 13N,
+pairs at their keys (fails on the old loader: 26 dialogs, 5 pairs, rows changed); (b) notes bar; (c) 13N data table
+>= 8 rows at 1280x720 (11), Form closes/opens, kept for the next window, Levels list >= 10 rows (11), empty extras
+hidden; (d) converter repair path byte for byte against the unmodified file's conversion; (e) expert switch hides and
+shows, in-use items shown, the saved file unchanged.  New `convert_line_repair` (every accepted variant, the
+refusals with their file lines, the readings).  `gui_window`'s File > Convert check no longer answers a report box
+(changed on purpose: the report is a note).
+**Run** (`work/b-gui-casual`, Release, GUI on, Qt 6.11 of the conda env, `-j4`): build 0 warnings (the touched
+sources recompiled); `ctest -LE slow -j4`: 405 of 405 passed, 6 rmfit tests skipped (rmfit_enginepin passed with
+PYAZR_ENGINE_DIR set); `ctest -L gui`: 8 of 8; `tests/run_tests.sh` (this build's AZURE2): 185 passed, 0 failed.  Audit harness (scratch
+`work/gui-casual/audit/`): all 17 start-page projects, standard and expert view, 1280x720 / 1280x800 / 1440x900: 0 modal
+dialogs; visible labels above 140 characters 241 -> 44 (standard) / 61 (expert); data-set rows in sight 1-2 -> 8-12
+(720 px), 10-14 (800 px), 12-17 (900 px).  Screenshots: `work/gui-casual/shots/before/`, `final_m0_*`, `final_m1_*`,
+`final_misc*`, `test/`.
+**Not run**: `ctest -L slow`, a real display, Qt 6.4 (CI's), macOS/Windows.
+**Open.**  The THM tab's experiment fields (ps, psNodes, distortion, opticalAA/SF, ...) are shown in either view (not
+classified); Tumino's extrapolation grids read "list 1.5 ... 5.4999999999999997 MeV" (the example's converted exact
+grid, cosmetic); the Levels channel table's Value column is cut at every size; natural_neon's data table still
+scrolls horizontally at 1280 (its Target and Beam columns hold values); pyazr gets the converter's diagnosis as the
+refusal's text only (no structured `lineProblem` in the binding).
+
 
 
 ## 2026-11-21 (potential-gui) — the potential in the Qt program, its own a0, and the partial waves without a level
@@ -23,7 +245,7 @@ users will not neglect some missing waves."
    "Partial waves..." check (gui/src/LevelsPartialWaves.cpp) with "switch includeAllJPi on" and "add blank levels".
    Behaviour change of the window: when includeAllJPi is switched on in the window and the file has no
    `maxOrbitalMomentum`, the save writes the tab's maximum l as `maxOrbitalMomentum` (so the key reaches every J^pi the
-   tab lists); `commitTabs` is split, `commitLevels` its first half.  qt_gui.md section 19; graphical_interface.rst.
+   tab lists); `commitTabs` is split, `commitLevels` its first half.  qt_gui.md section 20 (19 before the merge of 2026-11-25); graphical_interface.rst.
 4. A fix of a test: `pyazr_potential_api` was skipped under ctest (pyazr not on the path); it now runs.
 5. Added on the PI's approval (2026-11-21, "Yes, want it"): the depth and Gaussian width for a chosen (a0, r0) on the
    branch of the bound states (`physics::DepthWidthForEffectiveRange`, nested bracketed 1-D solves; not found, with the

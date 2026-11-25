@@ -114,6 +114,23 @@ QString FactsText(const front::PhysicsCurves &c) {
   return out;
 }
 
+/// The facts on the page without the list of level energies (the pole table below lists them; the tip has all).
+QString ShortFactsText(const front::PhysicsCurves &c) {
+  QStringList parts;
+  int levels = 0;
+  for (const auto &f : c.facts) {
+    if (f.first.compare(0, 8, "E_level ") == 0) {
+      levels++;
+      continue;
+    }
+    parts << QString::fromStdString(f.first + " = " + f.second);
+  }
+  if (levels > 0) parts << QObject::tr("%n level(s)", nullptr, levels);
+  QString out = parts.join("; ");
+  for (const std::string &n : c.notes) out += "\n" + QString::fromStdString(n);
+  return out;
+}
+
 QWidget *Scrolled(QWidget *w) {
   // the form at its natural height, the rest of the column empty (a form layout would stretch its rows)
   QWidget *box = new QWidget;
@@ -129,6 +146,35 @@ QWidget *Scrolled(QWidget *w) {
 }
 
 }  // namespace
+
+/// A phase shift in degrees, defined modulo 180 (the engine gives arg(U_cc)/2 in (-90, 90], in [0, 180) for identical
+/// particles), drawn continuous: a step of more than 90 degrees between a point near 0 and its neighbour near 180 is
+/// taken as the wrap of [0, 180) and removed (a jump at +-90 stays as given); the first point keeps the engine's value (a curve without a wrap is drawn as given).  Display only: a phase near 0
+/// that wraps to 180 and back (c12c12_tumino2018, 12C+12C) no longer draws as a comb (qt_gui.md section 19.8).
+QVector<double> UnwrappedPhaseDegrees(const QVector<double> &deg) {
+  QVector<double> out = deg;
+  double offset = 0;
+  int first = -1;
+  for (int i = 0; i < out.size(); i++) {
+    if (!std::isfinite(deg[i])) continue;
+    if (first >= 0) {
+      int prev = i - 1;
+      while (prev >= 0 && !std::isfinite(deg[prev])) prev--;
+      // a wrap of the identical-particle range [0, 180): one point near 0, its neighbour near 180.  A jump at +-90
+      // (a resonance through 90 degrees in the range (-90, 90]) is drawn as the engine gives it.
+      const double step = deg[i] - deg[prev];
+      const double lo = std::min(std::fabs(deg[i]), std::fabs(deg[prev])), hi = std::max(std::fabs(deg[i]), std::fabs(deg[prev]));
+      const bool wrap = lo < 45 && hi > 135;
+      if (wrap && step > 90) offset -= 180;
+      else if (wrap && step < -90) offset += 180;
+    } else {
+      first = i;
+    }
+    out[i] = deg[i] + offset;
+  }
+  return out;
+}
+
 
 // ---------------------------------------------------------------- Channels
 
@@ -189,10 +235,8 @@ ChannelsPage::ChannelsPage(PhysicsContext *context, QWidget *parent) : ProjectPa
   buttons->addWidget(clearButton);
   buttons->addStretch(1);
   f->addRow(buttons);
-  QLabel *about = new QLabel(QString::fromStdString(CallNamed("ChannelFunctions").doc));
-  about->setWordWrap(true);
-  about->setProperty("role", "hint");
-  f->addRow(about);
+  // what the page computes: the tip of the pair's drop-down, not a paragraph (qt_gui.md section 19.6)
+  pair_->setToolTip(QString::fromStdString(CallNamed("ChannelFunctions").doc));
   QSplitter *split = new QSplitter;
   split->addWidget(Scrolled(controls));
   split->addWidget(panel_);
@@ -418,7 +462,8 @@ void RMatrixPage::compute() {
         }
         answer_ = *answer;
         answerGroup_ = jgroup;
-        facts_->setText(FactsText(answer_));
+        facts_->setText(ShortFactsText(answer_));
+        facts_->setToolTip(FactsText(answer_));
         fillSeries();
         redraw();
       });
@@ -464,6 +509,7 @@ void RMatrixPage::redraw() {
     if (p->x.empty()) {
       ps.modelX = x;
       ps.modelY = Values(s.values);
+      if (p->y == "delta") ps.modelY = UnwrappedPhaseDegrees(ps.modelY);
     } else {
       const front::PhysicsSeries *sx = answer_.Find(p->x, s.keys);
       if (!sx) continue;
@@ -505,7 +551,9 @@ void RMatrixPage::centreOnPole(int row) {
 
 PoleMapPage::PoleMapPage(PhysicsContext *context, QWidget *parent) : ProjectPage(context, parent) {
   setObjectName("poleMapPage");
-  explanation_ = new QLabel(
+  // one line on the page, the reading of the map in its tip (qt_gui.md section 19.6)
+  explanation_ = new QLabel(tr("A real-energy map along E_x (the complex plane is not available)."));
+  explanation_->setToolTip(
       tr("A real-energy map: the excitation energy E_x runs along the real axis, each row is a J^pi group (log10 "
          "|det A^-1|), a pair of channels (|U_cc'|) or a pair of levels (|A|) of one group.  A minimum of |det A^-1| "
          "(a dark valley of log10 |det A^-1|) is where the inverse level matrix is nearly singular on the real axis: "
@@ -767,7 +815,7 @@ ThmPage::ThmPage(PhysicsContext *context, QWidget *parent) : ProjectPage(context
 void ThmPage::infoChanged() {
   const PhysicsContext::Info &info = context_->info();
   if (info.ok && info.experiments.empty()) {
-    setNeeds(tr("The project has no THM experiment (<thm> experiment[...]): the THM tab adds one."));
+    setNeeds(tr("The project has no THM experiment: the THM tab adds one."));
     return;
   }
   const QSignalBlocker block(experiment_);

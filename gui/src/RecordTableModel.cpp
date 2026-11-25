@@ -143,7 +143,7 @@ QVariant RecordTableModel::data(const QModelIndex &index, int role) const {
   switch (role) {
     case Qt::DisplayRole:
       if (c.type == Column::Include || c.type == Column::Fit) return QVariant();
-      return cells_[row][index.column()];
+      return c.type == Column::Field ? RoundedNumbers(cells_[row][index.column()]) : cells_[row][index.column()];
     case Qt::EditRole:
       return editText(index);
     case Qt::CheckStateRole:

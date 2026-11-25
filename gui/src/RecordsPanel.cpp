@@ -1,6 +1,8 @@
 #include "RecordsPanel.h"
+#include "ExpertMode.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleValidator>
@@ -8,6 +10,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QEvent>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPainter>
@@ -19,6 +22,13 @@
 #include <QScrollArea>
 #include <QSortFilterProxyModel>
 #include <QSplitter>
+#include <QRegularExpression>
+#include <QScrollBar>
+#include <QSettings>
+#include <QSignalBlocker>
+#include <QToolButton>
+#include <QToolTip>
+#include <algorithm>
 #include <QTableView>
 #include <QTimer>
 #include <QToolButton>
@@ -37,8 +47,12 @@ namespace {
 QString Q(const std::string &s) { return QString::fromStdString(s); }
 
 QString ToolTip(const front::FieldInfo &f) {
-  QString t = "<b>" + Q(f.title).toHtmlEscaped() + "</b> (<tt>" + Q(f.key).toHtmlEscaped() + "</tt>) &mdash; " +
-              Q(f.doc).toHtmlEscaped() + "<br><tt>" + Q(f.grammar).toHtmlEscaped() + "</tt>";
+  // the file's key and the value's grammar in the expert view; in standard view the title and what it is
+  // (qt_gui.md section 19.9)
+  const bool expert = expert::Enabled();
+  QString t = "<b>" + Q(f.title).toHtmlEscaped() + "</b>" +
+              (expert ? " (<tt>" + Q(f.key).toHtmlEscaped() + "</tt>)" : QString()) + " &mdash; " + Q(f.doc).toHtmlEscaped() +
+              (expert ? "<br><tt>" + Q(f.grammar).toHtmlEscaped() + "</tt>" : QString());
   if (f.required) t += "<br>Required.";
   if (!f.requiredWhen.empty()) t += "<br>Required when " + Q(f.requiredWhen).toHtmlEscaped() + ".";
   if (!f.appliesWhen.empty()) t += "<br>Applies when " + Q(f.appliesWhen).toHtmlEscaped() + ".";
@@ -255,6 +269,7 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   const QString id = section + (kinds.isEmpty() ? QString() : "_" + kinds.join("_"));
   setObjectName("records_" + id);
 
+  expert_ = expert::Enabled();
   model_ = new RecordTableModel(holder_, section_, kinds_, this);
   proxy_ = new QSortFilterProxyModel(this);
   proxy_->setSourceModel(model_);
@@ -265,6 +280,18 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   table_->setObjectName("recordList_" + id);
   table_->setModel(proxy_);
   table_->setItemDelegate(new RecordCellDelegate(table_));
+  // a column the user drags keeps its width (fitColumns no longer runs on a resize); the last column, which the header
+  // stretches, does not count
+  table_->viewport()->installEventFilter(this);
+  connect(table_->horizontalHeader(), &QHeaderView::sectionResized, this, [this](int section) {
+    // only a drag of the header by the user (the layout and the model resize sections too)
+    if (fitting_ || reloading_ || !(QApplication::mouseButtons() & Qt::LeftButton)) return;
+    QHeaderView *h = table_->horizontalHeader();
+    int last = -1;  // the last shown column, the one the header stretches
+    for (int v = h->count() - 1; v >= 0 && last < 0; v--)
+      if (!h->isSectionHidden(h->logicalIndex(v))) last = h->logicalIndex(v);
+    if (section != last) userWidths_ = true;
+  });
   table_->setSortingEnabled(true);
   table_->sortByColumn(-1, Qt::AscendingOrder);
   table_->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -359,15 +386,33 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   includeButton_->setVisible(model_->hasIncludeColumn());
   excludeButton_->setVisible(model_->hasIncludeColumn());
   buttons->addStretch(1);
+  // what the section is: a "?" with its sentence as the tip, not a paragraph above the table (qt_gui.md 19.6)
+  if (!help.isEmpty()) {
+    QToolButton *about = new QToolButton;
+    about->setObjectName("sectionHelp");
+    about->setText("?");
+    about->setToolTip(help);
+    about->setAutoRaise(true);
+    connect(about, &QToolButton::clicked, this, [about, help]() { QToolTip::showText(about->mapToGlobal(QPoint(0, about->height())), help, about); });
+    buttons->addWidget(about);
+  }
+  // the form below the table: closed and opened here, or by dragging the splitter
+  formToggle_ = new QToolButton;
+  formToggle_->setObjectName("formToggle");
+  formToggle_->setText(tr("Form"));
+  formToggle_->setCheckable(true);
+  formToggle_->setChecked(true);
+  formToggle_->setToolTip(tr("Show or hide the form of the selected record below the table (a double click on a row "
+                             "opens the record in its own window)."));
+  connect(formToggle_, &QToolButton::toggled, this, &RecordsPanel::setFormShown);
+  buttons->addWidget(formToggle_);
+  // "?" and "Form" on the buttons' line at the buttons' height (they were smaller and sat higher)
+  for (QToolButton *b : findChildren<QToolButton *>())
+    if (b->objectName() == "sectionHelp" || b == formToggle_) b->setFixedHeight(addButton_->sizeHint().height());
 
   QWidget *top = new QWidget;
   QVBoxLayout *topLayout = new QVBoxLayout(top);
   topLayout->setContentsMargins(0, 0, 0, 0);
-  if (!help.isEmpty()) {
-    QLabel *helpLabel = new QLabel(help);
-    helpLabel->setWordWrap(true);
-    topLayout->addWidget(helpLabel);
-  }
   topLayout->addWidget(filter_);
   topLayout->addWidget(table_, 1);
   topLayout->addLayout(buttons);
@@ -425,15 +470,27 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
   bottomLayout->addWidget(scroll, 1);
   bottomLayout->addLayout(formButtons);
 
-  QSplitter *splitter = new QSplitter(Qt::Vertical);
-  splitter->addWidget(top);
-  splitter->addWidget(bottom);
-  splitter->setStretchFactor(0, 2);
-  splitter->setStretchFactor(1, 5);
-  splitter->setSizes({220, 550});
+  // The table and the form share the height by a splitter (qt_gui.md section 19.3): the table keeps at least five
+  // rows, the form may be closed (dragged to the bottom, or the Form button), and the sizes a user sets are kept per
+  // panel.  Before, the form took 5/7 of the height and the table of a project's data sets showed two rows at 720 px.
+  splitter_ = new QSplitter(Qt::Vertical);
+  splitter_->setObjectName("split_" + id);
+  splitter_->addWidget(top);
+  splitter_->addWidget(bottom);
+  splitter_->setStretchFactor(0, 1);
+  splitter_->setStretchFactor(1, 1);
+  splitter_->setCollapsible(0, false);
+  splitter_->setCollapsible(1, true);
+  connect(splitter_, &QSplitter::splitterMoved, this, [this]() {
+    const QList<int> sizes = splitter_->sizes();
+    if (sizes.size() == 2 && sizes[1] > 0) formHeight_ = sizes[1];
+    QSignalBlocker block(formToggle_);
+    formToggle_->setChecked(sizes.size() == 2 && sizes[1] > 0);
+    QSettings().setValue("layout/" + splitter_->objectName(), splitter_->saveState());
+  });
   QVBoxLayout *layout = new QVBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
-  layout->addWidget(splitter);
+  layout->addWidget(splitter_);
 
   connect(holder_, &ProjectHolder::opened, this, &RecordsPanel::reload);
   connect(holder_, &ProjectHolder::sectionEdited, this, [this](const QString &s) {
@@ -446,6 +503,135 @@ RecordsPanel::RecordsPanel(ProjectHolder *holder, const QString &section, const 
 
 int RecordsPanel::recordCount() const { return model_->rowCount(); }
 
+int RecordsPanel::tableRowsHeight(int rows) const {
+  return table_->horizontalHeader()->sizeHint().height() + rows * table_->verticalHeader()->defaultSectionSize() +
+         2 * table_->frameWidth() + table_->horizontalScrollBar()->sizeHint().height();
+}
+
+int RecordsPanel::visibleRows() const {
+  return table_->viewport()->height() / std::max(1, table_->verticalHeader()->defaultSectionSize());
+}
+
+void RecordsPanel::showEvent(QShowEvent *event) {
+  QWidget::showEvent(event);
+  if (!sized_) initialSizes();
+  if (!columnsFitted_) fitColumns();
+}
+
+bool RecordsPanel::eventFilter(QObject *watched, QEvent *event) {
+  // the table's width changed (the window resized, the panel laid out): the columns fitted again, unless the user
+  // set a column's width
+  if (watched == table_->viewport() && event->type() == QEvent::Resize && !userWidths_ &&
+      std::abs(table_->viewport()->width() - fittedWidth_) > 8) {
+    columnsFitted_ = false;
+    fitColumns();
+  }
+  return QWidget::eventFilter(watched, event);
+}
+
+void RecordsPanel::fitColumns() {
+  // The columns as wide as their contents (at most 40 characters), the widest ones narrowed to one width when they
+  // would not fit side by side (qt_gui.md section 19.8): no sideways scrolling at 1280 px while a column can give room.
+  // A cell's whole text is in the row's tip.  Done once the table has its width; a column the user widens stays so.
+  const int available = table_->viewport()->width();
+  if (!table_->isVisible() || available < 200) return;
+  columnsFitted_ = true;
+  fittedWidth_ = available;
+  fitting_ = true;
+  // the contents' widths (the last column measured unstretched: it is stretched to the table's edge)
+  const bool stretch = table_->horizontalHeader()->stretchLastSection();
+  table_->horizontalHeader()->setStretchLastSection(false);
+  table_->resizeColumnsToContents();
+  QVector<int> widths;
+  int total = 0;
+  for (int c = 0; c < model_->columnCount(); c++) {
+    const int w = table_->isColumnHidden(c) ? 0 : std::min(table_->columnWidth(c), fontMetrics().horizontalAdvance(QString(40, 'x')));
+    widths << w;
+    total += w;
+  }
+  int cap = fontMetrics().horizontalAdvance(QString(40, 'x'));
+  const int floor = fontMetrics().horizontalAdvance(QString(12, 'x'));
+  while (total > available && cap > floor) {
+    cap -= 8;
+    total = 0;
+    for (int w : widths) total += std::min(w, cap);
+  }
+  for (int c = 0; c < model_->columnCount(); c++)
+    if (!table_->isColumnHidden(c)) table_->setColumnWidth(c, std::min(widths[c], cap));
+  table_->horizontalHeader()->setStretchLastSection(stretch);
+  fitting_ = false;
+}
+
+void RecordsPanel::initialSizes() {
+  const int total = splitter_->height();
+  if (total < 100) return;  // not laid out yet
+  sized_ = true;
+  const QByteArray saved = QSettings().value("layout/" + splitter_->objectName()).toByteArray();
+  if (!saved.isEmpty() && splitter_->restoreState(saved)) {
+    QSignalBlocker block(formToggle_);
+    formToggle_->setChecked(splitter_->sizes().value(1) > 0);
+    return;
+  }
+  // the table: its rows up to ten (at least four), with the filter and the buttons; at most 60 % of the height
+  const int rows = std::clamp(model_->rowCount(), 4, 10);
+  const int chrome = filter_->sizeHint().height() + addButton_->sizeHint().height() + 24;
+  const int top = std::min(tableRowsHeight(rows) + chrome, total * 3 / 5);
+  splitter_->setSizes({top, total - top});
+}
+
+void RecordsPanel::setFormShown(bool on) {
+  const QList<int> sizes = splitter_->sizes();
+  if (sizes.size() != 2) return;
+  const int total = sizes[0] + sizes[1];
+  if (!on) {
+    if (sizes[1] > 0) formHeight_ = sizes[1];
+    splitter_->setSizes({total, 0});
+  } else if (sizes[1] == 0) {
+    const int form = formHeight_ > 0 ? formHeight_ : total / 2;
+    splitter_->setSizes({std::max(total - form, tableRowsHeight(5)), form});
+  }
+  {
+    QSignalBlocker block(formToggle_);
+    formToggle_->setChecked(on);
+  }
+  QSettings().setValue("layout/" + splitter_->objectName(), splitter_->saveState());
+}
+
+bool RecordsPanel::formShown() const { return splitter_->sizes().value(1) > 0; }
+
+void RecordsPanel::setExpertMode(bool on) {
+  expert_ = on;
+  fitting_ = true;  // columns hidden or shown here are not the user's resizing
+  updateColumns();
+  fitting_ = false;
+  columnsFitted_ = false;
+  userWidths_ = false;
+  fitColumns();
+}
+
+void RecordsPanel::updateColumns() {
+  // standard view: the Kind column when every row is of one kind, and the columns empty in every row (a "Fit?" column
+  // without a box in any row too), hidden; a column that holds a value in any row stays (nothing in effect is hidden)
+  const int rows = model_->rowCount();
+  for (int c = 0; c < model_->columnCount(); c++) {
+    const RecordTableModel::Column &col = model_->column(c);
+    bool hide = false;
+    if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Kind) {
+      hide = true;
+      const QString first = model_->data(model_->index(0, c)).toString();
+      for (int r = 1; r < rows && hide; r++) hide = model_->data(model_->index(r, c)).toString() == first;
+    } else if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Field) {
+      hide = true;
+      for (int r = 0; r < rows && hide; r++) hide = model_->data(model_->index(r, c)).toString().trimmed().isEmpty();
+    } else if (!expert_ && rows > 0 && col.type == RecordTableModel::Column::Fit) {
+      // a "Fit?" column whose field no row has (no box in any row)
+      hide = true;
+      for (int r = 0; r < rows && hide; r++) hide = !model_->data(model_->index(r, c), Qt::CheckStateRole).isValid();
+    }
+    table_->setColumnHidden(c, hide);
+  }
+}
+
 QString RecordsPanel::shownName() const { return haveShown_ ? Q(shown_.name) : QString(); }
 
 void RecordsPanel::reload() {
@@ -456,6 +642,10 @@ void RecordsPanel::reload() {
   table_->resizeColumnsToContents();
   for (int c = 0; c < model_->columnCount(); c++)
     table_->setColumnWidth(c, std::min(table_->columnWidth(c), fontMetrics().horizontalAdvance(QString(40, 'x'))));
+  updateColumns();
+  columnsFitted_ = false;
+  userWidths_ = false;
+  fitColumns();
   reloading_ = false;
   haveShown_ = false;
   QStringList again;
@@ -572,6 +762,8 @@ void RecordsPanel::clearForm() {
   preview_ = nullptr;
   kernels_ = front::KernelPreview();
   quantityRows_.clear();
+  fieldRows_.clear();
+  notApplying_.clear();
   hiddenByQuantity_.clear();
   haveShown_ = false;
   while (QLayoutItem *item = formLayout_->takeAt(0)) {
@@ -585,6 +777,8 @@ void RecordsPanel::clearForm() {
   bottom_->setVisible(!empty);
   table_->setMaximumHeight(empty ? table_->horizontalHeader()->sizeHint().height() + 3 * table_->verticalHeader()->defaultSectionSize() + 4
                                  : QWIDGETSIZE_MAX);
+  // a table with records keeps five rows in sight, whatever the splitter (qt_gui.md section 19.3)
+  table_->setMinimumHeight(empty ? 0 : tableRowsHeight(std::min(5, std::max(1, model_->rowCount()))));
   usedBy_->clear();
   usedBy_->setVisible(false);
   assignButton_->setVisible(false);
@@ -624,6 +818,7 @@ FieldEditor *RecordsPanel::makeEditor(const front::FieldInfo &field, const QStri
     }
   });
   if (Q(field.key) == quantityKey_) connect(e, &FieldEditor::changed, this, &RecordsPanel::quantityChanged);
+  connect(e, &FieldEditor::changed, this, &RecordsPanel::applyConditions);
   return e;
 }
 
@@ -652,8 +847,11 @@ void RecordsPanel::addFieldRows(const front::KindInfo &kind, const front::Record
       QToolButton *remove = new QToolButton;
       remove->setText(QString::fromUtf8("−"));
       remove->setToolTip(tr("Remove this %1").arg(Q(field.title)));
-      h->addWidget(e, 1);
+      remove->setFixedSize(22, 22);
+      // the remove button left of the entry: every field's text button stays in one column at the right edge
+      // (qt_gui.md section 19.9)
       h->addWidget(remove, 0, Qt::AlignTop);
+      h->addWidget(e, 1);
       v->insertWidget(v->count() - 1, entry);
       connect(remove, &QToolButton::clicked, this, [this, entry, e, key]() {
         editors_[key].removeAll(e);
@@ -675,6 +873,7 @@ void RecordsPanel::addFieldRows(const front::KindInfo &kind, const front::Record
     row = makeEditor(field, values.isEmpty() ? QString() : values.first());
   }
   form->addRow(label, row);
+  if (!fieldRows_.contains(key)) fieldRows_.insert(key, {form, label, row, field});
   if (field.byQuantity) quantityRows_.insert(key, {form, label, row, field});
   if (field.rare && values.isEmpty()) {
     rareRows_ << label << row;
@@ -701,6 +900,7 @@ void RecordsPanel::buildForm(const front::Record &record) {
 
   QFormLayout *basic = new QFormLayout;
   basic->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+  basic->setContentsMargins(0, 0, 0, 0);  // the same right edge as the boxes' forms (the text buttons in one column)
   QWidget *basicHost = new QWidget;
   basicHost->setLayout(basic);
   formLayout_->addWidget(basicHost);
@@ -759,7 +959,84 @@ void RecordsPanel::buildForm(const front::Record &record) {
   updatePreview();
   formLayout_->addStretch(1);
   applyQuantityRules();
+  applyConditions();
   showUsedBy();
+}
+
+namespace {
+
+/// A field's schema condition in the words experiment::Describe writes for the two simple kinds: "<field> is[ not]
+/// <word> or <word> ..." and "<field> is[ not] given".  False for any other condition (it is then taken to hold).
+bool ParseCondition(const std::string &words, QString &field, QStringList &values, bool &negate, bool &present) {
+  const QRegularExpression re("^([A-Za-z_][A-Za-z0-9_]*) is( not)? ([A-Za-z0-9_.+\\- ]+)$");
+  const QRegularExpressionMatch m = re.match(Q(words));
+  if (!m.hasMatch()) return false;
+  field = m.captured(1);
+  negate = !m.captured(2).isEmpty();
+  const QString rest = m.captured(3).trimmed();
+  present = rest == "given";
+  values = present ? QStringList() : rest.split(" or ", Qt::SkipEmptyParts);
+  return present || !values.isEmpty();
+}
+
+}  // namespace
+
+void RecordsPanel::applyConditions() {
+  // A field the schema requires only for some records ("Active nucleus: kind is layer, infinite or sample") is not
+  // marked missing on a record it does not apply to, and its row is hidden while it holds no value (qt_gui.md
+  // section 19.8).  Before, a valid target of kind none showed red "Required:" lines.
+  if (!haveShown_) return;
+  const front::KindInfo *kind = holder_->kind(shown_.kind);
+  if (!kind) return;
+  auto valueOf = [this](const QString &key) {
+    for (FieldEditor *e : editors_.value(key)) {
+      const QString t = e->text().trimmed();
+      if (!t.isEmpty()) return t.section(' ', 0, 0);
+    }
+    return QString();
+  };
+  auto requiredField = [kind](const QString &key) {
+    for (const front::FieldInfo &f : kind->fields)
+      if (Q(f.key) == key) return f.required && f.appliesWhen.empty();
+    return false;
+  };
+  notApplying_.clear();
+  for (const front::FieldInfo &f : kind->fields) {
+    if (f.appliesWhen.empty()) continue;
+    QString field;
+    QStringList values;
+    bool negate = false, present = false;
+    if (!ParseCondition(f.appliesWhen, field, values, negate, present)) continue;
+    const QString value = valueOf(field);
+    // the validator's rule (experiment Validate.cpp, Holds): a field not given is "not is", unless it is a required
+    // field still missing, whose answer is unknown (taken to hold here: the field stays marked)
+    bool holds;
+    if (present) holds = value.isEmpty() == negate;
+    else if (value.isEmpty()) holds = requiredField(field) || negate;
+    else holds = values.contains(value.startsWith('"') ? value.mid(1).chopped(1) : value) != negate;
+    const QString key = Q(f.key);
+    bool given = false;
+    for (FieldEditor *e : editors_.value(key)) {
+      e->setApplies(holds);
+      given = given || !e->text().trimmed().isEmpty();
+    }
+    if (!holds) notApplying_ << key;
+    if (fieldRows_.contains(key)) {
+      const QuantityRow &r = fieldRows_[key];
+      r.label->setText(DisplayTitle(f.title) + (f.required && holds ? " *" : ""));
+      const bool rareHidden = rareRows_.contains(r.row) && !everyField_->isChecked() && !given;
+      const bool hide = !holds && !given && !everyField_->isChecked();
+      if (!quantityRows_.contains(key)) r.form->setRowVisible(r.row, !rareHidden && !hide);
+    }
+    if (QWidget *box = boxes_.value(key, nullptr)) {
+      bool used = given;
+      for (const front::FieldInfo &m : kind->fields)
+        if (m.group == f.key)
+          for (FieldEditor *e : editors_.value(Q(m.key))) used = used || !e->text().trimmed().isEmpty();
+      const bool rareHidden = rareRows_.contains(box) && !everyField_->isChecked() && !used;
+      box->setVisible(!rareHidden && (holds || used || everyField_->isChecked()));
+    }
+  }
 }
 
 void RecordsPanel::updatePreview() {
@@ -777,7 +1054,11 @@ void RecordsPanel::updatePreview() {
   previewWhy_ = drawn ? QString() : Q(why);
   if (!drawn) kernels_ = front::KernelPreview();
   // a record that selects a kernel the engine cannot draw now (the project does not build): the reason in its place
-  const bool reason = referable && !drawn && !why.empty() && kernels_.notes.empty() && why.find("selects no kernel") == std::string::npos;
+  // (only a reason about this record: an engine message about another record, as a data set's field that does not
+  // apply, is that record's matter, shown on its form and in the Diagnostics, not here; qt_gui.md section 19.8)
+  const bool reason = referable && !drawn && !why.empty() && kernels_.notes.empty() &&
+                      why.find("selects no kernel") == std::string::npos &&
+                      why.find(shown_.name) != std::string::npos;
   if (reason) kernels_.notes.push_back(tr("Not drawn: %1").arg(Q(why)).toStdString());
   static_cast<KernelView *>(preview_)->setPreview(kernels_);
   preview_->setVisible(drawn || reason);
@@ -946,6 +1227,7 @@ void RecordsPanel::assignDialog() {
 void RecordsPanel::showEveryField(bool on) {
   for (QWidget *w : rareRows_) w->setVisible(on);
   applyQuantityRules();
+  applyConditions();
 }
 
 QWidget *RecordsPanel::fieldWidget(const QString &key) const { return fieldEditor(key); }

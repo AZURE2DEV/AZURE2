@@ -106,26 +106,34 @@ class NumberItem : public QTableWidgetItem {
   }
 };
 
-/// The chi^2/N column: a horizontal bar under the number, its length chi^2/N over the column's largest.
+/// The chi^2/N column: a small bar left of the number, never under it, its length chi^2/N over the column's scale
+/// (BarChart::ScaleTop: the largest, or ten times the median when one value is far above the others; a bar beyond
+/// the scale is drawn full with a break).  The bar takes only the room the number leaves (qt_gui.md section 19.9).
 class RatioBarDelegate : public QStyledItemDelegate {
  public:
   using QStyledItemDelegate::QStyledItemDelegate;
   double top = 1;
   void paint(QPainter *p, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
-    const double v = index.data(Qt::UserRole).toDouble();
-    if (std::isfinite(v) && top > 0) {
-      p->save();
-      QColor c = v > kHighChiPerPoint ? BarChart::warningColor() : option.palette.color(QPalette::Highlight);
-      c.setAlpha(150);
-      // a strip along the cell's foot, so that the number above it stays readable on both looks
-      const QRect cell = option.rect.adjusted(3, 2, -3, -2);
-      const QRect r(cell.left(), cell.bottom() - std::max(3, cell.height() / 4), cell.width(), std::max(3, cell.height() / 4));
-      p->setPen(Qt::NoPen);
-      p->setBrush(c);
-      p->drawRect(QRect(r.left(), r.top(), std::max(2, (int)std::lround(r.width() * std::min(1.0, v / top))), r.height()));
-      p->restore();
-    }
     QStyledItemDelegate::paint(p, option, index);
+    const double v = index.data(Qt::UserRole).toDouble();
+    if (!std::isfinite(v) || top <= 0) return;
+    const QRect cell = option.rect.adjusted(4, 0, -4, 0);
+    const int text = option.fontMetrics.horizontalAdvance(index.data(Qt::DisplayRole).toString());
+    const int room = cell.width() - text - 8;  // the bar's room: what the right-aligned number leaves
+    if (room < 10) return;
+    p->save();
+    QColor c = v > kHighChiPerPoint ? BarChart::warningColor() : option.palette.color(QPalette::Highlight);
+    c.setAlpha(170);
+    const int h = std::max(4, cell.height() / 3);
+    const QRect r(cell.left(), cell.center().y() - h / 2, std::max(2, (int)std::lround(room * std::min(1.0, v / top))), h);
+    p->setPen(Qt::NoPen);
+    p->setBrush(c);
+    p->drawRect(r);
+    if (v > top) {
+      p->setPen(QPen(option.palette.color(QPalette::Base), 2));
+      p->drawLine(QPoint(r.right() - 7, r.bottom() + 1), QPoint(r.right() - 3, r.top() - 1));
+    }
+    p->restore();
   }
 };
 
@@ -200,6 +208,7 @@ void OverviewPage::build() {
   }
   actions->addStretch(1);
   b->addLayout(actions);
+  stepsBox_ = b;
 
   // The project
   projectCard_ = Card(tr("The project"), b, "overviewProject");
@@ -235,8 +244,9 @@ void OverviewPage::build() {
   none->setObjectName("overviewNoRun");
   QVBoxLayout *nl = new QVBoxLayout(none);
   QLabel *noneText = Text();
-  noneText->setText(tr("<b>No run yet.</b> The output directory holds no results of this project. Calculate the data "
-                       "sets from the parameters as they stand, or fit them."));
+  noneText->setText(tr("<b>No run yet.</b>"));
+  noneText->setToolTip(tr("The output directory holds no results of this project: calculate the data sets from the "
+                          "parameters as they stand, or fit them."));
   nl->addWidget(noneText);
   QHBoxLayout *nb = new QHBoxLayout;
   for (const auto &button : {qMakePair(QString("calculate"), tr("Calculate")), qMakePair(QString("fit"), tr("Fit"))}) {
@@ -293,7 +303,8 @@ void OverviewPage::build() {
   table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
   table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
   table_->horizontalHeader()->setSectionResizeMode(kColumnChiPerPoint, QHeaderView::Fixed);
-  table_->horizontalHeader()->resizeSection(kColumnChiPerPoint, table_->fontMetrics().horizontalAdvance("M") * 9);
+  table_->horizontalHeader()->resizeSection(kColumnChiPerPoint, table_->fontMetrics().horizontalAdvance("M") * 11);
+  table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);  // the names: at most 18 characters, elided
   table_->setTextElideMode(Qt::ElideRight);
   table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   table_->setItemDelegateForColumn(kColumnChiPerPoint, new RatioBarDelegate(table_));
@@ -391,6 +402,8 @@ void OverviewPage::changeEvent(QEvent *e) {
 
 void OverviewPage::refreshLater() { refreshTimer_->start(); }
 
+void OverviewPage::addNotice(QWidget *notice) { stepsBox_->addWidget(notice); }
+
 void OverviewPage::setRunning(bool running) {
   running_ = running;
   if (running) clearProgress();
@@ -423,8 +436,8 @@ void OverviewPage::clearProgress() {
   trace_->clear();
   trace_->hide();
   traceTitle_->hide();
-  traceNote_->setText(Muted(tr("Recorded while a fit runs in this window (the engine writes no file of a fit's "
-                               "progress).")));
+  traceNote_->setText(Muted(tr("Drawn while a fit runs here.")));
+  traceNote_->setToolTip(tr("Recorded while a fit runs in this window: the engine writes no file of a fit's progress."));
 }
 
 void OverviewPage::refresh() {
@@ -489,16 +502,21 @@ void OverviewPage::parametersDone() {
 
 void OverviewPage::fillProject() {
   const QFileInfo file(QString::fromStdString(project_.file));
-  QString head = QString("<b>%1</b> %2").arg(file.fileName().toHtmlEscaped(), Muted(QDir::toNativeSeparators(file.absolutePath()).toHtmlEscaped()));
+  // the file's name; its folder in the tip (qt_gui.md section 19.6)
+  QString head = QString("<b>%1</b>").arg(file.fileName().toHtmlEscaped());
+  projectHead_->setToolTip(QDir::toNativeSeparators(file.absoluteFilePath()));
   if (holder_->project().Modified()) head += "<br>" + Warn(tr("modified, not saved"));
   QStringList nuclei;
   for (const std::string &n : project_.nuclei) nuclei << QString::fromStdString(n);
   head += "<br>" + tr("Compound nucleus: <b>%1</b>").arg(nuclei.isEmpty() ? tr("none yet") : nuclei.join(", "));
-  QStringList pairs;
-  for (const front::PairChoice &p : project_.pairs)
-    pairs << QString("%1 %2").arg(QString::fromStdString(p.label).toHtmlEscaped(),
-                                  Muted(tr("E<sub>x</sub> %1 MeV").arg(p.threshold, 0, 'f', 3)));
+  // the pairs by name; each threshold (E_x of the compound nucleus) in the tip
+  QStringList pairs, thresholds;
+  for (const front::PairChoice &p : project_.pairs) {
+    pairs << QString::fromStdString(p.label).toHtmlEscaped();
+    thresholds << tr("%1: threshold at E_x = %2 MeV").arg(QString::fromStdString(p.label)).arg(p.threshold, 0, 'f', 3);
+  }
   head += "<br>" + tr("Pairs: %1").arg(pairs.isEmpty() ? tr("none yet") : pairs.join(" &middot; "));
+  if (!thresholds.isEmpty()) projectHead_->setToolTip(projectHead_->toolTip() + "\n" + thresholds.join("\n"));
   projectHead_->setText(head);
 
   levelsTitle_->setText(tr("<b>%n level(s)</b>", nullptr, project_.levels) +
@@ -529,7 +547,11 @@ void OverviewPage::fillProject() {
     free = tr("<b>%1</b> of %2").arg(parameters_.free).arg(parameters_.parameters) +
            (kinds.isEmpty() ? QString() : " (" + kinds.join(", ") + ")");
   } else if (!parametersWhy_.isEmpty()) {
-    free = Muted(tr("not known: %1").arg(parametersWhy_.toHtmlEscaped()));
+    {
+      // the first line of the reason; the whole text is in the Diagnostics panel and in this line's tool tip
+      const QString first = parametersWhy_.section('\n', 0, 0).left(160);
+      free = Muted(tr("not known: %1%2").arg(first.toHtmlEscaped(), first.size() < parametersWhy_.size() ? tr(" ... (see Validate)") : QString()));
+    }
   } else {
     free = Muted(QFileInfo::exists(holder_->path()) ? tr("being counted...") : tr("save the project to count them"));
   }
@@ -593,7 +615,7 @@ void OverviewPage::fillRun() {
     if (!run_.minimizer.empty()) status += tr(" (%1, %n call(s))", nullptr, (int)run_.calls).arg(QString::fromStdString(run_.minimizer));
     runStatus_->setText(status);
   } else {
-    runStatus_->setText(command == "calculate" ? Muted(tr("A calculation: the parameters as they were, no fit."))
+    runStatus_->setText(command == "calculate" ? Muted(tr("A calculation (no fit)."))
                                                : QString());
   }
   runStatus_->setVisible(!runStatus_->text().isEmpty());
@@ -607,12 +629,22 @@ void OverviewPage::fillRun() {
   tiles_["dof"]->setStyleSheet(std::isfinite(dof) && dof > kHighChiPerPoint
                                    ? QString("color: %1;").arg(BarChart::warningColor().name())
                                    : QString());
-  QStringList totals;
+  QStringList totals, labels;
   for (const auto &t : run_.totals)
-    if (t.first != "Total-Chi-Squared" && t.first != "Total-N")
-      totals << QString("%1 %2").arg(QString::fromStdString(t.first).toHtmlEscaped(), Number(t.second));
+    if (t.first != "Total-Chi-Squared" && t.first != "Total-N" && t.second != 0) {
+      // the file's label in words ("Total-Norm-Chi-Squared" -> "norm chi²"), the label in the tip; a term that adds
+      // nothing is not listed (qt_gui.md section 19.8)
+      QString name = QString::fromStdString(t.first);
+      const QString label = name;
+      if (name.startsWith("Total-")) name.remove(0, 6);
+      if (name.endsWith("-Chi-Squared")) name = name.chopped(12) + QString::fromUtf8(" chi²");
+      name.replace('-', ' ');
+      totals << QString("%1 %2").arg(name.toHtmlEscaped(), Number(t.second));
+      labels << label;
+    }
   totalsText_->setText(totals.isEmpty() ? QString() : Muted(totals.join(" &middot; ")));
   totalsText_->setVisible(!totals.isEmpty());
+  totalsText_->setToolTip(labels.isEmpty() ? QString() : tr("chiSquared.out: %1").arg(labels.join(", ")));
 
   // the table: one row per data set of chiSquared.out
   table_->setSortingEnabled(false);
@@ -626,7 +658,13 @@ void OverviewPage::fillRun() {
   QVector<double> sorted = ratios;
   std::sort(sorted.begin(), sorted.end(), [](double a, double b) { return a > b; });
   const double third = sorted.size() >= 3 ? sorted[2] : sorted.isEmpty() ? 0 : sorted.last();
-  static_cast<RatioBarDelegate *>(table_->itemDelegateForColumn(kColumnChiPerPoint))->top = top;
+  bool capped = false;
+  const double scale = BarChart::ScaleTop(ratios, &capped);
+  static_cast<RatioBarDelegate *>(table_->itemDelegateForColumn(kColumnChiPerPoint))->top = scale;
+  if (QTableWidgetItem *head = table_->horizontalHeaderItem(kColumnChiPerPoint))
+    head->setToolTip(capped ? tr("chi²/N; the bars on a scale cut at ten times the median (%1): a bar with a break is "
+                                 "longer").arg(Number(scale, 3))
+                            : tr("chi²/N; the bars on a linear scale up to the largest"));
   for (int i = 0; i < (int)run_.dataSets.size(); i++) {
     const front::DataSetResult &d = run_.dataSets[i];
     const QString name = d.record.empty() ? tr("data set %1").arg(d.key) : QString::fromStdString(d.record);
@@ -654,6 +692,8 @@ void OverviewPage::fillRun() {
     }
   }
   table_->setSortingEnabled(true);
+  table_->resizeColumnToContents(0);
+  table_->setColumnWidth(0, std::min(table_->columnWidth(0), table_->fontMetrics().horizontalAdvance(QString(18, 'n')) + 12));
   const int rows = std::min(16, std::max(3, table_->rowCount()));
   table_->setMinimumHeight(table_->horizontalHeader()->sizeHint().height() + rows * table_->verticalHeader()->defaultSectionSize() + 4);
 
@@ -698,7 +738,14 @@ void OverviewPage::fillSteps() {
     steps_ << Step{tr("The project does not validate: %n error(s).", nullptr, errors_), "diagnostics"};
   else if (validated_ && warnings_ > 0)
     steps_ << Step{tr("The validation gives %n warning(s).", nullptr, warnings_), "diagnostics"};
-  if (!running_ && !run_.present) steps_ << Step{tr("There is no run yet: calculate or fit."), "tab:calculate"};
+  // a project not finished yet: the next thing to add, before any run (qt_gui.md section 19.8)
+  const bool noPairs = project_.pairs.empty(), noLevels = project_.levels == 0,
+             noData = project_.dataSets == 0 && project_.extrapolations == 0;
+  if (noPairs) steps_ << Step{tr("No particle pair yet: add the entrance and exit pairs."), "tab:pairs"};
+  else if (noLevels) steps_ << Step{tr("No level yet: add the levels of the compound nucleus."), "tab:levels"};
+  if (noData) steps_ << Step{tr("No data set or extrapolation yet: add one."), "tab:segments"};
+  if (!running_ && !run_.present && !noPairs && !noLevels && !noData)
+    steps_ << Step{tr("There is no run yet: calculate or fit."), "tab:calculate"};
   if (run_.present && run_.projectNewer)
     steps_ << Step{tr("The outputs are older than the project file: calculate again."), "tab:calculate"};
   if (run_.present && !run_.changedInputs.empty())
@@ -738,6 +785,9 @@ void OverviewPage::fillSteps() {
   if (!run_.leftOut.empty())
     steps_ << Step{tr("%n active data set(s) were left out by the run (no point in the window).", nullptr, (int)run_.leftOut.size()),
                    "record:data:" + QString::fromStdString(run_.leftOut.front())};
+  // Calculate and Fit once on the page: in "The last run" while there is none, here once there is one
+  for (const char *name : {"overviewAction_runcalculate", "overviewAction_runfit"})
+    if (QPushButton *b = findChild<QPushButton *>(name)) b->setVisible(run_.present || running_);
   QStringList lines;
   for (const Step &s : steps_) lines << "&bull; " + Link(s.link, s.text.toHtmlEscaped());
   if (lines.isEmpty())

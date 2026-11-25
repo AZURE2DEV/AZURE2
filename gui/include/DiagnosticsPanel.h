@@ -28,6 +28,8 @@ class DiagnosticsPanel : public QWidget {
   int rowCount() const;
   /// The codes shown, for the tests.
   QStringList codes() const;
+  /// The rows as text, "severity code (line N): message", the first `maxRows` of them (the notes bar's Details).
+  QString listing(int maxRows) const;
 
  public slots:
   /// Validate the project and show the result; returns whether it is valid.

@@ -1,5 +1,5 @@
 // The Potential panel of the Particle Pairs tab and the Levels tab's check of the partial waves (docs/upgrade/qt_gui.md
-// section 19), headless:  gui_potential_test <source dir> [<screenshot dir>]
+// section 20), headless:  gui_potential_test <source dir> [<screenshot dir>]
 // On a copy of tests/potential_background/models/bound_level_a40.azr (3He + 4He, the Gaussian potential VD in seven
 // waves, each with `background interior`, the p3/2 one with `subtract 1`; a 3/2- level at the potential's bound state):
 //  (a) the pair selected: the panel shows its record and its seven waves; Apply without an edit and a save move no byte;

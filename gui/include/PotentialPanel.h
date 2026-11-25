@@ -25,7 +25,7 @@ class QTimer;
 QT_END_NAMESPACE
 
 /*!
- * The Potential panel of the Particle Pairs tab (docs/upgrade/qt_gui.md section 19): the `potential` record of the pair
+ * The Potential panel of the Particle Pairs tab (docs/upgrade/qt_gui.md section 20): the `potential` record of the pair
  * selected in the tab, wave by wave, with what the potential creates and what it gives by itself.
  *
  *  - on/off: the record switched off is kept in the file as comment lines (Project::SetRecordOn), so that switching it

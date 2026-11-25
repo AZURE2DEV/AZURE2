@@ -64,6 +64,11 @@ class PairsModel : public QAbstractTableModel {
   static bool editableInPlace(int column) { return column == 10 || column == 11 || column == 12 || column == LightExcitationColumn; }
 
   int isPair(const PairsData &pair) const;
+  /// Whether two pairs agree in every column (isPair's test).  A project may hold the same pair under two keys (the
+  /// THM projects keep one key for the THM data and one for the direct data, each with its own widths).
+  static bool samePair(const PairsData &a, const PairsData &b);
+  /// Whether the row `row` exists and holds `pair`.
+  bool pairAt(int row, const PairsData &pair) const { return row >= 0 && row < pairsList.size() && samePair(pairsList[row], pair); }
   int numPairs() const { return pairsList.size(); };
   QList<PairsData> getPairs() const { return pairsList; };
   /// Replace every pair (the undo stack): rows removed and inserted, so that the window sees an edit.

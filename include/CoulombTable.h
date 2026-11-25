@@ -91,6 +91,8 @@ class CoulombTable {
   bool Build(const BuildSpec &spec);
   /// The number of rows Build computes (the unit of spec.rowsDone).
   static int BuildRows(const BuildSpec &spec);
+  /// The threads of the command line's build (--build-coulomb-table): every OpenMP thread (1 without OpenMP).
+  static int DefaultBuildThreads();
   /// Build and write path (empty: DefaultPath()), creating its directory; the file is
   /// written as path.new and renamed over path, so a process reading the old file keeps
   /// it.  False with a reason in error on cancel or an I/O error; nothing is left behind.

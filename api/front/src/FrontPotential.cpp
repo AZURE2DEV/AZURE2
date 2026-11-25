@@ -1,5 +1,5 @@
 // The facade's part for the Potential panel of the Pairs tab and the Levels tab's check of the partial waves
-// (docs/upgrade/qt_gui.md section 19).  Every number is the engine's: a pair's potential as the engine's reader builds
+// (docs/upgrade/qt_gui.md section 20).  Every number is the engine's: a pair's potential as the engine's reader builds
 // the record (experiment::ReadFormat3Text, BuildPotentials), the pair as the engine makes it from its <levels> row
 // (PPair(io::LevelRow)), the wave's arguments as the session's calls take them (PotentialWaveOf, api/include/
 // PotentialWave.h), and physics/'s functions of the potential (InteriorBoxStates, SubtractedBoxStates,

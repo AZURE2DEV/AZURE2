@@ -6,7 +6,9 @@
 #include <sstream>
 
 #include "Build.h"
+#include "OldEra.h"
 #include "OldProject.h"
+#include "azure2/experiment/Build.h"
 #include "azure2/experiment/Json.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
@@ -227,8 +229,20 @@ bool OldGslCoulombBoxTicked(const io::Document &doc) {
 
 }  // namespace
 
-ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions &options) {
+ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOptions &options) {
   ConvertResult res;
+  // A UTF-8 byte-order mark (written by some Windows editors) before the first tag: no AZURE2 wrote one, and the
+  // section reader would not see the first tag behind it.  Removed with a note; the lines keep their numbers.
+  const bool bom = givenText.compare(0, 3, "\xEF\xBB\xBF") == 0;
+  std::string oldText = bom ? givenText.substr(3) : givenText;
+  std::vector<std::pair<std::string, std::string>> eraNotes;  // forms of earlier eras brought to a later one (OldEra.h)
+  CloseOldLastRun(oldText, eraNotes);
+  if (bom) {
+    res.notes.push_back({"byte-order mark", "", "the file begins with a UTF-8 byte-order mark (a Windows editor's): removed"});
+    res.constructs["byte-order mark"].converted++;
+    res.constructs["byte-order mark"].notes++;
+  }
+  const io::Document given = io::Document::Parse(oldText);  // the lines as numbered in the file (for a refusal)
   io::Document doc = io::Document::Parse(oldText);
   if (io::FormatOf(doc) == 3) {
     res.refusal = "already format 3";
@@ -238,15 +252,45 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
     res.refusal = "the project's sections cannot be read: " + p;
     return res;
   }
+  if (io::FormatOf(doc) == 1) {
+    res.refusal = FoldOldExternalCapture(doc, eraNotes);
+    if (!res.refusal.empty()) return res;
+  }
+  for (const auto &n : eraNotes) {
+    res.notes.push_back({n.first, "", n.second});
+    res.constructs[n.first].converted++;
+    res.constructs[n.first].notes++;
+  }
   res.refusal = UnconvertedSection(doc);
   if (!res.refusal.empty()) return res;
   const bool gslCoulomb = OldGslCoulombBoxTicked(doc);  // before ConvertToFormat2 removes <lastRun>
   res.format2Changes = ConvertToFormat2(doc);
 
   OldProject old;
-  std::string why = ReadOldProject(doc, old);
+  std::string why = ReadOldProject(doc, old, options.projectDir);
+  for (const auto &r : old.repairs) {
+    res.notes.push_back({r.first, "", r.second});
+    res.constructs[r.first].converted++;
+    res.constructs[r.first].notes++;
+  }
   if (!why.empty()) {
     res.refusal = why;
+    // The refused line as numbered in the file: format 2's edits (ConvertToFormat2) leave these sections alone, so the
+    // line keeps its place in its section.
+    const io::Document::Section *now = old.refusedSection.empty() ? nullptr : doc.Find(old.refusedSection);
+    const io::Document::Section *then = now ? given.Find(old.refusedSection) : nullptr;
+    if (now && then && old.refusedLine > now->open) {
+      LineProblem &p = res.lineProblem;
+      p.section = old.refusedSection;
+      const std::size_t at = then->open + (old.refusedLine - now->open);
+      p.fileLine = (int)at + 1;
+      p.text = given.Line(at);
+      if (!p.text.empty() && p.text.back() == '\r') p.text.pop_back();
+      p.problem = why;
+      p.expected = ExpectedFields(p.section);
+      p.readings = ProposeReadings(p.section, p.text);
+      res.refusal += "\n" + p.Text();
+    }
     return res;
   }
   Built built;
@@ -339,6 +383,31 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   if (errors) {
     res.refusal = "the converted project does not validate (" + std::to_string(check.diagnostics.size()) + " diagnostic(s))";
     return res;
+  }
+  // The final state of external capture, as the run's set-up checks it (experiment::ExternalCaptureFinalStates through
+  // the engine's build; data files not required): a project the old program ran can be one this program refuses at
+  // its first run.  Before 2026-10-26 (35793eb3) the engine created a final state that is not a level of <levels> as a
+  // hidden level at the pair's E_x, with a free reduced width of 0.1 MeV^1/2 in each particle channel that no line of
+  // the project held; that level is not written by guess here: the conversion stops with the old reason.
+  {
+    experiment::Format3ReadOptions build;
+    build.projectDir = options.projectDir;
+    build.dataFiles = experiment::DataFiles::NotUsed;
+    const experiment::Format3Project built = experiment::ReadFormat3Text(res.text, build);
+    for (const experiment::Diagnostic &d : built.diagnostics) {
+      const std::string code = d.code;
+      // only the final state that is no level: the one the old engine gave a meaning (a shared or an unbound final
+      // state is refused by the run with its own reason, as before)
+      if (code != experiment::codes::kFinalStateNotLevel) continue;
+      res.diagnostics.push_back(d);
+      res.refusal = d.message + " (" + code + ").  An AZURE2 before 2026-10-26 (35793eb3) ran such a project: it created "
+                    "the final state as a hidden level at the pair's E_x, with a free reduced width of 0.1 MeV^1/2 in "
+                    "each particle channel, which no line of the project held (its fit parameters moved the names of "
+                    "every later level).  This program needs the final state as a level of <levels>: add a level of "
+                    "that J^pi at that E_x (its widths fixed, or the values you mean) to a copy of the old project and "
+                    "convert the copy, or switch the external capture of that pair off";
+      return res;
+    }
   }
   res.ok = true;
   return res;

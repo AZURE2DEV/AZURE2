@@ -3,6 +3,7 @@
 // them with the record grammar's token writer (io::WriteTokens) and the one writer of a nuisance (NuisanceText).  The
 // pairs of <levels> and the labels of their reactions (experiment/LevelTables.h, the converter's labels).
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <cstdlib>
 #include <string>
@@ -461,18 +462,21 @@ bool ParseFieldValue(const std::string &kind, const std::string &key, const std:
 }
 
 std::string ValueText(const ValueInfo &info, const ValueParts &parts) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   Tokens tokens;
   AppendTokens(info, parts, tokens);
   return io::WriteTokens(tokens);
 }
 
 std::string FieldValueText(const std::string &kind, const std::string &key, const ValueParts &parts) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const std::vector<KindInfo> kinds = RecordKinds();
   const FieldInfo *f = FieldInfoOf(kinds, kind, key);
   return f ? ValueText(f->value, parts) : std::string();
 }
 
 std::string ShortValueText(const std::string &kind, const std::string &key, const std::string &text) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   ValueParts parts;
   std::string why;
   if (!ParseFieldValue(kind, key, text, "", parts, why)) return text;
@@ -502,6 +506,7 @@ std::vector<std::pair<std::string, std::string>> ColumnRoles() {
 }
 
 std::vector<std::pair<std::string, std::string>> DefaultColumns(const std::string &quantity) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::pair<std::string, std::string>> out;
   const ex::Quantity *q = ex::FindQuantity(quantity);
   if (!q) return out;
@@ -522,6 +527,7 @@ std::vector<std::pair<std::string, std::string>> DefaultColumns(const std::strin
 }
 
 bool PreviewShape(const Record &record, int points, ShapeCurve &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   out = ShapeCurve();
   // a beam's profile components and truncation, read as BuildEffects reads them
   std::vector<ex::BeamProfileComponent> components;
@@ -572,6 +578,7 @@ bool PreviewShape(const Record &record, int points, ShapeCurve &out, std::string
 }
 
 std::vector<PairChoice> Pairs(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PairChoice> out;
   for (const ex::PairInfo &p : TablesOf(project).pairs) {
     PairChoice c;
@@ -590,6 +597,7 @@ std::vector<PairChoice> Pairs(const Project &project) {
 }
 
 std::string ReactionLabel(const Project &project, int entrance, int exit) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const ex::LevelTables tables = TablesOf(project);
   const ex::PairInfo *in = ex::PairByKey(entrance, tables.pairs);
   const ex::PairInfo *out = exit > 0 ? ex::PairByKey(exit, tables.pairs) : nullptr;
@@ -598,6 +606,7 @@ std::string ReactionLabel(const Project &project, int entrance, int exit) {
 }
 
 bool ReactionPairs(const Project &project, const std::string &reaction, int &entrance, int &exit) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   entrance = exit = 0;
   std::string comment;
   std::vector<io::RecordDiagnostic> problems;
