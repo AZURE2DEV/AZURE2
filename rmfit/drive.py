@@ -62,7 +62,21 @@ DEFAULT_BUDGET = dict(polish_nfev=150, polish_rounds_max=4, sign_rounds_max=4, l
 DEFAULT_STRUCTURE = dict(seed_omitted=True, broad_first_kev=10.0, narrow_phase=True, levelscan_per_cycle=1, levelscan_top=3,
                          levelscan_gamma_kev=None, local_release_mev=0.5, local_nfev=80, recall_levels=2, recall_min_pass=0.5,
                          # PRUNE (the evaluator 2026-11-21 "prune-own"): backward elimination over the levels THIS run adopted only
-                         prune_own=True, prune_nfev=None)
+                         prune_own=True, prune_nfev=None,
+                         # 2026-11-24 (the evaluator "yes" to a method proposal from benchmark diagnostics):
+                         # add_first: cycle 1 runs TIGHTEN -> STRUCTURE_ADD over the broad queue -> TIGHTEN -> SIGN -> POPULATION
+                         # (the SIGN/POPULATION before the first add bought nothing at the add step in those diagnostics);
+                         # norm_range_first: the data norms' box (x nominal) during that first polish and those adds, released
+                         # after (a clearly better basin than the unboxed drive; [0.9, 1.1] worse); retest_at_cap: an add
+                         # rejected only for amplitudes at the theta^2 cap is re-tested once with those channels closed;
+                         # split_retest_tau: an add rejected as "splits" with a gain >= this x tau is re-tested once with the
+                         # partner inside the local release, then queued as a non-blocking decision (0 = off)
+                         add_first=True, norm_range_first=[0.5, 2.0], retest_at_cap=True, split_retest_tau=10.0)
+# the 2026-11-24 defaults apply to drives whose state file was created after them (DEFAULTS_REV 2); an older drive keeps the
+# previous behaviour unless its spec sets the keys (no method change in the middle of someone else's run)
+DEFAULTS_REV = 2
+OFF_BEFORE_REV2 = dict(structure=dict(add_first=False, norm_range_first=None, retest_at_cap=False, split_retest_tau=0.0),
+                       stop=dict(marginal_rule_from_cycle=1))
 DEFAULT_STOP = dict(polish_gain_rel_min=5e-4, sign_rounds_without_accept=2, level_adds_marginal_in_a_row=2,
                     cycle_gain_rel_min=1e-3, population_gain_rel_min=1e-3, dataset_off_extra_pct=5.0, reproduce_rtol=1e-3,
                     # sign rounds only after the polish converged (skill section 3, step 1 "when done" before step 2): a flip
@@ -72,7 +86,11 @@ DEFAULT_STOP = dict(polish_gain_rel_min=5e-4, sign_rounds_without_accept=2, leve
                     sign_after_converged_polish=1,
                     # DONE only after a residual scan on the final structure whose candidates were all tested (the evaluator
                     # 2026-11-21 "scan"); at most final_scans_max extra scan passes, then DONE with the reason noted
-                    scan_before_done=1, final_scans_max=2)
+                    scan_before_done=1, final_scans_max=2,
+                    # level_adds_marginal_in_a_row ends the BROAD queue only from this cycle on (2026-11-24: in a benchmark the first two
+                    # broad ENSDF candidates were levels the start still had; their marginal results ended the queue before
+                    # the missing level was tested, hours later).  The narrow phase applies the rule in every cycle.
+                    marginal_rule_from_cycle=2)
 
 SYMBOLS = ["n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K",
            "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr",
@@ -116,10 +134,20 @@ class Driver:
         self.spec = FitSpec.load(self.spec_path)
         self.budget = dict(DEFAULT_BUDGET, **{k: v for k, v in (self.spec.get("budget") or {}).items() if _isnum(v) or isinstance(v, bool)})
         self.stop = dict(DEFAULT_STOP, **{k: v for k, v in (self.spec.get("stop_rules") or {}).items() if _isnum(v)})
-        self.structure = dict(DEFAULT_STRUCTURE, **{k: v for k, v in (self.spec.get("structure") or {}).items()
-                                                   if _isnum(v) or isinstance(v, bool) or v is None})
+        spec_structure = {k: v for k, v in (self.spec.get("structure") or {}).items()
+                          if _isnum(v) or isinstance(v, bool) or v is None
+                          or (isinstance(v, (list, tuple)) and all(_isnum(q) for q in v))}
+        self.structure = dict(DEFAULT_STRUCTURE, **spec_structure)
         self.state_path = os.path.join(self.dir, STATE_FILE)
         self.state = self._load_state()
+        if int(self.state.get("defaults_rev", 1)) < DEFAULTS_REV:
+            spec_stop = self.spec.get("stop_rules") or {}
+            for k, v in OFF_BEFORE_REV2["structure"].items():
+                if k not in spec_structure:
+                    self.structure[k] = v
+            for k, v in OFF_BEFORE_REV2["stop"].items():
+                if k not in spec_stop:
+                    self.stop[k] = v
         if base:
             base = os.path.abspath(base)
             if self.state.get("base") and os.path.abspath(self.state["base"]) != base:
@@ -137,7 +165,7 @@ class Driver:
             with open(self.state_path) as fh:
                 st = json.load(fh)
         else:
-            st = {}
+            st = dict(defaults_rev=DEFAULTS_REV)
         st.setdefault("state", "PIN_CHECK")
         st.setdefault("status", "CONTINUE")
         st.setdefault("cycle", 1)
@@ -964,10 +992,50 @@ class Driver:
     def _incumbent_obj(self) -> float:
         return float(self.campaign.incumbent()[2])
 
+    def _norm_box(self):
+        """structure.norm_range_first as (lo, hi) x nominal, or None (off, or structure.add_first off)."""
+        nr = self.structure.get("norm_range_first")
+        if not self.structure.get("add_first") or not nr or len(nr) != 2:
+            return None
+        return float(nr[0]), float(nr[1])
+
+    def _sync_norm_box(self):
+        """The data norms' box: structure.norm_range_first while the add-first phase is active (state add_first ==
+        "active"), the campaign policy's own norm_range otherwise.  It lives in the in-memory policy only (campaign.json
+        is written from cfg, never from the policy object), so every leg re-applies it here."""
+        c = self.campaign
+        if c is None or getattr(c, "policy", None) is None:
+            return
+        from .local import BoundsPolicy
+        default = tuple(float(q) for q in (((getattr(c, "cfg", None) or {}).get("policy") or {}).get("norm_range")
+                                           or BoundsPolicy().norm_range))
+        box = self._norm_box() if self.state.get("add_first") == "active" else None
+        want = default if box is None else (max(box[0], default[0]), min(box[1], default[1]))
+        if tuple(float(q) for q in c.policy.norm_range) != want:
+            c.policy = dataclasses.replace(c.policy, norm_range=want)
+            self.log(f"data norms boxed {want[0]:g}-{want[1]:g} x nominal"
+                     + (" (add-first phase, structure.norm_range_first)" if box else " (the campaign policy's own box)"))
+
     def _s_tighten(self):
         c = self.campaign
         if c is None:
             raise DriveStop("ERROR", "no campaign.json: the build phase did not reach INIT")
+        if (int(self.state["cycle"]) == 1 and self.structure.get("add_first") and self.state.get("add_first") is None
+                and int(self.budget["level_tests_max"]) > 0):
+            self.state["add_first"] = "active"
+            box = self._norm_box()
+            self.note("add-first phase (structure.add_first, 2026-11-24): cycle 1 tests the broad "
+                      "structure queue right after this polish, before SIGN / POPULATION"
+                      + (f"; data norms boxed {box[0]:g}-{box[1]:g} x nominal until those adds are done (structure.norm_range_first)"
+                         if box else ""))
+            self.save()
+        self._sync_norm_box()
+        res = self._tighten_rounds(c)
+        if isinstance(res, tuple) and res[0] == "next" and self.state.get("add_first") == "active":
+            return "STRUCTURE_ADD", res[1] + " -> STRUCTURE_ADD first (add-first phase, cycle 1)"
+        return res
+
+    def _tighten_rounds(self, c):
         n = int(self.counters.get("polish_rounds", 0))
         if self.state.get("cycle_start_objective") is None:
             # a campaign that existed before the drive (perturb sibling, retrofit) never passed INIT: the cycle's
@@ -1163,18 +1231,28 @@ class Driver:
         self.note("LEVELSCAN: " + msg)
         return "next", msg
 
+    def _end_add_first(self, why):
+        """The add-first phase is over: release the norm box and go on with cycle 1's TIGHTEN -> SIGN -> POPULATION."""
+        self.state["add_first"] = "done"
+        self._sync_norm_box()
+        self.note(f"add-first phase done ({why}): norm box released; cycle 1 continues with TIGHTEN -> SIGN -> POPULATION")
+        self.save()
+        return "TIGHTEN", f"add-first phase done ({why}) -> TIGHTEN with the norms released"
+
     def _s_structure_add(self):
         c = self.campaign
         from .structure import LevelCandidate
+        self._sync_norm_box()
+        phase = self.state.get("add_first") == "active"
         path, data, bank = self._bank()
         tested = set(int(i) for i in self.state["tested_candidates"])
         marg = int(self.counters.get("marginal_in_a_row", 0))
         ntests = int(self.counters.get("level_tests", 0))
+        cyc = int(self.state["cycle"])
         if ntests >= int(self.budget["level_tests_max"]):
+            if phase:
+                return self._end_add_first(f"budget.level_tests_max {self.budget['level_tests_max']} reached")
             return "next", f"budget.level_tests_max {self.budget['level_tests_max']} reached ({len(bank) - len(tested)} untested)"
-        if marg >= int(self.stop["level_adds_marginal_in_a_row"]):
-            self.counters["marginal_in_a_row"] = 0
-            return "next", f"{marg} marginal adds in a row: the queue ends here ({len(bank) - len(tested)} untested)"
         # a candidate without a hypothesis is never tested (every structure candidate needs one)
         for i in range(len(bank)):
             if i not in tested and not (bank[i].get("hypothesis") or bank[i].get("note")):
@@ -1186,6 +1264,16 @@ class Driver:
         # structure.broad_first_kev wait until the broad queue AND the residual scan are exhausted (structure.narrow_phase)
         broad = [i for i in untested if not self._is_narrow(bank[i])]
         narrow = [i for i in untested if self._is_narrow(bank[i])]
+        # stop_rules.level_adds_marginal_in_a_row: ends the broad queue only from stop_rules.marginal_rule_from_cycle on
+        # (2026-11-24); the narrow phase applies it in every cycle
+        from_cycle = int(self.stop.get("marginal_rule_from_cycle", 1) or 1)
+        if marg >= int(self.stop["level_adds_marginal_in_a_row"]) and not (broad and cyc < from_cycle):
+            self.counters["marginal_in_a_row"] = 0
+            if phase:
+                return self._end_add_first(f"{marg} marginal adds in a row")
+            return "next", f"{marg} marginal adds in a row: the queue ends here ({len(bank) - len(tested)} untested)"
+        if phase and not broad:
+            return self._end_add_first("broad structure queue tested")
         if broad:
             order = sorted(broad, key=lambda i: (-_cand_width_kev(bank[i]), i))
         else:
@@ -1219,12 +1307,9 @@ class Driver:
         if self.state.get("adds_untrusted") and getattr(c, "spec", None) is not None:
             c.spec.data.setdefault("pre_authorized", {})["adopt_level"] = False      # this process only: adds become decisions
             self.log("  level adds untrusted after RECALL: an accept is recorded as accept-pending (decision)")
-        st = c.run_level_add(cand, jpis=jpis, global_nfev=int(self.budget["level_nfev"]), pinned_nfev=int(self.budget["pinned_nfev"]),
-                             local_release=float(self.structure.get("local_release_mev") or 0.0),
-                             local_nfev=int(self.structure.get("local_nfev") or 80), note="rmfit drive",
-                             # the J^pi group's other open channels FREE (tiny seed), not gamma 0 FIXED: an ENSDF candidate
-                             # names no channels (structure.seed_omitted, default True since 2026-11-22)
-                             seed_omitted=bool(self.structure.get("seed_omitted", True)))
+        is_broad = not self._is_narrow(spec)
+        st = self._level_add(c, cand, jpis)
+        st = self._retest(c, cand, jpis, st)
         self.state["tested_candidates"].append(i)
         self.counters["level_tests"] = ntests + 1
         out = st.get("outcome", "?")
@@ -1245,9 +1330,107 @@ class Driver:
             # not a measured marginal level: nothing could be tested (e.g. no channel open at that energy); it must not
             # end the queue for the candidates behind it
             self.log(f"  candidate {i}: untestable ({out}); not counted toward level_adds_marginal_in_a_row")
+        elif is_broad and cyc < int(self.stop.get("marginal_rule_from_cycle", 1) or 1):
+            self.log(f"  candidate {i}: {out} in the cycle-{cyc} broad queue; not counted toward level_adds_marginal_in_a_row "
+                     f"(stop_rules.marginal_rule_from_cycle {self.stop.get('marginal_rule_from_cycle')})")
         else:
             self.counters["marginal_in_a_row"] = marg + 1
-        return "stay", f"candidate {i} {st.get('jpi', cand.jpi) or 'scan'} @ {cand.energy}: {out} (delta {st.get('delta', float('nan')):+.1f})"
+        return "stay", (f"candidate {i} {st.get('jpi', cand.jpi) or 'scan'} @ {cand.energy}: {out} (delta {st.get('delta', float('nan')):+.1f})"
+                        + (f" [{st['retest_of']}]" if st.get("retest_of") else ""))
+
+    def _level_add(self, c, cand, jpis, local_release=None, seed_omitted=None):
+        return c.run_level_add(cand, jpis=jpis, global_nfev=int(self.budget["level_nfev"]), pinned_nfev=int(self.budget["pinned_nfev"]),
+                               local_release=float(self.structure.get("local_release_mev") or 0.0) if local_release is None else float(local_release),
+                               local_nfev=int(self.structure.get("local_nfev") or 80), note="rmfit drive",
+                               # the J^pi group's other open channels FREE (tiny seed), not gamma 0 FIXED: an ENSDF candidate
+                               # names no channels (structure.seed_omitted, default True since 2026-11-22)
+                               seed_omitted=bool(self.structure.get("seed_omitted", True)) if seed_omitted is None else bool(seed_omitted))
+
+    def _retest(self, c, cand, jpis, st):
+        """One re-test of an add the criteria rejected for a reason that is not about the level (2026-11-24, benchmark
+        diagnostics; the evaluator approved the method proposal):
+          * "unphysical" only because amplitudes of the new level sit AT the theta^2 cap (structure.retest_at_cap): the same
+            J^pi again with those channels closed (gamma 0 fixed) and the level's other channels named.  A reference model can
+            itself hold an amplitude at the cap, and the seeded channels of an ENSDF add (structure.seed_omitted) can run there
+            in one run and stop just short in another -- a verdict on the last digit.
+          * "splits" with a gain >= structure.split_retest_tau x tau: again with the local release widened to hold the split
+            partner (its energy free).  Still a split: a non-blocking decision for the evaluator (a large gain rejected as a
+            split of a neighbouring level of the same J^pi, where the reference has both).  Small splits stay rejected."""
+        out = st.get("outcome")
+        if out == "unphysical" and self.structure.get("retest_at_cap"):
+            th = st.get("theta2") or {}
+            if isinstance(th, str):
+                try:
+                    th = json.loads(th)
+                except ValueError:
+                    th = {}
+            ab = [a.strip() for a in str(st.get("at_bound") or "").split(",") if a.strip()]
+            if any(not a.startswith("g[") for a in ab):
+                return st                                  # a total-width floor, not a channel at the cap: no re-test
+            e = float(st.get("energy_fit") or cand.energy)
+            caps = [float(c.policy.cap_for(e))]
+            if float(getattr(c.policy, "new_level_theta2_cap", 0.0) or 0.0) > 0:
+                caps.append(float(c.policy.new_level_theta2_cap))
+            cap = min(caps)
+            off = sorted({k for k, v in th.items() if float(v) >= cap * (1 - 1e-3)} | set(ab))
+            keep = []
+            for k in th:
+                m = re.match(r"g\[\S+ p(\d+) L(\d+) S([-0-9.]+)\]", k)
+                if m and k not in off:
+                    keep.append(dict(pair=int(m.group(1)), L=int(m.group(2)), S=float(m.group(3)), gamma=1000.0))
+            if not off or not keep:
+                return st
+            why = "unphysical at the theta2 cap: re-tested with " + ", ".join(off) + " closed"
+            self.log(f"  re-test (structure.retest_at_cap): {st.get('jpi', cand.jpi)} @ {cand.energy} was unphysical only for "
+                     f"{', '.join(off)} at the theta^2 cap {cap:g}; again with those channels closed and {len(keep)} named")
+            cand2 = dataclasses.replace(cand, channels=keep, note=(cand.note + f" [{why}]").strip())
+            st2 = self._level_add(c, cand2, [st.get("jpi") or cand.jpi], seed_omitted=False)
+            st2["retest_of"] = why
+            self.note(f"re-test of {st.get('jpi', cand.jpi)} @ {cand.energy}: {why} -> {st2.get('outcome')} (delta {st2.get('delta', float('nan')):+.1f})")
+            return st2
+        kx = float(self.structure.get("split_retest_tau") or 0.0)
+        if out == "splits" and kx > 0:
+            tau, delta = float(st.get("tau") or 0.0), float(st.get("delta") or 0.0)
+            if tau <= 0 or delta < kx * tau:
+                return st
+            sp = st.get("split") or {}
+            if isinstance(sp, str):
+                try:
+                    sp = json.loads(sp) if sp else {}
+                except ValueError:
+                    sp = {}
+            ep = None
+            try:
+                ep = float(str(sp.get("label", "")).split("@")[1])
+            except (IndexError, ValueError):
+                pass
+            lr0 = float(self.structure.get("local_release_mev") or 0.0)
+            lr = max(lr0, abs(ep - float(cand.energy)) + 0.1) if ep is not None else lr0
+            st2 = None
+            if lr > lr0 + 1e-6:
+                self.log(f"  re-test (structure.split_retest_tau {kx:g}): {st.get('jpi', cand.jpi)} @ {cand.energy} split "
+                         f"{sp.get('label')} with gain {delta:+.0f} = {delta / tau:.1f} tau; again with the local release "
+                         f"widened {lr0:g} -> {lr:.3f} MeV (the partner's energy free)")
+                st2 = self._level_add(c, cand, [st.get("jpi") or cand.jpi], local_release=lr)
+                st2["retest_of"] = f"split of {sp.get('label')} (gain {delta:+.0f}): re-tested with local release {lr:.3f} MeV"
+                if st2.get("outcome") != "splits":
+                    self.note(f"re-test of {st.get('jpi', cand.jpi)} @ {cand.energy}: {st2['retest_of']} -> {st2.get('outcome')}")
+                    return st2
+            fin = st2 or st
+            jpi = fin.get("jpi") or cand.jpi
+            did = self.decisions.add(f"split-level-{jpi}-{float(cand.energy):.3f}",
+                                     f"the {jpi} add at {float(fin.get('energy_fit') or cand.energy):.4f} MeV gains "
+                                     f"{float(fin.get('delta') or 0):+.0f} ({float(fin.get('delta') or 0) / max(float(fin.get('tau') or 1), 1e-9):.0f} tau) "
+                                     f"but takes its width from the existing {sp.get('label')} (split; structure {fin.get('structure')}). "
+                                     f"Two levels of this J^pi there, or one lineshape?  The drive does not adopt it; "
+                                     f"'test' = re-run the add by hand from the current incumbent.",
+                                     evidence=f"ledger structure {fin.get('structure')} candidate {fin.get('candidate')}; "
+                                              f"figures/leveladd_*E{float(cand.energy):.4f}*",
+                                     options=("leave", "test"), default="leave")
+            self.note(f"{jpi} @ {cand.energy}: a large split ({float(fin.get('delta') or 0):+.0f}) not adopted; decision {did} (non-blocking)")
+            fin["retest_of"] = (fin.get("retest_of") or "large split") + f"; decision {did}"
+            return fin
+        return st
 
     def _s_prune(self):
         """Backward elimination over the levels this run adopted, and only those (in a benchmark a narrow level adopted
@@ -1494,12 +1677,12 @@ PLAN_TEXT = {
     "CANDIDATES": "candidates.json kept, or built from ENSDF <compound_nucleus> (broad first, hypothesis each)",
     "INIT": "Campaign.init --spec (baseline verified, engine pinned)",
     "RECALL": "structure.recall_levels broadest known levels removed one at a time and searched for with no J^pi (validates level-add); below recall_min_pass adds become decisions",
-    "TIGHTEN": "polish --tighten rounds until gain < polish_gain_rel_min (budget polish_rounds_max)",
+    "TIGHTEN": "polish --tighten rounds until gain < polish_gain_rel_min (budget polish_rounds_max); cycle 1 with structure.add_first: data norms boxed to structure.norm_range_first, then STRUCTURE_ADD over the broad queue before SIGN, then TIGHTEN again with the norms released",
     "SIGN": "sign rounds until sign_rounds_without_accept (>= 2 rounds; budget sign_rounds_max)",
     "POPULATION": "restarts_per_cycle sign-perturbed restarts polished to convergence + crossover_passes between them (basin crossing); gain < population_gain_rel_min -> off until a structure change",
     "SHIFTS_FREE": "polish --shifts-free if pre_authorized.shifts_free",
     "LEVELSCAN": "when the broad candidate queue is empty: residual-run clusters -> template screen of every J^pi -> candidates appended (structure.levelscan_per_cycle)",
-    "STRUCTURE_ADD": "level add per candidates.json entry, broad first (structure.broad_first_kev), narrow alignment after the broad queue + scan; hypothesis required; adoption per pre_authorized.adopt_level",
+    "STRUCTURE_ADD": "level add per candidates.json entry, broad first (structure.broad_first_kev), narrow alignment after the broad queue + scan; hypothesis required; adoption per pre_authorized.adopt_level; one re-test of an add unphysical only at the theta^2 cap (structure.retest_at_cap) or a large split (structure.split_retest_tau); marginal results end the broad queue from stop_rules.marginal_rule_from_cycle on",
     "PRUNE": "backward elimination over the levels this run adopted only (structure.prune_own); the cheapest REMOVE verdict adopted, repeated on the new structure",
     "SIGN_POST": "sign rounds again if a structure was adopted",
     "DATASET_OFF": "Botek test on the worst chi2/N sets (budget dataset_off_max); large extra recovery -> decision (keep)",

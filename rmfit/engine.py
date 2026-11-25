@@ -1769,6 +1769,26 @@ def bake(base_azr, x, keys, path, flags, workdir=None, output_dir=None,
                 print(f"bake: fixed parameters NOT rewritten (this pyazr cannot transform them: "
                       f"{str(err).strip().splitlines()[-1]}); a level whose free amplitudes moved may fail the check")
             phys = None if phys_all is not None else np.asarray(ev.transform(xs), float)
+            if phys_all is not None and not np.all(np.isfinite(phys_all)):
+                # 2026-11-24 (a level whose energy coincides with a channel threshold to within 1 keV): the engine's
+                # transform gives NaN for a channel whose threshold coincides with the level energy (penetrability at zero
+                # energy), and the NaN written into <levels> makes the file un-loadable ("AZURE2 could not initialize").  An
+                # amplitude that is exactly 0 has physical width 0 whatever its penetrability, so write 0; any other
+                # non-finite value is a real failure and stops the bake.
+                rwa_full = np.asarray(snap["all_rwa"], float).copy()
+                free = [i for i, p in enumerate(snap["parameters"]) if not p.fixed]
+                if len(free) == xs.size:
+                    rwa_full[free] = xs
+                bad = np.where(~np.isfinite(phys_all))[0]
+                zero = [int(i) for i in bad if rwa_full[i] == 0.0]
+                if len(zero) < bad.size:
+                    other = [snap["names"][i] for i in bad if int(i) not in zero]
+                    raise RuntimeError(f"bake: non-finite physical value for {len(other)} parameter(s) with a nonzero "
+                                       f"amplitude: {other[:6]}")
+                phys_all = phys_all.copy()
+                phys_all[zero] = 0.0
+                print(f"bake: {len(zero)} zero-amplitude parameter(s) with a non-finite physical value (channel threshold at "
+                      f"the level energy) written as 0: " + ", ".join(snap["names"][i] for i in zero[:6]))
     if PYAZR3:
         path, sav = _bake_write_p3(base_azr, xs, src_keys, path, flags, workdir, output_dir, name)
     else:

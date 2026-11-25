@@ -123,7 +123,8 @@
   "level_adds_marginal_in_a_row": 2,
   "cycle_gain_rel_min": 0.001,
   "sign_after_converged_polish": 1,
-  "population_gain_rel_min": 0.001
+  "population_gain_rel_min": 0.001,
+  "marginal_rule_from_cycle": 2
  },
  "structure": {
   "seed_omitted": true,
@@ -135,7 +136,14 @@
   "local_release_mev": 0.5,
   "local_nfev": 80,
   "recall_levels": 2,
-  "recall_min_pass": 0.5
+  "recall_min_pass": 0.5,
+  "add_first": true,
+  "norm_range_first": [
+   0.5,
+   2.0
+  ],
+  "retest_at_cap": true,
+  "split_retest_tau": 10.0
  },
  "standing_decisions": [
   {
