@@ -11,6 +11,8 @@
 //      the notes bar shown) shows at least eight rows on open; the Form button closes the form and the table takes
 //      its height; the choice is kept for the next window; the Levels tab's level list shows at least ten rows and its
 //      empty Gamma Decays / Isospin panels are not shown in standard view;
+//  (h) an old project of each era converted from the window under a decimal-comma locale: the bytes of the
+//      conversion under "C";
 //  (d) the converter's repair of an old line: the old 13N with one data line short of its shift's vary flag; the
 //      window shows the line, its number and the two readings; the first taken and converted again gives the project
 //      the unmodified old 13N gives, byte for byte; the old file is unchanged, the repaired copy beside it, a note says
@@ -818,6 +820,47 @@ int main(int argc, char **argv) {
       Check(savedA && savedB && !sa.str().empty() && sa.str() == sb.str() && watch.seen.isEmpty(),
             "(g) " + name + ": saved after showing every tab and " + std::to_string(forms) +
                 " record forms, byte for byte the save made on opening " + why.toStdString());
+    }
+  }
+
+  // (h) an old project converted from the window under a decimal-comma locale of the user: the bytes the converter
+  //     writes under "C" (the window resets LC_NUMERIC when it is made; the converter reads with strtod and streams).
+  //     The forms of 2025-08 and 2026-05 (decimals in norms, shifts, angles, scalings) and of 2025-01 (coefficients).
+  {
+    const char *comma = nullptr;
+    for (const char *name : {"de_DE.UTF-8", "de_DE.utf8", "it_IT.UTF-8", "pl_PL.UTF-8", "fr_FR.UTF-8", "de_DE"})
+      if (std::setlocale(LC_NUMERIC, name) && std::string(std::localeconv()->decimal_point) == ",") {
+        comma = name;
+        break;
+      }
+    std::setlocale(LC_NUMERIC, "C");
+    if (!comma) {
+      std::cout << "skip (h): no decimal-comma locale on this machine" << std::endl;
+    } else {
+      for (const char *form : {"energy_shift_2025_08", "components_scaling_2026_05", "target_2025_01_coefficients"}) {
+        const fs::path dir = work / (std::string("locale_") + form);
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        fs::copy(source / "tests/convert/fixtures/history" / form, dir, fs::copy_options::recursive);
+        const fs::path old = dir / (std::string(form) + ".azr");
+        std::string report;
+        const bool refOk = azure2::front::ConvertProject(old.string(), (dir / "ref.f3.azr").string(), report);
+        std::setlocale(LC_NUMERIC, comma);  // as QApplication sets it from the user's environment
+        bool ok = false;
+        {
+          AZURESetup w;  // resets LC_NUMERIC, as the program's window does
+          QString why;
+          ok = w.convertOldProject(QString::fromStdString(old.string()), QString::fromStdString((dir / "gui.f3.azr").string()), why);
+        }
+        std::setlocale(LC_NUMERIC, "C");
+        std::ifstream a(dir / "ref.f3.azr", std::ios::binary), b(dir / "gui.f3.azr", std::ios::binary);
+        std::stringstream sa, sb;
+        sa << a.rdbuf();
+        sb << b.rdbuf();
+        Check(refOk && ok && !sa.str().empty() && sa.str() == sb.str(),
+              std::string("(h) ") + form + " converted from the window with LC_NUMERIC " + comma +
+                  ": the bytes of the conversion under C");
+      }
     }
   }
 
