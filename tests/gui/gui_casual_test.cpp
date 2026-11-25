@@ -27,6 +27,8 @@
 //      in expert view only, a README title; New Project's first step; the notes bar's warning; Physics > Functions'
 //      title line without a gap; the Overview's Calculate and Fit once before a run.
 // PASS/FAIL per check; exit 1 on a failure.
+#include <cstdlib>
+#include <clocale>
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
@@ -169,6 +171,26 @@ int main(int argc, char **argv) {
   fs::create_directories(work);
   QSettings::setDefaultFormat(QSettings::IniFormat);
   QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QString::fromStdString((work / "settings").string()));
+
+  // (0) a decimal-comma locale of the user does not reach the readers: with LC_NUMERIC of such a language strtod
+  // stops at the point and every "5.441" of a project is refused.  The window resets it; the rest of this test then
+  // runs as the program would for such a user.  (Skipped where the machine has no such locale.)
+  {
+    const char *comma = nullptr;
+    for (const char *name : {"de_DE.UTF-8", "de_DE.utf8", "it_IT.UTF-8", "pl_PL.UTF-8", "fr_FR.UTF-8", "de_DE", "German_Germany.1252", "de-DE"})
+      if (std::setlocale(LC_NUMERIC, name) && std::string(std::localeconv()->decimal_point) == ",") {
+        comma = name;
+        break;
+      }
+    if (!comma) {
+      std::setlocale(LC_NUMERIC, "C");
+      std::cout << "skip (0): no decimal-comma locale on this machine" << std::endl;
+    } else {
+      AZURESetup probe;
+      Check(std::string(std::localeconv()->decimal_point) == "." && std::strtod("5.441", nullptr) == 5.441,
+            std::string("(0) with the locale ") + comma + " the window reads 5.441 as 5.441");
+    }
+  }
 
   // (a) every example opens with no modal dialog; the pairs keep their keys
   std::vector<fs::path> projects;

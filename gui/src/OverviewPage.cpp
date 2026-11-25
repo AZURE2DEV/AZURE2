@@ -544,7 +544,11 @@ void OverviewPage::fillProject() {
     free = tr("<b>%1</b> of %2").arg(parameters_.free).arg(parameters_.parameters) +
            (kinds.isEmpty() ? QString() : " (" + kinds.join(", ") + ")");
   } else if (!parametersWhy_.isEmpty()) {
-    free = Muted(tr("not known: %1").arg(parametersWhy_.toHtmlEscaped()));
+    {
+      // the first line of the reason; the whole text is in the Diagnostics panel and in this line's tool tip
+      const QString first = parametersWhy_.section('\n', 0, 0).left(160);
+      free = Muted(tr("not known: %1%2").arg(first.toHtmlEscaped(), first.size() < parametersWhy_.size() ? tr(" ... (see Validate)") : QString()));
+    }
   } else {
     free = Muted(QFileInfo::exists(holder_->path()) ? tr("being counted...") : tr("save the project to count them"));
   }

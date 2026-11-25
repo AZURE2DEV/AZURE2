@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QResource>
 #include <QOperatingSystemVersion>
+#include <clocale>
 #include <cstdlib>
 #include <cstring>
 #include "AZURESetup.h"
@@ -32,6 +33,8 @@ int main(int argc, char *argv[]) {
   applyFileDialogPolicy();
 
   QApplication app(argc, argv);
+  // numbers with a decimal point whatever the user's language (see AZURESetup's constructor)
+  std::setlocale(LC_NUMERIC, "C");
 
 #ifdef WIN_SPACING
   QFont font = app.font();

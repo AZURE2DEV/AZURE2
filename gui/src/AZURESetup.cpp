@@ -5,6 +5,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QComboBox>
+#include <QLocale>
 #include <QDialog>
 #include <QFontDatabase>
 #include <QPlainTextEdit>
@@ -33,6 +34,7 @@
 #include <QUrl>
 #include <QHBoxLayout>
 #include <QStyle>
+#include <clocale>
 #include <cmath>
 
 #include "AboutAZURE2Dialog.h"
@@ -64,6 +66,12 @@ static void InitShellResources() {
 }
 
 AZURESetup::AZURESetup() {
+  // Numbers are read and written with a decimal point, whatever the user's language: QApplication takes the C
+  // library's locale from the environment, and with a decimal-comma locale (de_DE, it_IT, pl_PL, ...) strtod then
+  // stops at the point, so the engine's readers refused every "5.441" of a project (E_NOT_A_NUMBER, E_BAD_NAME,
+  // E_REACTION_SYNTAX).  Qt's documentation asks for exactly this reset after the application is made.
+  std::setlocale(LC_NUMERIC, "C");
+  QLocale::setDefault(QLocale::c());
   InitShellResources();
   qRegisterMetaType<RunOutcome>("RunOutcome");
   holder_ = new ProjectHolder(this);
