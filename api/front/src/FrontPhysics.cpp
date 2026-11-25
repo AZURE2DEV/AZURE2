@@ -397,6 +397,50 @@ std::vector<PhysicsPole> PhysicsSession::Poles() {
   return out;
 }
 
+bool PhysicsSession::PotentialBoxStates(int pair, int l, int twoJ, double radius, double boundary, double eMin,
+                                        double eMax, std::vector<PotentialPole> &out, std::string &why) {
+  out.clear();
+  if (!IsOpen()) {
+    why = "no session";
+    return false;
+  }
+  try {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
+    for (const azure2::physics::BoxState &b : impl_->api->GetPotentialBoxStates(pair, l, twoJ, radius, boundary, eMin, eMax)) {
+      PotentialPole p;
+      p.nodes = b.nodes;
+      p.energy = b.E_MeV;
+      p.gamma2 = b.gamma2_MeV;
+      out.push_back(p);
+    }
+  } catch (const std::exception &e) {
+    why = e.what();
+    return false;
+  }
+  return true;
+}
+
+bool PhysicsSession::PotentialScatteringLength(int pair, int l, int twoJ, double &a, double &r, std::string &why) {
+  if (!IsOpen()) {
+    why = "no session";
+    return false;
+  }
+  try {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
+    const azure2::physics::EffectiveRange e = impl_->api->GetPotentialEffectiveRange(pair, l, twoJ);
+    if (!e.ok) {
+      why = e.why;
+      return false;
+    }
+    a = e.a;
+    r = e.r;
+  } catch (const std::exception &e) {
+    why = e.what();
+    return false;
+  }
+  return true;
+}
+
 bool PhysicsSession::ChannelFunctions(int pair, int l, double radius, int twoJ, const std::vector<double> &eCm,
                                       PhysicsCurves &out, std::string &why) {
   out = PhysicsCurves();

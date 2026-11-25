@@ -138,12 +138,18 @@ PairsTab::PairsTab(QWidget *parent) :
   extras = new QTabWidget;
   extras->setVisible(false);
   layout->addWidget(extras);
-  layout->setStretch(0, 3);
+  layout->setStretch(0, 2);
+  layout->setStretch(2, 5);
   setLayout(layout);
 }
 
-void PairsTab::addExtraPanel(const QString &title, QWidget *panel) {
-  extras->addTab(panel, title);
+void PairsTab::addExtraPanel(const QString &title, QWidget *panel, bool first) {
+  if (first) {
+    extras->insertTab(0, panel, title);
+    extras->setCurrentIndex(0);
+  } else {
+    extras->addTab(panel, title);
+  }
   extras->setVisible(true);
 }
 

@@ -113,6 +113,11 @@ class CoulFunc {
   /// J (kNoSpinOrbit for a pair without a spin-orbit term, whose functions do not depend on J).
   /// Coulomb functions at (l, two_j, radius fm, centre-of-mass energy MeV).
   CoulWaves operator()(int l, int two_j, double radius, double energy);
+  /// The waves the channel functions at the channel radius are made from: operator()'s, changed by the interior
+  /// background of the partial wave when the pair's potential has one (physics/ DressWaves, potential_background.md
+  /// Eq. (9)); operator()'s otherwise.  P, S, S', S'' and the hard-sphere phase read these; the external-capture
+  /// integrands read operator() at r > a_c.
+  CoulWaves ChannelWaves(int l, int two_j, double radius, double energy);
   /// Penetrability \f$P_l\f$ at (l, two_j, radius, energy).
   double Penetrability(int l, int two_j, double radius, double energy);
   /// Shift function \f$S_l\f$ at (l, two_j, radius, energy), positive energies.

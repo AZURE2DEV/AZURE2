@@ -114,6 +114,9 @@ std::string FindLineFinal(const CompoundSystem *c, int entranceKey, int exitKey,
     }
   }
   if (open == 0) return "its final state is bound (below every particle threshold): it has no line shape";
+  if (lf.fp && lf.fp->GetHybridPotential() && azure2::physics::HasInteriorCapture(*lf.fp->GetHybridPotential()))
+    return "its final state's pair has a potential with interior capture, which the line-shape integration is not built "
+           "for; without line_window the final state is taken as a narrow resonance";
   if (open > 1) return "its final state lies above more than one particle threshold; the line-shape integration handles one";
   const ExitRow &exit = P.exits[lf.exit - 1];
   for (int k = 1; k <= exit.num_groups; k++) {

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 namespace ScatteringLength {
 
@@ -92,6 +93,14 @@ void ThresholdMatrices(const CompoundSystem *compound, const LevelState &state, 
 }  // namespace
 
 Value Evaluate(const CompoundSystem *compound, const LevelState &state, const Config &configure, const Channel &ch) {
+  // The formula reads the point-Coulomb functions at E = 0: an interior background of the s wave changes the channel's
+  // exterior functions (potential_background.md Eq. (8)), which it does not know.  Refused, not computed wrongly.
+  const PPair *bgPair = compound->GetPair(ch.pairNum);
+  if (bgPair->GetHybridPotential() &&
+      azure2::physics::BackgroundOf(*bgPair->GetHybridPotential(), 0, bgPair->SpinOrbitTwoJ(ch.s)))
+    throw std::runtime_error("the s-wave scattering length of pair " + std::to_string(ch.pairKey) +
+                             " is not computed: its s wave has an interior background (potential_background.md); use "
+                             "the phase shifts and the effective-range expansion");
   Value v;
   v.ch = ch;
   v.M = complex(0.0, 0.0);
@@ -195,12 +204,22 @@ std::string Report(const CompoundSystem *compound, const LevelState &state, cons
     const PPair *pair = compound->GetPair(aa);
     if (pair->GetPType() != 0) continue;
     for (const Channel &ch : Channels(compound, pair->GetPairKey())) {
-      Value v = Evaluate(compound, state, configure, ch);
+      Value v;
+      std::string refused;
+      try {
+        v = Evaluate(compound, state, configure, ch);
+      } catch (const std::runtime_error &e) {
+        refused = e.what();
+        v.a0 = complex(std::nan(""), std::nan(""));
+      }
       out << std::setw(6) << ch.pairKey << "  " << std::left << std::setw(14) << AZURELabel::Pair(compound, aa)
           << std::setw(6) << AZURELabel::JPi(ch.s, ch.parity) << std::right << std::fixed << std::setprecision(4)
           << std::setw(10) << CoulombX(pair, ch.radius) << std::scientific << std::setprecision(6) << std::setw(16)
           << std::real(v.a0) << std::setw(16) << std::imag(v.a0);
-      if (!ch.hasLevels) out << "  no level in this channel (hard sphere)";
+      if (!refused.empty())
+        out << "  not computed: interior background (potential_background.md)";
+      else if (!ch.hasLevels)
+        out << "  no level in this channel (hard sphere)";
       out << std::defaultfloat << std::endl;
     }
   }

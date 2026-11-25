@@ -245,6 +245,14 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   bool ResidualsOnly(const vector_r &full, vector_r &residuals) const;
 
   /*!
+   * Is every entry of the parameter vector finite?  The evaluations refuse a vector that is not (a step of a fitter
+   * that went to NaN or infinity): operator() returns the chi-squared ceiling, Chi2Value NaN, ResidualJacobian and
+   * ResidualsOnly false, so the fitter rejects the step through its normal failure path.  Evaluated, such a vector
+   * reached the Coulomb functions with eta = rho = NaN, which throw, and the program aborted (2026-11-20).
+   */
+  static bool FiniteVector(const vector_r &p);
+
+  /*!
    * Returns a reference to the Config structure.
    */
   const Config &configure() const { return configure_; };

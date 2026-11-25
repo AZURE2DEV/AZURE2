@@ -81,6 +81,18 @@ data session holds for the same ``.azr`` (its ``x0``) can differ from the rate s
 ``.azr`` in the last digits of the capture widths' amplitudes (1e-10 relative on T1), which moves the rate by
 about 1e-9; a rate at a fit's or a sampler's point uses that point's values.
 
+An unbound final state
+----------------------
+
+A rate that includes external capture into a final state above the entrance pair's threshold is **not a number to
+quote**, and the run says so in a warning.  Such a final state is a narrow resonance; its cross section rises as
+:math:`1/E_\gamma` toward the final state's energy (the soft-photon limit), and the program cuts it where the
+radial integral is given up, at photon energies of a few keV.  The rate is then logarithmic in that numerical limit:
+for α + :math:`^{12}`\ C into a state 3.26 MeV above the threshold, a factor two in it moves the rate by 41 % at
+:math:`T_9` = 0.5 and by 9 % at :math:`T_9` = 10.  Cross sections away from the final state's energy are not
+affected.  The rate is still written; a physical cut (the final state's width, a detector threshold) has to be
+applied outside the program.
+
 On the page
 -----------
 

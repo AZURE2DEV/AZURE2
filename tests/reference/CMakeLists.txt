@@ -104,6 +104,19 @@ add_test(NAME park_chi2_fallback
          WORKING_DIRECTORY ${_park_chi2_dir})
 set_tests_properties(park_chi2_fallback PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
 
+# A non-finite parameter vector (a fit step to NaN or infinity) is a failed evaluation, never an abort: the
+# chi-squared ceiling, NaN, false; a parameter file with a non-finite value is refused.  A synthetic model with a
+# potential background (tests/potential_background/models/fit_level.azr) and the same without the potential.
+add_executable(nonfinite_step_test nonfinite_step_test.cpp)
+target_link_libraries(nonfinite_step_test PRIVATE AZURE2Core)
+set(_nonfinite_dir ${CMAKE_CURRENT_BINARY_DIR}/nonfinite_step)
+file(MAKE_DIRECTORY ${_nonfinite_dir}/output ${_nonfinite_dir}/checks)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/potential_background/models/data DESTINATION ${_nonfinite_dir})
+add_test(NAME nonfinite_step
+         COMMAND nonfinite_step_test ${CMAKE_SOURCE_DIR}/tests/potential_background/models/fit_level.azr
+         WORKING_DIRECTORY ${_nonfinite_dir})
+set_tests_properties(nonfinite_step PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
 # A shift column's difference step stays inside the planned nodes (ShiftedFold.h, question 5): a varied shift without
 # a prior on a thin layer (tests/thin_layer_limit's model at three densities), its gradient and residual Jacobian near
 # the edge of the reach against central differences.  Before, the process ended (std::logic_error in the refold).

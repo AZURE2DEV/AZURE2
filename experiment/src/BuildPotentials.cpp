@@ -56,6 +56,84 @@ std::string DefaultNote(const ValidatedRecord &r, const std::string &field) {
   return "potential " + r.name + ": " + field + " not given, " + (f ? f->defaultText : std::string("?")) + " (the default)";
 }
 
+/// The `wave` fields of the record (l, J, depth, width, background interior boundary subtract capture, only) into s.waves; false after an
+/// error (reported).
+bool ReadWaves(Context &c, const ValidatedRecord &r, HybridPotentialSetting &s) {
+  for (const Value *w : r.GetAll("wave")) {
+    physics::PartialWave pw;
+    if (const Value *l = w->Get("l")) pw.l = (int)l->integer;
+    if (const Value *j = w->Get("J")) pw.two_j = j->spin.twice;
+    if (const Value *d = w->Get("depth")) pw.depth_MeV = InBase(*d);
+    if (const Value *wd = w->Get("width")) {
+      if (s.shape != physics::FormShape::Gaussian) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": width belongs to a gaussian central term");
+        return false;
+      }
+      pw.width_fm = InBase(*wd);
+    }
+    for (const char *word : {"radius", "diffuseness"})
+      if (const Value *g = w->Get(word)) {
+        if (s.shape != physics::FormShape::WoodsSaxon) {
+          c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": " + word + " belongs to a woods_saxon central term");
+          return false;
+        }
+        (std::string(word) == "radius" ? pw.radius_fm : pw.diffuseness_fm) = InBase(*g);
+      }
+    const Value *bg = w->Get("background"), *b = w->Get("boundary"), *sub = w->Get("subtract"), *cap = w->Get("capture");
+    if (w->Get("only")) {
+      if (bg) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": only bound_state and background exclude "
+                                                    "each other (the background acts on the wave's channel functions)");
+        return false;
+      }
+      pw.bound_state_only = true;
+    }
+    if (bg) {
+      if (!b) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) +
+                                                    ": background interior needs boundary <B_bg> (potential_background.md "
+                                                    "section 2.2: the split depends on it)");
+        return false;
+      }
+      physics::InteriorBackground ib;
+      ib.boundary = b->number.value;
+      if (sub) ib.subtract_nodes.push_back((int)sub->integer);
+      ib.capture = cap != nullptr;
+      for (const char *word : {"charge_e1", "charge_e2"})
+        if (const Value *q = w->Get(word)) {
+          if (!ib.capture) {
+            c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": " + word +
+                                                        " is the charge of the interior capture: it needs capture interior");
+            return false;
+          }
+          (std::string(word) == "charge_e1" ? ib.charge_e1 : ib.charge_e2) = q->number.value;
+        }
+      pw.background = ib;
+    } else if (b || sub || cap || w->Get("charge_e1") || w->Get("charge_e2")) {
+      c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + ": boundary, subtract, capture and the interior charges belong to a background");
+      return false;
+    }
+    for (const physics::PartialWave &o : s.waves)
+      if (o.l == pw.l && o.two_j == pw.two_j) {
+        c.Error(codes::kPotentialWave, r, "wave", "wave l " + std::to_string(pw.l) + " is given twice for the same J");
+        return false;
+      }
+    s.waves.push_back(pw);
+  }
+  // `only bound_state` serves the interior capture: without a wave that asks for it the field would do nothing
+  bool bound = false, capture = false;
+  for (const physics::PartialWave &w : s.waves) {
+    bound = bound || w.bound_state_only;
+    capture = capture || (w.background && w.background->capture);
+  }
+  if (bound && !capture) {
+    c.Error(codes::kPotentialWave, r, "wave", "only bound_state gives the bound-state shape of the interior capture; no wave "
+                                              "of this potential has capture interior");
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 void BuildPotentials(Context &c) {
@@ -108,6 +186,7 @@ void BuildPotentials(Context &c) {
         continue;
       }
     }
+    if (!ReadWaves(c, r, s)) continue;
     s.coulomb_radius_fm = InBase(*coulomb);
     // r_m and the step: the table's defaults (HybridPotentialSetting's, the solver's) when absent, written to the log
     if (const Value *m = r.Get("matching_radius"))

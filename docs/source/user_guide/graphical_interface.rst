@@ -383,6 +383,19 @@ every edit, filter, sort and undo.
   with it off they are left out of the calculation, and the text says to switch
   the option on or to add a level (a background pole is the usual choice). A
   click on a J^pi fills the add bar.
+* **Partial waves...** (under the limits) lists every J^pi the particle pairs
+  form up to the maximum l that no active level carries, and says what that
+  means: AZURE2 makes a J^pi group only for the J^pi of an active level, so
+  these partial waves are left out of the calculation -- no hard-sphere or
+  potential scattering, no background of a pair's potential, no capture from
+  them -- without a message. Two ways to include them: ``Switch hard-sphere
+  scattering in every J^pi on`` (the ``<config>`` key ``includeAllJPi=1``; the
+  engine then adds a group with every particle channel up to
+  ``maxOrbitalMomentum`` for each J^pi without one, and the window writes the
+  tab's maximum l as ``maxOrbitalMomentum`` when the file names none), or
+  ``Add blank levels for the ticked``: per J^pi a level with every width 0, its
+  energy and widths fixed, 10 MeV above the highest level and threshold, which
+  carries the J^pi and adds no resonance.
 * **Channel details.** For the selected channel: the pair's particles, the
   separation energy, the channel radius (the channel's own from
   ``<channelRadii>`` when a record names it, the pair's beside it), and at the
@@ -423,6 +436,62 @@ separation energy from the table.
 The channels of a level (when it is added, or its J^pi or the limits change)
 are the engine's rule, the one ``pyazr`` uses, applied to the pairs as the tab
 holds them before a save.
+
+The potential of a pair
+-----------------------
+
+The first panel under the pairs (``Potential``) shows the ``potential`` record
+of the selected pair (``<potentials>``; the physics is the research note
+``docs/upgrade/potential_background.md`` of the source tree). Without one,
+``Add a potential...`` makes it in the record pop-up; ``Edit record...`` edits
+its Coulomb radius, central term, spin-orbit term, matching radius and step.
+
+* **Potential on.** Off keeps the record in the file as comment lines, each
+  after ``#off``: AZURE2 ignores it, and on again restores it exactly.
+* **The waves.** One row per ``wave`` line and one per l without a line. The
+  mode of a wave: *Central* (no line: the central potential acts beyond the
+  channel radius a_c), *Exterior only* (the wave's own depth and width beyond
+  a_c), *Exterior + interior* (also the potential's R-function inside a_c as
+  the background of the wave's R-matrix element: ``background interior
+  boundary B``), *None (point Coulomb)* (``only bound_state``: point-Coulomb
+  channel functions; its depth only shapes the bound state of interior
+  capture). B_bg, ``subtract n`` and ``capture interior`` are edited in the row
+  with a background. What the engine refuses is shown under the table in its
+  own words; ``Apply`` writes the record (an unchanged wave keeps its text),
+  ``Revert`` drops the edits.
+* **In the calculation.** Per J^pi of the wave: an active level of that J^pi,
+  or hard-sphere scattering in every J^pi (``includeAllJPi``) up to
+  ``maxOrbitalMomentum``. A wave line whose J^pi has neither is named in red:
+  the engine makes no channel there and the potential of that wave does
+  nothing. The Levels tab's ``Partial waves...`` adds blank levels for them.
+* **Poles.** For the selected wave, the box states of its potential at the
+  channel radius with a_c u'/u = B_bg: the node number (what ``subtract``
+  names), E_c and E_x, γ_p² and θ² = γ_p²/γ_W²; the subtracted one in bold.
+  These are the poles a background brings (deep ones are the potential's,
+  Pauli-forbidden, bound states); they move with a_c and B. Beside them the
+  project's levels of the same J^pi: a level close to an unsubtracted pole
+  counts that state twice.
+* **Tuning.** The potential's own scattering length a and effective range r
+  (the effective-range expansion of its own phase shifts near threshold,
+  Coulomb-modified for a charged pair and l = 0; the window and the spread of
+  the extrapolation are shown), its bound states, and the nodes of its
+  zero-energy wave. ``Depth for a =`` finds the wave's depth that gives a with
+  the same number of bound states (between two depths at which a state is bound
+  at threshold, a falls from +∞ to −∞, so there is one such depth).
+  ``Depth and range for a = ..., r = ...`` finds the depth and the Gaussian
+  width r0 that give both on the same branch, shows the a and r reached
+  beside the asked ones, and says so when the branch has none (with the range
+  of r it found). The scattering length is the more robust input; the
+  effective range depends more on the potential's shape and the energy
+  window, so treat it as the softer condition.
+  ``Depth to bind`` finds, for a level of the J^pi below threshold, the depth
+  within ±30 % that binds the wave at the level's energy, with the potential's
+  own ANC beside the level's. ``Use this depth`` puts it into the wave
+  (``Apply`` writes it).
+
+The same numbers from Python: ``Session.potential_box_states``,
+``Session.potential_bound_state``, ``Session.potential_scattering_length`` and
+``Session.potential_depth_for`` (:doc:`pyazr`).
 
 The parameter table
 -------------------

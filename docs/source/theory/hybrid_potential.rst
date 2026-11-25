@@ -82,6 +82,84 @@ The Coulomb phase :math:`e^{i(\sigma_l - \sigma_0)}` is the point-Coulomb one in
 ``channel_functions(pair, E, l, J=...)`` needs :math:`J` for a pair with the term (``E_SO_NEEDS_J``) and refuses it
 for any other (``E_SO_NO_TERM``).
 
+The interior of the potential as a channel's background
+-------------------------------------------------------
+
+.. note::
+
+   A research option, off unless a ``potential`` record has a ``wave`` field with ``background interior``.  The
+   design note, with the derivations, the tests and what is not done, is ``docs/upgrade/potential_background.md``.
+
+The hybrid pair above uses the potential only outside the channel radius :math:`a_c`.  The hybrid R-matrix models of
+Koonin, Tombrello and Fox and of Langanke and Koonin use its interior too: the potential describes the non-resonant
+part of a partial wave, and levels are added only for what it does not produce.  With :math:`u_E` the regular
+solution of the radial equation and
+
+.. math::
+
+   \ell(E) = \frac{a_c\,u_E'(a_c)}{u_E(a_c)}, \qquad R_\text{pot}(E) = \frac{1}{\ell(E) - B_\text{bg}},
+
+:math:`R_\text{pot}` is the R-function of the potential in :math:`[0, a_c]` for the boundary constant
+:math:`B_\text{bg}`: a sum of poles :math:`\gamma_p^2/(E_p - E)` at the eigenvalues of the potential in that box.
+Added to the diagonal R-matrix element of the channel, :math:`R_{cc} = \sum_\lambda \gamma_{\lambda c}^2/(E_\lambda -
+E) + R^0_c(E)`, it changes nothing in the level matrix or the collision matrix except the channel's functions at
+:math:`a_c`, which become those of the outgoing wave :math:`H = G + iF` mapped by
+
+.. math::
+
+   \tilde H = H - R^0(\rho H' - B_\text{bg} H), \qquad \rho\tilde H' = \rho H' - B_\text{bg} R^0(\rho H' - B_\text{bg} H),
+
+so that :math:`\tilde P = \rho/|\tilde H|^2`, :math:`\tilde\phi = \arg\tilde H` and :math:`\tilde S =
+\operatorname{Re}\rho\tilde H'/\tilde H`.  With no level in the channel the collision matrix is then that of the
+potential itself, whatever :math:`a_c` is.  Levels on top see :math:`\tilde S, \tilde P`: their observed (Brune)
+energies and widths are those of a resonance on top of the background.
+
+The record states it per partial wave::
+
+    wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] [radius <R> fm] [diffuseness <a> fm]
+               background interior boundary <B> [subtract <n>] [capture interior [charge_e1 <q>] [charge_e2 <q>]]
+
+(``depth``, and ``width`` of a Gaussian or ``radius`` and ``diffuseness`` of a Woods-Saxon term, are the partial
+wave's own; left out, the central term's.)
+
+*A state counted twice.*  A level that is also a state of the potential in that wave is in :math:`R_\text{pot}`
+already.  ``subtract <n>`` removes the box state with :math:`n` nodes from the background,
+:math:`R^0 = R_\text{pot} - \gamma_p^2/(E_p - E)`, and the level stands for it; or the depth is chosen so that the
+potential has no state there.  The set-up warns of a level within one width of a resonance or bound state of the
+potential in a wave with a background, and notes it when the wave has a ``subtract``.
+
+*Capture* (``capture interior``).  External capture runs from :math:`a_c` outward; the background's part of the
+entrance wave inside :math:`a_c` is :math:`D\,g_E(r)`, with :math:`D = \rho u' - B_\text{bg}u` the surface term of
+the channel's wave at :math:`a_c` and :math:`g_E(r) = R_\text{pot}(E)\,u_E(r)/u_E(a_c)` less the subtracted box
+states.  Its overlap with the final state inside :math:`a_c`,
+
+.. math::
+
+   K(E) = \int_0^{a_c} \varphi_f(r)\,w(r)\,g_E(r)\,dr, \qquad \varphi_f = u_{E_f}/u_{E_f}(a_c),
+
+is added to both terms of the external capture (:math:`w` the multipole's weight).  A bound final state must be a
+bound state of the potential in its partial wave within 1 keV of the level's energy (the run is refused otherwise,
+with the depth that binds there); its size is the level's ANC.  With no levels the capture is the potential model's
+direct capture and does not depend on :math:`a_c`.
+
+- *The interior charge.*  The :math:`E_L` operator of the relative motion carries :math:`Z_1 (m_2/M)^L + Z_2
+  (-m_1/M)^L`, which nearly vanishes for E1 between nuclei of equal :math:`Z/A` (:math:`-10^{-3}` for α +
+  :sup:`12`\ C); the strength inside :math:`a_c` is then the interior's own.  ``charge_e1 q`` (``charge_e2 q``) adds
+  :math:`e\,q\,r^L` to the operator of the interior capture of that wave, inside :math:`a_c` only.
+- *An unbound final state* is a narrow resonance whose wave outside :math:`a_c` is the outgoing wave
+  :math:`O_f(r)/O_f(a_c)`; inside it is continued in value by :math:`\varphi_f(r)` at :math:`E_f`.  There is no rule
+  that the potential has a resonance there; the set-up prints the mismatch of the logarithmic derivatives.  For
+  capture into a resonance of the potential itself, given as a level of the resonance's width, the cross section is
+  the same at :math:`a_c` = 4.0, 5.35 and 6.5 fm to 0.4 % (α + :sup:`12`\ C, a state 5 % of its energy wide), against
+  a factor of up to 4.6 without the interior.  The line shape of a broad final state (``line_window``) is refused
+  with interior capture.
+
+*The rate.*  The rate's energy grid has a cluster of points on each resonance of the entrance pair's potential in a
+wave with a background, as it has on each level.
+
+The numbers of the record (depths, :math:`B_\text{bg}`, the interior charge) are inputs, not fit parameters of the
+engine; ``pyazr.record_fit`` fits them from outside (:doc:`../user_guide/pyazr`).
+
 Checks
 ------
 

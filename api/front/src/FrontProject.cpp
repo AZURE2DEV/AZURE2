@@ -470,6 +470,100 @@ bool Project::MoveRecord(const std::string &section, const std::string &name, in
   return true;
 }
 
+std::string RecordOffMark() { return "#off "; }
+
+namespace {
+
+/// The runs of lines of a section body that carry the off mark, each with the line index (0-based, in the file) of its
+/// first line, the mark taken away.
+struct OffRun {
+  std::size_t first = 0;
+  std::vector<std::string> lines;
+};
+
+std::vector<OffRun> OffRuns(const io::Document &doc, const io::Document::Section &s) {
+  std::vector<OffRun> runs;
+  const std::string mark = RecordOffMark();
+  for (std::size_t i = s.open + 1; i < s.close; i++) {
+    const std::string &line = doc.Line(i);
+    if (line.compare(0, mark.size(), mark) != 0) continue;
+    if (runs.empty() || runs.back().first + runs.back().lines.size() != i) runs.push_back({i, {}});
+    runs.back().lines.push_back(line.substr(mark.size()));
+  }
+  return runs;
+}
+
+}  // namespace
+
+std::vector<Record> Project::RecordsOff(const std::string &section) const {
+  std::vector<Record> out;
+  const io::Document::Section *s = impl_->Find(section);
+  if (!s || s->close == io::Document::Section::npos) return out;
+  for (const OffRun &run : OffRuns(impl_->doc, *s)) {
+    const io::RecordReadResult read = io::ReadRecords(run.lines, (int)run.first + 1, ex::Schema::KindsOfSection(section));
+    for (const io::Record &r : read.set.records) {
+      Record x;
+      x.kind = r.kind;
+      x.name = r.name;
+      x.line = r.line;
+      for (const io::Field &f : r.fields) {
+        // the value as written: the line from the first token's column (the mark is not in these lines' columns)
+        const std::string &line = run.lines[(std::size_t)f.line - run.first - 1];
+        std::string value = f.tokens.empty() ? std::string() : line.substr((std::size_t)f.tokens.front().col - 1);
+        if (!f.trailingComment.empty()) {
+          const std::size_t at = value.rfind(f.trailingComment);
+          if (at != std::string::npos) value = value.substr(0, at);
+        }
+        x.fields.push_back({f.key, Trimmed(value), f.trailingComment});
+      }
+      out.push_back(x);
+    }
+  }
+  return out;
+}
+
+bool Project::SetRecordOn(const std::string &section, const std::string &name, bool on, std::string &why) {
+  const io::Document::Section *s = impl_->Find(section);
+  if (!s || s->close == io::Document::Section::npos) {
+    why = "the project has no <" + section + "> section";
+    return false;
+  }
+  const io::RecordReadResult read = impl_->Read(section);
+  const io::Record *active = nullptr;
+  for (const io::Record &r : read.set.records)
+    if (r.name == name) active = &r;
+  if (!on) {
+    if (!active) {
+      why = "<" + section + "> has no active record named " + name;
+      return false;
+    }
+    std::size_t first = 0, last = 0;
+    Impl::Span(*active, first, last);
+    std::vector<std::string> lines;
+    for (std::size_t i = first; i <= last; i++) lines.push_back(RecordOffMark() + impl_->doc.Line(i));
+    impl_->doc.ReplaceLines(first, last + 1, lines);
+    return true;
+  }
+  if (active) {
+    why = "<" + section + "> has an active record named " + name + "; rename one of the two first";
+    return false;
+  }
+  for (const OffRun &run : OffRuns(impl_->doc, *s)) {
+    const io::RecordReadResult off = io::ReadRecords(run.lines, (int)run.first + 1, ex::Schema::KindsOfSection(section));
+    for (const io::Record &r : off.set.records) {
+      if (r.name != name) continue;
+      std::size_t first = 0, last = 0;
+      Impl::Span(r, first, last);
+      std::vector<std::string> lines;
+      for (std::size_t i = first; i <= last; i++) lines.push_back(impl_->doc.Line(i).substr(RecordOffMark().size()));
+      impl_->doc.ReplaceLines(first, last + 1, lines);
+      return true;
+    }
+  }
+  why = "<" + section + "> has no record named " + name + " switched off";
+  return false;
+}
+
 Validation Project::Validate() const {
   Validation out;
   const ProjectValidation v = ValidateProjectBytes(Text(), impl_->path);

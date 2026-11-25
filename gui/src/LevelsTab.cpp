@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "LevelsTab.h"
+#include "PartialWavesDialog.h"
 #include "LevelsHeaderView.h"
 #include "AddLevelDialog.h"
 #include "IAEALevelDialog.h"
@@ -112,7 +113,14 @@ LevelsTab::LevelsTab(QWidget *parent) :
   missingJPiLabel->setObjectName("missingJPiLabel");
   connect(missingJPiLabel, &QLabel::linkActivated, this, &LevelsTab::fillAddBar);
   connect(includeAllJPiCheck, SIGNAL(toggled(bool)), this, SLOT(updateMissingSpinParities()));
+  connect(includeAllJPiCheck, &QCheckBox::toggled, this, &LevelsTab::limitsChanged);
+  partialWavesButton_ = new QPushButton(tr("Partial waves..."));
+  partialWavesButton_->setObjectName("partialWavesButton");
+  partialWavesButton_->setToolTip(tr("Every J\u03c0 the pairs form without an active level, what that means, and two ways "
+                                     "to include them: hard-sphere scattering in every J\u03c0, or blank levels"));
+  connect(partialWavesButton_, &QPushButton::clicked, this, &LevelsTab::showPartialWaves);
   connect(maxLSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
+  connect(maxLSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &LevelsTab::limitsChanged);
   connect(maxMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
   connect(maxNumMultSpin, SIGNAL(valueChanged(int)), this, SLOT(updateChannelsPairAddedEdited()));
 
@@ -279,6 +287,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   configLayout->addWidget(maxNumMultLabel, 2, 1);
   configLayout->addWidget(includeAllJPiCheck, 3, 0, 1, 2);
   configLayout->addWidget(missingJPiLabel, 4, 0, 1, 2);
+  configLayout->addWidget(partialWavesButton_, 5, 0, 1, 2, Qt::AlignLeft);
   configLayout->setColumnStretch(0, 0);
   configLayout->setColumnStretch(1, 1);
   configBox->setLayout(configLayout);
@@ -730,7 +739,8 @@ void LevelsTab::updateMissingSpinParities() {
     missingJPiLabel->setText(tr("<font color='#b00020'>Left out of the calculation: %1. No active level carries them and "
                                 "the option above is off, so they have no hard-sphere phase either.</font> To include "
                                 "them, switch the option on, or click a %2 to add a level of it (a background pole, "
-                                "far from the data with its energy fixed, is the usual choice).")
+                                "far from the data with its energy fixed, is the usual choice); \"Partial waves...\" "
+                                "adds blank levels for several at once.")
                                 .arg(linked.join(", "), jpi));
 }
 

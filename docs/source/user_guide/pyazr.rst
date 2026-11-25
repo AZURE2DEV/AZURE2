@@ -1084,6 +1084,35 @@ too, the row ``weisskopf_width`` of :doc:`physics_functions` (the closed form of
 present ones by +0.8 % (E1), +2.3 % (E2), +3.1 % (E3), −3.1 % (E4), +1.3 % (M1), +1.9 % (M2), −0.8 % (M3) and −7.2 %
 (M4), new / old): every number of the table is the engine's.
 
+A pair's nuclear potential through the session (the research option of ``docs/upgrade/potential_background.md``):
+``s.nuclear_potential(pair).waves`` lists the potential record's ``wave`` fields (``l``, ``J``, ``depth``, ``width``,
+``background``, ``only_bound_state``); ``s.channel_functions`` needs ``J`` when a ``wave`` names one, and in a partial
+wave with an interior background returns the dressed functions together (``P = rho/(F^2 + G^2)`` and ``delta_hs =
+-atan2(F, G)`` of the returned F, G); ``s.potential_box_states(pair, l, J, radius, boundary, e_min, e_max)`` gives
+the box states of the potential (energies ``E`` MeV c.m., residues ``gamma2`` MeV, ``nodes``: the poles of its interior
+R-function and what ``subtract`` names); ``s.potential_bound_state(pair, l, J, energy, window)`` the potential's
+eigenvalue nearest ``energy`` (MeV, < 0) and the ANC of its normalised state (fm^-1/2);
+``s.potential_scattering_length(pair, l, J)`` the scattering length ``a`` and effective range ``r`` of the potential
+alone in that wave (fm for l = 0), from the effective-range expansion of its own phase shifts near threshold
+(Coulomb-modified, :math:`K = C_0^2(\eta)\,k\cot\delta_0 + 2k\eta\,h(\eta) = -1/a + r k^2/2 + \dots`, for a charged
+pair and l = 0 only; :math:`k^{2l+1}\cot\delta_l` for a neutral pair), with the energy window it was fitted on
+(``e_window``, MeV c.m.: 24 energies with :math:`k` from :math:`0.125/R_N` to :math:`0.5/R_N`, :math:`R_N` the
+Gaussian width or :math:`R + 2a` of a Woods-Saxon term), the spread of the extrapolation (``a_spread``, ``r_spread``:
+the differences to two other fits; about :math:`10^{-5}` of ``a`` for ³He + α) and the potential's bound states in the
+wave (``bound_states``, Pauli-forbidden ones included); ``s.potential_depth_for(pair, a, l, J, r=None)`` the wave's
+depth for that ``a`` (or, with ``r``, its depth and Gaussian width for both) with the same number of bound states,
+``found`` False with the reason (the range of ``r`` reached) when that branch has none.  The scattering length is the
+more robust input; the effective range depends more on the potential's shape.  All four are rows of
+``s.describe()["functions"]``.
+
+The numbers of a potential record (the central depth, radius and diffuseness; a ``wave``'s depth, boundary constant
+and interior charge) are inputs of the engine, not fit parameters. ``pyazr.record_fit.fit_record_settings`` fits them
+from outside: at each trial value it writes the project, sets it up and runs the engine's fit of the project's own
+free parameters, and it returns the best values, their linear errors and, on request, the interval of each over
+which the profile of the objective rises by one. A ``Setting`` names a record and a field; ``match="l 0 J 1/2"`` picks
+one ``wave`` line by its first words and ``keyword="charge_e1"`` the number after that word, so several settings may
+share a line. Each trial costs a set-up and a fit; it needs scipy.
+
 The Wigner width :math:`\Gamma_W` of a particle channel (``azr.wigner_widths(x)``, a dict by free index, in eV; the
 denominator of θ²) is :math:`\Gamma_W = 2P_l(E_r)\,\gamma_W^2`: :math:`\gamma_W^2 = 3\hbar^2/(2\mu a^2)` the
 channel's Wigner limit, :math:`P_l` the penetrability the engine formed the observed width with (the session's own

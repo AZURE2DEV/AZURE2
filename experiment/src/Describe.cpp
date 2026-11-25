@@ -328,6 +328,26 @@ std::string DescribeText(const Format3Project &p, const std::string &only) {
         << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
         << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm"
         << SpinOrbitText(s) << "\n";
+    // the `wave` fields, one line each (none for a potential without them: its text is as before)
+    for (const physics::PartialWave &w : s.waves) {
+      out << "  wave l " << w.l;
+      if (w.two_j >= 0) out << " J " << w.two_j << "/2";
+      out << ":";
+      if (w.depth_MeV) out << " depth " << Fmt(*w.depth_MeV) << " MeV;";
+      if (w.width_fm) out << " width " << Fmt(*w.width_fm) << " fm;";
+      if (w.radius_fm) out << " radius " << Fmt(*w.radius_fm) << " fm;";
+      if (w.diffuseness_fm) out << " diffuseness " << Fmt(*w.diffuseness_fm) << " fm;";
+      if (w.background) {
+        out << " background interior, B_bg " << Fmt(w.background->boundary);
+        for (int n : w.background->subtract_nodes) out << ", subtract " << n;
+        if (w.background->capture) out << ", capture interior";
+        if (w.background->charge_e1 != 0.0) out << ", interior E1 charge " << Fmt(w.background->charge_e1);
+        if (w.background->charge_e2 != 0.0) out << ", interior E2 charge " << Fmt(w.background->charge_e2);
+        out << ";";
+      }
+      if (w.bound_state_only) out << " only bound_state (point-Coulomb channel functions; the bound-state shape of interior capture);";
+      out << "\n";
+    }
   }
   return out.str();
 }
@@ -422,6 +442,28 @@ std::string DescribeJson(const Format3Project &p, const std::string &only) {
           .Key("radius_fm").Number(s.spin_orbit->form.radius_fm).Key("diffuseness_fm").Number(s.spin_orbit->form.diffuseness_fm)
           .Key("on").String(s.spin_orbit->acts_on == physics::SpinOrbitParticle::Heavy ? "heavy" : "light")
           .Key("operator").String("2l.s").EndObject();
+    // the `wave` fields (the key only for a potential that has them, so that the others' JSON is as before)
+    if (!s.waves.empty()) {
+      j.Key("waves").BeginArray();
+      for (const physics::PartialWave &w : s.waves) {
+        j.BeginObject().Key("l").Integer(w.l);
+        if (w.two_j >= 0) j.Key("two_J").Integer(w.two_j);
+        if (w.depth_MeV) j.Key("depth_MeV").Number(*w.depth_MeV);
+        if (w.width_fm) j.Key("width_fm").Number(*w.width_fm);
+        if (w.radius_fm) j.Key("radius_fm").Number(*w.radius_fm);
+        if (w.diffuseness_fm) j.Key("diffuseness_fm").Number(*w.diffuseness_fm);
+        if (w.background) {
+          j.Key("background").BeginObject().Key("boundary").Number(w.background->boundary).Key("subtract").BeginArray();
+          for (int n : w.background->subtract_nodes) j.Integer(n);
+          j.EndArray().Key("capture_interior").Bool(w.background->capture);
+          if (w.background->charge_e1 != 0.0) j.Key("charge_e1").Number(w.background->charge_e1);
+          if (w.background->charge_e2 != 0.0) j.Key("charge_e2").Number(w.background->charge_e2);
+          j.EndObject();
+        }
+        j.Key("only_bound_state").Bool(w.bound_state_only).EndObject();
+      }
+      j.EndArray();
+    }
     j.EndObject();
   }
   j.EndArray().EndObject();

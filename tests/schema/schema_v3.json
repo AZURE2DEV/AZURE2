@@ -2022,6 +2022,144 @@
      ],
      "doc": "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"
     },
+    "wave": {
+     "title": "Partial wave",
+     "type": "structured",
+     "grammar": "l <integer >= 0> [J <J>] [depth <number> <energy unit>] [width <number> <length unit>] [radius <number> <length unit>] [diffuseness <number> <length unit>] [background interior] [boundary <number>] [subtract <integer >= 0>] [capture interior] [charge_e1 <number>] [charge_e2 <number>] [only bound_state]",
+     "required": false,
+     "repeatable": true,
+     "rare": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "l",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 0>",
+         "optional": false,
+         "min": 0,
+         "doc": "the orbital angular momentum of the partial wave"
+        },
+        {
+         "name": "J",
+         "keyword": true,
+         "type": "spin",
+         "grammar": "<J>",
+         "optional": true,
+         "doc": "only the channels of this total J (left out: every J of this l)"
+        },
+        {
+         "name": "depth",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": true,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true,
+         "doc": "V0 of the central term in this partial wave, in both halves (left out: the central depth)"
+        },
+        {
+         "name": "width",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": true,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "r0 of a Gaussian central term in this partial wave, in both halves (left out: the central width; refused with a Woods-Saxon term)"
+        },
+        {
+         "name": "radius",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": true,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "R of a Woods-Saxon central term in this partial wave, in both halves (left out: the central radius; refused with a Gaussian term)"
+        },
+        {
+         "name": "diffuseness",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": true,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "a of a Woods-Saxon central term in this partial wave (left out: the central diffuseness; refused with a Gaussian term)"
+        },
+        {
+         "name": "background",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "interior",
+         "optional": true,
+         "values": ["interior"],
+         "doc": "the R-function of the potential inside the channel radius as the background of the channel's diagonal R-matrix element (potential_background.md); left out: none"
+        },
+        {
+         "name": "boundary",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": true,
+         "doc": "B_bg of the background (dimensionless); required with background"
+        },
+        {
+         "name": "subtract",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 0>",
+         "optional": true,
+         "min": 0,
+         "doc": "the node number of a box state of the potential whose pole is subtracted from the background (a state a level of the project represents); left out: none"
+        },
+        {
+         "name": "capture",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "interior",
+         "optional": true,
+         "values": ["interior"],
+         "doc": "the interior direct capture of the background: the potential's interior wave, driven by the channel's full wave at a_c, captured into the potential's bound state inside a_c (potential_background.md section 5); left out: none"
+        },
+        {
+         "name": "charge_e1",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": true,
+         "doc": "the interior charge of the interior capture: a charge number q (units of e) added to the pair's own in the E1 operator inside the channel radius, q r (potential_background.md section 14); needs capture interior; left out: 0"
+        },
+        {
+         "name": "charge_e2",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": true,
+         "doc": "as charge_e1 for the E2 operator (q r^2); left out: 0"
+        },
+        {
+         "name": "only",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "bound_state",
+         "optional": true,
+         "values": ["bound_state"],
+         "doc": "the depth and width of this wave give the bound-state shape of the interior capture only; the wave's channel functions are the point-Coulomb ones (potential_background.md section 5.9); left out: they act on both"
+        }
+       ],
+       "doc": "what one partial wave of the pair has of its own (docs/upgrade/potential_background.md)"
+      }
+     ],
+     "doc": "a depth of its own and/or the interior background for the partial wave l (J) of the pair (docs/upgrade/potential_background.md); absent: neither"
+    },
     "matching_radius": {
      "title": "Matching radius",
      "type": "number_with_unit",
@@ -4549,6 +4687,10 @@
   "E_POTENTIAL_PAIR_KIND": {
    "severity": "error",
    "meaning": "a potential record on a photon or beta pair (a potential belongs to a particle pair)"
+  },
+  "E_POTENTIAL_WAVE": {
+   "severity": "error",
+   "meaning": "a wave field of a potential record: background without boundary, boundary, subtract, capture or an interior charge without background, an interior charge without capture interior, only bound_state with a background or without a capture interior in the potential, a width with a Woods-Saxon term, a radius or diffuseness with a Gaussian term, one (l, J) twice, or an interior background in the partial wave of an external capture's final state"
   },
   "E_CHANNEL_RADIUS_TWICE": {
    "severity": "error",

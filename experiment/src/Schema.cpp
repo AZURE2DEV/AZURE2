@@ -182,7 +182,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 // ---------------------------------------------------------------- structured values (sections 3.3-3.10)
 struct Forms {
   FormSpec shift, quadrature, secondaryGamma, orders, function, param, epoch, stopping, straggling,
-      isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit;
+      isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central, spinOrbit, wave;
   FormSpec branching, remainder, mixing, decaySign;
   FormSpec reference;
 };
@@ -276,6 +276,28 @@ Forms MakeForms() {
                            Kw("on", Words({"light", "heavy"}), "the particle whose spin i the term couples to l (the one particle of the pair with spin)"),
                            Kw("operator", Words({"2l.s"}), "2 l.i = j(j+1) - l(l+1) - i(i+1), FRESCO's convention: a strength quoted for l.s is twice this V_so")},
                           "v_so(r) <2 l.i>, v_so = V_so (2.000 fm^2) (1/r) df/dr, f = 1/(1 + exp((r - R_so)/a_so))")}};
+  f.wave = {{Unkeyed({Kw("l", IntAtLeast(0), "the orbital angular momentum of the partial wave"),
+                      OptionalKw("J", Spec(ValueType::Spin), "only the channels of this total J (left out: every J of this l)"),
+                      OptionalKw("depth", PositiveWithUnit("energy"), "V0 of the central term in this partial wave, in both halves (left out: the central depth)"),
+                      OptionalKw("width", PositiveWithUnit("length"), "r0 of a Gaussian central term in this partial wave, in both halves (left out: the central width; refused with a Woods-Saxon term)"),
+                      OptionalKw("radius", PositiveWithUnit("length"), "R of a Woods-Saxon central term in this partial wave, in both halves (left out: the central radius; refused with a Gaussian term)"),
+                      OptionalKw("diffuseness", PositiveWithUnit("length"), "a of a Woods-Saxon central term in this partial wave (left out: the central diffuseness; refused with a Gaussian term)"),
+                      OptionalKw("background", Words({"interior"}), "the R-function of the potential inside the channel radius as the background of the "
+                                                                   "channel's diagonal R-matrix element (potential_background.md); left out: none"),
+                      OptionalKw("boundary", Num(), "B_bg of the background (dimensionless); required with background"),
+                      OptionalKw("subtract", IntAtLeast(0), "the node number of a box state of the potential whose pole is subtracted "
+                                                            "from the background (a state a level of the project represents); left out: none"),
+                      OptionalKw("capture", Words({"interior"}), "the interior direct capture of the background: the potential's interior wave, "
+                                                                "driven by the channel's full wave at a_c, captured into the potential's bound state "
+                                                                "inside a_c (potential_background.md section 5); left out: none"),
+                      OptionalKw("charge_e1", Num(), "the interior charge of the interior capture: a charge number q (units of e) added to "
+                                                     "the pair's own in the E1 operator inside the channel radius, q r "
+                                                     "(potential_background.md section 14); needs capture interior; left out: 0"),
+                      OptionalKw("charge_e2", Num(), "as charge_e1 for the E2 operator (q r^2); left out: 0"),
+                      OptionalKw("only", Words({"bound_state"}), "the depth and width of this wave give the bound-state shape of the "
+                                                                 "interior capture only; the wave's channel functions are the point-Coulomb "
+                                                                 "ones (potential_background.md section 5.9); left out: they act on both")},
+                     "what one partial wave of the pair has of its own (docs/upgrade/potential_background.md)")}};
   return f;
 }
 
@@ -562,6 +584,9 @@ RecordKind PotentialKind() {
               Req("central", "Central term", Structured(f.central), "the central nuclear term V_N(r)"),
               Opt("spin_orbit", "Spin-orbit term", Structured(f.spinOrbit),
                   "a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none"),
+              Rare(Repeatable(Opt("wave", "Partial wave", Structured(f.wave),
+                                  "a depth of its own and/or the interior background for the partial wave l (J) of the pair "
+                                  "(docs/upgrade/potential_background.md); absent: neither"))),
               Rare(Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
                                  "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the "
                                  "pair"),

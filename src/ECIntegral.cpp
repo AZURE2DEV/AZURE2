@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <cmath>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 #include "RunScratch.h"
@@ -215,6 +216,79 @@ void ECIntegral::Integrate(double chanrad) {
       FW_ = fwintresult;
       GW_ = gwintresult;
     }
+  }
+}
+
+/*!
+ * The interior direct capture of a background partial wave (docs/upgrade/potential_background.md section 5, Eq. (C5)):
+ * when the entrance partial wave (l_i, 2J_i) of this pair has a background with `capture interior`, the integrals of
+ * the exterior waves, FW = int_a^inf F W~_f w dr and GW alike (or GW = int W_i W~_f w for a closed entrance channel),
+ * get the part inside a, K(E) D_u(a) W~_f(a): K the kernel of physics/ InteriorCaptureIntegral (the potential's
+ * interior response g_E(r), the bound state's interior shape phi_f(r) of the final partial wave at E_f), D_u = rho u'
+ * - B_bg u of the undressed exterior wave u = F, G or W_i at a (the dressing of Eq. (9) keeps D), and W~_f(a) the
+ * exterior bound wave at a in the scale of the integrals (10^-log10RefOut, and 10^-log10RefIn for W_i).  Both
+ * external-capture terms are linear in FW and GW, so the hard-sphere term gets the interior of the potential's own
+ * wave and the channel-capture term the interior driven by the level-fed outgoing wave.  Nothing without such a
+ * background (or beyond the matching radius, where the background is not applied either).
+ */
+void ECIntegral::AddInteriorCapture(double chanRad, bool electric, double finalEnergy) {
+  const std::optional<azure2::physics::HybridPotential> &pot = pair()->GetHybridPotential();
+  if (!pot || chanRad > pot->matching_radius_fm) return;
+  const int li = params_.liValue, lf = params_.lfValue, twoJi = params_.twoJi, twoJf = params_.twoJf;
+  const azure2::physics::InteriorBackground *bg = azure2::physics::InteriorCaptureOf(*pot, li, twoJi);
+  if (!bg) return;
+  const double E = params_.pairEnergy, B = bg->boundary;
+  const double mu = pair()->GetRedMass() * uconv;
+  const int L = params_.multLValue;
+  const bool charge = params_.useChargeFunction;
+  EffectiveCharge *effective = params_.effectiveCharge;
+  // The interior charge q (potential_background.md section 14) adds sqrt(alpha hbar c) q r^L to the operator inside
+  // the radius.  The integrals are multiplied afterwards by the operator's constant: 1 in the exact form (the charge
+  // function is in the weight), sqrt(alpha hbar c) (Z1 (m2/M)^L + Z2 (-m1/M)^L) in the long-wavelength form.
+  const double q = !electric ? 0.0 : L == 1 ? bg->charge_e1 : L == 2 ? bg->charge_e2 : 0.0;
+  double extra = 0.0;
+  if (q != 0.0) {
+    if (charge) extra = sqrt(fstruc * hbarc) * q;
+    else {
+      const double M = pair()->GetM(1) + pair()->GetM(2);
+      const double own = pair()->GetZ(1) * pow(pair()->GetM(2) / M, L) + pair()->GetZ(2) * pow(-pair()->GetM(1) / M, L);
+      if (own == 0.0)
+        throw std::runtime_error("interior charge in the long-wavelength form: the pair's own E" + std::to_string(L) +
+                                 " charge number is exactly zero, and the interior charge is carried as a multiple of it; "
+                                 "use the exact form (--no-long-wavelength)");
+      extra = q / own;
+    }
+  }
+  const auto weight = [&](double r) { return (charge ? (*effective)(r) : 1.0) * pow(r, L) + extra * pow(r, L); };
+  const double K = azure2::physics::InteriorCaptureIntegral(
+      azure2::physics::ForPartialWave(*pot, li, twoJi), li, pair()->SpinOrbitFactor(li, twoJi), E, *bg,
+      azure2::physics::ForPartialWave(*pot, lf, twoJf), lf, pair()->SpinOrbitFactor(lf, twoJf),
+      finalEnergy > 0.0 ? finalEnergy : -params_.bindingEnergy, pair()->GetZ(1), pair()->GetZ(2), mu, chanRad, weight);
+  if (finalEnergy > 0.0) {
+    // An unbound final state (potential_background.md section 14.3): outside a_c its wave is O_f(r)/O_f(a)
+    // (IntegrateUnbound); inside it is continued in value by the regular solution of the final partial wave's
+    // potential at E_f, phi_f(r) with phi_f(a) = 1, as the bound state is by (C3).  The complex integrals of the
+    // outgoing wave get K D of the undressed F and G, as (C5).  Not in the standing parts: a line window with
+    // interior capture is refused (LineWindowProblem).
+    const struct CoulWaves w = coulfunction()->operator()(li, twoJi, chanRad, E);
+    const double rho = Kinematics::Channel(pair()).Rho(chanRad, E);
+    FWc_ += K * (rho * w.dF - B * w.F);
+    GWc_ += K * (rho * w.dG - B * w.G);
+    return;
+  }
+  double sOut;
+  const double wfA = whitfunction()->Scaled(lf, twoJf, chanRad, params_.bindingEnergy, sOut) * pow(10.0, sOut - params_.log10RefOut);
+  if (E > 0.0) {
+    const struct CoulWaves w = coulfunction()->operator()(li, twoJi, chanRad, E);  // the undressed exterior waves at a
+    const double rho = Kinematics::Channel(pair()).Rho(chanRad, E);
+    FW_ += K * (rho * w.dF - B * w.F) * wfA;
+    GW_ += K * (rho * w.dG - B * w.G) * wfA;
+  } else {
+    double sIn;
+    const double wiA = whitfunction()->Scaled(li, twoJi, chanRad, fabs(E), sIn) * pow(10.0, sIn - params_.log10RefIn);
+    const double S = azure2::physics::HybridBoundShift(azure2::physics::ForPartialWave(*pot, li, twoJi), pair()->GetZ(1),
+                                                       pair()->GetZ(2), mu, li, pair()->SpinOrbitFactor(li, twoJi), chanRad, fabs(E));
+    GW_ += K * wiA * (S - B) * wfA;
   }
 }
 
@@ -429,7 +503,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
       status_ |= 1;
       return complex(0.0, 0.0);
     }
-    struct CoulWaves coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
+    struct CoulWaves coul = coulfunction()->ChannelWaves(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     const complex hsp = CoulombHardSpherePhase(coul);
     const double flux = Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
     auto overlap = [&](complex fw, complex gw) {
@@ -439,6 +513,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
                (gw + complex(0.0, 1.0) * fw);
       return (std::real(hsp) * fw + std::imag(hsp) * gw) * flux;
     };
+    AddInteriorCapture(chanRad, radType == 'E', finalEnergy);
     overlapIntegral = overlap(FWc_, GWc_);
     // the same with the exterior F_f alone and G_f alone (unnormalized), for StandingParts
     overlapF = overlap(complex(rawFF_, 0.0), complex(rawGF_, 0.0));
@@ -446,8 +521,9 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     hasParts_ = true;
   } else if (outEnergy > 0.0) {
     Integrate(chanRad);
+    AddInteriorCapture(chanRad, radType == 'E', 0.0);
     struct CoulWaves
-        coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
+        coul = coulfunction()->ChannelWaves(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     if (isChannelCapture) {
       complex chanExpHSP = CoulombHardSpherePhase(coul);
       overlapIntegral = complex(0.0, -0.5) *
@@ -473,6 +549,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     }
   } else {
     Integrate(chanRad);
+    AddInteriorCapture(chanRad, radType == 'E', 0.0);
     assert(isChannelCapture);
     // GW() now holds the integral divided by 10^(log10RefIn+log10RefOut), and
     // the Whittaker in the denominator is mWhit*10^log10RefIn.  The RefIn
@@ -490,6 +567,16 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
         ratio = sign * pow(10.0, log10Ratio);
       }
     }
+    // A closed entrance wave with an interior background: the levels see the dressed decaying wave, whose value at a_c
+    // is W~_d(a) = W~(a) (1 - R0 (S - B)) (Eq. (9) below threshold; the ANC <-> gamma factor reads the same), so the
+    // exterior wave per unit of the level feed is W~(r)/W~_d(a), as H(r)/H~(a) above threshold (review 2026-11-20;
+    // the interior part added to GW_ is divided alike).
+    if (const std::optional<azure2::physics::HybridPotential> &pot = pair()->GetHybridPotential())
+      if (azure2::physics::BackgroundOf(*pot, theInitialLValue, params_.twoJi) && chanRad <= pot->matching_radius_fm)
+        ratio /= azure2::physics::BackgroundWFactor(*pot, pair()->GetZ(1), pair()->GetZ(2), redMass * uconv,
+                                                    theInitialLValue, params_.twoJi,
+                                                    pair()->SpinOrbitFactor(theInitialLValue, params_.twoJi), chanRad,
+                                                    outEnergy);
     overlapIntegral = complex(0.0, -0.5) * ratio *
         sqrt(redMass * uconv * chanRad) / hbarc;
   }

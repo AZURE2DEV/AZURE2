@@ -4,6 +4,8 @@
 add_library(azure2_front STATIC src/FrontProject.cpp src/FrontRun.cpp src/FrontSchema.cpp src/FrontOutputs.cpp
             src/FrontParameters.cpp src/FrontThm.cpp src/FrontLevels.cpp src/FrontPhysics.cpp src/FrontForms.cpp
             src/FrontPhysicsPlots.cpp src/FrontPolish.cpp)
+# The Potential panel of the Pairs tab and the Levels tab's check of the partial waves (docs/upgrade/qt_gui.md section 19).
+target_sources(azure2_front PRIVATE src/FrontPotential.cpp)
 # The Overview page's calls (docs/upgrade/qt_gui.md section 17).
 target_sources(azure2_front PRIVATE src/FrontOverview.cpp)
 target_include_directories(azure2_front PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -1,12 +1,14 @@
 // The checks of the final states of external capture and of capture into a final state above a threshold
 // (BuildContext.h; the rules in FinalStates.h), made by Schema::Build.
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "azure2/experiment/BuildContext.h"
 #include "azure2/experiment/FinalStates.h"
+#include "azure2/physics/HybridPotential.h"
 
 namespace azure2 {
 namespace experiment {
@@ -65,6 +67,40 @@ void CheckFinalStates(Context &c, const LevelTables &levels) {
   }
 }
 
+
+// The final state of an external capture in a partial wave that has an interior background (potential_background.md
+// section 5): its wave beyond a_c would need the background's decaying solution, which is not built, and the set-up
+// refuses it (ECFinalStateFactors, physics::BelowThresholdPotential) for every particle channel of the final level's
+// J^pi group.  The same refusal here, so that --validate does not call such a project valid.
+void CheckFinalStateBackgrounds(Context &c, const LevelTables &levels) {
+  if (levels.externalCapturePairs.empty() || c.out_.potentials.pairs.empty()) return;
+  for (const FinalStateOfPair &f : ExternalCaptureFinalStates(levels, levels.externalCapturePairs)) {
+    if (f.levels.size() != 1 || f.sharedWithPairKey) continue;  // CheckFinalStates' refusals
+    const LevelInfo &level = levels.levels[f.levels[0]];
+    for (const LevelChannelInfo &channel : level.channels) {
+      const PairInfo *particle = PairByKey(channel.pairKey, levels.pairs);
+      if (!particle || particle->kind != 0) continue;
+      const std::optional<physics::HybridPotential> potential = c.out_.potentials.PotentialFor(channel.pairKey);
+      if (!potential) continue;
+      const int key = physics::DependsOnJ(*potential) ? level.twoJ : physics::kNoSpinOrbit;
+      if (!physics::BackgroundOf(*potential, channel.l, key)) continue;
+      const PairInfo *photon = PairByKey(f.pairKey, levels.pairs);
+      std::ostringstream message;
+      message << "the final state of photon pair " << f.pairKey << " (" << PairLabel(*photon) << "), J^pi = "
+              << (f.twoJ % 2 ? std::to_string(f.twoJ) + "/2" : std::to_string(f.twoJ / 2)) << (f.parity > 0 ? "+" : "-")
+              << " at E_x = " << f.energy << " MeV, has a channel in pair " << channel.pairKey << " (" << PairLabel(*particle)
+              << ") with l = " << channel.l << ", a partial wave whose potential has an interior background: the final "
+              << "state's wave there needs the background's decaying solution, which is not built (the set-up refuses the "
+              << "run).  Take the background off that wave, or give the final state's wave its own wave line without one";
+      Diagnostic d;
+      d.code = codes::kPotentialWave;
+      d.section = "potentials";
+      d.message = message.str();
+      c.out_.diagnostics.push_back(d);
+      break;  // one diagnostic per final state
+    }
+  }
+}
 
 // An external-capture final state at a particle threshold or too close above a charged one (FinalStates.h,
 // UnboundFinalStates): refused in every reading (the run, --validate, pyazr), since its outgoing wave is not evaluated.

@@ -120,6 +120,17 @@ complex ECTable::Integral(const PPair *finalPair, double radius, const Config &c
   // directly: its integral grows like (k_i - k_f)^-2 towards the photon threshold E = levelEnergy and is zero below
   // it, which a Lagrange stencil in ln(E_out) cannot follow.
   const bool unboundFinal = levelEnergy > threshold;
+  // An entrance wave with an interior background is integrated directly, never from the table
+  // (potential_background.md section 5.8): its amplitude follows the potential's resonances and the poles of R0,
+  // whose width can be far below the spacing of the nodes (a narrow s-wave resonance of 3He + 4He at 0.29 MeV: up to
+  // 21 % off with the table), and the dressed factors the table divided by vanish or jump there.  With the table
+  // off the two routes are the same integral, so a run with or without --no-ec-table gives the same numbers for
+  // such a wave.
+  if (coul.HybridPotential() && azure2::physics::BackgroundOf(*coul.HybridPotential(), li, twoJi)) {
+    ++counts.direct;
+    return Direct(finalPair, radius, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
+                  isChannelCapture);
+  }
   if (!unboundFinal && row && row->P > 0.0)
     reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
   else if (unboundFinal || !(outEnergy > 0.0) ||

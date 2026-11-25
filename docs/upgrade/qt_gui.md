@@ -845,3 +845,103 @@ unsaved edits the bar appears, the window keeps its value and the disk its own, 
 Keep mine hides the bar and changes nothing, a Save then writes the window's version without a reload; a run of the
 program outside changes the Overview's chi^2 without a click; a data file rewritten makes the stale mark name its data
 set; following off, an outside edit is not read and the choice is kept.
+
+## 19. The potential of a pair and the partial waves without a level (U9, agent potential-gui, 2026-11-21)
+
+The PI (2026-11-20): "We can add it to the GUI and also the possibility of switching it on or off and selecting
+external only and external + internal mode which shows also which poles are created and a way of tuning it? Also I
+would like an utility in the level tab to add these blank levels so casual users will not neglect some missing
+waves."  The physics is `potential_background.md` (sections 1-5, the record's fields; section 13, the tuning).  Code:
+`gui/src/PotentialPanel.cpp` (the panel), `gui/src/LevelsPartialWaves.cpp` (the Levels tab's check and its dialog),
+`api/front/src/FrontPotential.cpp` (the facade), `physics/src/PotentialTuning.cpp` (a and r of a potential, the depth
+for a chosen a).
+
+### 19.1 Where: a panel of the Particle Pairs tab
+
+The panel is the first tab under the pairs' table (beside the per-channel radii) and follows the selected pair.  A
+potential belongs to a pair (one `potential` record per pair, named by its label), as a channel radius does, and what
+the panel shows needs the pair's masses, charges, threshold and radius, which the Pairs tab holds; the Nuclear
+Potential tab keeps the record table and form for the fields the panel does not edit (and "Edit record..." opens the
+record pop-up of section 16.10 from the panel).
+
+### 19.2 The panel
+
+- **On/off.**  The format has no "active" field for a potential, and a removed record would lose its text.  Off is
+  therefore the record kept in the file as comment lines: each of its lines (its comments, header and fields) after
+  the mark `#off ` (`front::RecordOffMark()`, `Project::SetRecordOn`, `Project::RecordsOff`).  The engine and every
+  reader take them as comments; on again takes the mark away and gives the lines back byte for byte.  A record named
+  like an active one is refused on (the engine's rule of one name).
+- **The waves.**  One row per `wave` field of the record (in its order, grouped by l) and one row per l without a line
+  up to the Levels tab's maximum l.  Mode: *Central* (no line: the central potential acts beyond a_c), *Exterior only*
+  (a line without `background`), *Exterior + interior* (`background interior boundary B`), *None* (`only bound_state`:
+  point-Coulomb functions in the wave; there is no other way in format 3 to take the potential out of one wave while the
+  pair has it -- the whole potential off is the on/off box).  Depth, width, B_bg, `subtract n` and `capture interior`
+  are edited in the row; a depth of its own makes a central row a line.  B_bg, subtract and capture are offered only
+  with a background (the grammar's structure: they are parts of the background); `B = 0` is put in when a background is
+  chosen on a line without one (the record needs a B; 0 is a start to edit).  Every other rule is the engine's: the
+  record as edited is set into a copy of the project and validated (`Validate`), and the set-up's checks of the wave
+  (`subtract` naming a state the box has not, a background beyond the matching radius: `front::PotentialWaveOf`, the
+  words of `CheckPotentialWaves`) are shown under the table.  The wave's text is written by the facade
+  (`front::PotentialWaveText`, the record writer's tokens); a row not edited keeps its text, and Apply writes the
+  record through `Project::SetRecord` (only the changed lines).
+- **In the calculation.**  The last column says, per J^π of the wave, whether the engine will make its group: an
+  active level of the J^π with the channel (pair, l), or `includeAllJPi` with l up to `maxOrbitalMomentum`
+  (`front::PartialWaveStates`, the rule of `CompoundSystem::Fill` and `AddHardSphereGroups`, on the Levels tab's rows as
+  they stand).  A wave line whose J^π is left out is named in red under the table: its potential does nothing (the
+  trap met in practice).
+- **Poles.**  For the selected wave, the box states of its potential at the channel radius (the pair's, or the
+  channel's own from `<channelRadii>`) with a_c u'/u = B_bg (0 without background): nodes, E_c, E_x, γ_p², θ² against
+  the engine's Wigner limit, the subtracted one in bold, up to an E_c the user sets.  `front::PotentialWaveOf` calls
+  `physics::InteriorBoxStates` with the arguments the session's `potential_box_states` uses (one function,
+  `PotentialWaveOf` of `api/include/PotentialWave.h`); api_front (h) checks the two equal bit for bit.  Beside them the
+  project's levels of the J^π with a channel of the pair and l (E_x, E_c, the channel's value as written: Γ in eV or the
+  ANC in fm^-1/2).  A wave without J of a potential that depends on J is shown for its lowest J (the title says so).
+- **Tuning.**  Read out as the wave is edited: the potential's own a and r (Coulomb-modified effective-range
+  expansion, l = 0; any l for a neutral pair), with the spread of the extrapolation and the energy window, its bound
+  states and the nodes of its zero-energy solution.  *Depth for a*: the depth with that a in the branch of the present
+  number of bound states (`physics::DepthForScatteringLength`; the result names the branch and the node count).
+  *Depth and range for a, r* (added on the PI's approval of 2026-11-21): the depth and Gaussian width with both on the
+  same branch (`physics::DepthWidthForEffectiveRange`, `potential_background.md` 13.4); the achieved a and r are shown
+  beside the asked ones, and a branch without such a pair is said so in red with the range of r it reached, nothing to
+  use.  The help says that a is the robust input and r the model-dependent one.
+  *Depth to bind*: a level of the J^π below threshold; the depth within ±30 % that binds the wave at its E_c
+  (`physics::DepthBindingAt`, the depth the set-up's refusal of `capture interior` prints), the eigenvalue, the node
+  count, and the potential's own ANC beside the level's as written.  *Use this depth* puts it into the row (not
+  applied).
+- **Threads.**  Every computation runs in a `PhysicsWorker` (section 15.3) on a copy of the project's text and the
+  record as edited; a newer request drops an older one's answer; the window never waits.  Before the engine reads the
+  pairs the panel asks the window to write the Pairs and Levels tabs' rows into the project (`AZURESetup::commitLevels`,
+  the first half of `commitTabs`), so that a pair added in the tab is the engine's pair.
+
+### 19.3 The Levels tab: partial waves without a level
+
+`Partial waves...` under the channel configuration opens a check: every J^π the particle pairs form up to the tab's
+maximum l with no active level (`front::PartialWavesWithoutLevel`, nucleus by nucleus, with the lowest l and a pair
+that forms it), what that means in plain words (the engine makes no group: the partial waves are left out, no
+hard-sphere or potential scattering, no background, no capture from them, without a message), and two remedies:
+
+- *Switch hard-sphere scattering in every J^π on*: the tab's box, the `<config>` key `includeAllJPi` (read in
+  `src/Config.cpp`: `includeAllJPi=1` or `true`; off when absent).  With it the engine adds, for each J^π without a
+  group, one with every particle channel up to l = `maxOrbitalMomentum` (absent: the largest l of a particle row of
+  `<levels>`) and no level (`CompoundSystem::AddHardSphereGroups`).  So that it reaches every J^π the check lists, the
+  window now writes `maxOrbitalMomentum` (the tab's maximum l) when the key is switched on in the window and the file
+  names none (`commitLevels`); a file opened and saved without that switch is unchanged.
+- *Add blank levels for the ticked*: per J^π a level with every width 0, its energy and its widths fixed, at 10 MeV
+  above the highest level and threshold (whole MeV); one undo step.  A level with zero widths adds no resonance; it
+  carries the group.
+
+The red text under the box (section 13.3) names the check.
+
+### 19.4 Tests
+
+`tests/gui/gui_potential_test.cpp` (label gui) on `tests/potential_background/models/bound_level_a40.azr`: the panel on
+pair 1; Apply and save without an edit byte for byte; off and on byte for byte with a valid project while off; each mode
+written as expected (exterior only, exterior + interior with its B kept, capture interior, none refused with the
+engine's E_POTENTIAL_WAVE, central removing the line); the p3/2 poles equal to the facade's with node 1 marked; the
+3/2- level beside them; the depth binding it (83.589552 MeV, the written 83.589554) with the potential's ANC 4.093160
+(scipy 4.0931604450); a0 = 30.953065 fm read out (scipy 30.953078), the depth for 40 fm 65.2851799 MeV (brentq
+65.28518406), used and read out again as 40; the depth and width for scipy's (a, r) of (70 MeV, 2.4 fm) found back
+to 3e-4 with the asked values beside the achieved, and r = 5 fm reported as out of reach; the 1/2+ level removed: the panel's warning, the check's list, a blank
+level that brings it back (width 0, fixed) and the warning gone; includeAllJPi from the check and the save's
+`includeAllJPi=1`, `maxOrbitalMomentum=3`.  Screenshots: `AZURE2_QT_SHOTS/u9-potential`.  `api_front` (h): the
+facade (section 19.2) against the session and scipy.

@@ -17,15 +17,19 @@ class _HybridPotentials:
 
         Returns a :class:`NuclearPotential` -- ``enabled``, ``type``
         (``"WoodsSaxon"`` or ``"Gaussian"``), the shape parameters ``V0``/``R``/
-        ``a``/``r0``, ``coulomb_radius`` (fm), and ``own``, which says whether
-        this pair carries a setting of its own or is following the default.
+        ``a``/``r0``, ``coulomb_radius`` (fm), ``own``, which says whether
+        this pair carries a setting of its own or is following the default, and
+        ``waves``, one dict per ``wave`` field of the record (``l``, ``J`` or None,
+        ``depth`` MeV or None, ``width`` fm or None, ``background`` None or
+        ``{"boundary", "subtract", "capture_interior"}``, ``only_bound_state``;
+        ``docs/upgrade/potential_background.md``).
 
         ``pair=0`` addresses that default: the setting every pair falls back to
         when it has none.  A model where no pair is named therefore behaves as
         it did when the potential was a single global object.
         """
         pair = self._check_potential_pair(pair)
-        enabled, type_, V0, R, a, r0, own, rc, so, rm, step = self._engine.get_potential(pair)
+        enabled, type_, V0, R, a, r0, own, rc, so, rm, step, waves = self._engine.get_potential(pair)
         spin_orbit = None
         if len(so):
             spin_orbit = {"depth": float(so[0]), "radius": float(so[1]), "diffuseness": float(so[2]),
@@ -33,7 +37,8 @@ class _HybridPotentials:
         return NuclearPotential(pair=pair, enabled=bool(enabled), type=str(type_),
                                 V0=float(V0), R=float(R), a=float(a),
                                 r0=float(r0), own=bool(own), coulomb_radius=float(rc),
-                                spin_orbit=spin_orbit, matching_radius=float(rm), step=float(step))
+                                spin_orbit=spin_orbit, matching_radius=float(rm), step=float(step),
+                                waves=[dict(w) for w in waves])
 
     @engine_call
     def nuclear_potentials(self):

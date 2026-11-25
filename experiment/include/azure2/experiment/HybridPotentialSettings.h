@@ -29,6 +29,8 @@ struct HybridPotentialSetting {
   double step_fm = physics::HybridPotential().step_fm;                        ///< Numerov step (fm)
   /// The spin-orbit term (a format-3 record's spin_orbit); the old block has none.
   std::optional<physics::SpinOrbitTerm> spin_orbit;
+  /// Per-partial-wave depths and interior backgrounds (a format-3 record's `wave` fields; potential_background.md).
+  std::vector<physics::PartialWave> waves;
   /// The potential of this setting; throws std::invalid_argument when a parameter of its shape, R_C, r_m, the
   /// step or of the spin-orbit term is not positive.
   physics::HybridPotential Potential() const;

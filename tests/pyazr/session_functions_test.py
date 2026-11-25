@@ -89,8 +89,23 @@ with warnings.catch_warnings():
         described = s.describe()["functions"]
         answers = {"channel_functions": [s.channel_functions(1, ENERGIES, l=1)],
                    "jpi_block": [s.jpi_block(1, ENERGIES + 1.944), s.jpi_block(3, ENERGIES + 1.944)]}
-check("seven rows", sorted(described) == sorted(["channel_functions", "jpi_block", "thm_experiments", "thm_background",
-                                                   "thm_lineshape", "thm_vertex", "thm_distortion"]),
+# the two calls of a pair's potential, on a synthetic model with a potential (tests/potential_background)
+POT_DIR = tempfile.mkdtemp(prefix="session_functions_pot_")
+os.makedirs(os.path.join(POT_DIR, "output"))
+os.makedirs(os.path.join(POT_DIR, "checks"))
+POT = os.path.join(POT_DIR, "identity_a35.azr")
+shutil.copy(os.path.join(ROOT, "tests", "potential_background", "models", "identity_a35.azr"), POT)
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    with pyazr.Session(POT, extrapolations=True) as s:
+        answers["potential_box_states"] = [s.potential_box_states(1, l=0, J=0.5, e_min=-50.0, e_max=30.0)]
+        answers["potential_bound_state"] = [s.potential_bound_state(1, l=1, J=1.5, energy=-1.5)]
+        answers["potential_scattering_length"] = [s.potential_scattering_length(1, l=0, J=0.5)]
+        answers["potential_depth_for"] = [s.potential_depth_for(1, 40.0, l=0, J=0.5)]
+check("eleven rows", sorted(described) == sorted(["channel_functions", "potential_box_states", "potential_bound_state",
+                                                  "potential_scattering_length", "potential_depth_for",
+                                                  "jpi_block", "thm_experiments", "thm_background", "thm_lineshape",
+                                                  "thm_vertex", "thm_distortion"]),
       str(sorted(described)))
 for name, row in described.items():
     args = [a["name"] for a in row["arguments"]]
@@ -154,6 +169,7 @@ try:
           set(answers["thm_vertex"][-1]) >= {"E", "channels", "reached", "window", "model", "B", "pair"})
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(POT_DIR, ignore_errors=True)
 
 if failures:
     print(f"FAIL: {len(failures)} check(s): {failures}")

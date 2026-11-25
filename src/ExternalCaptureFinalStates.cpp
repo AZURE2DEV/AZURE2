@@ -10,7 +10,10 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <sstream>
+#include <string>
 
 #include "AChannel.h"
 #include "GSLException.h"
@@ -26,6 +29,7 @@
 #include "PPair.h"
 #include "NFIntegral.h"
 #include "ProjectSetup.h"
+#include "ShftFunc.h"
 #include "WhitFunc.h"
 #include "azure2/experiment/FinalStates.h"
 #include "azure2/experiment/ProjectReader.h"
@@ -82,6 +86,10 @@ namespace {
 void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, double levelEnergy, const Config &configure,
                          double &nfIntegral, double &conversion) {
   const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
+  // The final state's wave beyond a_c is the pair's W~ (or outgoing wave); in a partial wave with an interior
+  // background its normalisation at a_c would need the background too, which is not built (potential_background.md
+  // section 5): refused at set-up.
+  if (pair->GetHybridPotential()) azure2::physics::BelowThresholdPotential(*pair->GetHybridPotential(), l, twoJ);
   const double toAmplitude = sqrt(2.0 * pair->GetRedMass() * radius * uconv / pow(hbarc, 2.0));
   if (finalEnergy > 0.0) {
     CoulFunc coul(pair);
@@ -93,6 +101,121 @@ void ECFinalStateFactors(const PPair *pair, double radius, int l, int twoJ, doub
     WhitFunc newWhitFunc(pair);
     conversion = toAmplitude / newWhitFunc(l, twoJ, radius, fabs(finalEnergy));
   }
+}
+
+/*!
+ * The bound final state of external capture inside a_c, for a pair whose potential has a background with interior
+ * capture (docs/upgrade/potential_background.md section 5.3, the rule approved on 2026-11-20): its shape is the
+ * potential's own bound state in the final partial wave (l, 2J) at the level's energy E_f, its normalisation the
+ * level's (the exterior W~ x ANC continued at a_c).  The potential must bind there: its eigenvalue nearest E_f must lie
+ * within kInteriorCaptureEigenTolerance_MeV of E_f, else the run is refused with the depth that would bind at E_f (no
+ * depth is changed).  An unbound final state is continued in value without that rule (a note).  Prints the potential's eigenvalue and its own ANC, C_pot =
+ * 1 / (|W~(a)| (int_0^a phi^2 + N_f)^1/2) with phi the interior regular solution normalised at a and N_f = int_a^inf
+ * W~^2 / W~(a)^2 (nfIntegral), next to the level's ANC as written in <levels> (`writtenAnc`; NaN when the row holds
+ * a reduced-width amplitude).  Only for a final channel that a wave with capture interior reaches by a multipole of
+ * the photon pair (`multipoleMask`).
+ */
+constexpr double kInteriorCaptureEigenTolerance_MeV = 1e-3;
+
+/// The level's ANC as written, or the word that it is not written as one.
+std::string WrittenAncText(double writtenAnc) {
+  if (std::isnan(writtenAnc)) return "none (the level gives a reduced-width amplitude, MeV^1/2)";
+  std::ostringstream t;
+  t << writtenAnc << " fm^-1/2";
+  return t.str();
+}
+
+/// Does a wave with interior capture of `pot` reach a final channel of orbital momentum lf by a multipole of `mask`
+/// (isE1, isM1, isE2): E1 |l_i - l_f| = 1, M1 l_i = l_f, E2 |l_i - l_f| = 2 or l_i = l_f > 0?
+bool InteriorCaptureReaches(const azure2::physics::HybridPotential &pot, int lf, int mask) {
+  for (const azure2::physics::PartialWave &w : pot.waves) {
+    if (!w.background || !w.background->capture) continue;
+    const int d = std::abs(w.l - lf);
+    if (((mask & isE1) && d == 1) || ((mask & isM1) && d == 0) || ((mask & isE2) && (d == 2 || (d == 0 && lf > 0))))
+      return true;
+  }
+  return false;
+}
+
+void CheckInteriorCaptureFinalState(int exitPairKey, const PPair *pair, double radius, int l, int twoJ, double levelEnergy,
+                                    double nfIntegral, double writtenAnc, int multipoleMask, const Config &configure) {
+  const std::optional<azure2::physics::HybridPotential> &pot = pair->GetHybridPotential();
+  if (!pot || !azure2::physics::HasInteriorCapture(*pot)) return;
+  // only a final channel that a capture wave reaches needs the potential's bound state (review 2026-11-20)
+  if (!InteriorCaptureReaches(*pot, l, multipoleMask)) return;
+  const double finalEnergy = levelEnergy - pair->GetSepE() - pair->GetExE();
+  const std::string wave = "l = " + std::to_string(l) + (twoJ >= 0 ? ", 2J = " + std::to_string(twoJ) : std::string()) +
+                           " of pair " + std::to_string(pair->GetPairKey());
+  if (!(finalEnergy < 0.0)) {
+    // An unbound final state (section 14.3): a narrow resonance whose outgoing wave is continued inside a_c, in value,
+    // by the regular solution of this partial wave's potential at E_f.  No requirement that the potential has a
+    // resonance there: said, with the mismatch of the logarithmic derivatives at a_c.
+    const azure2::physics::HybridPotential qu = azure2::physics::ForPartialWave(*pot, l, twoJ);
+    const double ell = azure2::physics::InteriorLogDerivative(qu, pair->GetZ(1), pair->GetZ(2), pair->GetRedMass() * uconv, l,
+                                                              pair->SpinOrbitFactor(l, twoJ), radius, finalEnergy);
+    CoulFunc coul(pair);
+    const struct CoulWaves w = coul(l, twoJ, radius, finalEnergy);
+    const double rho = Kinematics::Channel(pair).Rho(radius, finalEnergy);
+    const double S = rho * (w.F * w.dF + w.G * w.dG) / (w.F * w.F + w.G * w.G);
+    configure.outStream << "NOTE: interior capture into the UNBOUND final state of photon pair " << exitPairKey << " (" << wave
+                        << ", E_f = " << finalEnergy << " MeV): inside a_c its outgoing wave is continued in value by the "
+                        << "potential's regular solution at E_f; at a_c the interior's a u'/u = " << ell
+                        << " against the shift of the waves outside, " << S
+                        << " (equal where the potential has its own resonance at E_f)." << std::endl;
+    return;
+  }
+  const azure2::physics::HybridPotential q = azure2::physics::ForPartialWave(*pot, l, twoJ);
+  const double mu = pair->GetRedMass() * uconv, ldoti = pair->SpinOrbitFactor(l, twoJ);
+  const int z1 = pair->GetZ(1), z2 = pair->GetZ(2);
+  const azure2::physics::PotentialEigenvalue ev =
+      azure2::physics::NearestEigenvalue(q, z1, z2, mu, l, ldoti, radius, finalEnergy, std::min(2.0, -finalEnergy));
+  if (!ev.found || std::fabs(ev.E_MeV - finalEnergy) > kInteriorCaptureEigenTolerance_MeV) {
+    const azure2::physics::DepthAtEnergy d = azure2::physics::DepthBindingAt(q, z1, z2, mu, l, ldoti, radius, finalEnergy);
+    std::ostringstream m;
+    m.precision(10);
+    m << "external capture with interior capture (potential_background.md section 5.3): the final state of photon pair "
+      << exitPairKey << " lies at E_f = " << finalEnergy << " MeV (c.m.) in the partial wave " << wave
+      << ", but the potential (depth " << q.central_depth_MeV << " MeV) ";
+    if (ev.found)
+      m << "binds that wave at " << ev.E_MeV << " MeV, " << (ev.E_MeV - finalEnergy) * 1e3 << " keV away";
+    else
+      m << "has no bound state within 2 MeV of it";
+    m << " (tolerance " << kInteriorCaptureEigenTolerance_MeV * 1e3 << " keV).  ";
+    if (d.found)
+      m << "The depth that binds it at E_f is " << d.depth_MeV << " MeV: write it as the `wave` depth of that partial wave, "
+        << "or move the level to the potential's eigenvalue.";
+    else
+      m << "No depth within 30 % of it binds the wave at E_f.";
+    throw std::runtime_error(m.str());
+  }
+  if (azure2::physics::BoundStateOnly(*pot, l, twoJ)) {
+    // `only bound_state` (potential_background.md section 5.9): the wave's exterior is the point-Coulomb Whittaker
+    // function times the level's ANC; inside a_c the potential's shape, continued in value at a_c.  The potential's
+    // own ANC is that of its normalised eigenstate with its own exterior; the jump of the log-derivative at a_c is
+    // the mismatch between the potential's interior and the point-Coulomb exterior.
+    const double ancPot = azure2::physics::PotentialBoundStateANC(q, z1, z2, mu, l, ldoti, radius, ev.E_MeV);
+    const double ell = azure2::physics::InteriorLogDerivative(q, z1, z2, mu, l, ldoti, radius, finalEnergy);
+    const double S = ShftFunc(pair, radius)(l, twoJ, levelEnergy);
+    configure.outStream << "NOTE: interior capture into the final state of photon pair " << exitPairKey << " (" << wave
+                        << ", only bound_state, E_f = " << finalEnergy << " MeV): the potential's eigenvalue " << ev.E_MeV
+                        << " MeV (" << (ev.E_MeV - finalEnergy) * 1e3 << " keV from E_f); its own ANC " << ancPot
+                        << " fm^-1/2, the level's ANC as written " << WrittenAncText(writtenAnc) << "; at a_c the interior shape's "
+                        << "a u'/u = " << ell << " against the point-Coulomb exterior's a W'/W = " << S
+                        << " (the interior bound wave is the potential's shape, continued in value from the Whittaker "
+                        << "function times the level's ANC)." << std::endl;
+    return;
+  }
+  // the potential's own ANC at the level's energy
+  const double interior = azure2::physics::InteriorNormIntegral(q, z1, z2, mu, l, ldoti, radius, finalEnergy);
+  WhitFunc w(pair);
+  const double wa = std::fabs(w(l, twoJ, radius, -finalEnergy));
+  const double ancPot = 1.0 / (wa * std::sqrt(interior + nfIntegral));
+  configure.outStream << "NOTE: interior capture into the final state of photon pair " << exitPairKey << " (" << wave
+                      << ", E_f = " << finalEnergy << " MeV): the potential's eigenvalue " << ev.E_MeV << " MeV ("
+                      << (ev.E_MeV - finalEnergy) * 1e3 << " keV from E_f); its own ANC " << ancPot
+                      << " fm^-1/2, the level's ANC as written " << WrittenAncText(writtenAnc)
+                      << " (the interior bound wave is the potential's shape, normalised to the level's ANC)."
+                      << std::endl;
 }
 
 /*!
@@ -191,6 +314,22 @@ int CompoundSystem::ParseExternalCapture(const Config &configure, std::map<int, 
         if (!NoteUnboundFinalState(configure, exitPair, theFinalPair, unboundNoted)) return -1;
         ECFinalStateFactors(theFinalPair, finalRadius, this->Group(jGroupNum)->GetChannel(ch)->GetL(), theFinalPair->SpinOrbitTwoJ(jValue),
                             exitPair->GetHeavyExE(), configure, nfIntegralValue, ecConvert);
+        // the level's value as written in <levels>: an ANC (fm^-1/2) for this closed channel unless the row's flag says
+        // it is a reduced-width amplitude (MeV^1/2); NaN then (the note says so)
+        double writtenAnc = std::numeric_limits<double>::quiet_NaN();
+        for (size_t row = 0; row < tables.rowSlots.size() && row < rows.size(); row++) {
+          const azure2::experiment::LevelRowSlot &slot = tables.rowSlots[row];
+          if (slot.group == jGroupNum && slot.level == levelNum && slot.channel == ch && !rows[row].gammaIsRWA())
+            writtenAnc = slot.value;
+        }
+        try {
+          CheckInteriorCaptureFinalState(exitPair->GetPairKey(), theFinalPair, finalRadius, this->Group(jGroupNum)->GetChannel(ch)->GetL(),
+                                         theFinalPair->SpinOrbitTwoJ(jValue), exitPair->GetHeavyExE(), nfIntegralValue,
+                                         writtenAnc, ec->second, configure);
+        } catch (const std::runtime_error &e) {
+          configure.outStream << "ERROR: " << e.what() << std::endl;
+          return -1;
+        }
       }
       this->Group(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
       this->Group(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);

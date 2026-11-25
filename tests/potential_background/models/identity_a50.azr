@@ -1,0 +1,113 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+format=3
+</config>
+<levels>
+0.5 1        40 1 1 1 1 0 2 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+0.5 -1        40 1 1 1 1 2 3 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+1.5 -1        40 1 1 1 1 2 4 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+1.5 1        40 1 1 1 1 4 5 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+2.5 1        40 1 1 1 1 4 6 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+2.5 -1        40 1 1 1 1 6 7 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+3.5 -1        40 1 1 1 1 6 8 1 1             0 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0   5 0 0 0
+
+</levels>
+<data>
+</data>
+<extrapolations>
+extrapolation ph_l0_j1
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              1/2
+    l              0
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+
+extrapolation ph_l1_j1
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              1/2
+    l              1
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+
+extrapolation ph_l1_j3
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              3/2
+    l              1
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+
+extrapolation ph_l2_j3
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              3/2
+    l              2
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+
+extrapolation ph_l2_j5
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              5/2
+    l              2
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+
+extrapolation ph_l3_j5
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              5/2
+    l              3
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+
+extrapolation ph_l3_j7
+    reaction       4He(h,h)4He
+    quantity       phase_shift
+    unit           deg
+    J              7/2
+    l              3
+    s              1/2
+    energies       list 0.5 1 2 4 MeV cm
+</extrapolations>
+<targets>
+</targets>
+<potentials>
+potential he3he4
+    pair            h+4He
+    coulomb_radius  3.095 fm
+    central         gaussian depth 67.5 MeV width 2.5200031651 fm
+    wave            l 0 J 1/2 depth 67.5 MeV background interior boundary -1.0
+    wave            l 1 J 1/2 depth 81.815179 MeV background interior boundary -1.0
+    wave            l 1 J 3/2 depth 83.589554 MeV background interior boundary -1.0
+    wave            l 2 J 3/2 depth 66.0 MeV background interior boundary -1.0
+    wave            l 2 J 5/2 depth 69.0 MeV background interior boundary -1.0
+    wave            l 3 J 5/2 depth 75.9 MeV background interior boundary -1.0
+    wave            l 3 J 7/2 depth 84.8 MeV background interior boundary -1.0
+    matching_radius 15 fm
+    step            0.0275 fm
+</potentials>

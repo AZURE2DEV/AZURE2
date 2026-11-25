@@ -209,6 +209,7 @@ ShiftColumnCount FillShiftColumns(const CompoundSystem *lc, LevelState &state, c
 
 bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
                                  vector_r &jac, std::vector<int> &packedToFull) const {
+  if (!FiniteVector(full)) return false;  // a non-finite parameter: a failed evaluation (FiniteVector)
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   const CompoundSystem *lc = compound();
@@ -289,6 +290,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
 }
 
 bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
+  if (!FiniteVector(full)) return false;  // a non-finite parameter: a failed evaluation (FiniteVector)
   // Forward-only counterpart of ResidualJacobian (no adjoint): same row order
   // and residual r = (model/J - data*n)/(err*n) as ComputeResidualJacobian.
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh

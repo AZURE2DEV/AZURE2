@@ -250,14 +250,17 @@ void PPair::SetEntrance() {
 }
 
 int PPair::SpinOrbitTwoJ(double J) const {
-  if (!hybrid_potential_ || !hybrid_potential_->spin_orbit) return azure2::physics::kNoSpinOrbit;
+  // J enters the key when the potential depends on it: a spin-orbit term, or a `wave` of the record with a J
+  // (potential_background.md); otherwise every J shares the key kNoSpinOrbit, as before either existed.
+  if (!hybrid_potential_ || !azure2::physics::DependsOnJ(*hybrid_potential_)) return azure2::physics::kNoSpinOrbit;
   return static_cast<int>(std::lround(2.0 * J));
 }
 
 double PPair::SpinOrbitFactor(int l, int two_j) const {
   if (two_j == azure2::physics::kNoSpinOrbit) return 0.0;
-  if (!hybrid_potential_ || !hybrid_potential_->spin_orbit)
-    throw std::logic_error("PPair::SpinOrbitFactor: a 2J key for a pair without a spin-orbit term");
+  if (!hybrid_potential_ || !azure2::physics::DependsOnJ(*hybrid_potential_))
+    throw std::logic_error("PPair::SpinOrbitFactor: a 2J key for a pair whose potential does not depend on J");
+  if (!hybrid_potential_->spin_orbit) return 0.0;  // J-dependent through a `wave` depth only
   const int particle = hybrid_potential_->spin_orbit->acts_on == azure2::physics::SpinOrbitParticle::Heavy ? 2 : 1;
   return azure2::physics::TwoLDotI(l, two_j, static_cast<int>(std::lround(2.0 * GetJ(particle))));
 }

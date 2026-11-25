@@ -340,6 +340,9 @@ LeastSquaresOutcome RunLevenbergMarquardt(AZURECalc &self, AZUREParams &params, 
       bool solved = (status == 0);
       if (solved)
         for (int a = 0; a < nFree; a++) dx[a] = gsl_vector_get(sol, a);
+      // A step that is not finite (a NaN or an infinity in J or the cost) is no solution: damp more, as for a
+      // singular system.  Clamped to the limits, a NaN passes std::min/max and was evaluated (2026-11-20).
+      for (int a = 0; a < nFree && solved; a++) solved = std::isfinite(dx[a]);
       gsl_matrix_free(A);
       gsl_vector_free(bvec);
       gsl_vector_free(sol);

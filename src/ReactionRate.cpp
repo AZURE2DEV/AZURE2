@@ -1,10 +1,17 @@
+#include "AChannel.h"
+#include "ALevel.h"
+#include "CoulFunc.h"
+#include "Kinematics.h"
 #include "CompoundSystem.h"
+#include "JGroup.h"
+#include "PPair.h"
 #include "Config.h"
 #include "Unit.h"
 #include "ReactionRate.h"
 #include "ECTable.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "CompoundSystemChecks.h"
+#include "azure2/physics/HybridPotential.h"
 #include <iomanip>
 #include <iostream>
 #include <math.h>
@@ -22,6 +29,9 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <set>
+#include <tuple>
+#include <optional>
 #include <vector>
 #include <time.h>
 
@@ -102,8 +112,39 @@ static const double kRateEpsRel = 1e-7;
  * that a parameter file had moved by more than its cluster (64 widths) was never
  * resolved and dropped out of the rate.
  */
+/*!
+ * The resonances of the entrance pair's potential in its partial waves with an interior background
+ * (docs/upgrade/potential_background.md): sigma(E) carries them without a level, and the grid had a cluster on every
+ * level and none on these (a 412 keV wide 1- resonance of alpha + 12C between backbone nodes left the rate 0.2 % low
+ * from T9 = 3).  The resonances are BackgroundPotentialStates' (CompoundSystemChecks.h).  A subtracted box state's
+ * resonance is listed too: its level has a cluster of its own and one more does no harm.
+ */
+static void AddPotentialResonances(const CompoundSystem *compound, int entranceKey,
+                                   std::vector<AdaptiveIntegrationGrid::ResonanceInfo> &resonances) {
+  namespace phys = azure2::physics;
+  if (!compound->IsPairKey(entranceKey)) return;
+  const int entrance = compound->GetPairNumFromKey(entranceKey);
+  const PPair *pair = compound->GetPair(entrance);
+  const std::optional<phys::HybridPotential> &pot = pair->GetHybridPotential();
+  if (!pot) return;
+  std::set<std::tuple<int, int, double>> done;
+  for (int j = 1; j <= compound->NumJGroups(); j++) {
+    const JGroup *group = compound->GetJGroup(j);
+    for (int ch = 1; ch <= group->NumChannels(); ch++) {
+      const AChannel *channel = group->GetChannel(ch);
+      if (channel->GetRadType() != 'P' || channel->GetPairNum() != entrance) continue;
+      const int l = channel->GetL(), twoJ = pair->SpinOrbitTwoJ(group->GetJ());
+      const double a = channel->GetRadius();
+      if (!phys::BackgroundOf(*pot, l, twoJ) || a > pot->matching_radius_fm) continue;
+      if (!done.insert(std::make_tuple(l, twoJ, a)).second) continue;
+      for (const PotentialState &state : BackgroundPotentialStates(*pair, l, twoJ, a, 1e-3, kRateEnergyHigh))
+        if (state.width > 0.0) resonances.push_back({state.Ec, state.width, state.width, 0});
+    }
+  }
+}
+
 static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
-RateResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+LevelResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
                int entranceKey) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.entranceKey = entranceKey;
@@ -120,6 +161,15 @@ RateResonances(const CompoundSystem *compound, const LevelState &state, const Le
     gc.inputWidthsArePhysical = false;
     return AdaptiveIntegrationGrid(gc).GetResonances(kRateEnergyHigh, kRateEnergyLow, compound, inputs);
   }
+}
+
+/// The levels' resonances (LevelResonances) and those of the entrance pair's potential (AddPotentialResonances).
+static std::vector<AdaptiveIntegrationGrid::ResonanceInfo>
+RateResonances(const CompoundSystem *compound, const LevelState &state, const LevelInputs &inputs, const Config &configure,
+               int entranceKey) {
+  std::vector<AdaptiveIntegrationGrid::ResonanceInfo> resonances = LevelResonances(compound, state, inputs, configure, entranceKey);
+  AddPotentialResonances(compound, entranceKey, resonances);
+  return resonances;
 }
 
 /*!
@@ -573,6 +623,31 @@ void DispatchRateCalculation(const std::vector<double> &temps,
     configure.outStream << "\tIdentical entrance particles: N_A<sigma v> includes (1+delta_12) in sigma and excludes\n"
                         << "\tthe 1/(1+delta_12) of the rate equation r = n^2 <sigma v> / 2 (FCZ 1967, REACLIB convention)."
                         << std::endl;
+  // External capture into a final state above the entrance pair's threshold (a narrow resonance,
+  // ECIntegral::IntegrateUnbound): sigma rises as 1/E_gamma toward the final state's energy E_f, the soft-photon
+  // limit, and the exterior integral stops where 40/(k_i - k_f) exceeds 50,000 fm.  The rate is then logarithmic in
+  // that numerical limit (alpha + 12C at E_f = 3.26 MeV: 9 to 41 % for a factor two in it, T9 = 10 to 0.5;
+  // docs/upgrade/potential_background.md section 14).  The rate mode has no line_window, so it is always this form.
+  const double entranceThreshold = entrancePair->GetSepE() + entrancePair->GetExE();
+  for (int key : RateExitKeys(compound, entranceKey, exitKey)) {
+    const int exitPairNum = compound->GetPairNumFromKey(key);
+    if (exitPairNum < 1) continue;
+    const PPair *exitPair = compound->GetPair(exitPairNum);
+    const double finalEnergy = exitPair->GetHeavyExE() - entranceThreshold;
+    if (!(finalEnergy > 0.0)) continue;
+    bool external = false;
+    for (int j = 1; j <= compound->NumJGroups() && !external; j++)
+      for (int la = 1; la <= compound->GetJGroup(j)->NumLevels() && !external; la++) {
+        const ALevel *level = compound->GetJGroup(j)->GetLevel(la);
+        external = level->IsECLevel() && level->GetECPairNum() == exitPairNum;
+      }
+    if (external)
+      configure.outStream << "WARNING: the rate into pair " << key << " includes external capture into an UNBOUND final state (E_x = "
+                          << exitPair->GetHeavyExE() << " MeV, " << finalEnergy * 1e3 << " keV above the entrance threshold) in the"
+                          << " narrow-resonance form.  That cross section rises as 1/E_gamma toward E_cm = " << finalEnergy
+                          << " MeV and is cut where its radial integral is given up (photon energies of a few keV), so this"
+                          << " rate depends on a numerical limit, by tens of per cent.  Do not quote it without a physical cut." << std::endl;
+  }
   RunTabulatedRateCalculation(temps, compound, state, inputs, configure, entranceKey, exitKey, outRates);
 }
 
@@ -595,8 +670,10 @@ ReactionRate::ReactionRate(const CompoundSystem *compound, const LevelState &sta
   }
   // Warn once if a level has a radiative width comparable to its particle width,
   // where the R-Matrix treatment of capture breaks down.
-  if (const std::optional<ObservedLevelTable> observed = compound_->ObservedWidthsAt(configure, params, state_, inputs_))
+  if (const std::optional<ObservedLevelTable> observed = compound_->ObservedWidthsAt(configure, params, state_, inputs_)) {
     WarnLargeRadiativeWidths(*compound_, inputs_, *observed, configure);
+    WarnLevelDoublesPotential(*compound_, inputs_, *observed, configure);
+  }
   if (configure.paramMask & Config::USE_BRUNE_FORMALISM) compound_->CalcShiftFunctions(configure, state_);
 }
 

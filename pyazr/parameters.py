@@ -15,6 +15,7 @@ are one table of the engine (``api/src/pybind_records.cpp``; ``pyazr.kinds()["pa
   ``table()``, ``to_records()``.
 - the particle pairs' records: :class:`pyazr.system.Pair` (:mod:`pyazr.system`).
 """
+import dataclasses
 
 import functools
 import os
@@ -433,6 +434,10 @@ class NuclearPotential:
     ``step`` (fm) the radial step of the integration (the record's
     ``matching_radius`` and ``step``; a session reports the values it uses).
 
+    ``waves`` lists the record's ``wave`` fields, one dict each (``l``, ``J``,
+    ``depth``, ``width``, ``background``, ``only_bound_state``;
+    :meth:`Session.nuclear_potential`).
+
     ``spin_orbit`` is ``None`` or the pair's spin-orbit term as a dict
     ``{"depth": MeV, "radius": fm, "diffuseness": fm, "on": "light"|"heavy"}``:
     v_so(r) <2 l.i> with v_so = V_so (2.000 fm^2) (1/r) df/dr, FRESCO's
@@ -451,6 +456,7 @@ class NuclearPotential:
     spin_orbit: Optional[dict] = None
     matching_radius: Optional[float] = None
     step: Optional[float] = None
+    waves: list = dataclasses.field(default_factory=list)
 
     @property
     def is_woods_saxon(self):

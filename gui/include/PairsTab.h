@@ -37,8 +37,9 @@ class PairsTab : public QWidget {
  public:
   PairsTab(QWidget *parent = 0);
   PairsModel *getPairsModel();
-  /// A panel shown below the pairs (the per-channel radii of <channelRadii>, AZURESetup).
-  void addExtraPanel(const QString &title, QWidget *panel);
+  /// A panel shown below the pairs (the per-channel radii of <channelRadii>, AZURESetup); `first`: as the first
+  /// and current tab (the Potential panel).
+  void addExtraPanel(const QString &title, QWidget *panel, bool first = false);
   /*! A new file: no pairs. */
   void reset();
   /// Select pair `row` and remove it as the Remove button does (the tests).

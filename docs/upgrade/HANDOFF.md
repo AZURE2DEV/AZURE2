@@ -4,6 +4,234 @@ Update this file at the end of every work session: what changed, what is next, w
 
 
 
+## 2026-11-21 (potential-gui) — the potential in the Qt program, its own a0, and the partial waves without a level
+
+Branch `feature/upgrade-9-potential-gui` from 7e1002da.  The PI: "We can add it to the GUI and also the possibility of
+switching it on or off and selecting external only and external + internal mode which shows also which poles are
+created and a way of tuning it? Also I would like an utility in the level tab to add these blank levels so casual
+users will not neglect some missing waves."
+1. **physics/PotentialTuning.h**: the potential's own phase shift, Coulomb-modified (l = 0) or neutral (any l)
+   effective-range expansion (window k = 0.125-0.5/R_N, a cubic in k², the spread of two other fits stated), Sturm's
+   bound-state count, the depth for a chosen a in the branch of the present bound-state count.  pyazr
+   `Session.potential_scattering_length` (+ describe row); `AZUREAPI::GetPotentialEffectiveRange`; the three potential
+   calls share `PotentialWaveOf` (api/include/PotentialWave.h).  potential_background.md section 13.
+2. **Facade** (api/front/src/FrontPotential.cpp): a record switched off as `#off ` comment lines and on again byte for
+   byte (`Project::SetRecordOn`, `RecordsOff`); the `wave` field split/written; the pair's record; a wave's box states,
+   set-up checks, a, r, bound states and levels from the record as edited; the depths for a and for a binding energy;
+   the partial waves an active level or includeAllJPi keeps (`PartialWaveStates`, `PartialWavesWithoutLevel`).
+3. **Qt**: the Potential panel, first tab under the Particle Pairs table (gui/src/PotentialPanel.cpp); the Levels tab's
+   "Partial waves..." check (gui/src/LevelsPartialWaves.cpp) with "switch includeAllJPi on" and "add blank levels".
+   Behaviour change of the window: when includeAllJPi is switched on in the window and the file has no
+   `maxOrbitalMomentum`, the save writes the tab's maximum l as `maxOrbitalMomentum` (so the key reaches every J^pi the
+   tab lists); `commitTabs` is split, `commitLevels` its first half.  qt_gui.md section 19; graphical_interface.rst.
+4. A fix of a test: `pyazr_potential_api` was skipped under ctest (pyazr not on the path); it now runs.
+5. Added on the PI's approval (2026-11-21, "Yes, want it"): the depth and Gaussian width for a chosen (a0, r0) on the
+   branch of the bound states (`physics::DepthWidthForEffectiveRange`, nested bracketed 1-D solves; not found, with the
+   range of r reached, when the branch has none); pyazr `Session.potential_depth_for(pair, a, l, J, r=None)`
+   (+ describe row), `AZUREAPI::GetPotentialDepthFor`, the facade's `PotentialDepthForEffectiveRange`, the panel's
+   "Depth and range" row.  Tested against scipy (charged 3He + 4He, neutral n + 4He; potential_background.md 13.4).
+   Sections 5.11-5.12 of potential_background.md and sections 10-11 of tests/potential_capture/check.sh (the capture
+   branch's two newer commits, to be merged by the director) are not touched here.
+Not done: the Coulomb-modified expansion for l > 0 (refused with the reason); tuning of a width or radius; a web-UI
+form; pyazr's version not bumped (dev series; James decides at the merge).
+Run: see the final report of the branch (build 0 warnings, ctest, run_tests.sh).
+
+## 2026-11-20 (potential-capture, follow-up 5) — subtract + capture end to end; E2 and M1 checked
+
+1. **A subtracted box pole put back as a level** (potential_background.md section 5.11): the engine's conventions (internal
+   capture −Ω 2i √P √P_γ γ A γ_γ, the hard-sphere and channel-capture terms) give the level's photon amplitude
+   γ_pγ = (i/2)(√(μa)/ħc) a_X γ_p ∫₀^a φ_p u_f w (Eq. (C7): the closed-channel integral with the box state in place of the
+   decaying wave); for one level Brune's amplitudes are the formal ones (only an observed width carries 1/(1 + γ²S̃')).
+   check.sh section 10 (`make_subtract_level.py` writes `models/subtract_level.azr.in`): the s-wave box state at 7.59 MeV
+   subtracted and put back reproduces the unsubtracted model to 3.2e-7 (capture, both states, 0.02-9 MeV) and 1.4e-6°
+   (s-wave phase); without the level's photon widths the capture misses by up to 17 %. The identity holds exactly in
+   the approved design.
+2. **E2 and M1** (section 5.12): the engine's interior capture uses the exterior's weights and factors for every
+   multipole; check.sh section 11 against `make_reference_e2m1.py` (independent: the golden rule with Edmonds' reduced
+   elements): E2 (s1/2, d3/2 -> d5/2) to 2.3e-7 and M1 orbital (d3/2 -> d5/2) to 3.8e-8; without capture interior the
+   references are missed by 30 % and 14 %. Not checked: M1's spin term (g factors 0 in the model), E2 without the
+   long-wavelength approximation. Nothing is refused: the engine computes them and they are now tested.
+No engine source changed in this round (tests, scripts, the note).
+Run on 4e1f93bb: build 0 warnings; `ctest -LE slow -j4` 400/401 (rmfit_enginepin, this machine: no installed `.so`);
+`tests/run_tests.sh` (4 threads) passed 187, failed 0; `tests/potential_capture/check.sh` all eleven sections pass.
+
+## 2026-11-20 (potential-capture, follow-up 4) — an independent review's findings
+
+Each finding was checked before it was changed; details and numbers in `potential_background.md` section 5.10.
+1. **Energy table across a narrow resonance** of the background's potential (reproduced: up to 21 % at E_cm = 0.30 MeV
+   for an s1/2 depth of 100 MeV): a background entrance wave is now integrated directly, never from the table (table on
+   = table off to every digit); `intEC.dat` signature mark "background direct v3" for such pairs only. Test: check.sh 8.
+2. **Closed entrance wave with a background** (confirmed: a factor 2.44 jump at the threshold): normalised by the
+   dressed W̃_d(a), exterior and interior part. Test: check.sh 9 (continuity through the threshold of a second pair).
+3. **API**: `channel_functions` J-aware for a `wave` with a J, all of F, G, P, S, phase dressed together;
+   `nuclear_potential().waves`; `Session.potential_box_states`, `Session.potential_bound_state` (rows of
+   `describe()["functions"]`). Test: `pyazr_potential_api`, `pyazr_session_functions` (nine rows). Not exposed: the
+   potential's own a0.
+4. **describe**: waves in the text and the JSON.
+5. **The NaN LM step**: the exact cause not identified (the project is not used here); the exact pole of R_pot (inf/inf)
+   and the rounding of S̃ − B in W̃_d/W̃ are defined now; tested exactly at a bisected pole.
+6. Node count includes the last interval; E_p bisected to the last bit and a 1 keV window around a subtracted pole
+   (R0 and the capture kernel the line through its edges); the written-ANC label for an amplitude; the binding rule
+   only for a final channel a capture wave reaches; set-up refusals of `subtract n` without such a state and of a
+   background beyond the matching radius, a warning for a `wave` that is no channel.
+7. **Behaviour change for the owner (James)**: since follow-up 2 a parameter file (`--parameter-file`, `param.sav`)
+   with a non-finite value (`nan`, `inf`) is refused for every model, not only for potentials (exit 1, the line named;
+   `reference/command_line.rst`). Before, it was applied and the first evaluation aborted.
+Not done: the end-to-end test of `subtract` with capture (needs the internal γ-amplitude convention written as the box
+state's overlap); tested at the kernel level.
+Run: build 0 warnings; `ctest -LE slow -j4` 399/401 (rmfit_enginepin, this machine; pyazr_ui_node, a session-function
+row without a starting J, fixed and rerun with the UI, session-function, potential-API, describe, consistency and docs
+tests: 24/24); `tests/run_tests.sh` (4 threads) passed 187, failed 0; `tests/potential_capture/check.sh` (sections 8, 9
+new) and `tests/potential_background/check.sh` pass; the closed-channel check with the undressed W~(a) restored in a
+scratch rebuild shows the 2.44 jump.
+
+## 2026-11-20 (potential-capture, follow-up 3) — `only bound_state`: a wave's potential for the bound-state shape alone
+
+From a test on an evaluation project: `capture interior` needs a binding depth in the final-state waves, and that depth
+also changed those waves' channel functions beyond a_c (their elastic χ² rose about fourfold). New opt-in qualifier on
+the `wave` field: `wave l <l> [J <J>] depth <V> MeV only bound_state`. Decided (potential_background.md section 5.9):
+the wave's channel functions are the point-Coulomb ones (waves, shift function, decaying solution W, so the levels'
+ANC/γ and N_f too), exactly as with no potential in the wave; for a capture final state the exterior stays the
+Whittaker function times the fitted ANC and the interior is the potential's eigenfunction continued in value at a_c
+(the derivative jumps; the note prints both log-derivatives); the 1 keV rule uses the potential's own eigenvalue and the
+printed own ANC its own exterior (`PotentialBoundStateANC`); the entrance waves are unchanged. Refused with
+`background` on the same wave and when no wave of the potential has `capture interior`. `--describe` now lists a
+potential's waves (only for a potential that has them). Absent: every output bit-identical (the potential's key gets a
+mark only when set).
+Tests (`tests/potential_capture/check.sh` section 7; synthetic): p-wave phase shifts and p levels identical to the
+model without a potential (and different without the qualifier); capture equal to the potential-in-the-p-waves result
+to 7.5·10⁻⁵ at a_c = 8 fm, 6.8·10⁻² apart at 4.87 fm (table in 5.9: 0.18 at 4.0 fm, 1·10⁻³ at 7 fm; total σ at 20 keV
+within 0.25 %); refusal with the binding depth and the own ANC 4.09316 fm⁻¹ᐟ² (scipy 4.0931604450); --validate,
+--describe, pyazr round trip. `experiment_build` cases. Not done: an edit of the qualifier through pyazr's Project API
+beyond the unedited round trip; GUI/web forms.
+Run: build 0 warnings; `ctest -LE slow -j4` 399/400 (rmfit_enginepin, this machine; potential_capture with section 7
+passes); `tests/run_tests.sh` (4 threads) passed 187, failed 0.
+
+## 2026-11-20 (potential-capture, follow-up 2) — a non-finite parameter is a failed evaluation, not an abort
+
+Reported from a fit with a potential background: an LM step produced a non-finite parameter, the channel functions got
+eta = rho = NaN, the Coulomb functions threw, the hybrid pair's "fallback to standard Coulomb" threw again, and the
+program ended with an uncaught std::runtime_error. Reproduced here on a synthetic model
+(`tests/potential_background/models/fit_level.azr`, a NaN start value read from a parameter file): `fit --use-lm` and
+MIGRAD both abort, **and so does the same model without a potential** -- the defect is general, not of the background.
+Cause: nothing stopped a non-finite parameter vector before the evaluation (a parameter file's "nan" was read by
+strtod and applied; an LM step x + dx with dx = NaN passes the clamp std::min/max). Fix: `AZURECalc::FiniteVector`;
+`operator()` returns the χ² ceiling (1e100) the minimizers already get for a non-finite χ², `Chi2Value` NaN (LM: not a
+decrease), `ResidualJacobian` and `ResidualsOnly` false (the fitters' failure path), all before evaluating; LM treats
+a non-finite step as a failed solve (more damping); a parameter file with a non-finite value is refused when read
+(exit 1, naming the line; `command_line.rst`). No state added; finite vectors are evaluated exactly as before. Test:
+`nonfinite_step` (ctest, `tests/reference/nonfinite_step_test.cpp`): both models, NaN/±∞ in the level energy and width
+→ ceiling, NaN, false, false, no exception; the file refusal. With the guard disabled in a scratch rebuild it fails
+(the NaN and +∞ cases throw the reported "Coulomb functions failed ... eta = nan, rho = nan"; −∞ and a non-finite
+width were even evaluated to a finite χ², 90.15). Not done: a real LM run that produces a NaN step (no synthetic
+model was found that does; the LM branch is covered through `Chi2Value`, which now returns NaN for such a step).
+Run: build 0 warnings; `ctest -LE slow -j4` 399/400 (rmfit_enginepin, this machine; `nonfinite_step` and
+`potential_capture` pass); `tests/run_tests.sh` (4 threads) passed 187, failed 0; the CLI with a "nan" start value
+now ends with "ERROR: ... the value of energy_1 is nan, not a finite number" (exit 1) instead of an abort.
+
+## 2026-11-20 (potential-capture, follow-up) — the external-capture energy table through a pole of the interior R-function
+
+A defect reported on another project, present on the parent branch: with a background in the entrance waves the
+capture depended on B_bg above E_cm ≈ 6 MeV (factors up to 50; a_c = 4.87 fm), but not with `--no-ec-table`. Cause:
+`ECTable` tabulated the integral divided by the *dressed* √P̃ (hard-sphere term) or e^{−iφ̃} (channel capture), which
+vanish or jump by π at a pole of R⁰ (a box state of the potential, here the s wave at E_cm = 7.59 MeV), so the
+interpolated quotient was wrong over several per cent of E around it. Fix: for a wave with a background the factor is
+made of the undressed waves (e^{+iφ̃}√P and e^{−iφ}), smooth through the pole; the dressing is applied exactly at the
+energy; `intEC.dat`'s signature gets a mark for a pair with a background. Nothing changes for a wave without one.
+After: 4 radii × 2 B_bg × table on/off agree to 2.1·10⁻⁶ from 0.02 to 9 MeV, and with the independent reference;
+the elastic channel functions were never affected (evaluated, not interpolated: phase shifts B_bg-independent to 11
+digits within 10⁻¹¹ MeV of the poles). `tests/potential_capture/check.sh` now runs to 9 MeV with the B_bg and
+table-off cases and is a ctest (`potential_capture`). Details: `docs/upgrade/potential_background.md` section 5.8.
+Run: build 0 warnings; `ctest -LE slow -j4` 398/399 (rmfit_enginepin, this machine); `tests/run_tests.sh` (4
+threads) passed 187, failed 0; the check with the old reduction restored in a scratch rebuild fails 4 of its items (off
+by up to a factor 28 at 7.5 MeV), with the fix it passes.
+
+## 2026-11-20 (potential-capture, research branch `feature/upgrade-9-potential-capture`) — the interior direct capture of a potential background
+
+Side branch (from `feature/upgrade-9-potential-background` at `61bdb6a8`), for the PI; not merged, not pushed. Design,
+the PI's approval of its two rules (2026-11-20, "Ok to both") and results: `docs/upgrade/potential_background.md`
+section 5 (5.7 the numbers).
+
+**What was built.** `wave ... background interior boundary <B> [subtract <n>] capture interior` (new key `capture` of
+the `wave` field; `E_POTENTIAL_WAVE` without a background). Model: the potential's box poles are levels with fixed
+particle and γ amplitudes; the interior wave they carry is the potential's interior response driven by the surface term
+D = ρu' − B_bg u of the channel's full wave at a_c (the dressing keeps D), g_E(r) = R_pot φ_E(r) − Σ_subtracted γ_p²
+φ_p(r)/(E_p − E); with no levels this is the potential's scattering wave, continuous in value and derivative. Fitted
+levels keep their γ widths. The final state inside a_c: the potential's bound state of the final (l, J) at the level's
+energy, normalised to continue W̃ × ANC; the potential must bind within 1 keV of the level's energy, else the set-up
+refuses and prints the depth that would; the set-up prints the potential's own ANC next to the written one.
+`physics/HybridPotential.h`: `InteriorCaptureIntegral`, `SubtractedBoxStates` (shared with `BackgroundR`),
+`NearestEigenvalue`, `DepthBindingAt`, `BoundMatching`, `InteriorNormIntegral`; `IntegrateOutward` now reads a grid
+routine with the same arithmetic. Engine: `ECIntegral::AddInteriorCapture` (adds K D W̃_f(a) to FW, GW; open and
+closed entrance channel), `CheckInteriorCaptureFinalState` (`ExternalCaptureFinalStates.cpp`). Gradient: no change
+needed (the integrals are constants of the level parameters; `AZURE_GRAD_CHECK` 2.7e-10).
+
+**Tests.** `physics_potential_capture` (ctest: the kernel against closed forms of the zero potential, 3e-9, with a
+subtracted pole 1.2e-6; the eigenvalue of VD p3/2 against scipy, 5e-7 MeV; the depth that binds). `tests/potential_capture/
+check.sh`: 3He(α,γ)7Be with VD as a pure potential model in the engine = `make_reference.py` (scipy/mpmath, 0 to ∞,
+not the engine) to 6.7e-7 at a_c = 3.5, 4.0, 4.87, 5.5 fm, radii agreeing to 5.6e-7; without `capture interior` the
+same model misses by 9-45 % and depends on a_c (the test can fail); the refusal; the gradient; threads.
+`experiment_build`: the field's cases. S34(0) of the model 0.483 keV b (engine masses: VD binds p3/2 at 1.455 MeV);
+with the paper's constants the reference reproduces its B = 1.5866 MeV, C = 4.34 fm⁻¹ᐟ² and its Fig. 6(a) VD curve.
+
+**Run.** Build `work/b-u9-potential-capture`, 0 warnings. `ctest -LE slow -j3`: 396/398 on the first engine build
+(upgrade_predictions: it lists every `.azr` under `tests/`, so the new models are kept as `.azr.in`, and it passes;
+rmfit_enginepin: this machine, no installed `.so`, as on the parent branch); after the last changes the affected tests
+(physics_potential_*, experiment_build, experiment_schema, pyazr_schema, repo_consistency, upgrade_predictions) and
+`tests/potential_capture/check.sh` pass. `tests/run_tests.sh` (4 threads) on that engine: passed 187, failed
+0 (the parent's 186 and `potential_capture`). **Not run**: `ctest -L slow`, the GUI build (no `gui/` or `api/front/`
+change), a comparison of two engines (nothing moves without the field: the potential's key and the arithmetic of
+`IntegrateOutward` and `BackgroundR` are unchanged, and `run_tests` and `tests/potential_background/check.sh` pass).
+
+**Open.** Levels on top with measured capture data (how much a_c dependence they bring back); M1/E2 against an
+independent calculation (the code takes them, untested); the closed-entrance branch (built, untested); an unbound
+final state and a final state in a background wave stay refused; the VD depth does not bind 7Be at 1.5866 MeV with the
+projects' masses (84.13 MeV would).
+
+## 2026-11-20 (potential-background, research branch `feature/upgrade-9-potential-background`) — the interior R-function of a potential as an R-matrix background
+
+Side branch for the PI (not to be merged without his word). Design note and results: `docs/upgrade/potential_background.md`
+(status line at its top). Base `8aa3d8ed`.
+
+**What was built.** `physics/HybridPotential.h`: the regular solution integrated outward (the one Numerov recurrence,
+`NumerovNext`, now shared with the inward integration), R_pot = 1/(a u'/u − B), its box states (poles, residues,
+nodes), the background with named box states subtracted, the dressing of the waves at a_c (Eq. (9): a real map of
+determinant 1), the dressed S and ANC factor below threshold, a depth and a Gaussian width per partial wave. Record:
+`wave l <l> [J <J>] [depth <V> MeV] [width <r0> fm] [background interior boundary <B> [subtract <n>]]` in the `potential`
+record (`E_POTENTIAL_WAVE`). Engine: one place for the open channels, `CoulFunc::ChannelWaves` (P, S, S′, S″, the
+hard-sphere phase, the EC phases at a_c); `ShftFunc` and `ParticleChannelValues` below threshold; an EC final state in
+a background wave and the scattering-length threshold formula for an s wave with a background are refused. Off unless
+a `wave ... background` field is given; with no `wave` field the potential's key and every output are unchanged.
+
+**Tests.** `physics_potential_background` (closed forms 5e-9-8e-7, point Coulomb vs mpmath 3e-8, the identity U of
+the pure potential problem from R_pot + exterior = e^{2iδ} of scipy to 2.4e-7 for a_c = 3-6 fm, l = 0-3; S̃ continuous
+through threshold); `tests/potential_background/check.sh` (engine phase shifts = scipy's to 7e-6° at two radii; the
+potential's own bound state as a level with its pole subtracted restores the potential to 1e-4° at a_c = 4.0 and 5.5 fm;
+gradient 9e-10; threads); `experiment_build` cases. Every check passes.
+
+**Run.** Build `work/b-u9-potential-background`, 0 warnings. `ctest -LE slow -j4`: 394/397 on the first engine commit
+(repo_consistency: a check.sh awk bound, fixed; upgrade_predictions: lines of the new models, written; rmfit_enginepin:
+this machine, as in the director's runs); after the fixes the affected 28 tests, and after each later commit the
+physics, experiment and the new check, pass. `tests/run_tests.sh` (4 threads) on the final engine build: passed 186, failed 0.
+**Not run**: `ctest -L slow`, the GUI build (no `gui/` or `api/front/` change), the comparison of two engines (no output
+can move without a `wave` field: the potential's key and the arithmetic are unchanged; `run_tests` is the evidence).
+
+**Results (synthetic, ³He + ⁴He; EXFOR returned HTTP 403, so no measured data).** With no level in a partial wave the
+background removes the a_c dependence exactly; the model dependence moves to the choice of potential (five published
+potentials that fit the s-wave phase shifts give a₀ = 24.2-31.0 fm). With a free background pole, data at 0.7-4 MeV give
+a₀ = 27-43 fm over a_c = 3.5-6 fm (truth 31.0), and data from 2.5 MeV give 26.7-38.2 fm over fits that are all
+acceptable. A level on top of a wrong potential brings the a_c dependence back (and a near-threshold level leaves a₀
+undetermined: 28-180 fm along a flat χ² valley). The fitted 1/2⁺ and 5/2⁺ background poles follow the box poles of the
+potential's interior R-function (θ² 1.3-2.4, moving 2-3 MeV per 0.5 fm); none of the potentials has a 1/2⁺ or 5/2⁺
+resonance below E_c.m. = 15 MeV.
+
+**Open.** Interior direct capture (needed before a capture project can use the background; hence no S(0) result);
+the test on measured data; the depth as a fit parameter; pyazr/GUI forms; `LineWindow` with a background final state;
+the existing scattering-length formula ignores the hybrid exterior for every hybrid pair (pre-existing, not changed);
+the VD p₃/₂ depth binds at 1.455 MeV with the engine's masses, not the paper's 1.5866 MeV (cause not found).
+Research files (not in the repository): `work/u9-potential-background/` (scripts, runs, results, the driver
+`tools/potdrive.cpp` linked against the build's `libazure2_physics.a`).
+
 ## 2026-11-20 (director) — round 8 joined: the Physics tab, the polish, the Overview page, changes on disk
 
 Merged into `feature/upgrade-6` after `0bab4c51`: `feature/upgrade-8-physqt`, `-polish`, `-overview` (their entries

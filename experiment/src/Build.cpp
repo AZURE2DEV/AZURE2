@@ -966,6 +966,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   build::BuildChannelRadii(c);
   build::BuildIsospin(c, levels);
   if (options.setUpChecks) build::CheckFinalStates(c, levels);
+  if (options.setUpChecks) build::CheckFinalStateBackgrounds(c, levels);
   build::CheckUnboundFinalStates(c, levels);
   NameParameters(c);
   ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
