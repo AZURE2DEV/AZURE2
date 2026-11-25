@@ -100,11 +100,15 @@ class CoulombTable {
   /// Read a table; returns false (with a reason in error) on any mismatch.
   bool Load(const std::string &path, std::string &error);
 
-  /// Below this the tabulated phase (stored as phi - rho, absolute accuracy about 1e-16 rad) is replaced by the
-  /// exact routine's: relative rounding error of the table phase stays below about 1e-10.
+  /// Below this the tabulated phase (stored as phi - rho, so no better than about 1e-16 rad absolute, and within
+  /// the interpolation error elsewhere) is replaced by SmallPhase's, which keeps the phase's relative accuracy.
   static constexpr double kSmallPhase = 1e-6;
+  /// The hard-sphere phase deep below the barrier from the regular function's power series and the penetrability:
+  /// sin(phi) = F sqrt(P / rho), with logP = ln P.  Relative accuracy that of P; for phi < kSmallPhase, where the
+  /// series has no cancellation.  NaN when the series does not converge (the caller then uses the exact routine).
+  static double SmallPhase(int l, double eta, double rho, double logP);
   /// Table lookup of an open channel; false outside the table.  Counted in `use` (the run's; null: not counted).
-  /// P and S are the table's; so is phi, except below kSmallPhase (deep below the barrier), where it is exact.
+  /// P and S are the table's; so is phi, except below kSmallPhase (deep below the barrier), where it is SmallPhase's.
   bool LookupOpen(int l, double eta, double rho, Open &out, CoulombTableUse *use) const;
   /// Table lookup of a closed channel's shift function; false outside the table.  Counted in `use` as above.
   bool LookupBound(int l, double etaB, double rhoB, double &S, CoulombTableUse *use) const;

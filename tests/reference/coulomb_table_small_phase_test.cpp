@@ -2,8 +2,10 @@
 // the looked-up phase is good to the rounding of rho (about 1e-16 rad) and no better; where phi itself is smaller
 // (alpha+alpha below about 20 keV: phi = 1e-75 at 1 keV) the lookup returned 0 or +-1e-16 and the elastic amplitude
 // exp(-2i phi) - 1 was rounding noise (angle-integrated alpha+alpha elastic at 1 keV: 5e-31 b for 6e-144 b).
-// Below CoulombTable::kSmallPhase the lookup now takes the phase from the exact routine.  Checked on a small table
-// built here: alpha+alpha at a = 3.5 fm from 1 to 200 keV, l = 0..2.
+// Below CoulombTable::kSmallPhase the lookup now takes the phase from CoulombTable::SmallPhase (the regular
+// function's power series and the table's penetrability; about 100 times cheaper than the exact routine, which
+// matters for a heavy target, where most lookups are that deep).  Checked on a small table built here: alpha+alpha
+// at a = 3.5 fm from 1 to 200 keV, l = 0..2, and SmallPhase against the exact routine over the table's range.
 #include "CoulombTable.h"
 
 #include <chrono>
@@ -66,9 +68,34 @@ int main() {
   check(missed == 0, "every point is inside the table");
   check(small >= 25 && large >= 3, "points on both sides of the limit");
   check(positive, "a small phase is positive, never 0 or rounding noise");
-  check(worstSmall < 1e-12, "below the limit the phase is the exact routine's");
+  check(worstSmall < 2e-9, "below the limit the phase agrees with the exact routine's to the accuracy of P");
   check(worstLarge < 1e-9, "above the limit the phase is the table's, within its interpolation");
   check(worstP < 1e-5, "the penetrability is the table's throughout");
+
+  // SmallPhase with the exact P against the exact phase, wherever the phase is below the limit: l = 0..10 over
+  // the default table's range (eta and rho 1e-3..100, eta rho <= 150), on a fixed grid
+  int swept = 0, unconverged = 0;
+  double worstSweep = 0.0;
+  for (int l = 0; l <= 10; ++l)
+    for (int i = 0; i <= 50; ++i)
+      for (int j = 0; j <= 50; ++j) {
+        const double eta = std::pow(10.0, -3.0 + 0.1 * i), rho = std::pow(10.0, -3.0 + 0.1 * j);
+        if (eta * rho > 150.0) continue;
+        const CoulombTable::Open exact = CoulombTable::ExactOpen(l, eta, rho);
+        if (!(exact.phi > 0.0 && exact.phi < CoulombTable::kSmallPhase && exact.P > 1e-250)) continue;
+        if (rho > eta + std::sqrt(eta * eta + l * (l + 1.0))) continue;  // a wrapped phase above the barrier
+        const double series = CoulombTable::SmallPhase(l, eta, rho, std::log(exact.P));
+        if (!std::isfinite(series)) {
+          ++unconverged;
+          continue;
+        }
+        ++swept;
+        worstSweep = std::max(worstSweep, std::abs(series / exact.phi - 1.0));
+      }
+  std::printf("  SmallPhase against the exact routine: %d points, worst relative %.2e, not converged %d\n", swept, worstSweep,
+              unconverged);
+  check(swept > 5000 && unconverged == 0, "the series converges wherever the phase is below the limit");
+  check(worstSweep < 2e-9, "and agrees with the exact routine");
 
   fs::remove_all(dir);
   std::printf(failures ? "FAILED: %d\n" : "PASS\n", failures);
