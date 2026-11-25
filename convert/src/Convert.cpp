@@ -8,6 +8,7 @@
 #include "Build.h"
 #include "OldEra.h"
 #include "OldProject.h"
+#include "azure2/experiment/Build.h"
 #include "azure2/experiment/Json.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
@@ -382,6 +383,31 @@ ConvertResult ConvertToFormat3(const std::string &givenText, const ConvertOption
   if (errors) {
     res.refusal = "the converted project does not validate (" + std::to_string(check.diagnostics.size()) + " diagnostic(s))";
     return res;
+  }
+  // The final states of external capture, as the run's set-up checks them (experiment::ExternalCaptureFinalStates through
+  // the engine's build; data files not required): a project the old program ran can be one this program refuses at
+  // its first run.  Before 2026-10-26 (35793eb3) the engine created a final state that is not a level of <levels> as a
+  // hidden level at the pair's E_x, with a free reduced width of 0.1 MeV^1/2 in each particle channel that no line of
+  // the project held; that level is not written by guess here: the conversion stops with the old reason.
+  {
+    experiment::Format3ReadOptions build;
+    build.projectDir = options.projectDir;
+    build.dataFiles = experiment::DataFiles::NotUsed;
+    const experiment::Format3Project built = experiment::ReadFormat3Text(res.text, build);
+    for (const experiment::Diagnostic &d : built.diagnostics) {
+      const std::string code = d.code;
+      if (code != experiment::codes::kFinalStateNotLevel && code != experiment::codes::kFinalStateShared &&
+          code != experiment::codes::kFinalStateUnbound)
+        continue;
+      res.diagnostics.push_back(d);
+      res.refusal = d.message + " (" + code + ").  An AZURE2 before 2026-10-26 (35793eb3) ran such a project: it created "
+                    "the final state as a hidden level at the pair's E_x, with a free reduced width of 0.1 MeV^1/2 in "
+                    "each particle channel, which no line of the project held (its fit parameters moved the names of "
+                    "every later level).  This program needs the final state as a level of <levels>: add a level of "
+                    "that J^pi at that E_x (its widths fixed, or the values you mean) to a copy of the old project and "
+                    "convert the copy, or switch the external capture of that pair off";
+      return res;
+    }
   }
   res.ok = true;
   return res;
