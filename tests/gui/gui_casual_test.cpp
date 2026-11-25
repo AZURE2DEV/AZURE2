@@ -598,7 +598,15 @@ int main(int argc, char **argv) {
     // Physics > R-matrix: the E_x fields show their whole value
     w.tabs()->setCurrentIndex(w.tabs()->count() - 1);
     if (PhysicsTab *physics = w.findChild<PhysicsTab *>()) physics->showPage(PhysicsTab::RMatrix);
-    Settle(4000);
+    // The page fills its fields when its session has read the project: on a slow machine that takes far more than a
+    // fixed pause, so wait for the two fields (up to 3 minutes) instead.
+    for (int waited = 0; waited < 180000; waited += 500) {
+      Settle(500);
+      int filled = 0;
+      for (QLineEdit *e : w.findChildren<QLineEdit *>())
+        filled += e->isVisible() && (e->objectName() == "sweepFrom" || e->objectName() == "sweepTo") && !e->text().isEmpty();
+      if (filled == 2 && waited >= 3500) break;
+    }
     int cut = 0, fields = 0;
     for (QLineEdit *e : w.findChildren<QLineEdit *>()) {
       if (!e->isVisible() || (e->objectName() != "sweepFrom" && e->objectName() != "sweepTo") || e->text().isEmpty()) continue;
