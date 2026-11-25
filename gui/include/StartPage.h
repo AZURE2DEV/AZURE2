@@ -32,6 +32,8 @@ class StartPage : public QWidget {
   /// "Show expert options" (qt_gui.md section 19.4): the same switch as View > Show Expert Options.
   QCheckBox *expertBox() const { return expert_; }
   void setExpertChecked(bool on);
+  /// A line under the New and Open buttons (the Coulomb table's notice, qt_gui.md section 19.12).
+  void addNotice(QWidget *notice);
 
   /// One line of the examples' manifest (examples/index.json, qt_gui.md section 19.9): a group's heading (project
   /// empty), an entry (one reaction) or a variant of the entry before it.
@@ -62,6 +64,7 @@ class StartPage : public QWidget {
   QWidget *tabNotes_;
   QPushButton *new_, *open_;
   QCheckBox *expert_ = nullptr;
+  class QVBoxLayout *notices_ = nullptr;
 };
 
 #endif

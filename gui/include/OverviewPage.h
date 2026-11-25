@@ -79,6 +79,8 @@ class OverviewPage : public QWidget {
   bool staleShown() const;
   /// The run card shows "No run yet" with its two buttons.
   bool noRunShown() const;
+  /// A line at the end of "What to look at next" (the Coulomb table's notice, qt_gui.md section 19.12).
+  void addNotice(QWidget *notice);
   /// Follow a step's link, as a click does.
   void followLink(const QString &link);
 
@@ -126,6 +128,7 @@ class OverviewPage : public QWidget {
   QScrollArea *scroll_;
   QGridLayout *grid_;
   QFrame *stepsCard_, *projectCard_, *runCard_, *chartsCard_;
+  QVBoxLayout *stepsBox_ = nullptr;
   QLabel *stepsText_, *projectHead_, *projectText_, *levelsTitle_, *projectMore_;
   QPushButton *validity_;
   BarChart *levelBars_;

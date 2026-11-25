@@ -154,15 +154,10 @@ void PythonTools::fillMenu(QMenu *menu, const QString &projectFile) {
     if (!n.trimmed().isEmpty()) warn(start({"import", "ensdf", n.trimmed()}, dir, reason), reason);
   });
   menu->addSeparator();
-  add(tr("Build the Coulomb Table"), tr("python -m pyazr coulomb-table build (about 5 min on 4 threads, 88 MB)"),
-      [=]() {
-        QString reason;
-        warn(start({"coulomb-table", "build"}, dir, reason), reason);
-      });
-  add(tr("Check the Coulomb Table"), tr("python -m pyazr coulomb-table check"), [=]() {
-    QString reason;
-    warn(start({"coulomb-table", "check"}, dir, reason), reason);
-  });
+  // the Coulomb table: the window's own dialog (Run > Build the Coulomb Table..., no Python needed; qt_gui.md 19.12)
+  QAction *coulomb = menu->addAction(tr("Build or Check the Coulomb Table..."));
+  coulomb->setToolTip(tr("The same window as Run > Build the Coulomb Table...: the engine's build, no Python needed"));
+  QObject::connect(coulomb, &QAction::triggered, this, &PythonTools::coulombTableRequested);
   menu->addSeparator();
   add(tr("Open the Web Page of This Project"),
       tr("python -m pyazr ui FILE: the web page on 127.0.0.1, with the samplers (NUTS, emcee) and the band jobs"),

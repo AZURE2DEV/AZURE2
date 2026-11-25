@@ -17,6 +17,7 @@ class RunTab;
 class PlotTab;
 class ThmTab;
 class PythonTools;
+class CoulombTableControl;
 class MCMCTab;
 class DiagnosticsPanel;
 class StartPage;
@@ -87,6 +88,8 @@ class AZURESetup : public QMainWindow {
   /// The MCMC tab, null when the engine has no mcmc command.
   MCMCTab *getMCMCTab() const { return mcmcTab; }
   PythonTools *tools() const { return tools_; }
+  /// The Coulomb table of this computer: its notices (start page, Overview) and its dialog (qt_gui.md section 19.12).
+  CoulombTableControl *coulombTable() const { return coulomb_; }
   DiagnosticsPanel *getDiagnostics() const { return diagnostics; }
   QTabWidget *tabs() const { return tabWidget; }
   StartPage *startPage() const { return startPage_; }
@@ -184,6 +187,7 @@ class AZURESetup : public QMainWindow {
   bool loadedIncludeAllJPi_ = false;  ///< <config> includeAllJPi as read (the Levels tab's box)
   int loadedMaxL_ = 0;                ///< the Levels tab's maximum l as read
   bool running_ = false;
+  CoulombTableControl *coulomb_ = nullptr;
   QThread runThread_;
   RunWorker *worker_ = nullptr;
 

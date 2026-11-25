@@ -208,6 +208,7 @@ void OverviewPage::build() {
   }
   actions->addStretch(1);
   b->addLayout(actions);
+  stepsBox_ = b;
 
   // The project
   projectCard_ = Card(tr("The project"), b, "overviewProject");
@@ -400,6 +401,8 @@ void OverviewPage::changeEvent(QEvent *e) {
 }
 
 void OverviewPage::refreshLater() { refreshTimer_->start(); }
+
+void OverviewPage::addNotice(QWidget *notice) { stepsBox_->addWidget(notice); }
 
 void OverviewPage::setRunning(bool running) {
   running_ = running;

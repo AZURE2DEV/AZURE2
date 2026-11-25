@@ -271,6 +271,9 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   layout->setSpacing(14);
   layout->addLayout(header);
   layout->addLayout(buttons);
+  notices_ = new QVBoxLayout;
+  notices_->setContentsMargins(0, 0, 0, 0);
+  layout->addLayout(notices_);
   layout->addLayout(lists, 1);
   QHBoxLayout *centred = new QHBoxLayout;
   centred->addStretch(1);
@@ -291,6 +294,8 @@ void StartPage::setExpertChecked(bool on) {
   QSignalBlocker block(expert_);
   expert_->setChecked(on);
 }
+
+void StartPage::addNotice(QWidget *notice) { notices_->addWidget(notice); }
 
 void StartPage::setRecent(const QStringList &files) {
   recent_->clear();

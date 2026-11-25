@@ -57,6 +57,7 @@
 #include "PlotTab.h"
 #include "PhysicsTab.h"
 #include "PythonTools.h"
+#include "CoulombTableUi.h"
 #include "RunTab.h"
 #include "ThmTab.h"
 
@@ -194,6 +195,9 @@ AZURESetup::AZURESetup() {
   connect(startPage_, &StartPage::openRequested, this, qOverload<>(&AZURESetup::open));
   connect(startPage_, &StartPage::openFile, this, [this](const QString &file) { open(file); });
   connect(startPage_, &StartPage::expertToggled, this, &AZURESetup::setExpertMode);
+  // the Coulomb table (qt_gui.md section 19.12): one quiet line while runs have none, here and on the Overview
+  coulomb_ = new CoulombTableControl(this);
+  startPage_->addNotice(coulomb_->makeNotice());
   central_ = new QStackedWidget;
   central_->addWidget(startPage_);
   central_->addWidget(tabWidget);
@@ -238,6 +242,7 @@ AZURESetup::AZURESetup() {
   tools_ = new PythonTools(this);
   connect(tools_, &PythonTools::line, runTab, &RunTab::appendLine);
   connect(tools_, &PythonTools::webPageReady, this, [](const QString &url) { QDesktopServices::openUrl(QUrl(url)); });
+  connect(tools_, &PythonTools::coulombTableRequested, coulomb_, &CoulombTableControl::showDialog);
   createActions();
   createToolBar();
   createMenus();
@@ -248,6 +253,7 @@ AZURESetup::AZURESetup() {
   {
     OverviewPage *overview = new OverviewPage(holder_);
     tabWidget->insertTab(0, overview, tr("O&verview"));
+    overview->addNotice(coulomb_->makeNotice());
     connect(holder_, &ProjectHolder::opened, overview, [this, overview]() {
       overview->clearProgress();
       overview->refresh();
@@ -429,6 +435,7 @@ AZURESetup::AZURESetup() {
   projectOpened();
   showProject(false);
   restoreWindowState();
+  coulomb_->refresh();  // the table runs would find now (front::CoulombTableStatus)
   setExpertMode(expert::Enabled());  // the view of the last session (standard the first time)
 }
 
@@ -536,6 +543,17 @@ void AZURESetup::createMenus() {
   for (const QString &name : {"calculate", "fit", "stop"}) runMenu->addAction(actions_[name]);
   runMenu->addSeparator();
   runMenu->addAction(actions_["plot"]);
+  // the Coulomb table without Python (qt_gui.md section 19.12): one dialog for both entries
+  runMenu->addSeparator();
+  QAction *buildTable = runMenu->addAction(tr("&Build the Coulomb Table..."), coulomb_, [this]() {
+    coulomb_->showDialog()->buildButton()->setFocus();
+  });
+  buildTable->setObjectName("buildCoulombTable");
+  buildTable->setStatusTip(tr("Build this computer's Coulomb table once (about 5 min, 88 MB): runs are about 4 times "
+                              "faster with the same results"));
+  QAction *checkTable = runMenu->addAction(tr("C&heck the Coulomb Table..."), coulomb_, &CoulombTableControl::showDialog);
+  checkTable->setObjectName("checkCoulombTable");
+  checkTable->setStatusTip(tr("Where runs look for the Coulomb table and what they find there"));
 
   // View: the look (AzureTheme.h), the tool bar and the Diagnostics
   QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
@@ -886,6 +904,7 @@ void AZURESetup::updateActions() {
   actions_["calculate"]->setEnabled(hasProject_ && idle);
   actions_["fit"]->setEnabled(hasProject_ && idle);
   actions_["stop"]->setEnabled(running_);
+  if (coulomb_) coulomb_->setCalculationRunning(running_);  // no build starts while a run of the window goes on
   actions_["plot"]->setEnabled(hasProject_);
 }
 

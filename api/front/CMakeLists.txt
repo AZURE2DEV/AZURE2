@@ -6,6 +6,8 @@ add_library(azure2_front STATIC src/FrontProject.cpp src/FrontRun.cpp src/FrontS
             src/FrontPhysicsPlots.cpp src/FrontPolish.cpp)
 # The Overview page's calls (docs/upgrade/qt_gui.md section 17).
 target_sources(azure2_front PRIVATE src/FrontOverview.cpp)
+# The Coulomb table of this computer: its state and the command line's build (qt_gui.md section 19.12).
+target_sources(azure2_front PRIVATE src/FrontCoulombTable.cpp)
 target_include_directories(azure2_front PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # PRIVATE: the engine's include directories do not reach a front end; only Engine.h does.
 # AZUREAPI: the parameter vector of a session (ReadParameters, as pyazr's Session sets it up).

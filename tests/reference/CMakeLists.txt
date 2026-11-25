@@ -159,7 +159,7 @@ add_test(NAME coulomb_table_small
                  -DOUT=${CMAKE_CURRENT_BINARY_DIR}/coulomb_table_small.bin
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_table_small.cmake)
 
-# CoulombTable::BuildFile (AZURE2 --build-coulomb-table, the GUI's Build Coulomb Table...):
+# CoulombTable::BuildFile (AZURE2 --build-coulomb-table, the setup program's Run > Build the Coulomb Table...):
 # a small table built, counted, cancelled, and picked up by Shared() after ForgetMissing().
 add_executable(coulomb_table_build_test coulomb_table_build_test.cpp)
 target_link_libraries(coulomb_table_build_test PRIVATE AZURE2Core)

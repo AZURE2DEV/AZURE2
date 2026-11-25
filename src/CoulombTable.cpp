@@ -143,8 +143,8 @@ const CoulombTable *CoulombTable::Shared(const std::string &path, const std::str
         if (path.empty() && !std::ifstream(file.c_str()).good())
           std::cerr << "Coulomb table: none at " << file
                     << "; using the exact Coulomb functions (build one with "
-                       "'AZURE2 --build-coulomb-table' or, in the GUI, Configure > Build Coulomb "
-                       "Table..., about 5 min on 4 threads)." << std::endl;
+                       "'AZURE2 --build-coulomb-table' or, in the setup program, Run > Build the "
+                       "Coulomb Table..., about 5 min on 4 threads)." << std::endl;
         else
           std::cerr << "WARNING: Coulomb table not used: " << error
                     << "; using the exact Coulomb functions. Build one with "
@@ -258,6 +258,14 @@ bool CoulombTable::Build(const BuildSpec &spec) {
   if (order_ == 4)
     for (Sheet &s : sheets_) Derivatives(s);
   return true;
+}
+
+int CoulombTable::DefaultBuildThreads() {
+#ifdef _OPENMP
+  return std::max(1, omp_get_max_threads());
+#else
+  return 1;
+#endif
 }
 
 int CoulombTable::BuildRows(const BuildSpec &spec) {
