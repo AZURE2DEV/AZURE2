@@ -2,6 +2,7 @@
 // the plots each answer offers (the series names are those FrontPhysics.cpp gives), and the last fit's parameter file.
 // No arithmetic: the series' values are the engine's.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <filesystem>
 
@@ -13,6 +14,7 @@ namespace azure2 {
 namespace front {
 
 std::vector<PhysicsCall> PhysicsCalls() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsCall> out;
   auto add = [&out](const char *name, const char *title, const char *doc, const char *axis, bool slow) {
     PhysicsCall c;
@@ -45,6 +47,7 @@ std::vector<PhysicsCall> PhysicsCalls() {
 }
 
 std::vector<PhysicsPlot> PhysicsPlots(const std::string &call) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsPlot> out;
   auto add = [&out](const char *c, const char *name, const char *title, const char *y, const char *yTitle,
                     const char *doc) -> PhysicsPlot & {
@@ -145,6 +148,7 @@ std::string StoppingStatusText(const std::string &name, int status) {
 }
 
 std::string LastParameterFile(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::string dir = experiment::PathToOpen(project.Directory(), project.ConfigValue("output_dir"));
   if (dir.empty()) return std::string();
   if (dir.back() != '/') dir += '/';

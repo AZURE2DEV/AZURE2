@@ -2,6 +2,7 @@
 // (io::ConfigEdits), <levels> (io::LevelRow, io::EditLevelRow) and the record sections (io::ReadRecords,
 // io::WriteRecords), checked by ValidateProjectBytes (AZURE2 --validate).  docs/upgrade/qt_gui.md section 2.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -127,6 +128,7 @@ Project::Project(Project &&) noexcept = default;
 Project &Project::operator=(Project &&) noexcept = default;
 
 bool Project::Open(const std::string &path, Project &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::string bytes;
   if (!ReadBytes(path, bytes)) {
     why = "cannot read " + path;
@@ -142,6 +144,7 @@ bool Project::Open(const std::string &path, Project &out, std::string &why) {
 }
 
 Project Project::FromText(const std::string &text, const std::string &path) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   Project p;
   p.impl_->path = path;
   p.impl_->doc = io::Document::Parse(text);
@@ -175,6 +178,7 @@ std::string Project::Text() const { return impl_->doc.Write(); }
 bool Project::Modified() const { return Text() != impl_->saved; }
 
 bool Project::Save(const std::string &path, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const std::string to = path.empty() ? impl_->path : path;
   const std::string text = Text();
   // a whole file or none: a temporary file beside it, renamed over it
@@ -225,6 +229,7 @@ void Project::SetSectionBody(const std::string &name, const std::vector<std::str
 }
 
 std::vector<ConfigEntry> Project::Config() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::size_t open = 0;
   const io::ConfigSection section = io::ReadConfigSection(io::ConfigLinesOf(impl_->doc, open));
   std::vector<ConfigEntry> out;
@@ -240,6 +245,7 @@ std::string Project::ConfigValue(const std::string &name, const std::string &abs
 }
 
 bool Project::SetConfig(const std::string &name, const std::string &value, std::string &why, bool remove) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::size_t open = 0;
   const std::vector<std::string> lines = io::ConfigLinesOf(impl_->doc, open);
   if (lines.empty()) {
@@ -262,6 +268,7 @@ bool Project::SetConfig(const std::string &name, const std::string &value, std::
 }
 
 std::vector<LevelRow> Project::Levels() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<LevelRow> out;
   for (const std::string &line : SectionBody("levels")) {
     LevelRow row;
@@ -275,6 +282,7 @@ std::vector<LevelRow> Project::Levels() const {
 }
 
 bool Project::SetLevels(const std::vector<LevelRow> &rows, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const std::vector<std::string> old = SectionBody("levels");
   std::vector<std::string> lines;
   for (std::size_t i = 0; i < rows.size(); i++) {
@@ -315,6 +323,7 @@ bool Project::SetLevels(const std::vector<LevelRow> &rows, std::string &why) {
 }
 
 std::vector<Record> Project::Records(const std::string &section) const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<Record> out;
   const io::RecordReadResult read = impl_->Read(section);
   for (const io::Record &r : read.set.records) {
@@ -329,6 +338,7 @@ std::vector<Record> Project::Records(const std::string &section) const {
 }
 
 bool Project::SetRecord(const std::string &section, const Record &record, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const std::vector<std::string> kinds = ex::Schema::KindsOfSection(section);
   if (std::find(kinds.begin(), kinds.end(), record.kind) == kinds.end()) {
     why = "<" + section + "> holds no record of kind '" + record.kind + "'";
@@ -406,6 +416,7 @@ bool Project::SetRecord(const std::string &section, const Record &record, std::s
 }
 
 bool Project::RenameRecord(const std::string &section, const std::string &from, const std::string &to, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   if (!IsToken(to)) {
     why = "a record's name is one token without blanks, quotes or '#': '" + to + "'";
     return false;
@@ -429,6 +440,7 @@ bool Project::RenameRecord(const std::string &section, const std::string &from, 
 }
 
 bool Project::RemoveRecord(const std::string &section, const std::string &name, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const io::RecordReadResult read = impl_->Read(section);
   for (const io::Record &r : read.set.records) {
     if (r.name != name) continue;
@@ -444,6 +456,7 @@ bool Project::RemoveRecord(const std::string &section, const std::string &name, 
 }
 
 bool Project::MoveRecord(const std::string &section, const std::string &name, int delta, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const io::RecordReadResult read = impl_->Read(section);
   const std::vector<io::Record> &records = read.set.records;
   std::size_t at = records.size();
@@ -471,6 +484,7 @@ bool Project::MoveRecord(const std::string &section, const std::string &name, in
 }
 
 Validation Project::Validate() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   Validation out;
   const ProjectValidation v = ValidateProjectBytes(Text(), impl_->path);
   if (!v.notFormat3.empty()) {

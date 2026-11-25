@@ -3,6 +3,7 @@
 // the engine reads it, and the rows of <parameterSettings> and of <mcmc> <parameters> in the grammar of their readers
 // (ParameterLimitsManager::ReadParameterSettings, src/SamplerRun.cpp).
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <cmath>
 #include <cstdio>
@@ -93,6 +94,7 @@ std::string SettingText(const ParameterSetting &r) {
 }  // namespace
 
 bool ReadParameters(const std::string &projectFile, std::vector<Parameter> &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   return ReadParameters(projectFile, std::string(), out, why);
 }
 
@@ -151,6 +153,7 @@ bool ReadParameters(const std::string &projectFile, const std::string &scratchDi
 }
 
 bool ReadParameterFile(const std::string &path, std::vector<ParameterValue> &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   out.clear();
   std::ifstream in(path);
   if (!in) {
@@ -171,6 +174,7 @@ bool ReadParameterFile(const std::string &path, std::vector<ParameterValue> &out
 }
 
 std::vector<ParameterSetting> ParameterSettings(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<ParameterSetting> out;
   const int first = SectionLine(project, "parameterSettings");
   const std::vector<std::string> body = project.SectionBody("parameterSettings");
@@ -184,6 +188,7 @@ std::vector<ParameterSetting> ParameterSettings(const Project &project) {
 }
 
 bool SetParameterSetting(Project &project, const ParameterSetting &row, std::string &why, bool remove) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   const std::vector<std::string> names = Tokens(row.name);
   if (names.empty() || row.name.find('#') != std::string::npos) {
     why = "a parameter setting needs a name without '#'";
@@ -215,6 +220,7 @@ bool SetParameterSetting(Project &project, const ParameterSetting &row, std::str
 }
 
 std::vector<SamplerPrior> SamplerPriors(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<SamplerPrior> out;
   bool in = false;
   for (const std::string &raw : project.SectionBody("mcmc")) {
@@ -237,6 +243,7 @@ std::vector<SamplerPrior> SamplerPriors(const Project &project) {
 }
 
 void SetSamplerPriors(Project &project, const std::vector<SamplerPrior> &rows) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::string> body, block;
   block.push_back("<parameters>");
   for (const SamplerPrior &r : rows)

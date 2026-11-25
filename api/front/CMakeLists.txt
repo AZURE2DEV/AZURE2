@@ -19,5 +19,12 @@ if(BUILD_TESTING)
   add_executable(front_test tests/front_test.cpp)
   target_link_libraries(front_test PRIVATE azure2_front)
   add_test(NAME api_front COMMAND front_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:AZURE2>)
+  # The facade under a decimal-comma numeric locale, without a window: read, check, edit, save, convert give the bytes
+  # of the "C" locale (docs/upgrade/qt_gui.md section 19.10; skipped where the machine has no such locale).
+  add_executable(front_locale_test tests/locale_test.cpp)
+  target_link_libraries(front_locale_test PRIVATE azure2_front)
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/locale_scratch)
+  add_test(NAME api_front_locale COMMAND front_locale_test ${CMAKE_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/locale_scratch)
+  set_tests_properties(api_front_locale PROPERTIES SKIP_RETURN_CODE 77)
   set_tests_properties(api_front PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
 endif()
