@@ -11,6 +11,7 @@
 #include <cmath>
 
 #include "LevelsTab.h"
+#include "ButtonSizes.h"
 #include "PairsTab.h"
 
 QLayout *LevelsTab::buildFilterBar() {
@@ -30,6 +31,7 @@ QLayout *LevelsTab::buildFilterBar() {
   connect(jpiFilter_, qOverload<int>(&QComboBox::currentIndexChanged), this, &LevelsTab::jpiFilterChosen);
   onlyIncluded_ = new QCheckBox(tr("Only included"));
   onlyIncluded_->setObjectName("onlyIncluded");
+  onlyIncluded_->setMinimumWidth(onlyIncluded_->sizeHint().width());  // its label whole under a larger font
   onlyIncluded_->setToolTip(tr("Hide the levels left out of the calculation (Include? off)"));
   connect(onlyIncluded_, &QCheckBox::toggled, this, [this](bool on) {
     levelsModelProxy->setOnlyIncluded(on);
@@ -84,6 +86,9 @@ QLayout *LevelsTab::buildAddBar() {
   bar->addWidget(addNucleus_);
   bar->addWidget(addBarButton_);
   bar->addWidget(duplicateButton_);
+  // the labels of the add bar's buttons stay whole under a larger font (qt_gui.md 19.11)
+  for (QAbstractButton *b : {static_cast<QAbstractButton *>(addBarButton_), static_cast<QAbstractButton *>(duplicateButton_)})
+    b->setMinimumWidth(buttons::TextWidth(b));
   return bar;
 }
 

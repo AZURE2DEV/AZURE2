@@ -14,6 +14,7 @@
 //  (h) an old project of each era converted from the window under a decimal-comma locale: the bytes of the
 //      conversion under "C";
 //  (i) a converted project whose data files are elsewhere: one note with Locate Data Files..., located by name;
+//  (j) the small buttons of the Levels and Pairs tabs keep their labels under an 18 pt font;
 //  (d) the converter's repair of an old line: the old 13N with one data line short of its shift's vary flag; the
 //      window shows the line, its number and the two readings; the first taken and converted again gives the project
 //      the unmodified old 13N gives, byte for byte; the old file is unchanged, the repaired copy beside it, a note says
@@ -59,6 +60,8 @@
 #include <QHeaderView>
 #include <QToolButton>
 #include <QFile>
+#include <QFont>
+#include <QFontMetrics>
 #include <QLineEdit>
 #include <QPushButton>
 #include <fstream>
@@ -902,6 +905,40 @@ int main(int argc, char **argv) {
     bool dataError = false;
     for (const azure2::front::Diagnostic &d : v.diagnostics) dataError = dataError || d.code == "E_DATA_FILE";
     Check(!dataError, "(i) after locating: no E_DATA_FILE");
+  }
+
+  // (j) small buttons under a larger font (the PI: "the NDS text is too big to the button box"): a Levels tab and a
+  //     Pairs tab made with an 18 pt application font; each text button of their rows at least as wide as its label
+  //     (plus one line height of margin) and as high as the style asks
+  {
+    const QFont before = QApplication::font();
+    QFont big = before;
+    big.setPointSizeF(18);
+    QApplication::setFont(big);
+    {
+      LevelsTab levels;
+      PairsTab pairs;
+      levels.resize(900, 700);
+      pairs.resize(900, 500);
+      levels.show();
+      pairs.show();
+      Settle(100);
+      std::string cut;
+      for (QWidget *tab : {static_cast<QWidget *>(&levels), static_cast<QWidget *>(&pairs)})
+        for (QPushButton *b : tab->findChildren<QPushButton *>()) {
+          if (b->text().isEmpty() || !b->isVisibleTo(tab)) continue;
+          const QFontMetrics fm = b->fontMetrics();
+          if (b->minimumWidth() < fm.horizontalAdvance(b->text()) && b->width() < fm.horizontalAdvance(b->text()) + 4)
+            cut += " '" + b->text().toStdString() + "' width " + std::to_string(b->width());
+          if (b->maximumHeight() < fm.height() + 4) cut += " '" + b->text().toStdString() + "' height " + std::to_string(b->maximumHeight());
+        }
+      QPushButton *nds = nullptr;
+      for (QPushButton *b : levels.findChildren<QPushButton *>())
+        if (b->text() == "NDS") nds = b;
+      Check(nds && nds->minimumWidth() >= nds->fontMetrics().horizontalAdvance("NDS") && cut.empty(),
+            "(j) at 18 pt: NDS and the other small buttons of the Levels and Pairs tabs keep their labels whole" + cut);
+    }
+    QApplication::setFont(before);
   }
 
   std::cout << (failures ? "FAILED: " : "ALL PASSED") << (failures ? std::to_string(failures) : "") << std::endl;

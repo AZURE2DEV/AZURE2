@@ -1132,3 +1132,15 @@ not saved); the Diagnostics dock stays closed when those are the only errors.  `
 **Unlisted final states.**  Two projects captured into a photon pair whose final state is no level of <levels>; the
 engine ran such projects until 2026-10-26 (35793eb3) with a hidden level and refuses them since.  The converter now
 refuses them at conversion with that reason (project_format3.md 8.6) instead of writing a file whose first run fails.
+
+### 19.11 Small buttons sized from the font (2026-11-25)
+
+The PI: "the NDS text is too big to the button box".  The Levels tab's "+", "-" and "NDS" had pixel maxima (28x28,
+50x28) and "Fix All Widths", "Fix All Energies", "Export LaTeX" a 28 px maximum height; under a larger application
+font (reproduced at 18 pt, `work/gui-casual/shots/nds_before18/`) the label of "NDS" was cut and the row's buttons
+were lower than the style asks.  `ButtonSizes.h`: the row's height is the larger of 28 px and the style's height of a
+text button at the current font; "+" and "-" are squares of it; a text button is at least as wide as its label plus
+one line height; the same for the Pairs tab's "+" and "-", the add bar's "Add" and "Duplicate", "Only included", and
+the OK buttons of the two information dialogs (their 80x30 maximum removed).  At the usual font the row looks as
+before (shots `nds_after0/`, `nds_after18/`).  Not changed: at 18 pt in a 1280 px window the levels column is narrower
+than its add bar wants (the window would grow on a real screen; offscreen it stays 1280 px).  `gui_casual` (j).

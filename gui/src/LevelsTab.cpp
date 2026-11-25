@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "LevelsTab.h"
+#include "ButtonSizes.h"
 #include "ExpertMode.h"
 #include "RecordExtras.h"
 #include "RecordsPanel.h"
@@ -185,23 +186,18 @@ LevelsTab::LevelsTab(QWidget *parent) :
   connect(channelDetails->wignerButton, SIGNAL(clicked()), this, SLOT(calculateWignerLimit()));
 
   addLevelButton = new QPushButton(tr("+"));
-  addLevelButton->setMaximumSize(28, 28);
   connect(addLevelButton, SIGNAL(clicked()), this, SLOT(addLevel()));
   removeLevelButton = new QPushButton(tr("-"));
-  removeLevelButton->setMaximumSize(28, 28);
   removeLevelButton->setEnabled(false);
   connect(removeLevelButton, SIGNAL(clicked()), this, SLOT(removeLevel()));
   iaeaQueryButton = new QPushButton(tr("NDS"));
-  iaeaQueryButton->setMaximumSize(50, 28);
   iaeaQueryButton->setToolTip(tr("Query NDS database for level schemes"));
   connect(iaeaQueryButton, SIGNAL(clicked()), this, SLOT(addLevelsFromIAEA()));
 
   fixAllWidthsButton = new QPushButton(tr("Fix All Widths"));
-  fixAllWidthsButton->setMaximumHeight(28);
   connect(fixAllWidthsButton, SIGNAL(clicked()), this, SLOT(fixAllWidths()));
 
   fixAllEnergiesButton = new QPushButton(tr("Fix All Energies"));
-  fixAllEnergiesButton->setMaximumHeight(28);
   connect(fixAllEnergiesButton, SIGNAL(clicked()), this, SLOT(fixAllEnergies()));
 
   nucleusFilterCombo = new QComboBox;
@@ -210,9 +206,14 @@ LevelsTab::LevelsTab(QWidget *parent) :
   nucleusFilterCombo->setVisible(false);
   connect(nucleusFilterCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(filterByNucleus(int)));
   exportLatexButton = new QPushButton(tr("Export LaTeX"));
-  exportLatexButton->setMaximumHeight(28);
   exportLatexButton->setToolTip(tr("Export levels and widths to LaTeX table"));
   connect(exportLatexButton, SIGNAL(clicked()), this, SLOT(exportLatexTable()));
+  // the row's buttons sized from the font, not in pixels: "NDS" was cut under a larger font (qt_gui.md 19.11)
+  {
+    const int row = buttons::RowHeight(fixAllWidthsButton);
+    for (QPushButton *b : {addLevelButton, removeLevelButton}) buttons::FitGlyph(b, row);
+    for (QPushButton *b : {iaeaQueryButton, fixAllWidthsButton, fixAllEnergiesButton, exportLatexButton}) buttons::FitText(b, row);
+  }
 
   /*
   mapper = new QSignalMapper(this);

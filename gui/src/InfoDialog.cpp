@@ -17,7 +17,7 @@ InfoDialog::InfoDialog(const QString &string,
   textEdit->setHtml(string);
 
   QPushButton *okButton = new QPushButton(tr("OK"), this);
-  okButton->setMaximumSize(80, 30);
+  okButton->setMinimumWidth(80);  // the label from the font; no pixel maximum (qt_gui.md 19.11)
 
   QVBoxLayout *layout = new QVBoxLayout(this);
   layout->addWidget(textEdit);

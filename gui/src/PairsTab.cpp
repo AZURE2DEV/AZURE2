@@ -14,6 +14,7 @@
 #include <QInputDialog>
 #include <QTabWidget>
 #include "PairsTab.h"
+#include "ButtonSizes.h"
 #include "RecordExtras.h"
 #include "LevelsTab.h"
 #include "LevelsViews.h"
@@ -83,10 +84,8 @@ PairsTab::PairsTab(QWidget *parent) :
   for (int i = 0; i < pairsModel->columnCount(QModelIndex()); i++) pairsView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
 
   addButton = new QPushButton(tr("+"));
-  addButton->setMaximumSize(28, 28);
   connect(addButton, SIGNAL(clicked()), this, SLOT(addPair()));
   deleteButton = new QPushButton(tr("-"));
-  deleteButton->setMaximumSize(28, 28);
   deleteButton->setEnabled(false);
   connect(deleteButton, SIGNAL(clicked()), this, SLOT(removePair()));
   duplicateButton = new QPushButton(tr("Duplicate"));
@@ -94,6 +93,8 @@ PairsTab::PairsTab(QWidget *parent) :
   duplicateButton->setToolTip(tr("A copy of the selected pair in the pair dialog, to change into another pair (Ctrl+D)"));
   duplicateButton->setEnabled(false);
   connect(duplicateButton, &QPushButton::clicked, this, &PairsTab::duplicatePair);
+  // "+" and "-" squares of the row's height, from the font (qt_gui.md 19.11)
+  for (QPushButton *b : {addButton, deleteButton}) buttons::FitGlyph(b, buttons::RowHeight(duplicateButton));
   {
     auto *s = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), pairsView);
     s->setContext(Qt::WidgetShortcut);
