@@ -376,7 +376,8 @@ Available Options
      - Build the Coulomb table with the default specification on all OpenMP
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
        report progress in steps of 10 % and exit; no project file is needed.
-       The same build as **Configure → Build Coulomb Table...** in the GUI.
+       The same build as **Run → Build the Coulomb Table...** in the setup
+       program (which takes at most 4 threads).
    * - ``--convert``
      - ``--convert OLD NEW [--json-report R] [--answers A] [--exact-grids] [--strict]
        [--allow-questions]``: write the old project ``OLD`` (format 1 or 2) in project format 3

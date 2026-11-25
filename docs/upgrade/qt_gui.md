@@ -112,8 +112,8 @@ reader would refuse is refused with its message.  The THM tab draws its forms fr
 
 ## 8. The Tools menu: pyazr as a child process
 
-ENDF-6 export and import, EXFOR and ENSDF imports, the Coulomb table and the web page live in pyazr (Python); the
-GUI does not re-implement them.  `PythonTools` starts `<python> -m pyazr <command>` with `QProcess`, its output in
+ENDF-6 export and import, EXFOR and ENSDF imports and the web page live in pyazr (Python); the GUI does not
+re-implement them.  (The Coulomb table's entry opens the window's own dialog since section 19.12.)  `PythonTools` starts `<python> -m pyazr <command>` with `QProcess`, its output in
 the log pane, the interpreter a setting of the computer (`QSettings`, Configure > Directories), every item disabled
 with the reason when `import pyazr` fails.  The web page is `python -m pyazr ui FILE --json` (127.0.0.1; the URL
 from its JSON line), stopped with the window.  The samplers (NUTS, emcee) and the band jobs are no commands of the
@@ -1144,3 +1144,41 @@ one line height; the same for the Pairs tab's "+" and "-", the add bar's "Add" a
 the OK buttons of the two information dialogs (their 80x30 maximum removed).  At the usual font the row looks as
 before (shots `nds_after0/`, `nds_after18/`).  Not changed: at 18 pt in a 1280 px window the levels column is narrower
 than its add bar wants (the window would grow on a real screen; offscreen it stays 1280 px).  `gui_casual` (j).
+
+### 19.12 The Coulomb table in the window (2026-11-25)
+
+The PI approved: say in the window that the table can be built, and build it without Python.  Before, the window
+named the table nowhere in standard view: the Tools menu (hidden in standard view) started `python -m pyazr
+coulomb-table build`, and the engine's stderr line pointed to a menu entry "Configure > Build Coulomb Table..." that
+this window does not have.  A user without the table runs about 4 times slower with the same results.
+
+- **State** (`front::CoulombTableStatus`, `api/front/src/FrontCoulombTable.cpp`): the path from
+  `CoulombTable::DefaultPath` (the engine's rule, not a copy: `$AZURE2_COULOMB_TABLE`, else
+  `~/.azure2/coulomb_table.bin`), whether a file is there and whether `CoulombTable::Shared`, the loader the runs
+  call, takes it (so a usable table is read once and kept for the runs).  A file the loader refused is loaded once
+  more on its own to give the reason; a file that loads now although the loader found none before (put there
+  since) is handed back to it with `ForgetMissing`.
+- **Build** (`front::BuildCoulombTable`): `CoulombTable::BuildFile`, the routine of `AZURE2 --build-coulomb-table`
+  (written as `<path>.new`, renamed when whole; on cancel nothing is left), with the row counter and the cancel flag
+  of `BuildSpec`; threads `CoulombTable::DefaultBuildThreads()` (new accessor, the CLI now calls it too: every
+  OpenMP thread) capped at 4.  After a success `CoulombTable::ForgetMissing()` (it existed; no new state): a path the
+  loader failed on in this process is tried again, so the next run uses the table.
+- **Window** (`gui/src/CoulombTableUi.cpp`): `CoulombTableNotice`, one line (`role=hint`, the placeholder colour,
+  never red) with `Build...`, on the start page and at the end of the Overview's "What to look at next", hidden once
+  the table is usable; `CoulombTableDialog` (not modal: the path and the state, `Build` / `Build Again`, a progress
+  bar from the row counter polled every 200 ms, `Cancel Build`), the build in a `QThread` holding a shared job (the
+  dialog's destructor cancels and waits); `CoulombTableControl`, owned by the window, keeps the notices in step and
+  knows whether a run of the window goes on (`AZURESetup::updateActions`): no build starts during a run; a run started
+  during a build calls the loader, finds no file and runs without the table.  Menus: Run > Build the Coulomb
+  Table... and Run > Check the Coulomb Table... (standard view); Tools' entry opens the same dialog.
+- **Engine text**: the stderr line of a run without the table names Run > Build the Coulomb Table....
+- **Test** `gui_coulomb` (37 checks; HOME an empty folder of the build tree and `AZURE2_COULOMB_TABLE` unset, set by
+  the test before the engine reads the environment): the line and its button on both pages, the menu entries in
+  standard view, a file that is no table named with the loader's reason, no build during a calculation, a 2004-row
+  build that advances and is cancelled leaving neither file, a small table (l <= 2, eta 0.1-3, rho 0.1-10, 30 per
+  decade) built from the dialog and then used by a calculation of T1 in the same process (the run's "N lookups" line,
+  absent before).  Shown to fail without `ForgetMissing` (4 checks).  The other gui tests were run once with an empty
+  HOME (as CI) and pass with the line showing.
+- **Not done**: `std::rename` over an existing file fails on Windows, so Build Again over a table there would say
+  "could not write" (the CLI's routine, unchanged; engine code).  Check shows the loader's facts; it does not compare
+  the table with the exact routine (`azure2-coulomb-table validate` does).

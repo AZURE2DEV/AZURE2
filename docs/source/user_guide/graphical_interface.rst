@@ -39,6 +39,24 @@ project opens it; an ``.azr`` file dropped on the window is opened too.
 ``File > Close Project`` returns to the start page. What each tab is for is its
 tab's tool tip.
 
+While this computer has no Coulomb table (the file runs look for:
+``AZURE2_COULOMB_TABLE`` if set, else ``~/.azure2/coulomb_table.bin``), the
+start page and the Overview show one quiet line: "Coulomb table not built:
+calculations run slower. Build it once for this computer (about 5 min,
+88 MB)", with a ``Build...`` button; a file there that cannot be read is named
+with the reason instead. The button and **Run > Build the Coulomb Table...**
+open one window (not modal): where the table goes, ``Build``, a progress bar
+and ``Cancel Build``. It builds with the command line's routine
+(``AZURE2 --build-coulomb-table``) on the command line's thread count but at
+most 4, writes the file under a temporary name and renames it when whole (a
+cancelled build leaves nothing), does not start while a calculation of the
+window runs, and a calculation started during a build runs without the table.
+Afterwards the line goes and the next calculation uses the table, with the
+same results (:doc:`configure_menu`, "Coulomb functions from a table").
+**Run > Check the Coulomb Table...** shows what runs find there (l range, nodes
+per decade, size). No Python is needed; the Tools menu's entry opens the same
+window.
+
 Opening a project never shows a box: what there is to know about it (the
 engine's check: errors and warnings; what the converter assumed for an older
 project; a ``<levels>`` the Levels tab could not read) is one bar under the tool
@@ -618,12 +636,12 @@ What lives in ``pyazr`` and not in the engine is started from ``Tools`` as
 output appears in the Calculate tab's log: Export ENDF-6 (``endf write``),
 Import an ENDF-6 Evaluation as a New Project (``endf to-project``), ENDF-6
 File Summary, Import an EXFOR Data Set (``import exfor``), ENSDF Levels of a
-Nuclide (``import ensdf``), Build and Check the Coulomb Table
-(``coulomb-table``), and Open the Web Page of This Project (``pyazr ui``,
+Nuclide (``import ensdf``), and Open the Web Page of This Project (``pyazr ui``,
 served on 127.0.0.1 and opened in the browser; it stops with the window). The
 Python interpreter is set in ``Configure > Directories`` (a setting of this
 computer, ``python3`` by default); when it cannot import ``pyazr`` every item
-is disabled and says why. The pyazr samplers (NUTS, emcee) and band jobs are
+is disabled and says why, except Build or Check the Coulomb Table, which opens
+the window's own dialog (see "The window" above; no Python). The pyazr samplers (NUTS, emcee) and band jobs are
 not commands of pyazr's command line: they are in the web page and in Python.
 
 From the command line and Python

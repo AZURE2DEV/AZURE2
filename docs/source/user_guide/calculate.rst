@@ -173,29 +173,41 @@ The minimizer selection is only available for fitting modes.
 Parameter and Integral Files
 ----------------------------
 
-**Parameters File**
-   - **Create New Parameters File** (default) -- use the parameters currently
-     entered in the GUI.
-   - **Use** -- load parameters from a previously saved file (e.g., ``param.sav``
-     from a completed fit).
+**Parameter file** (``--parameter-file=FILE``)
+   Blank (the default): the run starts from the parameters of the project
+   (the Levels tab and the data sets' normalizations and shifts).  A file,
+   e.g. the ``param.sav`` of a completed fit, starts it from that file's
+   values instead.
 
-**External Capture Integrals File**
-   - **Create New Integrals File** (default) -- compute the external capture
-     integrals from scratch.
-   - **Use** -- load a previously computed integrals file (``intEC.dat``) to
-     speed up calculations.  Since the integrals come from energy tables
-     (:doc:`../developer/ec_table`), a new file takes seconds even for
-     convolved or target-integrated capture data, and the run log reports
-     ``External capture table: N integrals, M computed at table nodes``.
+**External capture integrals**
+   The window offers no choice here.  A run of the window (or of ``AZURE2
+   <command>``) computes the external capture integrals and writes them to
+   ``intEC.dat`` (``intEC.extrap`` for a run without data) in the output
+   directory.  Since the integrals come from energy tables
+   (:doc:`../developer/ec_table`), this takes seconds even for convolved or
+   target-integrated capture data; the run log reports ``External capture
+   table: N integrals, M computed at table nodes``.  To read the integrals of
+   an earlier run instead, name its file in the expert view's
+   ``--capture-amplitudes`` field (the command line's
+   ``--capture-amplitudes=FILE``); a ``pyazr`` session reuses the
+   ``intEC.dat`` of its output directory by itself.
 
    .. note::
 
-      The integrals file can be reused as long as the calculation segments,
-      channel radii, :math:`J^\pi` values and integration grids (target
-      effects) have not changed. Level energies, widths, and ANCs can be
-      changed freely. AZURE2 verifies this against the signature it keeps in
-      ``intEC.dat.sig`` and recomputes, with a warning, a file that does not
-      match (see :doc:`../reference/output_files`).
+      A file of integrals is used only if it still belongs to the project:
+      AZURE2 compares it with the signature kept beside it in
+      ``intEC.dat.sig`` (the calculation segments, channel radii,
+      :math:`J^\pi` values and integration grids of the target effects; level
+      energies, widths and ANCs can be changed freely) and recomputes, with a
+      warning, a file that does not match or holds the wrong number of
+      integrals (see :doc:`../reference/output_files`).
+
+**The Coulomb table**
+   Not a choice of the run either: every run uses the Coulomb table of this
+   computer when there is one (:doc:`configure_menu`, "Coulomb functions from
+   a table").  While there is none, the start page and the Overview say so in
+   one line with a ``Build...`` button; **Run > Build the Coulomb Table...**
+   builds it once (about 5 minutes, 88 MB) with a progress bar and Cancel.
 
 Execution Controls
 ------------------
