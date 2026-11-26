@@ -59,9 +59,53 @@ void FoldBoth(const Kernel &k, const KernelParameters &p, const KernelPoint &poi
   for (const auto &t : form.Terms()) fromWeights += t.second * values[t.first - 1];
 }
 
+
+/// The value of a form on `values` (node j at values[j - 1]); a node listed twice counts twice.
+double Evaluate(const LinearForm &form, const std::vector<double> &values) {
+  double sum = 0.0;
+  for (const auto &t : form.Terms()) sum += t.second * values[t.first - 1];
+  return sum;
+}
+
+/// LinearForm against plain arithmetic: the same expression built on doubles and on forms, in the shapes the
+/// kernels use (interpolations of two nodes, scaled, summed over a window that moves up, down and apart).
+void LinearFormArithmetic() {
+  std::printf("the linear form\n");
+  const int n = 400;
+  std::vector<double> values(n);
+  for (int j = 0; j < n; j++) values[j] = std::sin(0.37 * j) + 0.01 * j;
+  auto node = [&](int j) { return values[j - 1]; };
+  double want = 0.0;
+  LinearForm got = 0.0;
+  // windows of interpolated values: upward, downward (the low end grows), disjoint from the sum so far, overlapping
+  const int starts[] = {200, 150, 320, 10, 190};
+  for (int w = 0; w < 5; w++) {
+    double inner = 0.0;
+    LinearForm innerForm = 0.0;
+    for (int i = 0; i < 40; i++) {
+      const int j = (w == 1) ? starts[w] + 40 - i : starts[w] + i;
+      const double f = 0.1 + 0.02 * i, weight = 1.0 / (1.0 + i);
+      inner += (node(j) * (1.0 - f) + node(j + 1) * f) * weight;
+      innerForm += (LinearForm::Unit(j) * (1.0 - f) + LinearForm::Unit(j + 1) * f) * weight;
+    }
+    inner /= 3.0, innerForm /= 3.0;
+    want += inner * (0.5 + w), got += innerForm * (0.5 + w);
+  }
+  Close("sums of scaled interpolations over moving windows", Evaluate(got, values), want, 1e-13);
+  LinearForm two = LinearForm::Unit(7) * 2.0 + LinearForm::Unit(9) * -3.0;
+  Check("two terms stay two terms", two.Terms().size() == 2);
+  Close("a small form added to a large one, and a large one to a small one",
+        Evaluate(got + two, values) + Evaluate(two + got, values), 2.0 * (want + 2.0 * node(7) - 3.0 * node(9)), 1e-13);
+  LinearForm same = LinearForm::Unit(5) + LinearForm::Unit(5) + LinearForm::Unit(5);
+  Close("one node three times", Evaluate(same, values), 3.0 * node(5), 1e-15);
+  Check("a sum of forms is valid; a nonzero constant is not", got.Valid() && !(got + LinearForm(1.0)).Valid());
+  Check("zero is the empty form", LinearForm(0.0).Terms().empty() && LinearForm(0.0).Valid());
+}
+
 }  // namespace
 
 int main() {
+  LinearFormArithmetic();
   std::printf("the table\n");
   std::set<std::string> names;
   for (const Kernel &k : Kernels()) {

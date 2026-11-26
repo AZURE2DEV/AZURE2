@@ -680,6 +680,18 @@ parameter whenever the project writes it `fit` (the nuisance grammar the density
 at its layout value (`KernelParameters::layoutValues`); its derivative is central differences of the whole χ².  The
 stopping scale is the first row of the same kind (`apparatus_parameters.md`).  No engine file names a kernel parameter.
 
+**Cost of the weights (measured 2026-11-26, 11B+α on the shared mesh).** The weights are the kernel evaluated on
+`LinearForm` (`azure2/experiment/LinearForm.h`). A form of at most two terms (an interpolated node value) lives in the
+object; a larger one is a dense run of coefficients over a range of nodes, so a running sum over a window holds one
+coefficient per node and an addition is one pass over the added form's run. As a list of terms appended to at every
+addition, the sum of the target kernel with a beam spread or straggling held nodes × window terms (3e7 terms, 0.5 GB
+per point at 3400 nodes), and the weights cost 9-11 times the forward fold; they now cost about 3.7 times it. The
+Gaussian of `FoldTarget` and `FoldGaussian` is evaluated once per Gauss point (the quadrature asks for the numerator's
+and the denominator's weight). The folds of a shifted data set at ±h (`RefoldShiftedSegments`, `src/ShiftedFold.cpp`)
+run in one team over the points, as the folds of the point pass do. Full case, 4 threads: one gradient 132.6 s → 56.5 s,
+one evaluation 6.68 s → 5.35 s, peak memory 5.67 GB → 2.18 GB, every output identical but two values in the 11th
+digit. The kernel itself stays quadratic in the nodes of the support (`FOR_THE_OWNER.md` section 9).
+
 The roadmap lists SUM, RATIO, natural targets and the S factor as kernel builders. They are already one table of
 expression nodes with `value` and `backward`, tested alone; re-implementing them as kernels would write them twice.
 

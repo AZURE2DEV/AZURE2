@@ -1,5 +1,7 @@
 // The Gaussian beam-spread kernel (Kernels.h): the normalised Gaussian average of the node values about the point's
 // energy, sigma from the beam record (a constant or a formula, KernelParameters::sigma).
+#include <limits>
+
 #include "azure2/experiment/KernelQuadrature.h"
 #include "azure2/experiment/Kernels.h"
 #include "azure2/experiment/LinearForm.h"
@@ -22,7 +24,15 @@ V FoldGaussian(const KernelParameters &p, const KernelPoint &point, const Kernel
   const double centroid = point.energy;
   const double s = p.sigma(centroid, point.cmFactor);
   if (!(s > 0.)) return InterpolateNodes<V>(nodes, values, centroid);
-  auto k = [&](double e) { return GaussianDensity(e, centroid, s); };
+  // the quadrature asks for the numerator's and the denominator's weight at each Gauss point: one evaluation
+  double atEnergy = std::numeric_limits<double>::quiet_NaN(), density = 0.0;
+  auto k = [&](double e) {
+    if (e != atEnergy) {
+      atEnergy = e;
+      density = GaussianDensity(e, centroid, s);
+    }
+    return density;
+  };
   V num = 0.0;
   double den = 0.0;
   GridQuadrature<V>(nodes, values, eLow, eHigh, false, k, k, num, den);

@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "CalculationPlan.h"
 #include "Config.h"
@@ -15,6 +16,10 @@
 #include "SegmentState.h"
 #include "TargetEffect.h"
 #include "WorkingCopy.h"
+#include "azure2/support/FloatingPointPrecision.h"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace azure2 {
 
@@ -279,9 +284,30 @@ bool RefoldShiftedSegments(WorkingCopy &data, const std::vector<const Segment *>
                            Results &results) {
   for (const Segment *segment : segments)
     if (!FoldOnlyShift(data, *segment)) return false;
+  // Each fold writes its own point's records and reads the nodes (as the folds of the point pass, EnergyPass.cpp):
+  // one team over the points, none inside a caller's parallel region.  A fold that throws is rethrown after the loop.
+  std::vector<Unit *> points;
   for (const Segment *segment : segments)
     for (int t = 0; t < segment->NumTerms(); t++)
-      for (Unit &point : segment->TermPoints(data, t)) point.FoldSubPoints(data, configure, results);
+      for (Unit &point : segment->TermPoints(data, t)) points.push_back(&point);
+#ifdef _OPENMP
+  const bool ownTeam = !omp_in_parallel() && points.size() > 1;
+#else
+  const bool ownTeam = false;
+#endif
+  (void)ownTeam;
+  std::string failure;
+#pragma omp parallel for schedule(dynamic, 1) if (ownTeam)
+  for (int k = 0; k < (int)points.size(); k++) {
+    const azure2::support::ExtendedPrecisionScope fpPrecision;
+    try {
+      points[k]->FoldSubPoints(data, configure, results);
+    } catch (const std::exception &e) {
+#pragma omp critical(azure_refold_failure)
+      if (failure.empty()) failure = e.what();
+    }
+  }
+  if (!failure.empty()) throw std::runtime_error(failure);
   return true;
 }
 

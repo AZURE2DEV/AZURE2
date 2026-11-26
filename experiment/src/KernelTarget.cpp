@@ -148,7 +148,15 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
         V inner = 0.0;
         if (sigmaEff > 1.0e-10) {
           double den = 0.0;
-          auto k = [&](double e) { return GaussianDensity(e, eDepth, sigmaEff); };
+          // the quadrature asks for the numerator's and the denominator's weight at each Gauss point: one evaluation
+          double atEnergy = std::numeric_limits<double>::quiet_NaN(), density = 0.0;
+          auto k = [&](double e) {
+            if (e != atEnergy) {
+              atEnergy = e;
+              density = GaussianDensity(e, eDepth, sigmaEff);
+            }
+            return density;
+          };
           GridQuadrature<V>(nodes, values, std::max(eLow, eDepth - range * sigmaEff), std::min(eHigh, eDepth + range * sigmaEff), true, k, k, inner, den);
           inner = (den > 0.0) ? inner / den : V(0.0);
         } else {
