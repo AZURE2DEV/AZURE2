@@ -176,6 +176,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) {
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     params.ReadUserParameters(configure());
     params.ReconcileBasis(compound(), configure());
+    params.ApplyFileWidthMask(compound(), levels_.state, configure());
   }
   // The support: the fit's limits, as AZUREMain sets them before a fit (the kinds' own and <parameterSettings>).
   support_ = PosteriorSupportOfFit(configure(), compound(), levels_.state, levels_.inputs, data(), params);
