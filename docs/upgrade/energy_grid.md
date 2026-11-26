@@ -184,6 +184,18 @@ Then (the shared mesh): one mesh per compound nucleus, planned from
 - the **levels**: their quantized anchors (`AdaptiveIntegrationGrid::Quantize`: Γ to the nearest power of 1.25, E_λ
   to a multiple of Γ/4) and reach (core of m widths at Γ/p per node, then a geometric tail with step = t·distance up
   to the base step h_0);
+- the **narrow poles** of interfering levels (2026-11-25, `src/LevelPoles.cpp`): a level's anchor width is the sum of
+  its partial widths, which is the width of its resonance only when the level is isolated. Levels of one J^π that
+  share a channel and lie closer than their widths give one broad structure and one far narrower than either's
+  partial widths (two levels, Γ₁ ≪ Γ₂, at ΔE ≪ Γ₂: about 4 ΔE² Γ₁ Γ₂ / (Γ₁ + Γ₂)³). `NarrowPolesOf` takes the
+  eigenvalues of E_λ δ_λμ − (i/2) Σ_c a_λc a_μc (a_λc the signed root of the partial width in the open particle
+  channel c) for each J^π group in which two such levels overlap, and every pole narrower than half the width of
+  each level it is made of gets an anchor of its own, at its energy and width. The levels' anchors are unchanged, so
+  a project without such a pole keeps its mesh. Found on ²²Ne(α,n): 1⁻ levels at E_x 11.8847 and 11.8913 MeV, 3.06
+  and 93.95 keV in the n₀ channel; the cross section has a peak 33 eV wide where the mesh took 3.08 keV (61.7 eV
+  between nodes at 50 per width), and a point folded with a 6.2 keV beam spread 7 keV below it was 25 % off (2 % at
+  100 per width, converged at 400). With the pole's anchor the default is within 3 × 10⁻⁵ of the converged value at
+  that point (χ² of the data set 823.76 → 745.37, converged 745.46). `tests/reference/level_poles_test.cpp`;
 - the **numerical settings** of each data set (`quadrature` in format 3: points per width p, width multiplier m, base
   step h_0).
 

@@ -11,7 +11,7 @@ RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
 AZUREParams.cpp PosteriorSupport.cpp Unit.cpp SiteObservables.cpp CompoundSystemBuild.cpp AbundanceSamples.cpp Equation.cpp
 JGroup.cpp Config.cpp ProjectOptions.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp ReferenceTableLeaf.cpp Predictions.cpp CalculationPlan.cpp EnergyPass.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
-AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp AZUREGradThm.cpp GradEnergyTasks.cpp ThmFunc.cpp
+AdaptiveIntegrationGrid.cpp LevelPoles.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp AZUREGradThm.cpp GradEnergyTasks.cpp ThmFunc.cpp
 DataOutputFiles.cpp CommandLineValues.cpp
 DataCheckFiles.cpp
 DataCovarianceGroups.cpp

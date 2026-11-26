@@ -186,6 +186,13 @@ target_link_libraries(coulomb_table_small_phase_test PRIVATE AZURE2Core)
 add_test(NAME coulomb_table_small_phase COMMAND coulomb_table_small_phase_test)
 set_tests_properties(coulomb_table_small_phase PROPERTIES TIMEOUT 300)
 
+# NarrowPolesOf (LevelPoles.h): interfering levels of one J^pi give a pole far narrower than their partial widths;
+# the energy mesh gets an anchor for it (22Ne(a,n): a 33 eV peak the mesh took as 3.08 keV wide).
+add_executable(level_poles_test level_poles_test.cpp)
+target_link_libraries(level_poles_test PRIVATE AZURE2Core)
+add_test(NAME level_poles COMMAND level_poles_test)
+set_tests_properties(level_poles PROPERTIES TIMEOUT 60)
+
 # AZUREParams::ReadUserParameters on a param.sav with "nan" errors (written after a
 # fit with an invalid covariance), blank and malformed lines: it used to loop
 # until std::bad_alloc.  The timeout turns a hang into a failure.
