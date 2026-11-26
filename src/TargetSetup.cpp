@@ -694,3 +694,35 @@ int WorkingCopy::SetUpTargetEffects(const Config &configure, const CompoundSyste
   }
   return 0;
 }
+
+int WorkingCopy::RefuseUnfoldedNoParticle(const CompoundSystem *compound, const Config &configure) {
+  for (Segment &segment : Draft().segments_) {
+    const SegmentState &state = this->State(segment);
+    for (int t = 0; t < segment.NumTerms() && t < (int)state.terms.size(); t++) {
+      const TermState &term = state.terms[t];
+      const int effect = segment.TermTargetEffectNum(t);
+      const bool folded = effect > 0 && Draft().GetTargetEffect(effect)->IsSubPointEffect();
+      for (std::size_t i = 0; i < term.frame.rows.size(); i++) {
+        if (!term.frame.rows[i].noParticle) continue;
+        const Unit &point = this->UnitAt(term.first + (int)i);
+        if (folded && point.NumSubPoints() > 0) continue;
+        // the conversion's own words, as when it refused the row at load
+        const int entranceKey = segment.TermEntranceKey(t), exitKey = segment.TermExitKey(t);
+        azure2::experiment::FrameRule rule = segment.TermFrameRule(
+            t, compound->GetPair(compound->GetPairNumFromKey(entranceKey)), compound->GetPairFromKey(exitKey));
+        rule.keepNoParticle = false;
+        azure2::experiment::FrameRow row;
+        azure2::experiment::AngleLimit lim;
+        azure2::experiment::ConvertRow(rule, point.GetLabEnergy(), point.GetLabAngle(), point.GetLabEnergy(),
+                                       point.GetLabEnergy(), true, row, lim);
+        configure.outStream << "ERROR: ";
+        if (t) configure.outStream << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << segment.TermKey(t);
+        else configure.outStream << ((configure.paramMask & Config::CALCULATE_WITH_DATA) ? "segment #" : "test segment #") << segment.GetSegmentKey();
+        configure.outStream << ": lab angle " << point.GetLabAngle() << " deg at E_lab = " << point.GetLabEnergy() << " MeV: "
+                            << lim.why << "." << std::endl;
+        return -1;
+      }
+    }
+  }
+  return 0;
+}

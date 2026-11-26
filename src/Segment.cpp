@@ -529,6 +529,10 @@ azure2::experiment::FrameRule RuleOf(const Segment &segment, int t, const PPair 
   r.labDifferential = segment.IsDifferential() && !segment.IsPhase() && !segment.IsAngularDist() &&
                       !segment.IsCMDifferential();
   r.convertValue = convertValue;
+  // A lab angle no particle reaches at the point's energy: kept as a lab row; a point without a fold is refused once
+  // the targets are known (WorkingCopy::RefuseUnfoldedNoParticle), a folded one takes the lab cross section at each
+  // energy of its fold (experiment::LabBranchesAt, Unit::RowSetOver).
+  r.keepNoParticle = r.labDifferential && r.exitKind == ExitKind::Particle && !r.elastic && !r.relativistic && !r.betaDelayed;
   return r;
 }
 

@@ -807,6 +807,20 @@ share one set (T2: 60 sets → 2).
   error.  The brute-force test above is the direct check of the fold.
 - An analysing power is given at c.m. angles only (format 3 refuses a lab angle), so D5's A_y path is not reached.
 
+**No particle, and two c.m. angles (2026-11-25).** θ_cm(E_n; θ_lab) is not always one number. For a reaction with a
+threshold, with g = v_cm / v_ejectile,cm (g² = a₁₃/a₂₄ of Marion–Young): below the threshold there is no ejectile;
+for g > 1, just above it, the ejectile goes into the cone sin ψ ≤ 1/g and each ψ inside is reached by cos θ = −g sin²ψ
+± cos ψ √(1 − g² sin²ψ), with J = |1 + g cos θ| / (1 + g² + 2 g cos θ)^{3/2}. The lab cross section the fold needs is
+Σ_i σ_cm(θ_i)/J_i, zero where there is no angle. A cross section Σ_L B_L P_L is linear in its row, so the row set holds
+one row per slot as before: a zero row with J = 1 where no particle reaches the angle, and P_L(cos θ₁) + (J₁/J₂)
+P_L(cos θ₂) with J = J₁ inside the cone (`Unit::RowSetOver`, `experiment::LabBranchesAt`). At the edge of the cone J → 0,
+an integrable peak in energy; J is held at 10⁻⁶. Before, such a slot was NaN and a fold that read it a failed point,
+so a thick-target yield at a lab angle could not be computed for a reaction with a threshold. The point's own row
+where a term has no particle stays in the lab (`FrameRow::noParticle`: θ_cm = θ_lab, J = 1, a common factor of model
+and datum); `WorkingCopy::RefuseUnfoldedNoParticle` refuses it when the point is not folded, with the conversion's
+message, as at load before. Not covered: relativistic kinematics, elastic scattering, analysing powers (one angle, as
+before). `tests/lab_angle_threshold`; `tests/lab_frame_fold` case (d) is now a finite point.
+
 ### 4.4 The gate
 
 Stated as: "every per-point pull of a calculation agrees with the reference to 8 ulp (relative 2 × 10⁻¹⁵); every

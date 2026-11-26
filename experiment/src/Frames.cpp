@@ -347,8 +347,15 @@ bool ConvertRow(const FrameRule &r, double eLab, double thetaLab, double binLowL
   ConvertRowEnergy(r, eLab, binLowLab, binHighLab, row);
   if (r.exitKind == ExitKind::None || !r.labDifferential) return true;
   bool inRange = true;
+  row.noParticle = false;
   if (r.exitKind == ExitKind::Particle) {
     inRange = ParticleAngle(r, row, thetaLab, lim);
+    if (!inRange && r.keepNoParticle && !r.elastic && !r.relativistic && !r.betaDelayed) {
+      row.thetaCM = thetaLab;
+      row.jacobian = 1.0;
+      row.noParticle = true;
+      return true;
+    }
     if (!inRange && atLoad) return false;
     if (r.convertValue) ParticleRowJacobian(r, row, thetaLab, lim);
   }
@@ -377,6 +384,41 @@ bool LabAngleAt(const FrameRule &rule, double eCM, double thetaLab, double &thet
   thetaCM = row.thetaCM;
   jacobian = row.jacobian;
   return inRange && std::isfinite(jacobian) && jacobian > kMinLabJacobian;
+}
+
+bool LabBranchesAt(const FrameRule &rule, double eCM, double thetaLab, LabBranches &branches) {
+  if (rule.betaDelayed || rule.relativistic || rule.elastic || rule.exitKind != ExitKind::Particle) return false;
+  branches = LabBranches();
+  const Partition &in = rule.entrance, &out = rule.exit;
+  const double eLab = BeamLabFromCM(in, eCM, false);
+  const double qValue = in.sepE + in.exE - out.sepE - out.exE;
+  if (!(eLab + qValue > 0.0)) return true;  // below the threshold
+  const double a13 = (in.m1 * out.m1) * eLab / (eLab + qValue) / (in.m1 + in.m2) / (out.m1 + out.m2);
+  const double a24 = (in.m2 * out.m2) * (1 + in.m1 / in.m2 * qValue / (eLab + qValue)) / (in.m1 + in.m2) / (out.m1 + out.m2);
+  if (!(a24 > 0.0)) return true;  // below the threshold
+  if (!(a13 > a24)) {
+    AngleLimit lim;
+    double thetaCM = 0.0, jacobian = 1.0;
+    if (LabAngleAt(rule, eCM, thetaLab, thetaCM, jacobian, lim)) {
+      branches.count = 1;
+      branches.thetaCM[0] = thetaCM;
+      branches.jacobian[0] = jacobian;
+    }
+    return true;  // (not reached: count 0, as a point there is refused)
+  }
+  const double g = std::sqrt(a13 / a24), psi = thetaLab * pi / 180.0;
+  const double under = 1.0 - g * g * std::sin(psi) * std::sin(psi);
+  if (!(std::cos(psi) > 0.0) || !(under >= 0.0)) return true;  // beyond the cone
+  const double root = std::cos(psi) * std::sqrt(under);
+  for (int sign = 0; sign < 2; sign++) {
+    double c = -g * std::sin(psi) * std::sin(psi) + (sign == 0 ? root : -root);
+    c = std::max(-1.0, std::min(1.0, c));
+    const double jacobian = std::abs(1.0 + g * c) / std::pow(1.0 + g * g + 2.0 * g * c, 1.5);
+    branches.thetaCM[sign] = std::acos(c) * 180.0 / pi;
+    branches.jacobian[sign] = std::max(jacobian, kMinLabJacobian);
+  }
+  branches.count = 2;
+  return true;
 }
 
 }  // namespace experiment

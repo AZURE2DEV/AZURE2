@@ -1489,6 +1489,8 @@ Yield (``dataset``, ``extrapolation``).  Reactions (or detected counts) per inci
      - ``E_lab``
    * - angle column
      - optional: ``theta_lab``
+   * - reaction
+     - sums
    * - ``target``
      - required
    * - ``beam``

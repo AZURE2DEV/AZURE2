@@ -3489,8 +3489,8 @@
     "windows": false
    },
    "reaction": {
-    "rule": "",
-    "flags": []
+    "rule": "sums",
+    "flags": ["sum"]
    },
    "fields": {
     "target": {
