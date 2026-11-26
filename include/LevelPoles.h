@@ -32,7 +32,10 @@ struct NarrowPole {
   double width = 0.0;   ///< pole width (MeV)
 };
 
-/// The poles that are narrower than 0.8 times the width of every level with at least a tenth of the pole's
+/// (Half, not less: a pole 0.5 to 1 times as wide as its levels is resolved by the levels' own anchors within a
+/// factor 2 of the nodes, and anchors for such poles move the folded numbers of projects that have no narrow
+/// structure at the 1e-5 level, e.g. tests/upgrade T2 by 4e-5; 22Ne(a,n) is the same with 0.5 and 0.8.)
+/// The poles that are narrower than half the width of every level with at least a tenth of the pole's
 /// weight, in ascending energy: the structures the levels' own widths do not resolve.  Empty for fewer than two
 /// levels, when no two levels with a common channel lie closer than the sum of their widths (the levels are then
 /// taken as isolated and the eigenvalues are not computed), and when the eigenvalue routine fails.

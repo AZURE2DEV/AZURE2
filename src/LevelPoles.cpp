@@ -74,7 +74,7 @@ std::vector<NarrowPole> NarrowPolesOf(const std::vector<PoleLevel> &levels) {
       for (std::size_t i = 0; i < n; i++)
         if (weight[i] >= 0.1 * total && levels[i].width > 0.0 && (narrowest == 0.0 || levels[i].width < narrowest))
           narrowest = levels[i].width;
-      if (narrowest > 0.0 && width < 0.8 * narrowest) poles.push_back({GSL_REAL(value) + mean, width});
+      if (narrowest > 0.0 && width < 0.5 * narrowest) poles.push_back({GSL_REAL(value) + mean, width});
     }
   }
   gsl_eigen_nonsymmv_free(work);

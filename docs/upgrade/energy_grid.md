@@ -189,7 +189,7 @@ Then (the shared mesh): one mesh per compound nucleus, planned from
   share a channel and lie closer than their widths give one broad structure and one far narrower than either's
   partial widths (two levels, Γ₁ ≪ Γ₂, at ΔE ≪ Γ₂: about 4 ΔE² Γ₁ Γ₂ / (Γ₁ + Γ₂)³). `NarrowPolesOf` takes the
   eigenvalues of E_λ δ_λμ − (i/2) Σ_c a_λc a_μc (a_λc the signed root of the partial width in the open particle
-  channel c) for each J^π group in which two such levels overlap, and every pole narrower than 0.8 times the width of
+  channel c) for each J^π group in which two such levels overlap, and every pole narrower than half the width of
   each level it is made of gets an anchor of its own, at its energy and width. The levels' anchors are unchanged, so
   a project without such a pole keeps its mesh. Found on ²²Ne(α,n): 1⁻ levels at E_x 11.8847 and 11.8913 MeV, 3.06
   and 93.95 keV in the n₀ channel; the cross section has a peak 33 eV wide where the mesh took 3.08 keV (61.7 eV

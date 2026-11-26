@@ -61,11 +61,16 @@ int main() {
         "two close levels in different channels: none");
   check(azure2::NarrowPolesOf({level(1.0, {1e-3}, {1.0})}).empty(), "one level: none");
   check(azure2::NarrowPolesOf({}).empty(), "no level: none");
-  // 4. Mild overlap (dE = 2 (G1 + G2) is outside the screen; dE = G1 + G2 changes the widths by less than 20 %): none.
+  // 4. Mild overlap (dE = 2 (G1 + G2) is outside the screen; dE = G1 + G2 does not halve a width): none.
   check(azure2::NarrowPolesOf({level(1.0, {1e-3}, {1.0}), level(1.0 + 4e-3, {1e-3}, {1.0})}).empty(), "levels two summed widths apart: none");
   {
     std::vector<NarrowPole> p = azure2::NarrowPolesOf({level(1.0, {1e-3}, {1.0}), level(1.0 + 1.9e-3, {1e-3}, {1.0})});
-    check(p.empty(), "equal levels just inside the screen: the poles are not 20 % narrower, none");
+    check(p.empty(), "equal levels just inside the screen: the poles are not half as wide, none");
+  }
+  // 4b. Overlap that narrows a level by less than half: none (the levels' own anchors resolve it).
+  {
+    std::vector<NarrowPole> p = azure2::NarrowPolesOf({level(1.0, {10e-3}, {1.0}), level(1.0 + 12e-3, {10e-3}, {1.0})});
+    check(p.empty(), "two equal levels 1.2 widths apart: no pole half as wide, none");
   }
   // 5. Three levels: a narrow one between two broad ones in the same channel, and a far one that plays no part.
   {
