@@ -321,8 +321,18 @@ void Builder::BuildData() {
     Add(r, "columns", rolesText);
 
     // windows
+    // An inactive line whose window is empty (Emin > Emax: campaign tools switch a data set off that way as well as
+    // by its first field) is written without the window, which format 3 refuses (E_EMPTY_RANGE); the comment keeps
+    // the numbers.  An active line with such a window is written as it is and refused, with the diagnostic.
     Count(Construct::kEnergyWindow);
-    Add(r, "energy_window", NumberText(s.minE(), d.text) + " " + NumberText(s.maxE(), d.text) + " MeV");
+    std::string emptyWindow;
+    if (!active && s.minE() > s.maxE()) {
+      emptyWindow = "the old line's energy window " + NumberText(s.minE(), d.text) + " " + NumberText(s.maxE(), d.text) +
+                    " MeV is empty (Emin > Emax) and is not written; give the data set a window before switching it on";
+      Note(Construct::kEnergyWindow, name, "inactive data line " + std::to_string(d.key) + ": " + emptyWindow);
+    } else {
+      Add(r, "energy_window", NumberText(s.minE(), d.text) + " " + NumberText(s.maxE(), d.text) + " MeV");
+    }
     if (!angleRole.empty()) {
       Count(Construct::kAngleWindow);
       Add(r, "angle_window", NumberText(s.minA(), d.text) + " " + NumberText(s.maxA(), d.text) + " deg");
@@ -436,7 +446,7 @@ void Builder::BuildData() {
     }
     if (!active) {
       Count(Construct::kInactive);
-      Add(r, "active", "no");
+      Add(r, "active", "no", emptyWindow);
     }
     out_.data.records.push_back(r);
   }
