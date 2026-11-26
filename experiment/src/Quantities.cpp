@@ -407,6 +407,9 @@ Quantity Yield() {
   q.energyRoles = {"E_lab"};
   q.angleRoles = {"theta_lab"};
   q.angle = Quantity::OptionalAngle;
+  // A sum: the yield of several exit groups counted together (neutrons to every state of the residual nucleus on a
+  // thick target); the fold is linear, so it is the sum of the terms' yields on the one target.
+  q.reaction = {R::kSum, "sums"};
   q.fields = {Requires("target"), Allows("beam"), Allows("detector"),
               Requires("charge_state", Condition::Dimension({"per_charge", "counts_per_charge"})),
               Requires("efficiency", Condition::Dimension({"counts_per_charge"}))};

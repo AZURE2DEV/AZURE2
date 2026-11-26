@@ -430,6 +430,14 @@ description (`d-Sig/d-Omega = a(0) + …`) does not settle **[I]**; refuse until
 
 ### 4.6 Yield linked to a target (treated fully)
 
+**A sum of reactions** (2026-11-25). Quantity `yield` takes `r1 + r2 + …`: the yield counted over several exit groups,
+e.g. the neutrons of ¹⁹F(α,n)²²Na to every state of ²²Na on a thick BaF₂ target (the old format's SUM segment on a
+`<targetInt>` line of density 0). The fold is linear in σ, so it is the sum of the terms' yields on the one target; at
+a lab angle each term has its own c.m. angle and solid-angle factor, as in a sum of differential cross sections. A
+ratio is not a yield and stays refused. `tests/yield_sum`. Not computed, with or without a sum: a thick-target yield
+at a lab angle of a reaction with a threshold, whose fold reaches energies where the lab angle is beyond the kinematic
+maximum (the point fails with a warning).
+
 **Thin and thick target.** A beam of lab energy E₀ (MeV), Gaussian spread σ_b, loses energy in a target of areal
 density N (active nuclei cm⁻²) with stopping cross section per active nucleus ε(E) (MeV cm²), effective for a compound
 A_xB_y: ε_eff = ε_A + (y/x) ε_B (Bragg additivity; `experimental_effects.rst:263-300`). The number of reactions per
