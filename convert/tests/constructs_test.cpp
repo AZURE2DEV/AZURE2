@@ -361,6 +361,23 @@ int main(int argc, char **argv) {
     const ConvertResult o = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 o.dat 1 2 1 1 2\n", "", "", "", ""});
     check("operation type 2: refused", !o.ok && o.refusal.find("neither 0 (sum) nor 1 (ratio)") != std::string::npos);
   }
+  // ---- an energy window with Emin > Emax: on an inactive line (campaign tools switch a data set off that way as well
+  //      as by its first field; 33 lines of a 10B+a campaign file, 2026-11-25) the window is not written, which
+  //      format 3 would refuse (E_EMPTY_RANGE), and the numbers stay in a comment and a note; an active line is
+  //      written as it is and refused by the validation
+  {
+    const ConvertResult i = Convert({"0 1 2 4.8 4.2 0 180 0 1 0 0 0 0 0 c.dat\n", "", "", "", ""});
+    check("inactive line with Emin > Emax: converted", i.ok);
+    check("... without an energy_window", i.ok && i.text.find("energy_window") == std::string::npos);
+    check("... inactive", i.ok && i.text.find("active         no") != std::string::npos);
+    check("... the old window in a comment", i.ok && i.text.find("# CONVERTED: the old line's energy window 4.8 4.2 MeV is empty") != std::string::npos);
+    check("... and in a note", HasNote(i, "inactive data line 1: the old line's energy window 4.8 4.2 MeV is empty"));
+    const ConvertResult o = Convert({"0 1 2 4.2 4.8 0 180 0 1 0 0 0 0 0 c.dat\n", "", "", "", ""});
+    check("inactive line with Emin < Emax: its window is written, no note",
+          o.ok && o.text.find("energy_window  4.2 4.8 MeV") != std::string::npos && !HasNote(o, "is empty"));
+    const ConvertResult a = Convert({"1 1 2 4.8 4.2 0 180 0 1 0 0 0 0 0 c.dat\n", "", "", "", ""});
+    check("active line with Emin > Emax: not converted", !a.ok);
+  }
   // ---- exit key -1 (total capture) with a data type that is not total capture: the old engine refused the line
   //      (src/WorkingCopy.cpp, TotalCaptureCodeOk), so the converter refuses it with that reason instead of writing [total];
   //      the line inactive, or with the total-capture type, converts
