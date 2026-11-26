@@ -225,6 +225,11 @@ class WorkingCopy {
   /// The leaves after the segments: their frames with their own pairs, energy-dependent values, Legendre
   /// polynomials, Coulomb amplitudes and external-capture amplitudes (appended to the intEC file).
   int InitializeLeaves(const CompoundSystem *, const Config &);
+  /// After the leaves: a point whose row was kept in the lab because no particle reaches its lab angle at its energy
+  /// (experiment::FrameRow::noParticle) and that is not folded over sub-points has no model: -1 with the conversion's error, as
+  /// it was refused at load before; 0 otherwise.  A folded point takes the lab cross section at the energies of
+  /// its fold (Unit::RowSetOver).
+  int RefuseUnfoldedNoParticle(const CompoundSystem *, const Config &);
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
   bool CheckComponentPairs(const CompoundSystem *, const Segment &baseSegment, int entranceKey, int exitKey, const Config &);
   /// A leaf of `base` (Segment::AddLeaf) with these pairs, a fixed lab angle (deg; a RATIO denominator) or none and a

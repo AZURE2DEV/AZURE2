@@ -22,7 +22,7 @@ while the frozen angle is 2.2e-2 off.  The build before D5 (milestone 3 of the o
 fails.  The data values are 1 with error 0.1 (only the model is compared).
 
 Case (d): `folded` with a fitted energy offset of prior width 0.3 MeV (a variant made in the check).  The fold's planned
-nodes then reach below E_c.m. = 1.678 MeV, where 30 deg lab is beyond the kinematic maximum: such a node holds NaN in
-the row set and is harmless while no fold reads it (offset 0: the point is finite; the build of milestone 4 aborted
-at set-up), and a fold that reads it (offset -0.32 MeV) is a failed point, NaN with the engine's warning that names the
-kinematic maximum and says what to do.
+nodes then reach below E_c.m. = 1.678 MeV, where 30 deg lab is beyond the kinematic maximum: no neutron reaches the
+angle there, so such a node holds a zero row (since 2026-11-25, `experiment::LabBranchesAt`; NaN before, and a fold
+that read it was a failed point).  At offset 0 the point is finite (the build of milestone 4 aborted at set-up); at
+offset -0.32 MeV the fold reads those energies, which add nothing, and the point is finite and smaller.

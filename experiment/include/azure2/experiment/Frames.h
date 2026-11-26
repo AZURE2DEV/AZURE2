@@ -129,6 +129,9 @@ struct FrameRule {
   bool relativistic = false;
   bool labDifferential = false;        ///< lab-frame differential data: the angle (and value) are converted
   bool convertValue = false;           ///< the value carries dOmega_lab/dOmega_cm (false for a ratio)
+  /// A reaction's lab angle that no particle reaches is kept as a lab row (FrameRow::noParticle) instead of failing
+  /// the conversion: set by the engine for the non-relativistic reaction rows LabBranchesAt covers.
+  bool keepNoParticle = false;
 };
 
 /*!
@@ -140,6 +143,12 @@ struct FrameRow {
   double eLab = 0.0, eCM = 0.0, eX = 0.0;
   double binLowCM = 0.0, binHighCM = 0.0;
   double thetaCM = 0.0, jacobian = 1.0;
+  /// A reaction's row at a lab angle no particle reaches at the row's energy (below the exit's threshold, or beyond
+  /// the maximum lab angle of a two-valued map): thetaCM is the lab angle and jacobian 1, i.e. the row stays in the
+  /// lab.  For a folded datum the frame is a common factor of model and datum and the fold supplies the lab cross
+  /// section at each of its energies (LabBranchesAt); a datum that is not folded has no model there and the engine
+  /// refuses it after the targets are set up, with `noParticleWhy`.
+  bool noParticle = false;
 };
 
 /// The rows of a measurement (or of one leaf of it) in the c.m. frame, at one energy shift.
@@ -182,6 +191,28 @@ bool AngleIsLab(const FrameRule &rule);
  */
 bool LabAngleAt(const FrameRule &rule, double eCM, double thetaLab, double &thetaCM, double &jacobian,
                 AngleLimit &lim);
+
+/*!
+ * Every c.m. angle that reaches a lab angle, for a fold at a lab angle across a reaction's threshold (a thick-target
+ * yield of an endothermic reaction; docs/upgrade/energy_grid.md section 4.3).  LabAngleAt gives one angle and fails
+ * below the exit's threshold and beyond the maximum lab angle; a fold needs the whole lab-frame cross section at each
+ * of its energies:
+ *   - below the threshold, and beyond the maximum lab angle of a two-valued map: no particle, count = 0;
+ *   - a single-valued map (the ejectile faster in the c.m. than the c.m. itself): count = 1, LabAngleAt's values;
+ *   - a two-valued map within its cone: count = 2, the forward and the backward c.m. angle, each with its
+ *     dOmega_lab/dOmega_cm; the lab cross section is the sum of sigma_cm(theta_i) / J_i.
+ * With g = v_cm / v_ejectile,cm (g^2 = a13 / a24 of Marion-Young): cos(theta) = -g sin^2(psi) +- cos(psi)
+ * sqrt(1 - g^2 sin^2(psi)) and J = |1 + g cos(theta)| / (1 + g^2 + 2 g cos(theta))^(3/2).  At the edge of the cone J
+ * goes to 0 (an integrable peak of the lab cross section in energy); it is held at kMinLabJacobian.
+ * False (and nothing set) where this does not apply and LabAngleAt is the rule: not a reaction with a particle exit
+ * (elastic scattering, a photon, a decay), or relativistic kinematics.
+ */
+struct LabBranches {
+  int count = 0;
+  double thetaCM[2] = {0.0, 0.0};   ///< deg
+  double jacobian[2] = {1.0, 1.0};  ///< dOmega_lab/dOmega_cm
+};
+bool LabBranchesAt(const FrameRule &rule, double eCM, double thetaLab, LabBranches &branches);
 
 }  // namespace experiment
 }  // namespace azure2

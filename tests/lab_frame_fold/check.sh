@@ -20,7 +20,8 @@
 #   (d) a fitted energy offset with a wide prior (0.3 MeV) gives the fold a reach margin that holds nodes where 30 deg
 #       lab is beyond the kinematic maximum (E_c.m. below 1.678 MeV): at offset 0 the run completes and the point is
 #       finite (the margin's nodes are not read; the milestone-4 build aborted at set-up), at -0.32 MeV the window
-#       reads them and the point is NaN with the failed-point warning that names the cause.
+#       reads them: no neutron reaches 30 deg lab there, so those energies add nothing and the point is finite and
+#       smaller (since 2026-11-25, experiment::LabBranchesAt; before, NaN with a failed-point warning).
 #
 #   ./tests/lab_frame_fold/check.sh path/to/AZURE2
 
@@ -59,9 +60,10 @@ if [ -n "$row0" ] && [ "$row0" != nan ] && ! grep -q 'calculation failed' "$WORK
   echo "  ok    (d) a margin beyond the kinematic maximum, not read: the point is $row0"
 else echo "  FAIL  (d) offset 0: '$row0' (run.log: $(grep -m1 -i 'terminate\|what()\|failed' "$WORK/reach0/run.log"))"
   REACH_FAILS=$((REACH_FAILS + 1)); fi
-if [ "$row32" = nan ] && grep -q 'beyond the kinematic maximum at an energy its fold reads' "$WORK/reach32/run.log"; then
-  echo "  ok    (d) the window reads it at -0.32 MeV: NaN with the warning"
-else echo "  FAIL  (d) offset -0.32 MeV: '$row32', no failed-point warning naming the kinematic maximum"
+if awk -v a="$row0" -v b="$row32" 'BEGIN { exit !(b ~ /^ *[-+]?\.?[0-9]/ && a ~ /^ *[-+]?\.?[0-9]/ && b + 0 > 0 && b + 0 < a + 0) }' &&
+   ! grep -q 'calculation failed' "$WORK/reach32/run.log"; then
+  echo "  ok    (d) the window reads it at -0.32 MeV: finite and smaller, $row32, no failed point"
+else echo "  FAIL  (d) offset -0.32 MeV: '$row32' (offset 0: '$row0'), or a failed point"
   REACH_FAILS=$((REACH_FAILS + 1)); fi
 
 python3 - "$OUT" <<'PY'

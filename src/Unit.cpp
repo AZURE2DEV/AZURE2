@@ -575,20 +575,36 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   set.labFrame = labFrame != nullptr;
   set.perSlot = set.labFrame || (maxL >= 0 && RowDependsOnEnergy(compound, targetEffect));
   const int positions = set.perSlot ? count : 1;
+  std::vector<azure2::experiment::LabBranches> branchAt;  // per slot where the lab angle has no or two c.m. angles
   if (!set.labFrame) {
     set.angles.assign(1, GetCMAngle());
   } else {
-    // a lab angle: theta_cm(E_n; theta_lab) and J(E_n; theta_lab) at each slot's energy (energy_grid.md 4.3); NaN at
-    // a slot where the lab angle is beyond the kinematic maximum (a margin node of a shift's reach, say): a fold that
+    // a lab angle: theta_cm(E_n; theta_lab) and J(E_n; theta_lab) at each slot's energy (energy_grid.md 4.3).  Where
+    // LabAngleAt is the only rule (below) a slot whose lab angle is beyond the kinematic maximum is NaN: a fold that
     // reads it is a failed point (FoldPoint), one that does not is unaffected
     set.frame = *labFrame;
     set.thetaLab = GetLabAngle();
     set.angles.resize((std::size_t)count);
     set.jacobian.resize((std::size_t)count);
+    // A cross section sum_L B_L P_L of a reaction is linear in its row, so every c.m. angle that reaches the lab
+    // angle is in one row (experiment::LabBranchesAt): none below the exit's threshold and beyond the maximum lab
+    // angle (a zero row, J = 1: no particle there), two inside the cone of a two-valued map (the row of the forward
+    // angle plus J_1/J_2 times the backward one's, J = J_1).  A fold across a threshold then has a value; before, a
+    // slot there was NaN and the point failed.  Other kinds and kinematics: LabAngleAt alone, as before.
+    const bool branchRows = set.kind == SiteObservable::kLegendre;
     for (int k = 0; k < count; k++) {
       azure2::experiment::AngleLimit lim;
-      if (!azure2::experiment::LabAngleAt(set.frame, data.SlotAt(first + k).GetCMEnergy(), set.thetaLab,
-                                          set.angles[k], set.jacobian[k], lim))
+      azure2::experiment::LabBranches branches;
+      const double eCM = data.SlotAt(first + k).GetCMEnergy();
+      if (branchRows && azure2::experiment::LabBranchesAt(set.frame, eCM, set.thetaLab, branches) && branches.count != 1) {
+        set.angles[k] = branches.count == 2 ? branches.thetaCM[0] : set.thetaLab;
+        set.jacobian[k] = branches.count == 2 ? branches.jacobian[0] : 1.0;
+        branchAt.resize((std::size_t)count);
+        branchAt[k] = branches;
+        branchAt[k].count = branches.count == 2 ? 2 : -1;  // -1: no particle
+        continue;
+      }
+      if (!azure2::experiment::LabAngleAt(set.frame, eCM, set.thetaLab, set.angles[k], set.jacobian[k], lim))
         set.angles[k] = set.jacobian[k] = std::numeric_limits<double>::quiet_NaN();
     }
   }
@@ -598,9 +614,21 @@ azure2::RowSet Unit::RowSetOver(const WorkingCopy &data, int first, int count, i
   } else {
     set.rowLength = (std::size_t)std::max(maxL + 1, 0);
     set.rows.resize(set.rowLength * (std::size_t)count);
-    for (int k = 0; k < count; k++)
-      LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), maxL, compound, targetEffect,
-                    set.rows.data() + (std::size_t)k * set.rowLength);
+    std::vector<double> backward(set.rowLength);
+    for (int k = 0; k < count; k++) {
+      double *row = set.rows.data() + (std::size_t)k * set.rowLength;
+      const int branches = branchAt.empty() ? 0 : branchAt[k].count;
+      if (branches == -1) {
+        std::fill(row, row + set.rowLength, 0.0);
+        continue;
+      }
+      LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), set.AngleAt(k), maxL, compound, targetEffect, row);
+      if (branches == 2) {
+        LegendreRowAt(data.SlotAt(first + k).GetCMEnergy(), branchAt[k].thetaCM[1], maxL, compound, targetEffect, backward.data());
+        const double weight = branchAt[k].jacobian[0] / branchAt[k].jacobian[1];
+        for (std::size_t l = 0; l < set.rowLength; l++) row[l] += weight * backward[l];
+      }
+    }
   }
   if (set.kind == SiteObservable::kAnalyzingPower) {
     // the factors of A_y at the readers' angle: Y_l'^mu (particle exits) and P_k^1 (capture)

@@ -434,9 +434,14 @@ description (`d-Sig/d-Omega = a(0) + …`) does not settle **[I]**; refuse until
 e.g. the neutrons of ¹⁹F(α,n)²²Na to every state of ²²Na on a thick BaF₂ target (the old format's SUM segment on a
 `<targetInt>` line of density 0). The fold is linear in σ, so it is the sum of the terms' yields on the one target; at
 a lab angle each term has its own c.m. angle and solid-angle factor, as in a sum of differential cross sections. A
-ratio is not a yield and stays refused. `tests/yield_sum`. Not computed, with or without a sum: a thick-target yield
-at a lab angle of a reaction with a threshold, whose fold reaches energies where the lab angle is beyond the kinematic
-maximum (the point fails with a warning).
+ratio is not a yield and stays refused. `tests/yield_sum`.
+
+**At a lab angle across a threshold** (2026-11-25). The fold of a thick-target yield of an endothermic reaction runs
+through the reaction's threshold. The lab cross section at each energy of the fold is the sum over every c.m. angle
+that reaches the lab angle: none below the threshold and beyond the maximum lab angle just above it, two inside the
+forward cone there (`experiment::LabBranchesAt`; `energy_grid.md` section 4.3). The data point itself may lie where a
+term has no particle: its row then stays in the lab frame. A point that is not folded is refused there, as before.
+`tests/lab_angle_threshold`: the yields at 16 lab angles integrate to the angle-integrated yield within 3e-11.
 
 **Thin and thick target.** A beam of lab energy E₀ (MeV), Gaussian spread σ_b, loses energy in a target of areal
 density N (active nuclei cm⁻²) with stopping cross section per active nucleus ε(E) (MeV cm²), effective for a compound

@@ -7,10 +7,8 @@
 # reaction, not a sum") until 2026-11-25, so such a project of the old format did not convert.  The fold over the
 # target is linear, so the yield of the sum must be the sum of the terms' yields on the same target: checked
 # angle-integrated on an infinite target, and at a lab angle, where each term has its own c.m. angle and solid-angle
-# factor, on a layer (1e19 atoms/cm2, beam energies from 2 MeV).  The layer because a thick-target yield at a lab
-# angle is not computed for a reaction with a threshold, sum or not: its fold reaches energies where the lab angle
-# is beyond the term's kinematic maximum, and the point fails with a warning (PointFold.cpp; the same on the old
-# engine, "the lab angle cannot be converted").
+# factor, on a layer (1e19 atoms/cm2, beam energies from 2 MeV).  (A thick-target yield at a lab angle across a
+# term's threshold is tests/lab_angle_threshold.)
 #
 # Model: tests/channel_space (12C + p with the inelastic exit 12C[0.8] and capture), a carbon target.
 #

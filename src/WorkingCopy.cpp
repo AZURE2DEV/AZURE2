@@ -529,7 +529,7 @@ int WorkingCopy::InitializeLeaves(const CompoundSystem *compound, const Config &
     if (in.is_open()) in.close();
   }
 
-  return 0;
+  return this->RefuseUnfoldedNoParticle(compound, configure);
 }
 
 /*!

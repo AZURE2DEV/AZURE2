@@ -14,7 +14,5 @@ Model: `../channel_space` (¹²C + p with the inelastic exit ¹²C[0.8] and capt
    (b + a/ρ), and the sum then equals a + ρ b (limit 1e-9; 3e-11, ρ = 0.905 to 0.923).
 3. **Both terms contribute**, and a ratio as a yield is still refused.
 
-The lab-angle case is on a layer because a thick-target yield at a lab angle is not computed for a reaction with a
-threshold, with or without a sum: the fold reaches energies where the lab angle is beyond the term's kinematic
-maximum and the point fails with a warning (`src/PointFold.cpp`). That is the next thing the ¹⁹F(α,n) data sets at
-an angle need.
+A thick-target yield at a lab angle of a reaction with a threshold, whose fold reads energies where no particle
+reaches the angle, is `../lab_angle_threshold`.
