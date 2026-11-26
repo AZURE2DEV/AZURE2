@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include "Config.h"
 #include "CompoundSystem.h"
+#include "LevelState.h"
 #include "azure2/experiment/Build.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/ParameterFileNames.h"
@@ -107,6 +108,7 @@ bool AZUREParams::ApplyUserParameterFile(const std::string &filename, const std:
   vector_r errors;
   std::vector<bool> fixed;
 
+  fileSet_.clear();
   std::ifstream in(pathToOpen.c_str());  // `filename` as written names it in the messages
   if (!in) {
     out << "Could not read user parameter file." << std::endl;
@@ -194,6 +196,7 @@ bool AZUREParams::ApplyUserParameterFile(const std::string &filename, const std:
         if (!varyFromProject && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
             !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
         GetMinuitParams().SetValue(i, values[ii]);
+        fileSet_.push_back(i);
         if (std::isfinite(errors[ii])) GetMinuitParams().SetError(i, errors[ii]);
         if (fixed[ii] && !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
       }
@@ -273,6 +276,31 @@ void AZUREParams::WriteParameterErrors(const std::vector<std::pair<double, doubl
     out.close();
   } else
     configure.outStream << "Could not save param.errors file." << std::endl;
+}
+
+void AZUREParams::ApplyFileWidthMask(const CompoundSystem *compound, LevelState &state, const Config &configure) {
+  if (BasisForConfig(configure) == kBasisStandard) return;
+  int masked = 0, unmasked = 0;
+  std::string firstMasked, firstUnmasked;
+  for (int i : fileSet_) {
+    const ParameterRecord &record = Record(i);
+    if (record.kind != ParamKind::Gamma) continue;
+    if (compound->GetJGroup(record.jGroup)->GetChannel(record.channel)->GetRadType() == 'P') continue;
+    const bool zero = params_.Value(i) == 0.0;
+    if (zero == state.ZeroInputWidth(record.jGroup, record.level, record.channel)) continue;
+    state.SetZeroInputWidth(record.jGroup, record.level, record.channel, zero);
+    if (zero && !params_.Parameter(i).IsFixed()) params_.Fix(i);
+    (zero ? masked : unmasked)++;
+    std::string &first = zero ? firstMasked : firstUnmasked;
+    if (first.empty()) first = params_.GetName(i);
+  }
+  if (masked > 0)
+    configure.outStream << "Note: " << masked << " photon width(s) are non-zero in <levels> and exactly 0 in the parameter"
+                        << " file (first: " << firstMasked << "): taken as no gamma decay there, without external capture"
+                        << " and fixed, as for a 0 in <levels>." << std::endl;
+  if (unmasked > 0)
+    configure.outStream << "Note: " << unmasked << " photon width(s) are 0 in <levels> and non-zero in the parameter file"
+                        << " (first: " << firstUnmasked << "): their external capture is computed." << std::endl;
 }
 
 bool AZUREParams::ReconcileBasis(const CompoundSystem *compound, const Config &configure) {

@@ -142,6 +142,7 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
 | 17 | Radiative widths are not in a level's total width (as on `dev`) | none | — | — |
 | 18 | Clebsch–Gordan and Racah coefficients computed here, not GSL's 3j and 6j | last digit | 2026-11-16 | PI |
 | 19 | `--gsl-coul` / `use_gsl_coul` (GSL's Coulomb functions) removed: refused | up to 5 % in P | 2026-11-16 | PI |
+| 20 | The `--ignore-externals` mask is decided by the input (`<levels>`, the parameter file), not by the amplitude in use | none on the input; a fit across 1e-8 no longer switches | 2026-11-25 | owner |
 
 1. σ(12→34) = (π/k²) g_I (1 + δ₁₂) Σ …: a ¹²C + ¹²C reaction is twice `dev`'s, which applies the 2 to elastic
    scattering only. `tests/identical_entrance_reaction`; `docs/source/theory/conventions.rst`, Eq. conv-sigma.
@@ -206,6 +207,11 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
     a converted old project is computed with the program's own functions, whatever its `<lastRun>` said. No
     result of a run without the option changes. A capture calculation that used the flag for speed takes 4.5
     times the instructions (`tests/13N`). `coulomb.md` sections 8 and 9; `coulomb_gsl_crosscheck`.
+20. `dev` drops a photon channel's external capture whenever its amplitude in use is below 1e-8 MeV^½, at every
+    evaluation; here the input decides once (`external_capture.md` section 3). Until 2026-11-25 the input was
+    `<levels>` alone, so a parameter file's exact 0 on a width that `<levels>` holds kept the external part, against
+    `dev` (found on a 12C(p,γ) project of the archive: capture angular distributions 1.25e-3 off). A parameter
+    file's 0 now masks and a non-zero value unmasks. `tests/ec_mask_parameter_file`.
 
 Rows 9, 15 and the refusals that stop a project which ran on `dev` (two resolution kernels on one data set, a lab
 point at the kinematic limit, ...) are in the history page, "What users notice".

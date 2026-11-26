@@ -81,7 +81,12 @@ handed to `TransformIn`), else 0. The input is the observed (Brune or Park) form
 Brune levels; it is recorded when the input is read (`ALevel::ZeroInputWidth`) and read-only afterwards. A masked
 channel means "no γ decay of λ to f": γ^int = 0 at the input and no external part. It stays masked if a fit frees its
 amplitude (the internal part then follows the fit, the external part stays off). Every other channel keeps its
-external part at every amplitude, zero included, so every observable is continuous in every fit parameter. This is
+external part at every amplitude, zero included, so every observable is continuous in every fit parameter. A parameter
+file (`--parameter-file`) is input as well (2026-11-25): for the photon channels it names, an amplitude given as
+exactly 0 is masked and fixed and a non-zero one is not masked, whatever `<levels>` holds, and the run says which
+channels the file changed (`AZUREParams::ApplyFileWidthMask`, Brune's and Park's bases; `tests/ec_mask_parameter_file`).
+The file is read once, before the first evaluation, so the continuity is unchanged. Not covered: a vector handed
+to a pyazr session in amplitudes, and the formal basis, where the file's amplitudes are not the Brune levels'. This is
 the definition of 5b83249a, which is ported (not merged); it differs from today's only for an input that is not zero
 but below 10⁻⁸ MeV^½ (kept now) and in fits that cross 10⁻⁸.
 

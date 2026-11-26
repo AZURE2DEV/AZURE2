@@ -22,6 +22,7 @@ class Config;
  */
 
 class CompoundSystem;
+class LevelState;
 
 class AZUREParams {
  public:
@@ -60,6 +61,12 @@ class AZUREParams {
   /// say so.  False when no conversion exists (standard <-> alternative, or a
   /// Park level with J <= 0), after printing why.
   bool ReconcileBasis(const CompoundSystem *, const Config &);
+  /// After ReadUserParameters and ReconcileBasis: the --ignore-externals mask of the photon channels the file
+  /// named follows the file (docs/upgrade/external_capture.md section 3).  A photon amplitude the file gives as
+  /// exactly 0 is "no gamma decay of the level to that final state": masked (no external part) and fixed, whatever
+  /// <levels> says; one it gives as non-zero is not masked.  Brune's and Park's bases only (in the formal basis
+  /// the file's amplitudes are not the Brune levels', on which the mask is defined).  Says what it changed.
+  void ApplyFileWidthMask(const CompoundSystem *, LevelState &, const Config &);
   /// The basis a run writes, from its runtime options.
   static int BasisForConfig(const Config &);
   static const char *BasisName(int);
@@ -76,6 +83,7 @@ class AZUREParams {
   std::vector<ParameterRecord> records_;  ///< one per entry of params_, in its order
   std::vector<int> kindCount_;            ///< parameters of each kind so far (the next ordinal)
   int basisTag_ = kBasisUnknown;
+  std::vector<int> fileSet_;  ///< the parameters the last parameter file set, by index
 };
 
 #endif

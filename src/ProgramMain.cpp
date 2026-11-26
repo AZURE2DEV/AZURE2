@@ -219,6 +219,7 @@ static int runMCMC(Config &configure, const RunRequest &request) {
     if (configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
       configure.outStream << "Reading User Parameter File..." << std::endl;
       if (!params.ReadUserParameters(configure) || !params.ReconcileBasis(compound.get(), configure)) return -1;
+      params.ApplyFileWidthMask(compound.get(), state, configure);
     } else {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);

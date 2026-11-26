@@ -300,6 +300,7 @@ bool PhysicsSession::Open(const std::string &projectFile, const std::string &par
         out = PhysicsSession();
         return false;
       }
+      params.ApplyFileWidthMask(s.api->compound(), s.api->state(), config);
       const std::vector<double> values = params.GetMinuitParams().Params();
       if (values.size() != s.x.size() || !s.api->SetParamsAllRWA(vector_r(values.begin(), values.end()))) {
         why = parameterFile + ": the parameter vector does not match the session's (" + std::to_string(values.size()) +

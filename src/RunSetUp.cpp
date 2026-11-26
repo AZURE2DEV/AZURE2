@@ -94,6 +94,7 @@ int SetUpRun(ProgramRun &run) {
   if (run.configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     run.configure.outStream << "Reading User Parameter File..." << std::endl;
     if (!run.params.ReadUserParameters(run.configure) || !run.params.ReconcileBasis(run.compound.get(), run.configure)) return -1;
+    run.params.ApplyFileWidthMask(run.compound.get(), run.state, run.configure);
   }
   // An adaptive extrapolation grid is a function of the parameters (docs/upgrade/project_format3.md section 3.8): it is
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
