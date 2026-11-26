@@ -5,6 +5,7 @@
 #include "PPair.h"
 #include "ChannelFunc.h"
 #include "CoulFunc.h"
+#include "LevelPoles.h"
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
@@ -286,6 +287,9 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
     if (jgroup->GetNucleus() != entrancePair->GetNucleus()) continue;
 
     int numChannels = jgroup->NumChannels();
+    // The group's levels for the pole estimate (LevelPoles.h): energies in the c.m. frame of the entrance pair.
+    std::vector<azure2::PoleLevel> poleLevels;
+    std::vector<double> poleRadiative;
 
     // Loop through all levels in this J-group
     for (int l = 1; l <= jgroup->NumLevels(); l++) {
@@ -347,6 +351,7 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
         double rwaParticleMeV = 0.0;
         double rwaNormSum = 0.0;
         double rwaGammaMeV = 0.0;
+        std::vector<double> poleAmplitude(numChannels, 0.0), poleRwa(numChannels, 0.0);
         for (int ch = 1; ch <= numChannels; ch++) {
           const AChannel *channel = jgroup->GetChannel(ch);
           const PPair *chPair = compound->GetPair(channel->GetPairNum());
@@ -365,14 +370,17 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
             // existing projects -- tests/17O by 1.4e-3 in chi2.)
             ChannelFunc channelFunc(chPair, channel->GetRadius());
             if (channelFunc.IsClosed(localEnergy)) continue;
+            const double sign = inputs.Gamma(j, l, ch) < 0.0 ? -1.0 : 1.0;
             if (isRWA) {
               const int twoJ = chPair->SpinOrbitTwoJ(jgroup->GetJ());
               double pene = channelFunc.Penetrability(channel->GetL(), twoJ, localEnergy);
               double dSdE = channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy);
               rwaParticleMeV += 2.0 * gamma * gamma * pene;
               rwaNormSum += dSdE * gamma * gamma;
+              poleRwa[ch - 1] = sign * std::sqrt(2.0 * gamma * gamma * std::abs(pene));
             } else {
               particleWidthEV += gamma;
+              poleAmplitude[ch - 1] = sign * std::sqrt(gamma * 1.0e-6);
             }
           } else if (channel->GetRadType() == 'M' || channel->GetRadType() == 'E') {
             if (isRWA) {
@@ -398,8 +406,15 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
         resInfo.particleWidth = particleWidth;
         resInfo.id = 1000 * j + l;
         resonances.push_back(resInfo);
+        if (particleWidth > 0.0) {
+          const double rwaScale = (1.0 + rwaNormSum > 0.0) ? 1.0 / std::sqrt(1.0 + rwaNormSum) : 1.0;
+          for (int ch = 0; ch < numChannels; ch++) poleAmplitude[ch] += rwaScale * poleRwa[ch];
+          poleLevels.push_back({levelCMEnergy, particleWidth, poleAmplitude});
+          poleRadiative.push_back(totalWidthMeV - particleWidth);
+        }
         continue;
       }
+      std::vector<double> poleAmplitudeB(numChannels, 0.0);
       for (int ch = 1; ch <= numChannels; ch++) {
         const AChannel *channel = jgroup->GetChannel(ch);
         if (channel->GetRadType() != 'P') continue;  // particle channels
@@ -417,6 +432,7 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
         double dSdE = channelFunc.ShiftDerivative(channel->GetL(), twoJ, localEnergy);
         totalWidth += 2.0 * gamma * gamma * pene;
         normSum += dSdE * gamma * gamma;
+        poleAmplitudeB[ch - 1] = (inputs.Gamma(j, l, ch) < 0.0 ? -1.0 : 1.0) * std::sqrt(2.0 * gamma * gamma * std::abs(pene));
         if (DebugGridEnabled()) {
           fprintf(stderr, "[AZR_DEBUG_GRID]     ch=%d l=%d Elocal=%.6e radius=%.4f gamma=%.6e "
                   "pene=%.6e dSdE=%.6e chanW=%.6e(eV)\n",
@@ -463,6 +479,29 @@ AdaptiveIntegrationGrid::LevelResonances(const CompoundSystem *compound, const L
       resInfo.totalWidth = totalWidth;
       resInfo.particleWidth = particleWidth;
       resInfo.id = 1000 * j + l;
+      resonances.push_back(resInfo);
+      if (particleWidth > 0.0) {
+        const double scale = (1.0 + normSum > 0.0) ? 1.0 / std::sqrt(1.0 + normSum) : 1.0;
+        for (double &a : poleAmplitudeB) a *= scale;
+        poleLevels.push_back({levelCMEnergy, particleWidth, poleAmplitudeB});
+        poleRadiative.push_back(totalWidth - particleWidth);
+      }
+    }
+    // Interfering levels of the group: a structure narrower than the levels' own widths gets an anchor of its
+    // own, at the pole's energy and width (LevelPoles.h).  The levels' anchors stay as they are, so a project
+    // without such a pole has the mesh it had.  The id is negative: no level's.
+    double radiative = 0.0;
+    for (double r : poleRadiative) radiative = std::max(radiative, r);
+    int poleNumber = 0;
+    for (const azure2::NarrowPole &pole : azure2::NarrowPolesOf(poleLevels)) {
+      ResonanceInfo resInfo;
+      resInfo.energy = pole.energy;
+      resInfo.totalWidth = pole.width + radiative;
+      resInfo.particleWidth = pole.width;
+      resInfo.id = -(1000 * j + ++poleNumber);
+      if (DebugGridEnabled())
+        fprintf(stderr, "[AZR_DEBUG_GRID]     J group %d: narrow pole at E_cm=%.6f MeV, width %.6e eV\n", j, pole.energy,
+                pole.width * 1.0e6);
       resonances.push_back(resInfo);
     }
   }

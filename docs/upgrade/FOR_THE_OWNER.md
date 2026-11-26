@@ -170,6 +170,8 @@ agree before `dev` follows; "PI" means the PI took the decision and you should k
    refined reference or closer, 2 of `hybrid_potential` (too coarse settings). Accepted when the largest distance is
    ≤ 1.2 times the old engine's and the r.m.s. ≤ 1.03 times (`energy_grid.md` section 7.1).
     Answered 2026-11-18: as proposed (1.2 times the largest and 1.03 times the r.m.s. distance); see OWNER_ANSWERS.md.
+    2026-11-25: a fold across two interfering levels of one J^π was outside this acceptance on both engines (²²Ne(α,n),
+    a point 25 % off): the mesh now has an anchor at each pole narrower than its levels (`energy_grid.md` section 2.2).
 9. `examples/c12c12_tumino2018`: χ² 111.661 → 117.516 (117.516 again with 8 times the points); a 9.7 eV level in a
    thick layer: mesh 2.18022e-6, uniform grid 2.06e-8 to 5.09e-7 (64 times the points). `tests/shift_sqrt_subpoints`.
 10. `beam_spread_ay`: χ² 3838.66 → 3760.95, one A_y point by 1.5 of its error; equal, bit for bit, to the old engine
