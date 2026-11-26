@@ -1,18 +1,24 @@
 // The page shown while no project is open (StartPage.h).
 #include "StartPage.h"
 
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSet>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace {
@@ -42,8 +48,20 @@ QListWidget *ProjectList(const QString &name) {
   return l;
 }
 
-/// The project roots: a checkout (examples/ and tests/upgrade/) or an installed share/azure2.
-bool IsRoot(const QDir &d) { return d.exists("examples") || d.exists("tests/upgrade"); }
+/// The project roots: a checkout or an installed share/azure2 (a folder with examples/).
+bool IsRoot(const QDir &d) { return d.exists("examples"); }
+
+/// The first heading of the folder's README.md ("# Neutrons on natural neon: a worked example"), "" when it has none.
+QString ReadmeTitle(const QDir &folder) {
+  QFile f(folder.filePath("README.md"));
+  if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return QString();
+  for (int n = 0; n < 20 && !f.atEnd(); n++) {
+    const QString line = QString::fromUtf8(f.readLine()).trimmed();
+    if (line.startsWith("# ")) return line.mid(2).trimmed();
+    if (!line.isEmpty() && !line.startsWith('#')) break;  // text before any title: no title
+  }
+  return QString();
+}
 
 }  // namespace
 
@@ -65,33 +83,72 @@ QStringList StartPage::examplePlaces() {
   return out;
 }
 
-QStringList StartPage::findExamples() {
-  QStringList out;
-  QSet<QString> seen;
-  auto take = [&](const QString &file) {
-    const QString canonical = QFileInfo(file).canonicalFilePath();
-    if (canonical.isEmpty() || seen.contains(canonical)) return;
-    seen.insert(canonical);
-    out << QFileInfo(file).absoluteFilePath();
-  };
-  for (const QString &place : examplePlaces()) {
-    const QDir root(place);
-    // the env's directory may itself hold project folders
-    for (const QString &base : {QString("examples"), QString("tests/upgrade"), QString("tests"), QString(".")}) {
-      const QDir dir(root.filePath(base));
-      if (!dir.exists()) continue;
-      if (base == "tests") {  // the 13N project of the test suite only
-        if (dir.exists("13N/13N.azr")) take(dir.filePath("13N/13N.azr"));
-        continue;
-      }
-      if (base == "." && place != QDir(qEnvironmentVariable("AZURE2_EXAMPLES")).absolutePath()) continue;
-      for (const QString &folder : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
-        if (base == "tests/upgrade" && !(folder.size() == 2 && folder[0] == 'T')) continue;  // T1, T2, T3
-        const QDir project(dir.filePath(folder));
-        for (const QString &f : project.entryList({"*.azr"}, QDir::Files, QDir::Name)) take(project.filePath(f));
+QList<StartPage::Example> StartPage::readManifest(const QString &root, QString *why) {
+  QList<Example> out;
+  QFile f(QDir(root).filePath("examples/index.json"));
+  if (!f.open(QIODevice::ReadOnly)) return out;
+  QJsonParseError error;
+  const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &error);
+  if (doc.isNull()) {
+    if (why) *why = tr("%1: %2").arg(f.fileName(), error.errorString());
+    return out;
+  }
+  for (const QJsonValue &g : doc.object().value("groups").toArray()) {
+    const QJsonObject group = g.toObject();
+    Example heading;
+    heading.group = group.value("title").toString();
+    out << heading;
+    for (const QJsonValue &e : group.value("entries").toArray()) {
+      const QJsonObject entry = e.toObject();
+      Example x;
+      x.group = heading.group;
+      x.reaction = entry.value("reaction").toString();
+      x.source = entry.value("source").toString();
+      x.what = entry.value("what").toString();
+      x.project = QDir(root).absoluteFilePath(entry.value("project").toString());
+      out << x;
+      for (const QJsonValue &v : entry.value("variants").toArray()) {
+        Example y = x;
+        y.what = v.toObject().value("what").toString();
+        y.project = QDir(root).absoluteFilePath(v.toObject().value("project").toString());
+        y.variant = true;
+        out << y;
       }
     }
   }
+  return out;
+}
+
+QList<StartPage::Example> StartPage::readManifest(QString *why) {
+  for (const QString &place : examplePlaces()) {
+    const QList<Example> m = readManifest(place, why);
+    if (!m.isEmpty()) return m;
+  }
+  return {};
+}
+
+QStringList StartPage::findExamples() {
+  QStringList out;
+  const QList<Example> manifest = readManifest();
+  for (const Example &e : manifest)
+    if (!e.project.isEmpty()) out << e.project;
+  if (!manifest.isEmpty()) return out;
+  // no manifest: the projects of examples/*/ (and of the folders of $AZURE2_EXAMPLES)
+  QSet<QString> seen;
+  for (const QString &place : examplePlaces())
+    for (const QString &base : {QString("examples"), QString(".")}) {
+      if (base == "." && place != QDir(qEnvironmentVariable("AZURE2_EXAMPLES")).absolutePath()) continue;
+      const QDir dir(QDir(place).filePath(base));
+      for (const QString &folder : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QDir project(dir.filePath(folder));
+        for (const QString &f : project.entryList({"*.azr"}, QDir::Files, QDir::Name)) {
+          const QString canonical = QFileInfo(project.filePath(f)).canonicalFilePath();
+          if (canonical.isEmpty() || seen.contains(canonical)) continue;
+          seen.insert(canonical);
+          out << QFileInfo(project.filePath(f)).absoluteFilePath();
+        }
+      }
+    }
   return out;
 }
 
@@ -126,27 +183,66 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   connect(open_, &QPushButton::clicked, this, &StartPage::openRequested);
   QLabel *drop = new QLabel(tr("or drop an .azr file on this window"));
   drop->setProperty("role", "hint");
+  expert_ = new QCheckBox(tr("Show expert options"));
+  expert_->setObjectName("startExpert");
+  expert_->setToolTip(tr("Show the options, columns, tabs and sections an occasional user does not need (also View > "
+                         "Show Expert Options).  It changes what is shown, never the project."));
+  connect(expert_, &QCheckBox::toggled, this, &StartPage::expertToggled);
   QHBoxLayout *buttons = new QHBoxLayout;
   buttons->addWidget(new_);
   buttons->addWidget(open_);
   buttons->addWidget(drop);
   buttons->addStretch(1);
+  buttons->addWidget(expert_);
 
   recent_ = ProjectList("startRecent");
   examples_ = ProjectList("startExamples");
   for (QListWidget *l : {recent_, examples_}) {
-    connect(l, &QListWidget::itemActivated, this,
-            [this](QListWidgetItem *item) { emit openFile(item->data(Qt::UserRole).toString()); });
-    connect(l, &QListWidget::itemClicked, this,
-            [this](QListWidgetItem *item) { emit openFile(item->data(Qt::UserRole).toString()); });
+    // a heading has no file: nothing to open
+    connect(l, &QListWidget::itemActivated, this, [this](QListWidgetItem *item) {
+      if (!item->data(Qt::UserRole).toString().isEmpty()) emit openFile(item->data(Qt::UserRole).toString());
+    });
+    connect(l, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+      if (!item->data(Qt::UserRole).toString().isEmpty()) emit openFile(item->data(Qt::UserRole).toString());
+    });
   }
-  for (const QString &f : findExamples()) {
-    const QFileInfo info(f);
-    QListWidgetItem *item = new QListWidgetItem(QIcon(":/actions/open.svg"),
-                                                QString("%1   (%2)").arg(info.fileName(), info.dir().dirName()));
-    item->setData(Qt::UserRole, f);
-    item->setToolTip(f);
-    examples_->addItem(item);
+  // the manifest's groups, entries and variants (qt_gui.md section 19.9): a heading per group, one line per reaction,
+  // its variants indented under it; without a manifest, the projects found by name
+  const QList<Example> manifest = readManifest();
+  if (!manifest.isEmpty()) {
+    for (const Example &e : manifest) {
+      QListWidgetItem *item = new QListWidgetItem;
+      if (e.project.isEmpty()) {
+        item->setText(e.group);
+        QFont f = item->font();
+        f.setBold(true);
+        item->setFont(f);
+        item->setFlags(Qt::NoItemFlags);
+        item->setForeground(palette().color(QPalette::WindowText));
+      } else if (e.variant) {
+        item->setText(QString("      ") + QChar(0x21B3) + " " + e.what);
+        item->setData(Qt::UserRole, e.project);
+        item->setToolTip(QDir::toNativeSeparators(e.project));
+      } else {
+        item->setIcon(QIcon(":/actions/open.svg"));
+        item->setText(QString("%1   %2 %3   %4").arg(e.reaction, QChar(0x2014), e.source, QChar(0x00B7)) + " " + e.what);
+        item->setData(Qt::UserRole, e.project);
+        item->setToolTip(QString("%1 (%2): %3\n%4").arg(e.reaction, e.source, e.what, QDir::toNativeSeparators(e.project)));
+      }
+      examples_->addItem(item);
+    }
+  } else {
+    for (const QString &f : findExamples()) {
+      const QFileInfo info(f);
+      QString text = info.completeBaseName();
+      if (info.dir().dirName() != text) text += QString("   (%1)").arg(info.dir().dirName());
+      const QString title = ReadmeTitle(info.dir());
+      if (!title.isEmpty()) text += QString("  ") + QChar(0x2014) + "  " + title;
+      QListWidgetItem *item = new QListWidgetItem(QIcon(":/actions/open.svg"), text);
+      item->setData(Qt::UserRole, f);
+      item->setToolTip(f);
+      examples_->addItem(item);
+    }
   }
   QVBoxLayout *recentBox = new QVBoxLayout;
   recentBox->addWidget(Heading(tr("Recent projects")));
@@ -155,8 +251,8 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   exampleBox->addWidget(Heading(tr("Example projects")));
   QLabel *exampleNote = new QLabel(examples_->count() ? tr("Projects of this installation; open one, then Save As "
                                                            "to keep your changes elsewhere.")
-                                                      : tr("None found (examples/ of an AZURE2 checkout, or "
-                                                           "AZURE2_EXAMPLES=<directory>)."));
+                                                      : tr("None found (the examples folder of an AZURE2 checkout "
+                                                           "or installation, or the folder AZURE2_EXAMPLES names)."));
   exampleNote->setProperty("role", "hint");
   exampleNote->setWordWrap(true);
   exampleBox->addWidget(exampleNote);
@@ -165,10 +261,9 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   lists->addWidget(Card(recentBox), 1);
   lists->addWidget(Card(exampleBox), 1);
 
+  // what each tab is for: the tabs' tool tips (qt_gui.md section 19.6), not eleven lines on this page
   tabNotes_ = new QWidget;
-  QVBoxLayout *notesBox = new QVBoxLayout;
-  notesBox->addWidget(Heading(tr("The tabs")));
-  notesBox->addWidget(tabNotes_);
+  tabNotes_->hide();
 
   QWidget *content = new QWidget;
   content->setMaximumWidth(1100);
@@ -176,8 +271,10 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   layout->setSpacing(14);
   layout->addLayout(header);
   layout->addLayout(buttons);
-  layout->addLayout(lists, 3);
-  layout->addWidget(Card(notesBox), 2);
+  notices_ = new QVBoxLayout;
+  notices_->setContentsMargins(0, 0, 0, 0);
+  layout->addLayout(notices_);
+  layout->addLayout(lists, 1);
   QHBoxLayout *centred = new QHBoxLayout;
   centred->addStretch(1);
   centred->addWidget(content, 12);
@@ -192,6 +289,13 @@ StartPage::StartPage(QWidget *parent) : QWidget(parent) {
   outer->setContentsMargins(0, 0, 0, 0);
   outer->addWidget(scroll);
 }
+
+void StartPage::setExpertChecked(bool on) {
+  QSignalBlocker block(expert_);
+  expert_->setChecked(on);
+}
+
+void StartPage::addNotice(QWidget *notice) { notices_->addWidget(notice); }
 
 void StartPage::setRecent(const QStringList &files) {
   recent_->clear();

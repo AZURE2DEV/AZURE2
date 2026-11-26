@@ -60,6 +60,13 @@ Platform scripts that set the options live in ``scripts/``
    it, AZURE2 says so once per run and computes the functions directly. See
    :doc:`../user_guide/configure_menu`.
 
+   In the setup program ``AZURESetup`` no command line is needed: while there
+   is no table, the start page and the Overview show one line, "Coulomb table
+   not built: calculations run slower", with a ``Build...`` button, and
+   **Run > Build the Coulomb Table...** opens the same window (where the file
+   goes, a progress bar, Cancel). The build runs beside the window on up to 4
+   threads; calculations started after it use the table without a restart.
+
 CMake Options
 ^^^^^^^^^^^^^
 

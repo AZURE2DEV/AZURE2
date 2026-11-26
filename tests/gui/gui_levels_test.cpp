@@ -397,9 +397,10 @@ int main(int argc, char **argv) {
   {
     levels->setIncludeAllJPi(false);
     Spin(20);
+    // the label is one line (qt_gui.md section 19.6); what to do is its tool tip
     const QString text = levels->missingLabel()->text();
-    Check(text.contains("switch the option on") && text.contains("href='jpi:"),
-          "missing J^pi: says what to do, each J^pi a link");
+    Check(levels->missingLabel()->toolTip().contains("switch the option on") && text.contains("href='jpi:"),
+          "missing J^pi: says what to do (its tip), each J^pi a link");
     const int at = text.indexOf("href='jpi:");
     const QString link = text.mid(at + 6, text.indexOf('\'', at + 6) - at - 6);
     QMetaObject::invokeMethod(levels->missingLabel(), "linkActivated", Q_ARG(QString, link));

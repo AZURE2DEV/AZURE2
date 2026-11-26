@@ -1,5 +1,5 @@
 // The Levels tab's check of the partial waves without a level and its two remedies (PartialWavesDialog.h,
-// docs/upgrade/qt_gui.md section 19.3).
+// docs/upgrade/qt_gui.md section 20.3).
 #include <algorithm>
 #include <cmath>
 

@@ -7,6 +7,10 @@
 #include <algorithm>
 
 #include "LevelsTab.h"
+#include "ButtonSizes.h"
+#include "ExpertMode.h"
+#include "RecordExtras.h"
+#include "RecordsPanel.h"
 #include "PartialWavesDialog.h"
 #include "LevelsHeaderView.h"
 #include "AddLevelDialog.h"
@@ -89,18 +93,22 @@ LevelsTab::LevelsTab(QWidget *parent) :
   maxLSpin->setValue(2);
   QLabel *maxLLabel = new QLabel(tr("Maximum Orbital Momentum"));
   maxMultSpin = new QSpinBox;
+  maxMultSpin->setObjectName("maxMultSpin");
   maxMultSpin->setMinimum(1);
   maxMultSpin->setMaximum(10);
   maxMultSpin->setSingleStep(1);
   maxMultSpin->setValue(2);
   QLabel *maxMultLabel = new QLabel(tr("Maximum Gamma Multipolarity"));
+  maxMultLabelW_ = maxMultLabel;
   maxNumMultSpin = new QSpinBox;
   maxNumMultSpin->setMinimum(1);
   maxNumMultSpin->setMaximum(10);
   maxNumMultSpin->setSingleStep(1);
   maxNumMultSpin->setValue(2);
   QLabel *maxNumMultLabel = new QLabel(tr("Maximum Gamma Multipolarities\nPer Decay"));
-  includeAllJPiCheck = new QCheckBox(tr("Hard-sphere scattering in every J%1 (levels or not)").arg(QChar(0x03C0)));
+  maxNumMultLabelW_ = maxNumMultLabel;
+  // two lines: the configuration column narrow, the channel table wide (qt_gui.md section 19.8)
+  includeAllJPiCheck = new QCheckBox(tr("Hard-sphere scattering in every J%1\n(levels or not)").arg(QChar(0x03C0)));
   includeAllJPiCheck->setToolTip(tr("AZURE2 only includes a J\u03c0 in the calculation when a level carries it. Without this, every J\u03c0 "
                                     "that has no level is missing from elastic scattering (its hard-sphere phase shift), unless a fixed "
                                     "zero-width level is added by hand. With it, every J\u03c0 the particle pairs allow up to the maximum "
@@ -152,7 +160,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::MeaningColumn, QHeaderView::Fixed);
   channelsView->horizontalHeader()->setSectionResizeMode(ChannelsModel::RatioColumn, QHeaderView::Fixed);
   channelsView->setColumnWidth(ChannelsModel::MeaningColumn, 78);
-  channelsView->setColumnWidth(ChannelsModel::RatioColumn, 50);
+  channelsView->setColumnWidth(ChannelsModel::RatioColumn, channelsView->fontMetrics().horizontalAdvance("0.000000") + 12);
   channelsView->setContextMenuPolicy(Qt::CustomContextMenu);
   connect(channelsView, &QWidget::customContextMenuRequested, this, &LevelsTab::showChannelsMenu);
   {
@@ -186,23 +194,18 @@ LevelsTab::LevelsTab(QWidget *parent) :
   connect(channelDetails->wignerButton, SIGNAL(clicked()), this, SLOT(calculateWignerLimit()));
 
   addLevelButton = new QPushButton(tr("+"));
-  addLevelButton->setMaximumSize(28, 28);
   connect(addLevelButton, SIGNAL(clicked()), this, SLOT(addLevel()));
   removeLevelButton = new QPushButton(tr("-"));
-  removeLevelButton->setMaximumSize(28, 28);
   removeLevelButton->setEnabled(false);
   connect(removeLevelButton, SIGNAL(clicked()), this, SLOT(removeLevel()));
   iaeaQueryButton = new QPushButton(tr("NDS"));
-  iaeaQueryButton->setMaximumSize(50, 28);
   iaeaQueryButton->setToolTip(tr("Query NDS database for level schemes"));
   connect(iaeaQueryButton, SIGNAL(clicked()), this, SLOT(addLevelsFromIAEA()));
 
   fixAllWidthsButton = new QPushButton(tr("Fix All Widths"));
-  fixAllWidthsButton->setMaximumHeight(28);
   connect(fixAllWidthsButton, SIGNAL(clicked()), this, SLOT(fixAllWidths()));
 
   fixAllEnergiesButton = new QPushButton(tr("Fix All Energies"));
-  fixAllEnergiesButton->setMaximumHeight(28);
   connect(fixAllEnergiesButton, SIGNAL(clicked()), this, SLOT(fixAllEnergies()));
 
   nucleusFilterCombo = new QComboBox;
@@ -211,9 +214,14 @@ LevelsTab::LevelsTab(QWidget *parent) :
   nucleusFilterCombo->setVisible(false);
   connect(nucleusFilterCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(filterByNucleus(int)));
   exportLatexButton = new QPushButton(tr("Export LaTeX"));
-  exportLatexButton->setMaximumHeight(28);
   exportLatexButton->setToolTip(tr("Export levels and widths to LaTeX table"));
   connect(exportLatexButton, SIGNAL(clicked()), this, SLOT(exportLatexTable()));
+  // the row's buttons sized from the font, not in pixels: "NDS" was cut under a larger font (qt_gui.md 19.11)
+  {
+    const int row = buttons::RowHeight(fixAllWidthsButton);
+    for (QPushButton *b : {addLevelButton, removeLevelButton}) buttons::FitGlyph(b, row);
+    for (QPushButton *b : {iaeaQueryButton, fixAllWidthsButton, fixAllEnergiesButton, exportLatexButton}) buttons::FitText(b, row);
+  }
 
   /*
   mapper = new QSignalMapper(this);
@@ -288,6 +296,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   configLayout->addWidget(includeAllJPiCheck, 3, 0, 1, 2);
   configLayout->addWidget(missingJPiLabel, 4, 0, 1, 2);
   configLayout->addWidget(partialWavesButton_, 5, 0, 1, 2, Qt::AlignLeft);
+  configLayout->setRowStretch(6, 1);  // the rows at the top, the spare height below them (rows hidden in standard view)
   configLayout->setColumnStretch(0, 0);
   configLayout->setColumnStretch(1, 1);
   configBox->setLayout(configLayout);
@@ -317,19 +326,23 @@ LevelsTab::LevelsTab(QWidget *parent) :
   mainLayout->addWidget(channelsBox, 0, 1, 2, 1);
   mainLayout->addWidget(configBox, 0, 2, 1, 1);
   mainLayout->addLayout(detailsBox, 1, 2, 1, 1);
-  mainLayout->setColumnStretch(0, 1);
-  mainLayout->setColumnStretch(1, 1);
-  mainLayout->setColumnStretch(2, 1);
-  // the records that belong to the level scheme (gamma decays, isospin): sub-tabs below, added by the window
-  extras = new QTabWidget;
-  extras->setObjectName("levelsExtras");
-  extras->setVisible(false);
-  mainLayout->addWidget(extras, 2, 0, 1, 3);
+  // the channel table holds nine columns, the configuration a few lines: the middle column wider, so that the Value
+  // column (the width or ANC) is not cut to "2..." (qt_gui.md section 19.8)
+  mainLayout->setColumnStretch(0, 4);
+  mainLayout->setColumnStretch(1, 6);
+  mainLayout->setColumnStretch(2, 2);  // the configuration at its natural width, the rest to the channels
   mainLayout->setRowStretch(0, 3);
   mainLayout->setRowStretch(1, 4);
-  mainLayout->setRowStretch(2, 2);
-
-  setLayout(mainLayout);
+  // the records that belong to the level scheme (gamma decays, isospin): sub-tabs below the levels in a splitter, a
+  // panel without records hidden in standard view (RecordExtras; qt_gui.md sections 19.3, 19.4)
+  QWidget *content = new QWidget;
+  content->setLayout(mainLayout);
+  extras = new RecordExtras(content, "levelsExtras");
+  QVBoxLayout *outer = new QVBoxLayout;
+  outer->setContentsMargins(0, 0, 0, 0);
+  outer->addWidget(extras);
+  setLayout(outer);
+  expert_ = expert::Enabled();
   setUpShortcuts();
 }
 
@@ -733,15 +746,18 @@ void LevelsTab::updateMissingSpinParities() {
   else if (missing.isEmpty())
     missingJPiLabel->setText(tr("Every %1 up to l = %2 has an active level.").arg(jpi).arg(maxLSpin->value()));
   else if (includeAllJPiCheck->isChecked())
-    missingJPiLabel->setText(tr("No active level of %1: these scatter as hard spheres only (the option above). "
-                                "Click one to add a level of it.").arg(linked.join(", ")));
+    missingJPiLabel->setText(tr("Hard sphere only (no level): %1").arg(linked.join(", ")));
   else
-    missingJPiLabel->setText(tr("<font color='#b00020'>Left out of the calculation: %1. No active level carries them and "
-                                "the option above is off, so they have no hard-sphere phase either.</font> To include "
-                                "them, switch the option on, or click a %2 to add a level of it (a background pole, "
-                                "far from the data with its energy fixed, is the usual choice); \"Partial waves...\" "
-                                "adds blank levels for several at once.")
-                                .arg(linked.join(", "), jpi));
+    missingJPiLabel->setText(tr("<font color='#b00020'>Not calculated (no level): %1</font>").arg(linked.join(", ")));
+  // the explanation in the tip, not on the page (qt_gui.md section 19.6)
+  missingJPiLabel->setToolTip(
+      includeAllJPiCheck->isChecked()
+          ? tr("No active level carries these J^pi: they scatter as hard spheres only (the option above).  Click one to "
+               "add a level of it.")
+          : tr("No active level carries these J^pi and the option above is off, so they have no hard-sphere phase "
+               "either.  To include them, switch the option on, or click one to add a level of it (a background pole, "
+               "far from the data with its energy fixed, is the usual choice); \"Partial waves...\" adds blank levels for "
+               "several at once."));
 }
 
 void LevelsTab::updateChannelsPairAddedEdited() {
@@ -782,6 +798,7 @@ void LevelsTab::updateChannelsPairAddedEdited() {
   }
   channelsView->resizeRowsToContents();
   updateMissingSpinParities();
+  updateExpertRows();  // a photon pair added in standard view: its multipolarity limits shown at once
 }
 
 void LevelsTab::updateChannelsPairRemoved(int pairIndex) {
@@ -801,6 +818,7 @@ void LevelsTab::updateChannelsPairRemoved(int pairIndex) {
     }
   }
   channelsView->resizeRowsToContents();
+  updateExpertRows();
 }
 
 void LevelsTab::updateDetails(const QItemSelection &selection) {

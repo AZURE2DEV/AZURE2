@@ -46,6 +46,17 @@ QStringList DiagnosticsPanel::codes() const {
   return out;
 }
 
+QString DiagnosticsPanel::listing(int maxRows) const {
+  QStringList out;
+  const int n = tree_->topLevelItemCount();
+  for (int i = 0; i < n && i < maxRows; i++) {
+    const QTreeWidgetItem *item = tree_->topLevelItem(i);
+    out << QString("%1 %2 (line %3): %4").arg(item->text(0), item->text(1), item->text(2), item->text(4));
+  }
+  if (n > maxRows) out << tr("... and %n more (the Diagnostics list them all)", nullptr, n - maxRows);
+  return out.join("\n");
+}
+
 bool DiagnosticsPanel::validate() {
   tree_->clear();
   errors_ = 0;

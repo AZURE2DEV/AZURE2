@@ -40,7 +40,7 @@ MCMCTab::MCMCTab(ProjectHolder *holder, QWidget *parent) : QWidget(parent), hold
                                      tr("Use Gaussian Prior")});
   table_->horizontalHeader()->setStretchLastSection(true);
   table_->verticalHeader()->setVisible(false);
-  table_->setToolTip(tr("The <mcmc> <parameters> rows: a Gaussian prior on a free parameter, in the sampler's basis "
+  table_->setToolTip(tr("The sampler's parameter rows: a Gaussian prior on a free parameter, in the sampler's basis "
                         "(--basis): a width as its reduced-width amplitude (rwa) or as the project writes it "
                         "(physical).  Only checked rows are written."));
   connect(table_, &QTableWidget::itemChanged, this, [this]() {

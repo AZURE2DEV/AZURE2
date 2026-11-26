@@ -5,6 +5,7 @@
 // AZUREParams::WriteUserParameters), matched to the project's records by the engine's own build of the project, as
 // ReadCurves (FrontOutputs.cpp) matches the curves.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <algorithm>
 #include <chrono>
@@ -117,6 +118,7 @@ void ReadTotalLine(const std::string &line, std::vector<std::pair<std::string, d
 }  // namespace
 
 ProjectSummary SummarizeProject(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   ProjectSummary out;
   out.file = project.Path();
   out.pairs = Pairs(project);
@@ -220,6 +222,7 @@ ProjectSummary SummarizeProject(const Project &project) {
 }
 
 RunSummary ReadLastRun(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   RunSummary out;
   out.outputDirectory = ex::PathToOpen(project.Directory(), project.ConfigValue("output_dir"));
   if (!out.outputDirectory.empty() && out.outputDirectory.back() != '/') out.outputDirectory += '/';
@@ -358,6 +361,7 @@ RunSummary ReadLastRun(const Project &project) {
 }
 
 std::vector<InputFile> InputFiles(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<InputFile> out;
   const ex::Format3Project built = Built(project);
   if (!built.Ok()) return out;

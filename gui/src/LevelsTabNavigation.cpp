@@ -11,12 +11,13 @@
 #include <cmath>
 
 #include "LevelsTab.h"
+#include "ButtonSizes.h"
 #include "PairsTab.h"
 
 QLayout *LevelsTab::buildFilterBar() {
   search_ = new QLineEdit;
   search_->setObjectName("levelSearch");
-  search_->setPlaceholderText(tr("Search: 3/2- or 7.1"));
+  search_->setPlaceholderText(tr("3/2- or 7.1"));  // the field's purpose in its tip; the hint whole
   search_->setClearButtonEnabled(true);
   search_->setToolTip(tr("Show the levels whose J^pi starts with this (3/2-, 2+) or whose energy contains it"));
   connect(search_, &QLineEdit::textChanged, this, [this](const QString &t) {
@@ -26,9 +27,11 @@ QLayout *LevelsTab::buildFilterBar() {
   jpiFilter_ = new QComboBox;
   jpiFilter_->setObjectName("jpiFilter");
   jpiFilter_->setToolTip(tr("Show the levels of one J^pi; the number of levels of each"));
+  jpiFilter_->setSizeAdjustPolicy(QComboBox::AdjustToContents);  // "All Jπ (34)" whole, not "All Jπ (34"
   connect(jpiFilter_, qOverload<int>(&QComboBox::currentIndexChanged), this, &LevelsTab::jpiFilterChosen);
   onlyIncluded_ = new QCheckBox(tr("Only included"));
   onlyIncluded_->setObjectName("onlyIncluded");
+  onlyIncluded_->setMinimumWidth(onlyIncluded_->sizeHint().width());  // its label whole under a larger font
   onlyIncluded_->setToolTip(tr("Hide the levels left out of the calculation (Include? off)"));
   connect(onlyIncluded_, &QCheckBox::toggled, this, [this](bool on) {
     levelsModelProxy->setOnlyIncluded(on);
@@ -42,8 +45,8 @@ QLayout *LevelsTab::buildFilterBar() {
   status_->setTextFormat(Qt::RichText);
   auto *bar = new QHBoxLayout;
   bar->setContentsMargins(0, 0, 0, 0);
-  bar->addWidget(search_, 2);
-  bar->addWidget(jpiFilter_, 1);
+  bar->addWidget(search_, 1);
+  bar->addWidget(jpiFilter_, 0);
   bar->addWidget(onlyIncluded_);
   bar->addWidget(count_);
   return bar;
@@ -57,7 +60,8 @@ QLayout *LevelsTab::buildAddBar() {
   addPi_->setObjectName("addLevelParity");
   addE_ = new QLineEdit;
   addE_->setObjectName("addLevelEnergy");
-  addE_->setPlaceholderText(tr("E_x [MeV]"));
+  addE_->setPlaceholderText(tr("MeV"));  // after the label "E": a hint that fits the field (was cut to "E_x [...")
+  addE_->setMinimumWidth(addE_->fontMetrics().horizontalAdvance("00.0000") + 16);
   addE_->setToolTip(tr("The level's excitation energy E_x (MeV); Enter adds the level"));
   addNucleus_ = new QComboBox;
   addNucleus_->setObjectName("addLevelNucleus");
@@ -82,6 +86,9 @@ QLayout *LevelsTab::buildAddBar() {
   bar->addWidget(addNucleus_);
   bar->addWidget(addBarButton_);
   bar->addWidget(duplicateButton_);
+  // the labels of the add bar's buttons stay whole under a larger font (qt_gui.md 19.11)
+  for (QAbstractButton *b : {static_cast<QAbstractButton *>(addBarButton_), static_cast<QAbstractButton *>(duplicateButton_)})
+    b->setMinimumWidth(buttons::TextWidth(b));
   return bar;
 }
 

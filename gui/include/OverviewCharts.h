@@ -29,6 +29,12 @@ class BarChart : public QWidget {
 
   /// The colour of a value to look at, readable on the light and the dark palette.
   static QColor warningColor();
+  /// The top of the bars' scale: the largest finite value, or, when it is more than ten times the median of the
+  /// positive values (one outlier would flatten the others), ten times the median; `capped` says which.  Bars above
+  /// it are drawn full and cut (qt_gui.md section 19.9).
+  static double ScaleTop(const QVector<double> &values, bool *capped = nullptr);
+  /// Whether the last drawing cut the bars at a capped scale (the tests).
+  bool capped() const { return capped_; }
 
  protected:
   void paintEvent(QPaintEvent *) override;
@@ -40,6 +46,7 @@ class BarChart : public QWidget {
   QVector<bool> highlight_;
   double reference_;
   QString referenceText_, empty_;
+  bool capped_ = false;
 };
 
 #endif

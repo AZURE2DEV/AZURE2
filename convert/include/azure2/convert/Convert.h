@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "azure2/convert/LineRepair.h"
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/io/Document.h"
 
@@ -64,6 +65,9 @@ struct ConstructCount {
 struct ConvertResult {
   bool ok = false;      ///< `text` is a valid format-3 project (or has only '?' placeholders, with allowQuestions)
   std::string refusal;  ///< why there is no result: "already format 3", a line the old engine refused, ...
+  /// When the refusal is about one <segmentsData>, <segmentsTest> or <targetInt> line: where it is, what is expected,
+  /// the readings proposed (LineRepair.h); `refusal` then ends with lineProblem.Text().
+  LineProblem lineProblem;
   std::string text;     ///< the converted project
   std::vector<std::string> format2Changes;  ///< io::ConvertToFormat2's list
   std::vector<ConvertNote> notes;

@@ -1326,6 +1326,56 @@ classified, 0 differ, 0 missing.
 6. The converted files replace the originals in one commit; the originals move to `tests/convert/fixtures/` with their
    committed conversions (check 20), so the converter is tested on every construct for as long as it exists.
 
+### 8.6 The forms of the file through its history (2026-11-25)
+
+The PI: "the old format files does not convert ... make so all the files will convert, both the original ones and the
+ones where component segments were added".  The forms were read from the history of every ref of the repository
+(`tests/convert/fixtures/history/README.md` has the timeline with its commits and the table of forms); the
+repository's history starts on 2020-07-03 and holds no project file before 2026-04-22, so the earlier forms were
+rebuilt from the writers of their era (`make_fixtures.py` there).  What the converter now does, beside section 8.1:
+
+- **Before 2020** (`OldEra.cpp`, `FoldOldExternalCapture`): `<levels>` rows of 30 columns get `ecMultMask` 0, and an
+  `<externalCapture>` line `isActive exitPair minJ maxJ mask` sets the mask of its exit pair's rows, as the 2020 setup
+  program imported such a file (the 2020 engine refused it; no engine of that era is in the history).  An inactive
+  line, or two masks for one pair, is refused: the import applied an inactive line, the engine is not known to.
+- **`<lastRun>` not closed** at the end of the file: closed (`CloseOldLastRun`); no engine read that section.
+- **A data file name with blanks, unquoted, running to the end of the line**: that name, as the engines of 2020 and
+  2025-08 read the rest of the line (`QuotedDataFile`); before only when the file existed.
+- **Target lines of 2025-01-26 .. 01-30** (`TargetLineOfFirstEra`): the convolution coefficients had no equation token
+  and sigma(E_lab) was the polynomial c0 + c1 E + ...; the later writer always quoted the equation, so a bare count in
+  its place is that form, and the equation `a0+a1*x+...` is written in.  Before, the count was read as the equation
+  (`spread formula "2"`) without a word.
+- **dev's spin observables written as type 9 with an operator** (until 2026-11-11): read as type 10.
+- **A `<targetInt>` line of inactive lines only**: its nucleus from the lines it lists (was a question).
+- **Numbers run together by the writer of 2026-09-25 .. 10-07** (`GluedNumbers`, a number with more than 17 significant
+  digits or a leading zero before a digit): a `<levels>` row is refused naming the token (before it was converted with
+  its columns shifted); a data, test or target line gets the split as a proposed reading.
+- **Refused with an accurate reason**: isDiff 8 (2026-09-17 .. 09-28, no format-3 quantity), `mixture` (dev,
+  2026-10-12 .. 13, no format-3 record).
+
+- **A final state of external capture that is no level of <levels>** (E_FINAL_STATE_NOT_LEVEL, checked by the engine's
+  build of the converted text, data files not required): refused at conversion (a shared or an unbound final state
+  stays the run's refusal, with its own reason).  The engine
+  before 2026-10-26 (35793eb3) created it as a hidden level at the pair's E_x with a free reduced width of 0.1 MeV^1/2
+  in each particle channel; that level is not written by guess.  The two refusal models of
+  `tests/ec_final_state_listed` (their originals in `tests/convert/fixtures/`) are refused here now instead of at
+  their run.
+
+Truly ambiguous (two meanings in two eras or writers, not guessed): glued numbers; an inactive `<externalCapture>`
+line; a component list of n components followed by between 2n and 3n numbers that a hand edit produced (the setup
+program never wrote two-number components with the secondary-decay field: the field came on 2026-03-09, after the
+angles of 2025-12-22); the converter keeps the reading of the setup program of the era (three numbers when 3n follow).
+
+Checks (`convert_history`): each converted form against the same project in a later era's form (records equal; the
+pre-2020 file's calculation gives the 2020 file's output files byte for byte); every historical `.azr` blob of every
+ref (678 blobs, 291 old-format) converted with the converter of 43ac5acd and with this one: of the 265 that converted,
+263 give the same bytes and 2 (the final-state refusal models above) are refused; 4 more convert (the type-9 spin
+observables, the target of inactive lines); 24 are refused (7 record fragments without `<levels>`, 7 intentional bad
+fixtures, 2 final-state models, 6 `mixture`, 1 isDiff 8, a THM toy whose pair breaks charge conservation).  A corpus
+of 377 old projects of real users (read-only, not in the repository): 376 convert (one is a macOS resource file), 316
+validate, 58 lack only their data files (absolute paths of another computer, placeholders, moved folders: notes, and
+the window's Locate Data Files...), 2 are now refused at conversion for an unlisted final state.  `convert_cli_locale` and `gui_casual` (h): the same bytes under a decimal-comma locale.
+
 ## 9. Worked user stories
 
 Each story is given as file, Python, GUI and agent. Pair labels assume a project with the pairs named.

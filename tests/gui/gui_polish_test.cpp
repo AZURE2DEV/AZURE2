@@ -345,8 +345,8 @@ int main(int argc, char **argv) {
     Check(list.size() == before + 1 && list.last().lightZ == 2 && list.last().heavyZ == 7 && list.last().heavyJ == 0.5 &&
               list.last().heavyPi == -1 && list.last().seperationEnergy > 0,
           "T2: the pair a + 15N added with 1/2-, S from the table: " + std::to_string(list.isEmpty() ? 0 : list.last().seperationEnergy));
-    pairs->findChild<QTableView *>()->setCurrentIndex(pairs->getPairsModel()->index(list.size() - 1, 0));
-    pairs->findChild<QTableView *>()->selectRow(list.size() - 1);
+    pairs->findChild<QTableView *>("pairsView")->setCurrentIndex(pairs->getPairsModel()->index(list.size() - 1, 0));
+    pairs->findChild<QTableView *>("pairsView")->selectRow(list.size() - 1);
     QTimer::singleShot(200, [&]() {
       AddPairDialog *d = qobject_cast<AddPairDialog *>(QApplication::activeModalWidget());
       if (!d) return;

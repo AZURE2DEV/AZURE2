@@ -14,9 +14,9 @@ QT_END_NAMESPACE
 
 /*!
  * The Tools menu (docs/upgrade/qt_gui.md section 9): what lives in pyazr and not in the engine (ENDF-6 export and
- * import, the Coulomb table's build, EXFOR and ENSDF imports, the web page of the project) started as
- * `<python> -m pyazr ...`, a child process whose output goes to the log pane.  Nothing of it is re-implemented in
- * C++.  The interpreter is the one chosen in Configure > Directories (a setting of this computer, not of the
+ * import, EXFOR and ENSDF imports, the web page of the project) started as `<python> -m pyazr ...`, a child process
+ * whose output goes to the log pane.  Nothing of it is re-implemented in C++.  The Coulomb table's entry opens the
+ * window's own dialog (CoulombTableUi.h: the engine's build through the facade, no Python).  The interpreter is the one chosen in Configure > Directories (a setting of this computer, not of the
  * project; default python3); every item is disabled, with the reason in its tool tip, when `import pyazr` fails
  * with it.  The web page is `python -m pyazr ui FILE --json`, which binds to 127.0.0.1; its process is stopped with
  * the window.
@@ -47,6 +47,8 @@ class PythonTools : public QObject {
   void line(const QString &text, bool transient);
   void finished(int exitCode);
   void webPageReady(const QString &url);
+  /// Tools > Build or Check the Coulomb Table...: the window's own dialog (CoulombTableUi.h), not a pyazr command.
+  void coulombTableRequested();
 
  private:
   QWidget *window_;

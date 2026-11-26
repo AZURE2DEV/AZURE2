@@ -1,0 +1,122 @@
+{
+  "about": "The example projects the Qt program's start page lists (docs/upgrade/qt_gui.md section 19.9; user guide getting_started/examples.rst). One entry per reaction; variants of the same reaction under it. Paths are relative to the folder that holds examples/. Each entry is checked by tests/gui/gui_casual_test.cpp (it exists, opens with no dialog and no warning note, and validates).",
+  "format": 1,
+  "groups": [
+    {
+      "title": "Trojan Horse evaluations (HOES data with direct data)",
+      "entries": [
+        {
+          "reaction": "¹²C+¹²C → ²⁰Ne+α, ²³Na+p",
+          "source": "Tumino et al. 2018",
+          "what": "THM and direct data, four exit channels in one experiment",
+          "project": "examples/c12c12_tumino2018/c12c12_tumino2018.azr"
+        },
+        {
+          "reaction": "¹⁹F(p,αγ)¹⁶O",
+          "source": "Su et al. 2025",
+          "what": "THM with the JUNA and Spyrou direct data, a profiled background",
+          "project": "examples/f19_pag_thm/f19_pag_thm.azr"
+        },
+        {
+          "reaction": "¹⁸O(p,α)¹⁵N",
+          "source": "La Cognata, Spitaleri & Mukhamedzhanov 2010",
+          "what": "THM with direct data, the distorted-wave vertex",
+          "project": "examples/o18_lacognata2010/o18_lacognata2010.azr",
+          "variants": [
+            {
+              "what": "THM only, the three narrow levels (La Cognata et al. 2008)",
+              "project": "examples/o18_lacognata2008/o18_lacognata2008.azr"
+            }
+          ]
+        },
+        {
+          "reaction": "¹⁷O(n,α)¹⁴C",
+          "source": "Guardo et al. 2017",
+          "what": "HOES yields below the neutron threshold",
+          "project": "examples/o17_guardo2017_fit/o17_guardo2017_fit.azr",
+          "variants": [
+            {
+              "what": "the same points as first entered (reduced-width amplitudes, default THM settings)",
+              "project": "examples/o17_guardo/o17_guardo.azr"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "On-shell THM points with direct data",
+      "entries": [
+        {
+          "reaction": "¹⁵N(p,α₀)¹²C",
+          "source": "La Cognata et al. 2007",
+          "what": "a THM S-factor table fitted with direct data",
+          "project": "examples/n15_lacognata2007/n15_lacognata2007.azr"
+        },
+        {
+          "reaction": "⁷Li(p,α)⁴He",
+          "source": "Tumino et al. 2006",
+          "what": "an identical α exit pair, a free norm",
+          "project": "examples/li7_tumino2006/li7_tumino2006.azr"
+        },
+        {
+          "reaction": "⁶Li(d,α)⁴He",
+          "source": "Pizzone et al. 2011",
+          "what": "THM points with four direct data sets",
+          "project": "examples/li6_pizzone2011/li6_pizzone2011.azr"
+        }
+      ]
+    },
+    {
+      "title": "Direct measurements",
+      "entries": [
+        {
+          "reaction": "n + ²⁰,²¹,²²Ne total cross sections",
+          "source": "eleven measurements",
+          "what": "neutrons on natural neon: three compound nuclei, a natural target",
+          "project": "examples/natural_neon/natural_neon.azr"
+        }
+      ]
+    },
+    {
+      "title": "Tutorials (synthetic data from known parameters)",
+      "entries": [
+        {
+          "reaction": "p + ¹²C → ¹³N",
+          "source": "test project T1",
+          "what": "capture and scattering; a fit returns the known parameters",
+          "project": "tests/upgrade/T1/T1.azr",
+          "variants": [
+            {
+              "what": "the start values of the fit",
+              "project": "tests/upgrade/T1/T1_start.azr"
+            }
+          ]
+        },
+        {
+          "reaction": "p + ¹⁵N → ¹⁶O",
+          "source": "test project T2",
+          "what": "data through an apparatus: targets, beams, detectors, a natural target",
+          "project": "tests/upgrade/T2/T2.azr",
+          "variants": [
+            {
+              "what": "the true parameters the data were made from",
+              "project": "tests/upgrade/T2/T2_true.azr"
+            }
+          ]
+        },
+        {
+          "reaction": "⁸Be (α+α, p+⁷Li, n+⁷Be)",
+          "source": "test project T3",
+          "what": "identical bosons, neutrons and special channels",
+          "project": "tests/upgrade/T3/T3.azr",
+          "variants": [
+            {
+              "what": "the start values of the fit",
+              "project": "tests/upgrade/T3/T3_start.azr"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

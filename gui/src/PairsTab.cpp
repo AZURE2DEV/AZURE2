@@ -14,6 +14,8 @@
 #include <QInputDialog>
 #include <QTabWidget>
 #include "PairsTab.h"
+#include "ButtonSizes.h"
+#include "RecordExtras.h"
 #include "LevelsTab.h"
 #include "LevelsViews.h"
 #include "ProjectHolder.h"
@@ -32,6 +34,7 @@ PairsTab::PairsTab(QWidget *parent) :
   pairsModel = new PairsModel(this);
 
   pairsView = new QTableView;
+  pairsView->setObjectName("pairsView");
   pairsView->setModel(pairsModel);
   pairsView->verticalHeader()->setHighlightSections(false);
   pairsView->horizontalHeader()->setHighlightSections(false);
@@ -81,10 +84,8 @@ PairsTab::PairsTab(QWidget *parent) :
   for (int i = 0; i < pairsModel->columnCount(QModelIndex()); i++) pairsView->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Stretch);
 
   addButton = new QPushButton(tr("+"));
-  addButton->setMaximumSize(28, 28);
   connect(addButton, SIGNAL(clicked()), this, SLOT(addPair()));
   deleteButton = new QPushButton(tr("-"));
-  deleteButton->setMaximumSize(28, 28);
   deleteButton->setEnabled(false);
   connect(deleteButton, SIGNAL(clicked()), this, SLOT(removePair()));
   duplicateButton = new QPushButton(tr("Duplicate"));
@@ -92,6 +93,8 @@ PairsTab::PairsTab(QWidget *parent) :
   duplicateButton->setToolTip(tr("A copy of the selected pair in the pair dialog, to change into another pair (Ctrl+D)"));
   duplicateButton->setEnabled(false);
   connect(duplicateButton, &QPushButton::clicked, this, &PairsTab::duplicatePair);
+  // "+" and "-" squares of the row's height, from the font (qt_gui.md 19.11)
+  for (QPushButton *b : {addButton, deleteButton}) buttons::FitGlyph(b, buttons::RowHeight(duplicateButton));
   {
     auto *s = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), pairsView);
     s->setContext(Qt::WidgetShortcut);
@@ -132,26 +135,23 @@ PairsTab::PairsTab(QWidget *parent) :
   buttonBox->setHorizontalSpacing(0);
 #endif
 
-  QVBoxLayout *layout = new QVBoxLayout();
+  QWidget *content = new QWidget;
+  QVBoxLayout *layout = new QVBoxLayout(content);
+  layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(pairsView);
   layout->addLayout(buttonBox);
-  extras = new QTabWidget;
-  extras->setVisible(false);
-  layout->addWidget(extras);
-  layout->setStretch(0, 2);
-  layout->setStretch(2, 5);
-  setLayout(layout);
+  // the per-channel radii below the pairs in a splitter, hidden in standard view while there are none (RecordExtras)
+  extras = new RecordExtras(content, "pairsExtras");
+  QVBoxLayout *outer = new QVBoxLayout;
+  outer->addWidget(extras);
+  setLayout(outer);
 }
 
-void PairsTab::addExtraPanel(const QString &title, QWidget *panel, bool first) {
-  if (first) {
-    extras->insertTab(0, panel, title);
-    extras->setCurrentIndex(0);
-  } else {
-    extras->addTab(panel, title);
-  }
-  extras->setVisible(true);
-}
+void PairsTab::addExtraPanel(const QString &title, RecordsPanel *panel) { extras->addPanel(title, panel); }
+
+void PairsTab::setExpertMode(bool on) { extras->setExpertMode(on); }
+
+void PairsTab::addExtraPanel(const QString &title, QWidget *panel, bool first) { extras->addWidgetPanel(title, panel, first); }
 
 void PairsTab::reset() {
   pairsModel->removeRows(0, pairsModel->numPairs(), QModelIndex());
@@ -201,7 +201,9 @@ void PairsTab::duplicatePair() {
 }
 
 void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
-  if (pairsModel->isPair(pair) == -1) {
+  // A pair typed by the user that repeats another is refused; one read from the project is taken at its key (the
+  // file may hold the same pair under two keys, LevelsTab::readLevels).
+  if (fromFile || pairsModel->isPair(pair) == -1) {
     pairsModel->insertRows(pairsModel->numPairs(), pairIndex + 1 - pairsModel->numPairs(), QModelIndex());
 
     QModelIndex index = pairsModel->index(pairIndex, 0, QModelIndex());

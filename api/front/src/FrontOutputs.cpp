@@ -7,6 +7,7 @@
 // sets (or extrapolations) in record order, less a data set without points; chiSquared.out lists the keys of those
 // that were used with their number of points, which this reader checks every block against.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <cmath>
 #include <cstdio>
@@ -105,6 +106,7 @@ struct Item {
 }  // namespace
 
 Curves ReadCurves(const Project &project) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   Curves out;
   ex::Format3ReadOptions read;
   read.fileName = project.Path();
@@ -230,6 +232,7 @@ Curves ReadCurves(const Project &project) {
 }
 
 bool ReadSamplerChain(const Project &project, SamplerChain &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   out = SamplerChain();
   std::string dir = ex::PathToOpen(project.Directory(), project.ConfigValue("output_dir"));
   if (!dir.empty() && dir.back() != '/') dir += '/';

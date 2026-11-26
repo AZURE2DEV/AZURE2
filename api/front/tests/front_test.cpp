@@ -11,7 +11,7 @@
 //      the row, the 1/2+ block's phase shift against the program's extrapolation, |U| = 1, |det A^-1| least at the
 //      level; T2's THM vertex;
 //  (g) what the Qt Physics tab draws (PhysicsCalls, PhysicsPlots, Block's T_abs, LastParameterFile);
-//  (h) the Potential panel and the partial waves (qt_gui.md section 19; PotentialChecks): a record switched off and on
+//  (h) the Potential panel and the partial waves (qt_gui.md section 20; PotentialChecks): a record switched off and on
 //      byte for byte, the waves split and written back, the pair's record found on and off, the box states and a, r
 //      of the record equal to the session's (AZUREAPI) bit for bit, the set-up's refusal of a subtract, the depths for
 //      a0 = 40 fm and for the p3/2 bound state against scipy, the partial waves an active level or includeAllJPi keep.

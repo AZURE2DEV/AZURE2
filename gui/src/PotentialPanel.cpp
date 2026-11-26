@@ -1,4 +1,4 @@
-// The Potential panel of the Particle Pairs tab (PotentialPanel.h, docs/upgrade/qt_gui.md section 19).
+// The Potential panel of the Particle Pairs tab (PotentialPanel.h, docs/upgrade/qt_gui.md section 20).
 #include "PotentialPanel.h"
 
 #include <cmath>

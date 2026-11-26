@@ -1,4 +1,5 @@
 #include "ValueEditor.h"
+#include "ExpertMode.h"
 
 #include <QCheckBox>
 #include <QColor>
@@ -100,13 +101,70 @@ QStringList UnitsOf(const front::ValueInfo &info, const EditorContext &c) {
   return Words(info.units);
 }
 
+
+}  // namespace
+
+QString RoundedNumbers(const QString &text) {
+  const QStringList words = text.split(' ');
+  QStringList out;
+  out.reserve(words.size());
+  for (const QString &w : words) {
+    int digits = 0;
+    bool started = false, plain = !w.isEmpty();
+    for (const QChar ch : w) {
+      if (ch == 'e' || ch == 'E') break;
+      if (ch.isDigit()) {
+        started = started || ch != '0';
+        if (started) digits++;
+      } else if (ch != '.' && ch != '-' && ch != '+') {
+        plain = false;
+        break;
+      }
+    }
+    bool ok = false;
+    const double v = plain && digits > 12 ? w.toDouble(&ok) : 0.0;
+    out << (ok ? QString::number(v, 'g', 12) : w);
+  }
+  return out.join(' ');
+}
+
+namespace {
+
+/// A line showing numbers: the text rounded for display (RoundedNumbers), the exact text kept and given back while
+/// the line shows what it was given, so that a field the user did not touch writes the file's text (19.9).
+void ShowNumbers(QLineEdit *e, const QString &exact) {
+  const QString shown = RoundedNumbers(exact);
+  e->setText(shown);
+  e->setProperty("exactText", exact);
+  e->setProperty("shownText", shown);
+}
+
+QString NumbersOf(const QLineEdit *e) {
+  const QVariant shown = e->property("shownText");
+  return shown.isValid() && e->text() == shown.toString() ? e->property("exactText").toString() : e->text();
+}
+
+}  // namespace
+
+QString PlainHint(const std::string &grammar) {
+  const QString g = Q(grammar).trimmed();
+  if (g.isEmpty()) return g;
+  if (g.contains("<A><Symbol>")) return QObject::tr("e.g. 20Ne");
+  if (g.contains('|') || g.contains('[') || g.count('<') > 1) return QString();
+  QString plain = g;
+  plain.remove('<').remove('>');
+  return plain;
+}
+
+namespace {
+
 // ---------------------------------------------------------------- one line
 class WordEditor : public PieceEditor {
  public:
   WordEditor(const front::ValueInfo &info, const std::string &defaultText) : info_(info) {
     const bool number = Is(info, "number") || Is(info, "integer");
-    edit_ = number ? NumberLine(Q(info.grammar), Is(info, "integer")) : new QLineEdit;
-    if (!number) edit_->setPlaceholderText(Q(info.grammar));
+    edit_ = number ? NumberLine(PlainHint(info.grammar), Is(info, "integer")) : new QLineEdit;
+    if (!number) edit_->setPlaceholderText(PlainHint(info.grammar));
     if (!defaultText.empty()) edit_->setPlaceholderText(tr("default: %1").arg(Q(defaultText)));
     Row(this)->addWidget(edit_, number ? 0 : 1);
     if (number) static_cast<QHBoxLayout *>(layout())->addStretch(1);
@@ -120,20 +178,21 @@ class WordEditor : public PieceEditor {
       for (const auto &c : p.composition) parts << Q(c.first) + " " + Q(c.second);
       text = parts.join(' ');
     }
-    edit_->setText(text);
+    ShowNumbers(edit_, text);
     return true;
   }
   front::ValueParts get() const override {
     front::ValueParts p;
     p.type = info_.type;
-    const QStringList tokens = edit_->text().split(' ', Qt::SkipEmptyParts);
+    const QString whole = NumbersOf(edit_);
+    const QStringList tokens = whole.split(' ', Qt::SkipEmptyParts);
     if (Is(info_, "number_list")) {
       for (const QString &t : tokens) p.numbers.push_back(S(t));
     } else if (Is(info_, "composition")) {
       for (int i = 0; i + 1 < tokens.size(); i += 2) p.composition.push_back({S(tokens[i]), S(tokens[i + 1])});
       if (tokens.size() % 2) p.composition.push_back({S(tokens.last()), ""});
     } else {
-      p.text = S(edit_->text());
+      p.text = S(whole);
     }
     return p;
   }
@@ -274,16 +333,16 @@ class NumberUnitEditor : public PieceEditor {
     connect(unit_, QOverload<int>::of(&QComboBox::activated), this, &PieceEditor::changed);
   }
   bool set(const front::ValueParts &p) override {
-    lo_->setText(Q(hi_ ? p.lo : p.number));
-    if (hi_) hi_->setText(Q(p.hi));
+    ShowNumbers(lo_, Q(hi_ ? p.lo : p.number));
+    if (hi_) ShowNumbers(hi_, Q(p.hi));
     SelectWord(unit_, Q(p.unit));
     return true;
   }
   front::ValueParts get() const override {
     front::ValueParts p;
     p.type = info_.type;
-    (hi_ ? p.lo : p.number) = S(lo_->text());
-    if (hi_) p.hi = S(hi_->text());
+    (hi_ ? p.lo : p.number) = S(NumbersOf(lo_));
+    if (hi_) p.hi = S(NumbersOf(hi_));
     p.unit = S(Word(unit_));
     return p;
   }
@@ -387,15 +446,15 @@ class NuisanceEditor : public PieceEditor {
   }
   bool set(const front::ValueParts &p) override {
     if (source_) SelectWord(source_, p.reference ? Q(p.text) : QString());
-    value_->setText(Q(p.number));
+    ShowNumbers(value_, Q(p.number));
     if (unit_) SelectWord(unit_, Q(p.unit));
     fit_->setChecked(p.fit);
     if (profiled_) profiled_->setChecked(p.profiled);
     usePrior_->setChecked(p.hasPrior);
-    centre_->setText(Q(p.priorCentre));
-    width_->setText(Q(p.priorWidth));
+    ShowNumbers(centre_, Q(p.priorCentre));
+    ShowNumbers(width_, Q(p.priorWidth));
     percent_->setChecked(p.priorPercent);
-    gridMax_->setText(Q(p.gridMax));
+    ShowNumbers(gridMax_, Q(p.gridMax));
     centre_->setEnabled(p.hasPrior);
     width_->setEnabled(p.hasPrior);
     percent_->setEnabled(p.hasPrior);
@@ -416,14 +475,14 @@ class NuisanceEditor : public PieceEditor {
       return p;
     }
     p.profiled = profiled_ && profiled_->isChecked();
-    p.number = S(value_->text());
+    p.number = S(NumbersOf(value_));
     if (unit_) p.unit = S(Word(unit_));
     p.fit = fit_->isChecked();
     p.hasPrior = usePrior_->isChecked();
-    p.priorCentre = S(centre_->text());
-    p.priorWidth = S(width_->text());
+    p.priorCentre = S(NumbersOf(centre_));
+    p.priorWidth = S(NumbersOf(width_));
     p.priorPercent = percent_->isChecked();
-    p.gridMax = S(gridMax_->text());
+    p.gridMax = S(NumbersOf(gridMax_));
     return p;
   }
 
@@ -673,7 +732,14 @@ class FormEditor : public PieceEditor {
   void showAlternative(int i) {
     if (i < 0 || i >= (int)info_.alternatives.size()) return;
     pages_->setCurrentIndex(i);
+    // the alternative's doc beside the choice explains the choice; a value of one form only has no choice, and its doc
+    // is the field's (its box or label says it): the tip only, not a grey line repeated on every entry of a repeatable
+    // field (natural_neon's isotopes; qt_gui.md section 19.8)
     doc_->setText(Q(info_.alternatives[i].doc));
+    // (an unkeyed alternative is listed in the choice by its doc already: no second copy beside it)
+    const bool explains = info_.alternatives.size() > 1 && !info_.alternatives[i].keyword.empty();
+    doc_->setVisible(explains);
+    setToolTip(explains ? QString() : Q(info_.alternatives[i].doc));
     // the stack takes the height of the page shown, not of the tallest
     for (int k = 0; k < pages_->count(); k++)
       pages_->widget(k)->setSizePolicy(QSizePolicy::Preferred, k == i ? QSizePolicy::Preferred : QSizePolicy::Ignored);
@@ -759,9 +825,9 @@ class GridEditor : public PieceEditor {
     const int at = kind_->findData(Q(p.gridKind));
     if (at < 0) return false;
     kind_->setCurrentIndex(at);
-    lo_->setText(Q(p.lo));
-    hi_->setText(Q(p.hi));
-    list_->setText(Words(p.numbers).join(' '));
+    ShowNumbers(lo_, Q(p.lo));
+    ShowNumbers(hi_, Q(p.hi));
+    ShowNumbers(list_, Words(p.numbers).join(' '));
     front::ValueParts path;
     path.text = p.text;
     path.quoted = p.quoted;
@@ -769,7 +835,7 @@ class GridEditor : public PieceEditor {
     SelectWord(unit_, Q(p.unit));
     SelectWord(frame_, Q(p.frame));
     spacing_->setCurrentIndex(p.byPoints ? 1 : 0);
-    step_->setText(Q(p.step));
+    ShowNumbers(step_, Q(p.step));
     points_->setText(Q(p.points));
     log_->setChecked(p.log);
     tolerance_->setText(Q(p.tolerance));
@@ -782,16 +848,16 @@ class GridEditor : public PieceEditor {
     front::ValueParts p;
     p.type = info_.type;
     p.gridKind = S(Word(kind_));
-    p.lo = S(lo_->text());
-    p.hi = S(hi_->text());
-    for (const QString &t : list_->text().split(' ', Qt::SkipEmptyParts)) p.numbers.push_back(S(t));
+    p.lo = S(NumbersOf(lo_));
+    p.hi = S(NumbersOf(hi_));
+    for (const QString &t : NumbersOf(list_).split(' ', Qt::SkipEmptyParts)) p.numbers.push_back(S(t));
     const front::ValueParts path = path_->get();
     p.text = path.text;
     p.quoted = path.quoted;
     p.unit = S(Word(unit_));
     p.frame = S(Word(frame_));
     p.byPoints = spacing_->currentIndex() == 1;
-    p.step = S(step_->text());
+    p.step = S(NumbersOf(step_));
     p.points = S(points_->text());
     p.log = log_->isChecked();
     p.tolerance = S(tolerance_->text());
@@ -1472,10 +1538,14 @@ FieldEditor::FieldEditor(const front::FieldInfo &field, const EditorContext &con
   textToggle_->setText(tr("Text"));
   textToggle_->setToolButtonStyle(Qt::ToolButtonIconOnly);
   textToggle_->setCheckable(true);
-  textToggle_->setToolTip(tr("<b>Edit this field as text</b>: the value as the project file writes it (its grammar: "
-                             "<tt>%1</tt>). Click again to return to the widgets.")
-                              .arg(Q(field.grammar).toHtmlEscaped()));
+  textToggle_->setToolTip(expert::Enabled()
+                              ? tr("<b>Edit this field as text</b>: the value as the project file writes it (its grammar: "
+                                   "<tt>%1</tt>). Click again to return to the widgets.")
+                                    .arg(Q(field.grammar).toHtmlEscaped())
+                              : tr("<b>Edit this field as text</b>: the value as the project file writes it. Click again "
+                                   "to return to the widgets."));
   textToggle_->setAutoRaise(true);
+  textToggle_->setFixedSize(24, 22);  // one size on every row (qt_gui.md section 19.9)
   h->addWidget(piece_, 1);
   h->addWidget(textEdit_, 1);
   h->addWidget(textToggle_, 0, Qt::AlignTop);
@@ -1586,6 +1656,12 @@ void FieldEditor::typeText(const QString &text) {
   emit changed();
 }
 
+void FieldEditor::setApplies(bool on) {
+  if (applies_ == on) return;
+  applies_ = on;
+  check();
+}
+
 void FieldEditor::showMessage(const QString &message, bool error) {
   message_->setText(message);
   message_->setStyleSheet(error ? "color: #c0392b;" : "color: palette(mid);");
@@ -1597,8 +1673,11 @@ QString FieldEditor::message() const { return message_->text(); }
 bool FieldEditor::check() {
   const QString t = text();
   if (t.trimmed().isEmpty()) {
-    showMessage(field_.required ? tr("Required: %1").arg(Q(field_.grammar)) : QString(), field_.required);
-    return !field_.required;
+    const bool required = field_.required && applies_;  // required where it applies (qt_gui.md section 19.8)
+    // the grammar in the expert view only (the label's tip has it there): a plain "Required" otherwise
+    showMessage(!required ? QString() : expert::Enabled() ? tr("Required: %1").arg(Q(field_.grammar)) : tr("Required"),
+                required);
+    return !required;
   }
   front::ValueParts parts;
   std::string why;

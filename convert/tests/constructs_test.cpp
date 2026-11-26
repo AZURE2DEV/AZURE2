@@ -188,10 +188,20 @@ int main(int argc, char **argv) {
   }
   // ---- isDiff 3 / exit -1: [total]; isDiff 5, 6: the multipole filter (Segment ctor, crossSectionComponent_)
   {
-    const ConvertResult r = Convert({"1 1 -1 0.2 1.4 0 180 3 1 0 0 0 0 0 t3.dat\n"
-                                     "1 1 4 0.2 1.4 0 180 5 1 0 0 0 0 0 t5.dat\n"
-                                     "1 1 4 0.2 1.4 0 180 6 1 0 0 0 0 0 t6.dat\n",
-                                     "", "", "", ""});
+    // capture into g + 16O with external capture on: its final state, 16O 0+ at E_x = 0, is a level of <levels> (the
+    // converter refuses a project whose run would refuse it; Convert.cpp, the final states of external capture)
+    Old o{"1 1 -1 0.2 1.4 0 180 3 1 0 0 0 0 0 t3.dat\n"
+          "1 1 4 0.2 1.4 0 180 5 1 0 0 0 0 0 t5.dat\n"
+          "1 1 4 0.2 1.4 0 180 6 1 0 0 0 0 0 t6.dat\n",
+          "", "", "", ""};
+    o.levels = "0 1 0.0 1 1 1 2 2 9 1 1 1.0 0.5 1 0.5 -1 0.0 1.007825 15.000109 1 7 12.1 12.1 0 0 0.0 0 4.85 0 0 0\n";
+    const ConvertResult r = Convert(o);
+    Old without = o;
+    without.levels.clear();
+    const ConvertResult noLevel = Convert(without);
+    check("capture with external capture on and no final-state level: refused at conversion with the old engine's meaning",
+          !noLevel.ok && noLevel.refusal.find("E_FINAL_STATE_NOT_LEVEL") != std::string::npos &&
+              noLevel.refusal.find("35793eb3") != std::string::npos);
     Expect("isDiff 3", r, "dataset t3", Sigma("t3.dat", "15N(p,g)16O[total]") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}});
     Expect("isDiff 5", r, "dataset t5",
            F{{"reaction", "15N(p,g)16O"}, {"quantity", "sigma"}, {"unit", "b"}, {"multipole", "E1"}, {"file", "t5.dat"},
@@ -814,7 +824,8 @@ int main(int argc, char **argv) {
     const ConvertResult nested = Convert({line, "", "", "<mcmc>\n<priors>\n</priors>\n</mcmc>\n", ""});
     check("<priors> inside <mcmc>: refused", !nested.ok && nested.refusal.find("<priors> inside <mcmc>") != std::string::npos);
     // dev's general spin observables: type 10 followed by the operator becomes a spin_observable record at c.m.
-    // angles (the bare type 10 is this branch's THM offset of an angle-integrated line); dev's older type 9 is refused
+    // angles (the bare type 10 is this branch's THM offset of an angle-integrated line); dev's older type 9 with an
+    // operator is read as type 10
     const ConvertResult spin = Convert({"1 1 1 1.9 10.1 0 180 10 b:y 1 0 0 0 0 0 by.dat\n", "", "", "", ""});
     check("a data line of type 10 with the operator b:y: a spin_observable record",
           spin.ok && spin.text.find("    quantity       spin_observable\n") != std::string::npos &&
@@ -825,9 +836,10 @@ int main(int argc, char **argv) {
           spinTest.ok && spinTest.text.find("    quantity       spin_observable\n") != std::string::npos &&
               spinTest.text.find("    operator       b:y*t:y\n") != std::string::npos && spinTest.text.find(" deg cm") != std::string::npos);
     const ConvertResult spin9 = Convert({"1 1 1 1.9 10.1 0 180 9 b:y 1 0 0 0 0 0 by.dat\n", "", "", "", ""});
-    check("a data line of type 9 with an operator (dev before 2026-11-11): refused, with the way out",
-          !spin9.ok && spin9.refusal.find("data segment #1 has type 9 followed by the spin operator 'b:y'") != std::string::npos &&
-              spin9.refusal.find("Write 10 for the type") != std::string::npos);
+    // dev wrote these as type 9 until 2026-11-11; type 9 is Legendre data here and has no operator, so the operator
+    // decides: read as type 10, the record of the same line written with 10 (tests/convert/fixtures/history/README.md)
+    check("a data line of type 9 with an operator (dev before 2026-11-11): read as type 10, with a note",
+          spin9.ok && HasNote(spin9, "read as type 10") && spin9.text == spin.text);
     const ConvertResult tail = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 s1.dat sample 1 radius 5.5\n", "", "", "", ""});
     check("a data line ending in a keyword the grammar does not read: refused, naming it",
           !tail.ok && tail.refusal.find("data segment #1 ends with 'radius 5.5'") != std::string::npos);

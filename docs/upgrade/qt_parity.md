@@ -226,8 +226,10 @@ because the engine also searches the whole file for them.
       amplitude width (`AZURESetupThm.cpp`)
 - [ ] THM Workspace... (visible only with THM on); refused with the engine's message when `<thm>` has a bad line
       (`AZURESetupThm.cpp`)
-- [ ] Build Coulomb Table...: asks first (about 5 min, 88 MB), builds on all threads with a progress dialog and
-      Cancel, reports the path and time; later runs use the table (`AZURESetup.cpp`)
+- [x] Build Coulomb Table...: asks first (about 5 min, 88 MB), builds on all threads with a progress dialog and
+      Cancel, reports the path and time; later runs use the table (`AZURESetup.cpp`).  Now Run > Build the Coulomb
+      Table... and the start page's / Overview's line (`CoulombTableUi.cpp`, qt_gui.md section 19.12), at most 4
+      threads.
 
 ## 4. Particle Pairs tab
 

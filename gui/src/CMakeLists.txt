@@ -20,7 +20,7 @@ set(AZURESETUP_SOURCES
     LevelsTabEdits.cpp LevelsTabNavigation.cpp LevelsUndo.cpp LevelsViews.cpp LevelsPartialWaves.cpp
     PotentialPanel.cpp
     ChooseFileButton.cpp RichTextDelegate.cpp InfoDialog.cpp InTabDocs.cpp AboutAZURE2Dialog.cpp
-    AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp
+    AzureTheme.cpp FileDialogPolicy.cpp StartPage.cpp NotesBar.cpp CoulombTableUi.cpp ConvertRepairDialog.cpp RecordExtras.cpp
     PhysicsTab.cpp PhysicsSessionPages.cpp PhysicsForms.cpp PhysicsWorker.cpp HeatmapWidget.cpp
     AZURESetup.qrc ShellIcons.qrc)
 
@@ -51,3 +51,37 @@ endif()
 
 add_executable(AZURESetup main.cpp)
 target_link_libraries(AZURESetup PRIVATE AZURESetupLib)
+
+# Installed, the start page finds share/azure2/examples/index.json above the program (StartPage::examplePlaces) and
+# lists what the manifest names, at the same paths relative to share/azure2 as in the checkout (qt_gui.md section
+# 19.9).  The program, the manifest, examples/ and every other project folder the manifest names (the tutorials of
+# tests/upgrade) are installed; the run products of a checkout (output/, checks/ contents, run.log) are not.
+include(GNUInstallDirs)
+install(TARGETS AZURESetup RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT gui)
+set(AZURE2_EXAMPLE_DIRS examples)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.19)
+  file(READ ${CMAKE_SOURCE_DIR}/examples/index.json _manifest)
+  string(JSON _groups LENGTH "${_manifest}" groups)
+  math(EXPR _glast "${_groups} - 1")
+  foreach(_g RANGE ${_glast})
+    string(JSON _entries LENGTH "${_manifest}" groups ${_g} entries)
+    math(EXPR _elast "${_entries} - 1")
+    foreach(_e RANGE ${_elast})
+      string(JSON _project GET "${_manifest}" groups ${_g} entries ${_e} project)
+      get_filename_component(_dir "${_project}" DIRECTORY)
+      list(APPEND AZURE2_EXAMPLE_DIRS ${_dir})
+    endforeach()
+  endforeach()
+  list(REMOVE_DUPLICATES AZURE2_EXAMPLE_DIRS)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/examples/index.json)
+endif()
+foreach(_dir ${AZURE2_EXAMPLE_DIRS})
+  string(FIND "${_dir}" "examples/" _inExamples)
+  if(_inExamples EQUAL 0)
+    continue()  # inside examples/, installed with it
+  endif()
+  get_filename_component(_parent "${_dir}" DIRECTORY)
+  install(DIRECTORY ${CMAKE_SOURCE_DIR}/${_dir} DESTINATION ${CMAKE_INSTALL_DATADIR}/azure2/${_parent} COMPONENT examples
+          REGEX "/(output|checks)/.+" EXCLUDE REGEX "/run\\.log$" EXCLUDE REGEX "/check\\.log$" EXCLUDE
+          REGEX "/__pycache__" EXCLUDE)
+endforeach()

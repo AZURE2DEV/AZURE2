@@ -1,4 +1,5 @@
 #include "RecordDialog.h"
+#include "ExpertMode.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -28,8 +29,9 @@ QString Q(const std::string &s) { return QString::fromStdString(s); }
 QString Title(const front::FieldInfo &f) { return Q(f.title).replace("J^pi", QString::fromUtf8("Jπ")); }
 
 QString Tip(const front::FieldInfo &f) {
-  QString t = "<b>" + Q(f.title).toHtmlEscaped() + "</b> &mdash; " + Q(f.doc).toHtmlEscaped() + "<br><tt>" +
-              Q(f.grammar).toHtmlEscaped() + "</tt>";
+  // the grammar in the expert view only (qt_gui.md section 19.9)
+  QString t = "<b>" + Q(f.title).toHtmlEscaped() + "</b> &mdash; " + Q(f.doc).toHtmlEscaped() +
+              (expert::Enabled() ? "<br><tt>" + Q(f.grammar).toHtmlEscaped() + "</tt>" : QString());
   if (!f.defaultText.empty()) t += "<br>Left out: <tt>" + Q(f.defaultText).toHtmlEscaped() + "</tt>.";
   return t;
 }

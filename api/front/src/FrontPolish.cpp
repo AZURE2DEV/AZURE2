@@ -4,6 +4,7 @@
 // expression split into its terms by the engine's parser, and the channels a level may have (the engine's
 // experiment::AllowedChannels on the GUI's unsaved pairs).
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <algorithm>
 #include <cmath>
@@ -238,6 +239,7 @@ bool Shape(const ex::TargetEffectSpec &spec, const std::string &directory, doubl
 }  // namespace
 
 bool QuantityFieldRules(const std::string &quantity, std::vector<QuantityFieldRule> &out) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   out.clear();
   const ex::Quantity *q = ex::FindQuantity(quantity);
   if (!q) return false;
@@ -503,6 +505,7 @@ bool KernelPreviewOf(const Project &project, const std::string &section, const R
 }
 
 std::vector<std::pair<std::string, std::string>> ColumnsForFile(const std::string &quantity, int columns) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::pair<std::string, std::string>> out = DefaultColumns(quantity);
   if (columns < 0) return out;
   // the column the engine reads past: the last of the plain roles ("_", experiment/ColumnsGrid.cpp)
@@ -513,6 +516,7 @@ std::vector<std::pair<std::string, std::string>> ColumnsForFile(const std::strin
 }
 
 bool ParseReactionExpression(const Project &project, const std::string &text, ReactionExpression &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   out = ReactionExpression();
   std::string comment;
   std::vector<io::RecordDiagnostic> problems;
@@ -562,6 +566,7 @@ bool ParseReactionExpression(const Project &project, const std::string &text, Re
 }
 
 std::string ReactionExpressionText(const ReactionExpression &expression) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::string out;
   const std::string join = expression.op == "ratio" ? " / " : " + ";
   for (std::size_t i = 0; i < expression.terms.size(); i++) {

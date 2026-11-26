@@ -112,8 +112,8 @@ reader would refuse is refused with its message.  The THM tab draws its forms fr
 
 ## 8. The Tools menu: pyazr as a child process
 
-ENDF-6 export and import, EXFOR and ENSDF imports, the Coulomb table and the web page live in pyazr (Python); the
-GUI does not re-implement them.  `PythonTools` starts `<python> -m pyazr <command>` with `QProcess`, its output in
+ENDF-6 export and import, EXFOR and ENSDF imports and the web page live in pyazr (Python); the GUI does not
+re-implement them.  (The Coulomb table's entry opens the window's own dialog since section 19.12.)  `PythonTools` starts `<python> -m pyazr <command>` with `QProcess`, its output in
 the log pane, the interpreter a setting of the computer (`QSettings`, Configure > Directories), every item disabled
 with the reason when `import pyazr` fails.  The web page is `python -m pyazr ui FILE --json` (127.0.0.1; the URL
 from its JSON line), stopped with the window.  The samplers (NUTS, emcee) and the band jobs are no commands of the
@@ -846,7 +846,344 @@ Keep mine hides the bar and changes nothing, a Save then writes the window's ver
 program outside changes the Overview's chi^2 without a click; a data file rewritten makes the stale mark name its data
 set; following off, an outside edit is not read and the choice is kept.
 
-## 19. The potential of a pair and the partial waves without a level (U9, agent potential-gui, 2026-11-21)
+## 19. For an occasional user: no boxes on opening, tables that fit, an expert switch, old lines repaired, less prose (agent gui-casual, 2026-11-24)
+
+The PI (2026-11-24): "it is still full of options that people might not need if they are not experts ... the data
+[tab] does not work very well because the bottom part covers everything ... errors when opening the examples ... like
+20 pop ups ... the conversion not always works due to some differences in the segment lines or target effect lines
+... some parts of the GUI are too verbose".  The audit (work/gui-casual/AUDIT.md, scratch: every example and test
+project of the start page opened through `AZURESetup::open` by a harness that records and closes each modal dialog,
+grabs each tab and sub-tab at 1280x720, 1280x800 and 1440x900, lists visible labels above 140 characters and each
+table's visible rows) gave the list this section answers.
+
+### 19.1 The pop-ups on opening (root cause)
+
+`examples/c12c12_tumino2018` raised 26 modal "Duplicate Pair" boxes, one per `<levels>` row of pair key 6.  The
+project names 12C+12C under key 1 (the THM data's widths) and key 6 (the direct data's widths) on purpose.  The
+Levels tab's reader (`LevelsTab::readLevels`) sent each new key through `PairsTab::addPair`, whose duplicate check is
+for a pair the user types: it refused key 6 with a box per row and never added it, so the channels of key 6 showed
+"n+?" and a save after a Levels edit would have written them with an empty pair.  Now a pair read from the file goes
+to its own key (`PairsModel::pairAt`, `addPair(..., fromFile)`); the check of a typed pair is unchanged.  The other
+16 projects opened with no box.
+
+### 19.2 The notes bar
+
+What there is to know about a project just opened is one bar under the tool bar (`NotesBar`): the engine's check
+("The engine's check: Valid, 50 warning(s)"), a `<levels>` the Levels tab could not read (was a modal box), the
+converter's report and the lines repaired (was a modal "Converted" box).  The bar shows the count and the first note;
+"Details" opens a window that is not modal (all notes; "Show Diagnostics" for the check); "Dismiss" hides it until
+the next project.  The Diagnostics dock opens by itself only for errors or after Validate; warnings no longer open
+it on every open (13N: 150 of 720 px).
+
+### 19.3 Tables that fit
+
+Every records panel (`RecordsPanel`: data sets, extrapolations, model data, targets, beams, detectors, potentials,
+channel radii, gamma decays, isospin) is a vertical splitter: the table keeps at least five rows (minimum height), its
+first height is its rows up to ten (at most 60 % of the panel), the form below can be closed (the "Form" button or
+dragging the handle to the bottom; a double click on a row opens the record's own window as before), and the
+splitter's state is kept per panel in QSettings (`layout/split_<section>`).  Before: stretch 2:5 and sizes {220, 550},
+so 13N's 16 data sets showed 2 rows at 1280x720; now 11 (12 at 800 px, 16 at 900 px).  The Pairs tab's per-channel
+radii and the Levels tab's gamma decays and isospin sit in a splitter below the tab's content (`RecordExtras`), a
+quarter of the height at most at first; their sub-tabs carry the record count.  The Levels list shows 11-12 rows at
+720 px (7-9 before).
+
+### 19.4 Standard and expert view
+
+One switch: View > Show Expert Options, the start page's box "Show expert options" and the status bar's "Standard
+view / Expert view"; off by default, kept in QSettings `view/expertOptions` (`ExpertMode.h`).  The window calls each
+tab's `setExpertMode(bool)`.  The rule: an expert item is hidden in standard view only while it is at its default
+(no record, no line other than comments, no value set); otherwise it is shown in either view and its tool tip says
+"An expert option, shown because the project sets it", so nothing hidden is in effect.  Project files and the
+engine's behaviour do not change with the switch (gui_casual (e) saves before and after and compares the bytes).
+
+| Where | Hidden in standard view (unless in use) |
+|---|---|
+| Tabs | Nuclear Potential (no potential record), THM (no `<thm>` line), MCMC (no `<mcmc>` line) |
+| Particle Pairs | Per-channel radii |
+| Levels and Channels | Gamma Decays, Isospin; the two gamma multipolarity limits (no photon pair); Export LaTeX |
+| Segments | Model Data |
+| Every records table | the Kind column when all rows are of one kind; columns empty in every row |
+| Fitting Settings | call limit, covariance refreeze passes (0), the Priors box (no prior covariance file), the text pages Parameter Settings and Sampler (MCMC) |
+| Calculate | the commands minos and mcmc in the list (the MCMC tab runs mcmc); every option but --parameter-file, --covariance-band, --rate-entrance/exit, --temperature-*, --delta-chi2, --walkers, --steps; each option's help line (its tool tip stays) |
+| Physics | the pole map page; the THM page without `<thm>` |
+| Menus | Tools (pyazr's child processes) |
+
+Not classified as expert (kept): Experimental Effects (targets, beams, detectors are needed for most data), the
+record forms' "Every field" (the forms already hide rare fields), the Configure menu, the Plot tab, Physics'
+Functions, Channels, R-matrix and Stopping pages.
+
+### 19.5 Old lines the converter could not read
+
+The repository's 182 old projects and the public 12C(p,g) project converted already; the failures came from lines
+written by hand or by other versions.  Constructed variants of the old 13N fixture (27, scratch `conv/variants.py`)
+gave: refused although unambiguous (BOM; a `#` comment line; a quoted segment list with a blank; an unquoted file
+name with a blank when the file exists; a target line ending after its empty stopping equation), a crash (a data line
+without a file: an uncaught exception), a silent misreading (a decimal-comma shift taken for the data file's name)
+and refusals without the file line or a way out (a data line short of a field, a test line short of isDiff, a decimal
+comma).  `convert/` now reads the unambiguous variants with a note each, refuses the no-file and decimal-comma lines,
+and attaches to a line refusal a `LineProblem` (`LineRepair.h`): the file line number (the format-2 step does not move
+these sections), the text, the fields expected and the readings proposed, each checked to read with the old
+grammar (`OldLineReads`); none is applied by the converter.  The refusal text ends with the same diagnosis, so
+`AZURE2 --convert` and `pyazr.convert_azr` print it.  The facade passes it as `ConvertLineProblem`; the window's
+`ConvertRepairDialog` shows the line editable, the readings as buttons and "Convert again", which converts a copy
+`<name>.repaired.azr` (`WriteRepairedCopy`; the old file is never written).  Tests: `convert_line_repair`, gui_casual
+(d).
+
+### 19.6 Less prose
+
+Explanations moved to tool tips or a "?" button; numbers and states stay: the records panels' help sentence (a "?"
+beside the buttons), the text panels' paragraph, the Fitting tab's prior paragraph, the Calculate options' help lines
+(standard view), the Levels tab's missing-J^pi paragraph (one red line, the explanation in its tip), the Overview's
+"No run yet" paragraph, project path, pair thresholds and chart note, the Physics function's formula and source and
+the pole map's paragraph (one line each, the rest in the tip), the start page's eleven lines about the tabs (now the
+tabs' tool tips), the R-matrix page's list of every level energy (the pole table lists them), the Physics session line.
+The plot's pole labels are no longer drawn over each other.  GUI tests whose expectations changed on purpose:
+gui_window's File > Convert no longer answers a report box (a note now); gui_levels reads "switch the option on" from
+the missing-J^pi label's tool tip; gui_polish finds the pairs table by its name `pairsView` (the radii table shares the
+Pairs tab's splitter now).
+
+### 19.7 Tests
+
+`tests/gui/gui_casual_test.cpp` (label gui): (a) every example and test project opens with no modal dialog, the pairs
+at their keys; (b) the notes bar; (c) the data-set table at 1280x720 shows at least eight rows, Form closes the form,
+the choice is kept, the Levels list at least ten rows, empty extras hidden; (d) the converter's repair path, byte for
+byte against the unmodified old file's conversion; (e) the expert switch hides and shows, an in-use item is shown in
+standard view, the file is unchanged.  `convert/tests/line_repair_test.cpp` (ctest `convert_line_repair`).
+
+### 19.8 Second review: a reviewer's pass and a casual user's (2026-11-24)
+
+The PI: "Review it again, both for a casual user and for bugs and fix them."  A review of the diff `43ac5acd..991118ca`
+and a pass through every tab, sub-tab and Physics page of the 14 projects of the start page, New Project and the start
+page (harness `work/gui-casual/audit/`, now also START, NEW and a run: `AUDIT_RUN=calculate|fit`), at 1280x720 and
+1440x900, standard and expert view, before and after a Calculate and a short Fit.
+
+**Holes in the rule "hidden only at its default".**  (1) The gamma multipolarity limits were hidden without a photon
+pair and re-checked only on opening and on the switch: a photon pair added in standard view generated its channels
+with a limit the user could not see (1, read from a file without photon channels).  They follow the pairs now
+(`LevelsTab::updateChannelsPairAddedEdited`, `...PairRemoved`).  (2) The Fitting tab's Parameter Settings and
+Sampler pages were re-checked only on opening and on the switch, while a row of the Parameters table writes
+`<parameterSettings>`: the page now follows `sectionEdited`.  (3) The THM tab's keys are classified (open item of the
+first pass): in standard view an experiment shows beam, target, spectator, Ebeam, ps and background, and every other
+key (psNodes, distortion, opticalAA/SF, the vertex model and its ff keys, spectator angles, cbackground, ...) only
+when the experiment gives it; a `<thm>` option only when the section gives it.
+
+**Forms and tables.**  A field the schema requires only for some records of its kind (`RequiredWhen`: a target's
+active nucleus and areal density for kinds layer, infinite and sample; its stopping and straggling for layer and
+infinite) was marked required on every record: natural_neon's valid target of kind `none` showed red "Required:"
+lines.  `RecordsPanel::applyConditions` reads the field's condition (the words of `experiment::Describe` for the two
+simple kinds, "<field> is <word> or ..." and "<field> is given"; any other condition is taken to hold) with the
+validator's rule against the form's values; a field that does not apply is not marked (`FieldEditor::setApplies`)
+and its row or box is hidden while empty (shown with "Every field").  A table's columns are fitted to its width when it
+is shown and when its width changes (`fitColumns`: the widest narrowed to one width, no narrower than 12 characters;
+the whole text is in the row's tip; a column the user drags keeps its width until the next reload): natural_neon's data sets no longer scroll sideways at 1280 px.  A number written with more than 12
+significant digits is shown with 12 in a table cell ("list 1.5 ... 5.5 MeV lab" for Tumino's grid
+`... 5.49999999999997`); the field, the form, the row's tip and the file keep the text as written (the shortest
+round-trip form of that double is itself 15 digits, so only a rounding of the display helps).  The Levels tab's
+middle column is wider (stretch 4:5:3, then 4:6:2 in the third pass below): the channel table's Value column is 93 px at 1280x720 instead of about 25
+("2...").  The kernel preview of a record says "Not drawn: <reason>" only when the reason names the record (13N's
+detector showed an engine message about a data set's quadrature field).
+
+**Notes and the Overview.**  A `<levels>` the Levels tab could not read is a warning of the notes bar (first, warning
+icon, "do not save edits of the levels before fixing it"), not an ordinary note.  New Project's first step is "No
+particle pair yet" (then levels, then a data set or extrapolation), not "calculate or fit"; Calculate and Fit appear
+once on the page before a run (in "The last run"), in "What to look at next" once there is one.
+
+**After a run.**  The Plot tab showed empty axes ("calculated column (engine units)") after the first Calculate: no
+data set was ticked.  When the list of curves changes (the first run, another project) and nothing was ticked, the
+first data set (or extrapolation) is ticked; with nothing ticked the axis says "tick a data set on the left".  The
+Overview's run card listed the extra totals of `chiSquared.out` under their file labels, zeros included
+("Total-Norm-Chi-Squared 0"): now only non-zero ones, in words ("Norm chi² 3.2"), the labels in the tip.
+
+**Physics.**  The Functions page kept an eight-line scroll area for the function's text after the text was moved to
+its tip: a blank band under the title.  The R-matrix page draws a phase shift continuous (`UnwrappedPhaseDegrees`):
+the engine gives arg(U_cc)/2 in [0, 180) for identical particles, and Tumino's channel 2 (12C+12C, key 6, l = 4) lies
+just below 0 between its narrow levels, so it was drawn as a comb between 0 and 180.  A display wrap, not physics:
+the engine's numbers are unchanged; a step of more than 90 degrees between a point near 0 (within 45 degrees) and its
+neighbour near 180 is taken as the wrap of [0, 180) and removed.  A jump at +-90 degrees (a resonance through 90 in
+the range (-90, 90]) and the first value are drawn as the engine gives them, so gui_physqt's check that the drawn
+curve is Block's own values holds unchanged.
+
+**Start page.**  The list comes from `StartPage::findExamples` (the checkout the program was built from,
+`AZURE2_SOURCE_DIR`, or `AZURE2_EXAMPLES`): `examples/*/`, `tests/upgrade/T1-T3` and `tests/13N`.  The test suite's
+projects are listed in expert view only, marked "[test project]"; an example is listed by its name, its folder when
+that differs, and the first heading of its folder's README.md when there is one (natural_neon only today).  No
+description is invented.
+
+**Tests.**  gui_casual (f) checks each item above; gui_window's File > Convert now checks that the converter's report
+is a note of the bar (the box it replaced was answered without being checked).  No expectation of an existing test
+changed in this pass.
+
+**Third pass (the coordinator, on the final screenshots).**  (1) The sweep fields of the Physics pages (E_x from/to
+of the R-matrix page, E_c of Channels, the Functions and THM sweeps) are wide enough for a value such as 14.769448
+(they showed "769448"); the sweep takes two rows (range and unit; points and log) so that the form column still fits.
+(2) `PlotWidget` places its legend in the first corner of the panel (top right, top left, bottom right, bottom left)
+that covers no point of a curve or of the data, and below the axes, in as many columns as fit, when every corner
+covers some (Tumino's 4+ phases: below); the pole labels are placed in x order in the lowest of four rows where they
+overlap no other label, on a translucent background; a label with no room is left out, its dashed line kept (the
+energies are in the pole table).  (3) The repair window shows the refused line exactly as in the file (runs of blanks
+and tabs, also inside quotes); "Convert again" without an edit writes the copy byte for byte as the old file.
+gui_casual (d) read the collapsed text before ("0.005 data/meyer_84.dat"): changed with the dialog, on purpose.
+(4) A structured value's alternative doc beside its choice is shown only when there is a choice and the alternative
+has a keyword: natural_neon's isotopes no longer repeat "abundance weight of a target nucleus" on every entry, and a
+beam's spread no longer shows "a constant Gaussian sigma" twice.  (5) A look at every standard-view screenshot at
+1280x720 found, and fixed: the Levels tab's J^pi filter cut ("All Jπ (34"), its search and energy hints cut, θ² and
+Value cut again by the wider controls; the hard-sphere box now takes two lines and the columns stretch 4:6:2.  Left as
+they are: T2's data-set table (19 columns) still scrolls sideways at 1280 px (its narrowest width is 12 characters per
+column; T2 is a test project, listed in expert view only); a function's name and summary in the Physics drop-downs
+is elided (the whole text is in its tip); with six long legend entries the legend below the axes takes six rows.
+
+### 19.9 Third round: the PI's look at the screenshots; the examples (2026-11-25)
+
+The PI: "Chi2 small bar overflow in the overview page, the small ones in the column, there are some sparse "<" like
+the <thm> and in other places, some small buttons are not aligned. Review again for bugs, whenever possible
+approximate to not have 9999999 numbers. Reduce the number of examples, or at least do not replicate the reactions
+and structure them nicely renaming them, and only the ones that checks out. Add also other examples ..."
+
+**Display.**  (1) The Overview table's chi²/N bars sit left of their numbers, never under them, and both the column
+and the chart use `BarChart::ScaleTop`: the largest value, or ten times the median when one value exceeds ten times
+the median (a cut bar is drawn full with a break; the header's and the chart's tips say which).  Names at most 18
+characters, elided.  (2) No file tag or grammar in the standard view: tips and notes say "the data sets", "the
+parameter settings", "THM options"; a field's placeholder is a plain hint (`PlainHint`: "e.g. 20Ne" for
+"<A><Symbol>", one "<word>" as the word, nothing for a grammar with alternatives); a missing required field says
+"Required"; the file key and the grammar remain in the expert view's tips and in a field's text mode, and the text
+pages keep the section's own name.  The engine's messages (Diagnostics, a refused value) are the engine's and keep
+its words.  (3) The forms' text buttons have one size and stand in one column at the right edge (the basic form lost
+its extra margin; a repeatable entry's remove button moved to its left); "?" and "Form" have the buttons' height.
+(4) Numbers written with more than 12 significant digits are shown with 12 (`RoundedNumbers`, one implementation for
+the record tables and the forms); a form's number line keeps the exact text and gives it back while it shows what it
+was given, so a field the user did not touch writes the file's text.  gui_casual (g) saves every manifest project on
+opening and again after every tab, sub-tab and record form was shown: the two files are identical byte for byte.
+
+**Review.**  Driven in the harness (`AUDIT_SCENARIO=1`, `shots/review3/scenario/`): Calculate, Fit, Stop after 4 s
+(Tumino: stopped after 1,411 calls, status "stopped" on the Overview, the step "The fit ended with status stopped"),
+the expert switch after the run, Save As and reopening the copy: no dialog, no note, the run's outputs shown.  The
+condition parser of 19.8 reads only the two forms `experiment::Describe` writes and takes any other as holding (the
+field stays marked); the phase unwrapping touches only steps across 0/180; the first data set is ticked only when
+the list of curves changed and nothing was ticked; File > Open and the start page are disabled while a run goes on.
+
+**Examples.**  The start page lists `examples/index.json` (format 1): groups, one entry per reaction (`reaction`,
+`source`, `what`, `project`, `variants`), paths relative to the folder holding `examples/`.  `StartPage::readManifest`
+reads the first place that has one ($AZURE2_EXAMPLES, a `share/azure2` or checkout above the program, the checkout the
+program was built from); without a manifest the projects of `examples/*/` are listed as before.  Installed: the
+program (component `gui`), the manifest, `examples/` and the manifest's other folders under `share/azure2`
+(component `examples`; tested with `cmake --install . --component examples`: 1.6 MB, every entry present).
+
+Every candidate was checked in this build (`work/gui-casual/examples_check/`: `AZURE2 --validate`, `AZURE2
+calculate`, two threads; then the window: gui_casual (a)):
+
+| project | reaction | validate | χ² total (data) / N | time | listed |
+|---|---|---|---|---|---|
+| examples/c12c12_tumino2018 | 12C+12C → 20Ne+α, 23Na+p | clean | 117.516 / 247 | 1.4 s | entry |
+| examples/f19_pag_thm | 19F(p,αγ)16O | clean | 77.635 / 59 | 0.2 s | entry |
+| examples/o18_lacognata2010 | 18O(p,α)15N | clean | 330.065 (329.703) / 161 | 3.4 s | entry |
+| examples/o18_lacognata2008 | 18O(p,α)15N, THM only | clean | 35.876 / 30 | 0.1 s | variant |
+| examples/o17_guardo2017_fit | 17O(n,α)14C | clean | 12.996 / 23 | 0.1 s | entry |
+| examples/o17_guardo | 17O(n,α)14C, first input | clean | 67.597 / 23 | 0.1 s | variant |
+| examples/n15_lacognata2007 | 15N(p,α0)12C | clean | 224.425 (223.414) / 208 | 0.1 s | entry |
+| examples/li7_tumino2006 | 7Li(p,α)4He | clean | 448.620 (439.149) / 294 | 0.3 s | entry |
+| examples/li6_pizzone2011 | 6Li(d,α)4He | clean | 158.967 (157.040) / 132 | 0.1 s | entry |
+| examples/natural_neon | n + 20,21,22Ne | clean | 36347.4 / 6328 | 5.3 s | entry |
+| tests/upgrade/T1, T1_start | p + 12C → 13N (synthetic) | clean | 482.275 / 442; 15387.2 | 2.1 s | entry, variant |
+| tests/upgrade/T2, T2_true | p + 15N → 16O (synthetic) | clean | 10910.1 (10905.2) / 330; 330.835 | 0.2 s | entry, variant |
+| tests/upgrade/T3, T3_start | 8Be (synthetic) | clean | 518.713 (509.684) / 494; 15550.3 | 0.1 s | entry, variant |
+| tests/13N | 12C(p,γ), 12C(p,p) | 50 warnings | 336480 / 593 | 5.7 s | no: a warning note on opening, χ²/N 567 |
+| tests/18O_p_a_thm | 18O(p,α)15N | 2 warnings (zero and negative errors) | 2228.79 / 118 | 0.1 s | no: warnings; reaction listed |
+| tests/15N_p_a | 15N(p,α)12C | clean | 4601.32 / 157 | 0.1 s | no: reaction listed, χ²/N 29 |
+| tests/17O | 17O(n,α)14C | clean | 96.906 / 23 | 0.1 s | no: reaction listed (a regression pin) |
+| tests/6Li_d, tests/7Li_p_a | 6Li(d,α), 7Li(p,α) | clean | 682.148 / 62; 2138.46 / 66 | 0.2 s | no: reactions listed; "a regression pin, not a physics benchmark" (README) |
+| tests/natural_neon | n + Ne | clean | 3342.70 / 1308 | 0.8 s | no: a reduced copy of the example |
+| tests/7Li_p_ay | 7Li(p,p) A_y | clean | 3955.41 / 72 | 0.1 s | no: χ²/N 55 (a code-path test) |
+| tests/13N_capture_ay, identical_pp_res, spin_observables_* | code-path tests | clean | finite | 0.1-1.2 s | no: tests of one code path |
+| tests/screening_6li (bare, scr, fit) | 6Li(p,α)3He screening | clean | scr 23.707 / 23 (the README's 23.70) | 0.1 s | no: the PI's decision (built on the PI's 7Be evaluation) |
+
+Every regression project of `tests/` reproduces its `expected/` values (`tests/run_tests.sh`, 185 passed).  The
+examples' totals differ from the numbers of `docs/source/getting_started/examples.rst` for c12c12_tumino2018 (117.516
+against 112.086), f19_pag_thm (77.635 against 79.408), o18_lacognata2010 (330.065 against 330.054) and o17_guardo
+(67.597 against 67.594); the per-data-set predictions of `tests/upgrade/predictions.txt` (ctest `upgrade_predictions`)
+are reproduced, so the page's numbers predate the format-3 files (to be re-measured; not changed here).
+
+### 19.10 Old projects of real users: the numeric locale, missing data files, unlisted final states (2026-11-25)
+
+The PI: old projects of a colleague (19F + p) and his own 12C + p fit "fail".  On this build the command line converted
+376 of 377 projects of that corpus (the one refusal a macOS `._` resource file); the window and the facade refused two
+of them with E_NOT_A_NUMBER, E_REACTION_SYNTAX and E_PRIOR_SYNTAX when LC_NUMERIC was a decimal-comma language.
+
+**The numeric locale.**  The engine's readers and writers parse and print numbers with strtod, std::stod,
+std::to_string and printf, which follow LC_NUMERIC (about a hundred parses and several hundred printf-style writes
+across io/, experiment/, convert/, src/, physics/, stopping/); the command line never sets the locale, a Qt
+application sets it from the environment.  258e3760 resets LC_NUMERIC in the window; at the root the facade now takes
+`support::ClassicNumericScope` (`support/include/azure2/support/ClassicNumeric.h`) at each of its 62 calls that read,
+check, edit, convert, save or run: the calling thread's locale with LC_NUMERIC "C" (POSIX newlocale/uselocale from a
+duplicate of the thread's locale; Windows a per-thread locale), nothing else changed, nothing changed in the C locale.
+The run's OpenMP threads keep the process's locale (the window sets it to C); pyazr does not set the locale and has
+no such scope (a Python program that calls locale.setlocale with a decimal-comma language would see the fault).
+Test `api_front_locale`: three projects opened, validated, edited, saved and an old project of each era converted,
+and T1 calculated, under C and de_DE.utf8 without a window: byte for byte equal; without the scope the validation and
+the conversion differ, and without it in Run the run's files differ.  `convert_cli_locale`: the command line under
+de_DE.utf8 gives the C bytes.  `gui_casual` (h): conversion from the window under the comma locale.
+
+**Data files not on this computer.**  58 converted projects of the corpus did not validate only because their data
+files are elsewhere (absolute paths of another computer, placeholder names, moved folders); the 2020 engine refused a
+run with a missing active data file as well, so the converter keeps its note.  The window now says it in one note,
+"N data file(s) not found on this computer" (Details: record and path), with **Locate Data Files...**: a folder,
+each file looked for by its name there, the data set pointed to it (relative to the project; the project is modified,
+not saved); the Diagnostics dock stays closed when those are the only errors.  `gui_casual` (i).
+
+**Unlisted final states.**  Two projects captured into a photon pair whose final state is no level of <levels>; the
+engine ran such projects until 2026-10-26 (35793eb3) with a hidden level and refuses them since.  The converter now
+refuses them at conversion with that reason (project_format3.md 8.6) instead of writing a file whose first run fails.
+
+### 19.11 Small buttons sized from the font (2026-11-25)
+
+The PI: "the NDS text is too big to the button box".  The Levels tab's "+", "-" and "NDS" had pixel maxima (28x28,
+50x28) and "Fix All Widths", "Fix All Energies", "Export LaTeX" a 28 px maximum height; under a larger application
+font (reproduced at 18 pt, `work/gui-casual/shots/nds_before18/`) the label of "NDS" was cut and the row's buttons
+were lower than the style asks.  `ButtonSizes.h`: the row's height is the larger of 28 px and the style's height of a
+text button at the current font; "+" and "-" are squares of it; a text button is at least as wide as its label plus
+one line height; the same for the Pairs tab's "+" and "-", the add bar's "Add" and "Duplicate", "Only included", and
+the OK buttons of the two information dialogs (their 80x30 maximum removed).  At the usual font the row looks as
+before (shots `nds_after0/`, `nds_after18/`).  Not changed: at 18 pt in a 1280 px window the levels column is narrower
+than its add bar wants (the window would grow on a real screen; offscreen it stays 1280 px).  `gui_casual` (j).
+
+### 19.12 The Coulomb table in the window (2026-11-25)
+
+The PI approved: say in the window that the table can be built, and build it without Python.  Before, the window
+named the table nowhere in standard view: the Tools menu (hidden in standard view) started `python -m pyazr
+coulomb-table build`, and the engine's stderr line pointed to a menu entry "Configure > Build Coulomb Table..." that
+this window does not have.  A user without the table runs about 4 times slower with the same results.
+
+- **State** (`front::CoulombTableStatus`, `api/front/src/FrontCoulombTable.cpp`): the path from
+  `CoulombTable::DefaultPath` (the engine's rule, not a copy: `$AZURE2_COULOMB_TABLE`, else
+  `~/.azure2/coulomb_table.bin`), whether a file is there and whether `CoulombTable::Shared`, the loader the runs
+  call, takes it (so a usable table is read once and kept for the runs).  A file the loader refused is loaded once
+  more on its own to give the reason; a file that loads now although the loader found none before (put there
+  since) is handed back to it with `ForgetMissing`.
+- **Build** (`front::BuildCoulombTable`): `CoulombTable::BuildFile`, the routine of `AZURE2 --build-coulomb-table`
+  (written as `<path>.new`, renamed when whole; on cancel nothing is left), with the row counter and the cancel flag
+  of `BuildSpec`; threads `CoulombTable::DefaultBuildThreads()` (new accessor, the CLI now calls it too: every
+  OpenMP thread) capped at 4.  After a success `CoulombTable::ForgetMissing()` (it existed; no new state): a path the
+  loader failed on in this process is tried again, so the next run uses the table.
+- **Window** (`gui/src/CoulombTableUi.cpp`): `CoulombTableNotice`, one line (`role=hint`, the placeholder colour,
+  never red) with `Build...`, on the start page and at the end of the Overview's "What to look at next", hidden once
+  the table is usable; `CoulombTableDialog` (not modal: the path and the state, `Build` / `Build Again`, a progress
+  bar from the row counter polled every 200 ms, `Cancel Build`), the build in a `QThread` holding a shared job (the
+  dialog's destructor cancels and waits); `CoulombTableControl`, owned by the window, keeps the notices in step and
+  knows whether a run of the window goes on (`AZURESetup::updateActions`): no build starts during a run; a run started
+  during a build calls the loader, finds no file and runs without the table.  Menus: Run > Build the Coulomb
+  Table... and Run > Check the Coulomb Table... (standard view); Tools' entry opens the same dialog.
+- **Engine text**: the stderr line of a run without the table names Run > Build the Coulomb Table....
+- **Test** `gui_coulomb` (37 checks; HOME an empty folder of the build tree and `AZURE2_COULOMB_TABLE` unset, set by
+  the test before the engine reads the environment): the line and its button on both pages, the menu entries in
+  standard view, a file that is no table named with the loader's reason, no build during a calculation, a 2004-row
+  build that advances and is cancelled leaving neither file, a small table (l <= 2, eta 0.1-3, rho 0.1-10, 30 per
+  decade) built from the dialog and then used by a calculation of T1 in the same process (the run's "N lookups" line,
+  absent before).  Shown to fail without `ForgetMissing` (4 checks).  The other gui tests were run once with an empty
+  HOME (as CI) and pass with the line showing.
+- **Not done**: `std::rename` over an existing file fails on Windows, so Build Again over a table there would say
+  "could not write" (the CLI's routine, unchanged; engine code).  Check shows the loader's facts; it does not compare
+  the table with the exact routine (`azure2-coulomb-table validate` does).
+
+## 20. The potential of a pair and the partial waves without a level (U9, agent potential-gui, 2026-11-21)
 
 The PI (2026-11-20): "We can add it to the GUI and also the possibility of switching it on or off and selecting
 external only and external + internal mode which shows also which poles are created and a way of tuning it? Also I
@@ -856,7 +1193,7 @@ waves."  The physics is `potential_background.md` (sections 1-5, the record's fi
 `api/front/src/FrontPotential.cpp` (the facade), `physics/src/PotentialTuning.cpp` (a and r of a potential, the depth
 for a chosen a).
 
-### 19.1 Where: a panel of the Particle Pairs tab
+### 20.1 Where: a panel of the Particle Pairs tab
 
 The panel is the first tab under the pairs' table (beside the per-channel radii) and follows the selected pair.  A
 potential belongs to a pair (one `potential` record per pair, named by its label), as a channel radius does, and what
@@ -864,7 +1201,7 @@ the panel shows needs the pair's masses, charges, threshold and radius, which th
 Potential tab keeps the record table and form for the fields the panel does not edit (and "Edit record..." opens the
 record pop-up of section 16.10 from the panel).
 
-### 19.2 The panel
+### 20.2 The panel
 
 - **On/off.**  The format has no "active" field for a potential, and a removed record would lose its text.  Off is
   therefore the record kept in the file as comment lines: each of its lines (its comments, header and fields) after
@@ -913,7 +1250,7 @@ record pop-up of section 16.10 from the panel).
   pairs the panel asks the window to write the Pairs and Levels tabs' rows into the project (`AZURESetup::commitLevels`,
   the first half of `commitTabs`), so that a pair added in the tab is the engine's pair.
 
-### 19.3 The Levels tab: partial waves without a level
+### 20.3 The Levels tab: partial waves without a level
 
 `Partial waves...` under the channel configuration opens a check: every J^π the particle pairs form up to the tab's
 maximum l with no active level (`front::PartialWavesWithoutLevel`, nucleus by nucleus, with the lowest l and a pair
@@ -932,7 +1269,7 @@ hard-sphere or potential scattering, no background, no capture from them, withou
 
 The red text under the box (section 13.3) names the check.
 
-### 19.4 Tests
+### 20.4 Tests
 
 `tests/gui/gui_potential_test.cpp` (label gui) on `tests/potential_background/models/bound_level_a40.azr`: the panel on
 pair 1; Apply and save without an edit byte for byte; off and on byte for byte with a valid project while off; each mode
@@ -944,4 +1281,4 @@ engine's E_POTENTIAL_WAVE, central removing the line); the p3/2 poles equal to t
 to 3e-4 with the asked values beside the achieved, and r = 5 fm reported as out of reach; the 1/2+ level removed: the panel's warning, the check's list, a blank
 level that brings it back (width 0, fixed) and the warning gone; includeAllJPi from the check and the save's
 `includeAllJPi=1`, `maxOrbitalMomentum=3`.  Screenshots: `AZURE2_QT_SHOTS/u9-potential`.  `api_front` (h): the
-facade (section 19.2) against the session and scipy.
+facade (section 20.2) against the session and scipy.

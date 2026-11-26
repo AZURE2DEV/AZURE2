@@ -16,10 +16,39 @@ BarChart::BarChart(bool horizontal, QWidget *parent)
 
 QColor BarChart::warningColor() { return azureThemeIsDark() ? QColor("#f08a7e") : QColor("#c0392b"); }
 
+double BarChart::ScaleTop(const QVector<double> &values, bool *capped) {
+  QVector<double> positive;
+  double top = 0;
+  for (double v : values)
+    if (std::isfinite(v) && v > 0) {
+      positive << v;
+      top = std::max(top, v);
+    }
+  if (capped) *capped = false;
+  if (positive.size() < 3) return top;
+  std::sort(positive.begin(), positive.end());
+  const double median = positive[positive.size() / 2];
+  if (median > 0 && top > 10 * median) {
+    if (capped) *capped = true;
+    return 10 * median;
+  }
+  return top;
+}
+
 void BarChart::setBars(const QStringList &labels, const QVector<double> &values, const QVector<bool> &highlight) {
   labels_ = labels;
   values_ = values;
   highlight_ = highlight;
+  bool cut = false;
+  ScaleTop(values, &cut);
+  capped_ = cut && !horizontal_;
+  // each bar's name and value in the tip (the bars are numbered when their names do not fit under them)
+  QStringList tip;
+  for (int i = 0; i < values.size() && i < 40; i++)
+    tip << QString("%1: %2  %3").arg(i + 1).arg(labels.value(i)).arg(QString::number(values[i], 'g', 4));
+  if (capped_)
+    tip.prepend(tr("The scale is cut at ten times the median: a cut bar (marked) is longer than the axis."));
+  setToolTip(tip.join("\n"));
   updateGeometry();
   update();
 }
@@ -57,9 +86,10 @@ void BarChart::paintEvent(QPaintEvent *) {
     p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap, empty_);
     return;
   }
-  double top = 0;
-  for (double v : values_)
-    if (std::isfinite(v)) top = std::max(top, v);
+  double top = horizontal_ ? 0 : ScaleTop(values_);
+  if (horizontal_)
+    for (double v : values_)
+      if (std::isfinite(v)) top = std::max(top, v);
   if (std::isfinite(reference_)) top = std::max(top, reference_);
   if (top <= 0) top = 1;
   const QColor bar = pal.color(QPalette::Highlight);
@@ -103,11 +133,19 @@ void BarChart::paintEvent(QPaintEvent *) {
   for (const QString &l : labels_) labels = labels && fm.horizontalAdvance(l) < slot - 2;
   for (int i = 0; i < n; i++) {
     const double v = std::isfinite(values_[i]) ? values_[i] : 0;
-    const double h = area.height() * v / top;
+    const bool cut = v > top;
+    const double h = area.height() * std::min(v, top) / top;  // never above the axis
     const double x = area.left() + slot * i + (slot - w) / 2;
     p.setPen(Qt::NoPen);
     p.setBrush(highlight_.value(i) ? warn : bar);
     p.drawRect(QRectF(x, area.bottom() - h, w, h));
+    if (cut) {  // the bar is longer than the scale: two breaks near its top
+      p.setPen(QPen(pal.color(QPalette::Base), 2));
+      for (int k = 0; k < 2; k++) {
+        const double y = area.top() + 6 + 5 * k;
+        p.drawLine(QPointF(x - 1, y + 3), QPointF(x + w + 1, y - 3));
+      }
+    }
     p.setPen(pal.color(QPalette::PlaceholderText));
     const QString label = labels ? labels_.value(i) : QString::number(i + 1);
     if (labels || slot > fm.horizontalAdvance(label) + 1)

@@ -90,6 +90,10 @@ class FieldEditor : public QWidget {
   void prefill();
   /// Give or leave out an optional structured field (its "use" switch); an edit.
   void setUsed(bool on);
+  /// Whether the field applies to the record as the form holds it (its schema condition, "kind is layer or ..."): a
+  /// required field that does not apply is not marked missing (RecordsPanel::applyConditions).
+  void setApplies(bool on);
+  bool applies() const { return applies_; }
 
  signals:
   void changed();
@@ -109,12 +113,20 @@ class FieldEditor : public QWidget {
   bool edited_ = false;
   bool textMode_ = false;
   bool loading_ = false;
+  bool applies_ = true;
 };
 
 /// Is `field` the record's quantity (an enum whose words are the quantities of its kind)?
 bool IsQuantityField(const azure2::front::FieldInfo &field, const std::string &kind);
 /// The names of the records of `kinds` in the project (each kind read in the sections the schema puts it).
 QStringList RecordNamesOfKinds(const ProjectHolder *holder, const std::vector<std::string> &kinds);
+/// A value's grammar as a hint a user reads (qt_gui.md section 19.9): "<A><Symbol>" as "e.g. 20Ne", a single
+/// "<word>" as the word, anything with alternatives or optional parts ("fixed|fit [prior ...]") as "" (the grammar
+/// stays in the expert view's tips and the text mode).
+QString PlainHint(const std::string &grammar);
+/// The text with each number written with more than 12 significant digits shown with 12 (shortest form: "5.5" for
+/// "5.4999999999999997", "0.3" for "0.30000000000000004"); other tokens as they are.  Display only (qt_gui.md 19.9).
+QString RoundedNumbers(const QString &text);
 /// The value with one blank between tokens outside quotes.
 QString OneBlank(const QString &text);
 

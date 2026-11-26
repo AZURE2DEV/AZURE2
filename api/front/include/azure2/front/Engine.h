@@ -470,6 +470,63 @@ RunResult Run(const RunRequest &request, RunObserver &observer, const std::atomi
 /// `report` holds the converter's notes and questions either way.
 bool ConvertProject(const std::string &from, const std::string &to, std::string &report);
 
+/// A line of the old project the converter could not read (convert::LineProblem, docs/upgrade/qt_gui.md section 19.5):
+/// its 1-based line number in the file (0: the refusal is about no such line), its section and text, the refusal, the
+/// fields the old grammar expects there and the readings proposed (label, line).  None is applied by the converter.
+struct ConvertLineProblem {
+  int line = 0;
+  std::string section, text, problem, expected;
+  std::vector<std::pair<std::string, std::string>> readings;
+};
+/// ConvertProject, with the line a refusal is about in `problem` (line 0 when none).
+bool ConvertProject(const std::string &from, const std::string &to, std::string &report, ConvertLineProblem &problem);
+/// A copy of the text file `from` with its line `line` (1-based) replaced by `text`, written to `to`, which must not
+/// exist (the repair of one line of an old project before it is converted again; the original is kept).  Its line
+/// ends (LF or CRLF) are kept.  False with `why`.
+bool WriteRepairedCopy(const std::string &from, int line, const std::string &text, const std::string &to, std::string &why);
+
+// ---- The Coulomb table of this computer (docs/upgrade/qt_gui.md section 19.12) ----
+
+/// What a run of this process finds as its Coulomb table (CoulombTable, include/CoulombTable.h): the file the engine
+/// looks for ($AZURE2_COULOMB_TABLE if set, else ~/.azure2/coulomb_table.bin: CoulombTable::DefaultPath, not a copy of
+/// the rule) and whether the engine's shared loader (CoulombTable::Shared, which the runs call) reads it.  A run
+/// without a usable table computes the exact Coulomb functions: the same results within 1e-7, about 4 times slower.
+struct CoulombTableState {
+  std::string path;            ///< the file runs look for
+  bool exists = false;         ///< a file is there
+  bool usable = false;         ///< the runs of this process use it
+  std::string problem;         ///< why the file there is not used (exists and not usable): the loader's reason
+  long long bytes = 0;         ///< the file's size (exists)
+  int lMax = -1;               ///< usable: the highest l tabulated
+  double nodesPerDecade = 0;   ///< usable: grid nodes per decade of eta and rho
+  double etaRhoMax = 0;        ///< usable: channels with eta * rho above it take the exact routine
+};
+/// The state above.  Reads the file once per process when it is usable (the loader keeps it for the runs).
+CoulombTableState CoulombTableStatus();
+
+/// What BuildCoulombTable builds: the engine's default specification (CoulombTable::BuildSpec, the table of
+/// AZURE2 --build-coulomb-table; DefaultCoulombTableBuild fills it), or a smaller one for a test.
+struct CoulombTableBuild {
+  std::string path;            ///< "" : CoulombTableStatus().path
+  int lMax = 0;                ///< highest l
+  double etaMin = 0, etaMax = 0, rhoMin = 0, rhoMax = 0;  ///< ranges of eta and rho = k a (dimensionless)
+  double perDecade = 0;        ///< grid nodes per decade
+  double etaRhoMax = 0;        ///< eta * rho limit of the table
+  int threads = 0;             ///< threads of the build (0: the command line's default); a front end's build takes at most 4
+};
+/// The specification of the command line's build, threads = its default (CoulombTable::DefaultBuildThreads).
+CoulombTableBuild DefaultCoulombTableBuild();
+/// The rows the build computes: the total of the progress counter of BuildCoulombTable.
+int CoulombTableBuildRows(const CoulombTableBuild &spec);
+/// Build the table and write it with the command line's routine (CoulombTable::BuildFile: written as <path>.new and
+/// renamed over <path> when whole, the folder made), on min(spec.threads, 4) threads.  `rowsDone` (may be null) counts
+/// the rows done; `cancel` (may be null), once set, stops the build: false with error "cancelled" and no file at
+/// <path> or <path>.new.  After a success the runs of this process use the new table (the loader forgets that it
+/// found none: CoulombTable::ForgetMissing).  False with `error` on cancel or an I/O error.  Blocks: call it from a
+/// worker thread.
+bool BuildCoulombTable(const CoulombTableBuild &spec, std::atomic<int> *rowsDone, const std::atomic<bool> *cancel,
+                       std::string &error);
+
 // ---- What the last run wrote, as data (the Plot tab; docs/upgrade/qt_gui.md section 5) ----
 
 /// One point of a curve: one row of an AZUREOut_* file (src/DataOutputFiles.cpp writes them; c.m. frame, or lab
@@ -1129,7 +1186,7 @@ bool AllowedChannels(const std::vector<LevelRow> &pairRows, int twoJ, int parity
                      int multipolaritiesMax, const std::vector<int> &pairKeys, std::vector<AllowedChannelInfo> &out,
                      std::string &why);
 
-// ---- The Potential panel of the Pairs tab and the Levels tab's partial waves (docs/upgrade/qt_gui.md section 19) ----
+// ---- The Potential panel of the Pairs tab and the Levels tab's partial waves (docs/upgrade/qt_gui.md section 20) ----
 
 /// One `wave` field of a `potential` record in its meaning, split by the engine's parser (ParseFieldValue); every
 /// number and spin keeps the text it was written with, so PotentialWaveText of an unchanged wave is the text read.

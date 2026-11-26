@@ -271,6 +271,10 @@ class ThmPage : public ProjectPage {
   QList<Curve> curves_;
 };
 
+/// A phase shift in degrees, defined modulo 180, made continuous for drawing where it wraps across 0/180 (the
+/// identical-particle range [0, 180)); a jump at +-90 and the first value stay as the engine gives them.  Display only (qt_gui.md section 19.8).
+QVector<double> UnwrappedPhaseDegrees(const QVector<double> &deg);
+
 }  // namespace physicsqt
 
 /*!
@@ -287,6 +291,9 @@ class PhysicsTab : public QWidget {
   explicit PhysicsTab(ProjectHolder *holder, QWidget *parent = nullptr);
   ~PhysicsTab() override;
   void showPage(int page);
+  /// Standard or expert view (qt_gui.md section 19.4): the pole map, and the THM page of a project without <thm>,
+  /// are not listed in standard view.
+  void setExpertMode(bool on);
   QListWidget *pages() const { return pages_; }
   bool busy() const;
   void cancel();

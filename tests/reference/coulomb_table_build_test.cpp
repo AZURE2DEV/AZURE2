@@ -1,5 +1,5 @@
 // CoulombTable::BuildFile, the build behind AZURE2 --build-coulomb-table and the GUI's
-// Configure > Build Coulomb Table...: it writes a loadable table (creating the directory),
+// Run > Build the Coulomb Table... (front::BuildCoulombTable): it writes a loadable table (creating the directory),
 // counts its rows for the progress display, leaves nothing behind when cancelled, and
 // ForgetMissing() lets a running process pick up a table built after it first looked.
 #include "CoulombTable.h"

@@ -60,6 +60,11 @@ class PlotWidget : public QWidget {
   int dataPointsDrawn() const;
   /// Draw the whole plot into `p` over `area`: on white (a file) or, `onScreen`, in the widget's palette.
   void render(QPainter &p, const QRect &area, bool onScreen = false) const;
+  /// Where the legend is drawn in the widget (empty without one), and whether it is below the axes (the tests).
+  QRect legendRect() const { return framesOf(rect()).legend; }
+  bool legendBelowAxes() const;
+  /// The pole labels drawn at the last paint, as rectangles (the tests: none overlaps another).
+  QList<QRect> markerLabelRects() const;
   /// Write the plot to a file: .png, .svg, .pdf or .csv (the points drawn) by its extension.  False with `why`.
   bool exportTo(const QString &file, QString &why) const;
   /// The points of the series as CSV: per series a block "# <label>: data" (x, y, error) and "# <label>: calculated"
@@ -90,8 +95,12 @@ class PlotWidget : public QWidget {
  private:
   struct Frame {
     QRect main, lower;  ///< the main panel; the residual panel (empty when off)
+    QRect legend;       ///< the legend's box (empty without one): a corner of the main panel that covers no point, else
+                        ///< below the axes
+    int legendColumns = 1;
   };
   Frame framesOf(const QRect &area) const;
+  Frame framesOfInner(const QRect &area) const;  ///< the panels alone, without the legend's room
   QRectF dataRange() const;
   double mapX(double x, const QRect &r) const;
   double mapY(double y, const QRect &r, const QRectF &view, bool log) const;

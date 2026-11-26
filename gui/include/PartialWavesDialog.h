@@ -12,7 +12,7 @@ class QPushButton;
 QT_END_NAMESPACE
 
 /*!
- * The Levels tab's check of the partial waves (docs/upgrade/qt_gui.md section 19.3): every J^pi the particle pairs form
+ * The Levels tab's check of the partial waves (docs/upgrade/qt_gui.md section 20.3): every J^pi the particle pairs form
  * up to the tab's maximum l that no active level carries, with what that means (the engine makes no J^pi group for
  * it: its partial waves are left out of the calculation unless includeAllJPi is on) and two ways out: switch
  * includeAllJPi on (the tab's "Hard-sphere scattering in every J^pi"), or add a blank level -- zero widths, energy and

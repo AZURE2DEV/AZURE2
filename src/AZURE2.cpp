@@ -123,9 +123,7 @@ void printHelp() {
 int buildCoulombTable(const std::string &path) {
   const std::string file = path.empty() ? CoulombTable::DefaultPath() : path;
   CoulombTable::BuildSpec spec;
-#ifdef _OPENMP
-  spec.threads = omp_get_max_threads();
-#endif
+  spec.threads = CoulombTable::DefaultBuildThreads();
   std::atomic<int> done{0};
   std::atomic<bool> finished{false};
   spec.rowsDone = &done;

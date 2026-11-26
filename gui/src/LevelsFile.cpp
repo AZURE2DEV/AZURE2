@@ -9,6 +9,7 @@
 #include <QSet>
 
 #include "LevelsTab.h"
+#include "RecordExtras.h"
 
 namespace {
 
@@ -56,7 +57,7 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
     rowNumber++;
     if (row.tokens.empty()) continue;
     if ((int)row.tokens.size() < kE1) {
-      why = tr("<levels> row %1 has %2 columns").arg(rowNumber).arg(row.tokens.size());
+      why = tr("Level row %1 has %2 columns").arg(rowNumber).arg(row.tokens.size());
       return false;
     }
     const std::vector<std::string> &t = row.tokens;
@@ -75,11 +76,14 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
                       Number(t, kE1)};
     const int pairIndex = ir - 1;
     if (pairIndex < 0) {
-      why = tr("<levels> row %1: pair key %2").arg(rowNumber).arg(ir);
+      why = tr("Level row %1: pair key %2").arg(rowNumber).arg(ir);
       return false;
     }
+    // The pair goes to its own key, whatever the other keys hold: a project may name the same pair under two keys
+    // (c12c12_tumino2018: key 1 for the THM data, key 6 for the direct data, each with its own widths).  Comparing
+    // with every pair (isPair) refused such a key with a box per row and left its channels without a pair.
     if (pairsModel->numPairs() < ir) emit readNewPair(pair, pairIndex, true);
-    else if (pairsModel->isPair(pair) == -1) emit readExistingPair(pair, pairIndex, true);
+    else if (!pairsModel->pairAt(pairIndex, pair)) emit readExistingPair(pair, pairIndex, true);
     LevelsData level = {(int)Number(t, kIsActive), (int)Number(t, kLevelFix), Number(t, kLevelJ), (int)levelPi,
                         Number(t, kLevelE)};
     const Nucleus nucleus = PairsModel::nucleusOf(pair);  // the engine's rule: a level belongs to its channels' nucleus
@@ -112,6 +116,7 @@ bool LevelsTab::readLevels(const std::vector<azure2::front::LevelRow> &rows, QSt
     for (const std::string &s : t) tokens << QString::fromStdString(s);
     channelsModel->setFileTokens(channelIndex, tokens);
   }
+  updateExpertRows();
   maxLSpin->setValue(maxLValue);
   maxMultSpin->setValue(maxMultValue);
   maxNumMultSpin->setValue(maxNumMultValue);
@@ -234,7 +239,21 @@ std::vector<azure2::front::LevelRow> LevelsTab::levelRows() {
   return rows;
 }
 
-void LevelsTab::addExtraPanel(const QString &title, QWidget *panel) {
-  extras->addTab(panel, title);
-  extras->setVisible(true);
+void LevelsTab::addExtraPanel(const QString &title, RecordsPanel *panel) { extras->addPanel(title, panel); }
+
+void LevelsTab::setExpertMode(bool on) {
+  expert_ = on;
+  extras->setExpertMode(on);
+  updateExpertRows();
+}
+
+void LevelsTab::updateExpertRows() {
+  // the photon multipolarity limits matter only with a photon pair (pair type 10); Export LaTeX is a writer's tool
+  bool photon = false;
+  if (pairsModel)
+    for (const PairsData &p : pairsModel->getPairs()) photon = photon || p.pairType == 10;
+  for (QWidget *w : {static_cast<QWidget *>(maxMultSpin), static_cast<QWidget *>(maxNumMultSpin),
+                     static_cast<QWidget *>(maxMultLabelW_), static_cast<QWidget *>(maxNumMultLabelW_)})
+    if (w) w->setVisible(expert_ || photon);
+  exportLatexButton->setVisible(expert_);
 }

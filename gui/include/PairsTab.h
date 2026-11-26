@@ -27,6 +27,8 @@ class QUndoStack;
 QT_END_NAMESPACE
 
 class InfoDialog;
+class RecordsPanel;
+class RecordExtras;
 
 /*!
  * The Particle Pairs tab: the pairs of the compound nucleus, and the source every other tab takes its pair list from.
@@ -37,9 +39,14 @@ class PairsTab : public QWidget {
  public:
   PairsTab(QWidget *parent = 0);
   PairsModel *getPairsModel();
-  /// A panel shown below the pairs (the per-channel radii of <channelRadii>, AZURESetup); `first`: as the first
-  /// and current tab (the Potential panel).
-  void addExtraPanel(const QString &title, QWidget *panel, bool first = false);
+  /// A panel shown below the pairs (the per-channel radii of <channelRadii>, AZURESetup).
+  void addExtraPanel(const QString &title, RecordsPanel *panel);
+  /// Standard or expert view (qt_gui.md section 19.4): the per-channel radii hidden in standard view unless they hold records.
+  void setExpertMode(bool on);
+  RecordExtras *extraPanels() const { return extras; }
+  /// A panel that is no records panel (the Potential panel, qt_gui.md section 20): always shown; `first`: as the
+  /// first and current sub-tab.
+  void addExtraPanel(const QString &title, QWidget *panel, bool first);
   /*! A new file: no pairs. */
   void reset();
   /// Select pair `row` and remove it as the Remove button does (the tests).
@@ -76,7 +83,7 @@ class PairsTab : public QWidget {
  private:
   PairsModel *pairsModel;
   QTableView *pairsView;
-  QTabWidget *extras;
+  RecordExtras *extras = nullptr;
   bool confirmRemoval_ = true;
 
  private:

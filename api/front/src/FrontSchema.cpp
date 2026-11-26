@@ -2,6 +2,7 @@
 // schema's order, the sections, the quantities and their units, the diagnostic codes.  Read from experiment/'s table
 // (Schema::Kinds, Quantities, DiagnosticCodes), the one AZURE2 --schema writes; nothing is spelled here.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <algorithm>
 #include <climits>
@@ -103,6 +104,7 @@ void SetSummary(KindInfo &info, const ex::RecordKind &k) {
 }  // namespace
 
 std::vector<KindInfo> RecordKinds() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<KindInfo> out;
   for (const ex::RecordKind &k : ex::Schema::Kinds()) {
     KindInfo info;
@@ -157,6 +159,7 @@ std::vector<std::pair<std::string, std::vector<std::string>>> RecordSections() {
 std::vector<std::string> QuantityNames(const std::string &kind) { return ex::QuantityNames(kind); }
 
 std::vector<QuantityInfo> Quantities(const std::string &kind) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<QuantityInfo> out;
   for (const std::string &name : ex::QuantityNames(kind)) {
     const ex::Quantity *q = ex::FindQuantity(name);
@@ -167,6 +170,7 @@ std::vector<QuantityInfo> Quantities(const std::string &kind) {
 }
 
 std::vector<std::string> QuantityUnits(const std::string &quantity) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::string> out;
   const ex::Quantity *q = ex::FindQuantity(quantity);
   if (!q) return out;
@@ -183,12 +187,14 @@ std::vector<std::string> QuantityUnits(const std::string &quantity) {
 }
 
 std::vector<std::pair<std::string, std::string>> DiagnosticCodes() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::pair<std::string, std::string>> out;
   for (const ex::DiagnosticCode &c : ex::DiagnosticCodes()) out.push_back({c.code, c.meaning});
   return out;
 }
 
 double SingleParticleWidth(int z1, int z2, double mu_u, int l, double a_fm, double E_MeV) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   azure2::physics::ChannelKinematics kin;
   kin.z1 = z1;
   kin.z2 = z2;

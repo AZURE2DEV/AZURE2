@@ -6,6 +6,7 @@
 // levels (AZUREAPI::ObservedLevelRowsAllRWA) and the THM tables (AZUREAPI::GetThm*, pyazr's session_thm.py).  No
 // formula here: the arrays are copied into series.
 #include "azure2/front/Engine.h"
+#include "azure2/support/ClassicNumeric.h"
 
 #include <cmath>
 #include <cstdio>
@@ -95,6 +96,7 @@ std::string PairKind(int ptype) { return ptype == 0 ? "particle" : ptype == 10 ?
 // ---------------------------------------------------------------- the physics table
 
 std::vector<PhysicsFunction> PhysicsFunctions() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsFunction> out;
   for (const table::PhysicsRow &r : table::PhysicsTable()) {
     PhysicsFunction f;
@@ -158,6 +160,7 @@ std::string PhysicsStatusText(const std::string &name, int status) {
 // ---------------------------------------------------------------- the stopping table
 
 std::vector<PhysicsFunction> StoppingFunctions() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsFunction> out;
   for (const table::StoppingRow &r : table::StoppingTable()) {
     PhysicsFunction f;
@@ -315,6 +318,7 @@ bool PhysicsSession::Open(const std::string &projectFile, const std::string &par
 }
 
 std::string PhysicsSession::Parametrization() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   if (!IsOpen()) return "";
   const Config &c = impl_->api->configure();
   if (c.paramMask & Config::USE_PARK_FORMALISM) return "park";
@@ -323,6 +327,7 @@ std::string PhysicsSession::Parametrization() const {
 }
 
 std::vector<PhysicsPair> PhysicsSession::Pairs() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsPair> out;
   if (!IsOpen()) return out;
   const CompoundSystem *c = impl_->api->compound();
@@ -343,6 +348,7 @@ std::vector<PhysicsPair> PhysicsSession::Pairs() const {
 }
 
 std::vector<PhysicsGroup> PhysicsSession::Groups() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsGroup> out;
   if (!IsOpen()) return out;
   const CompoundSystem *c = impl_->api->compound();
@@ -366,6 +372,7 @@ std::vector<PhysicsGroup> PhysicsSession::Groups() const {
 }
 
 std::vector<PhysicsPole> PhysicsSession::Poles() {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<PhysicsPole> out;
   if (!IsOpen()) return out;
   const azure2::support::ExtendedPrecisionScope fpPrecision;
@@ -489,6 +496,7 @@ bool PhysicsSession::ChannelFunctions(int pair, int l, double radius, int twoJ, 
 }
 
 bool PhysicsSession::Block(int jgroup, const std::vector<double> &excitation, PhysicsCurves &out, std::string &why) {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   out = PhysicsCurves();
   if (!IsOpen()) {
     why = "no session";
@@ -581,6 +589,7 @@ bool PhysicsSession::Block(int jgroup, const std::vector<double> &excitation, Ph
 }
 
 std::vector<std::string> PhysicsSession::ThmExperiments() const {
+  const support::ClassicNumericScope numeric;  // the numbers of files in the "C" locale (ClassicNumeric.h)
   std::vector<std::string> out;
   if (!IsOpen()) return out;
   for (const ThmExperiment &e : impl_->api->configure().thm.experiments) out.push_back(e.name);

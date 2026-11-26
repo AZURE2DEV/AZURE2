@@ -5,6 +5,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QComboBox>
+#include <QLocale>
 #include <QDialog>
 #include <QFontDatabase>
 #include <QPlainTextEdit>
@@ -15,6 +16,7 @@
 #include <QDockWidget>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
 #include <QMimeData>
@@ -33,6 +35,7 @@
 #include <QUrl>
 #include <QHBoxLayout>
 #include <QStyle>
+#include <clocale>
 #include <cmath>
 
 #include "AboutAZURE2Dialog.h"
@@ -47,12 +50,15 @@
 #include "RecordTabs.h"
 #include "RecordsPanel.h"
 #include "MCMCTab.h"
+#include "NotesBar.h"
+#include "ExpertMode.h"
 #include "OverviewPage.h"
 #include "PlotWidget.h"
 #include "ProjectWatcher.h"
 #include "PlotTab.h"
 #include "PhysicsTab.h"
 #include "PythonTools.h"
+#include "CoulombTableUi.h"
 #include "RunTab.h"
 #include "ThmTab.h"
 
@@ -63,6 +69,12 @@ static void InitShellResources() {
 }
 
 AZURESetup::AZURESetup() {
+  // Numbers are read and written with a decimal point, whatever the user's language: QApplication takes the C
+  // library's locale from the environment, and with a decimal-comma locale (de_DE, it_IT, pl_PL, ...) strtod then
+  // stops at the point, so the engine's readers refused every "5.441" of a project (E_NOT_A_NUMBER, E_BAD_NAME,
+  // E_REACTION_SYNTAX).  Qt's documentation asks for exactly this reset after the application is made.
+  std::setlocale(LC_NUMERIC, "C");
+  QLocale::setDefault(QLocale::c());
   InitShellResources();
   qRegisterMetaType<RunOutcome>("RunOutcome");
   holder_ = new ProjectHolder(this);
@@ -107,10 +119,10 @@ AZURESetup::AZURESetup() {
   pairsTab->addExtraPanel(
       tr("Per-channel radii"),
       new RecordsPanel(holder_, "channelRadii",
-                       tr("A channel's own radius (<channelRadii>): a record per pair and, optionally, l, s and J; every "
+                       tr("A channel's own radius: a record per pair and, optionally, l, s and J; every "
                           "channel it does not name keeps its pair's radius (the column a of the pairs).")));
   {
-    // the Potential panel (docs/upgrade/qt_gui.md section 19): the selected pair's potential, wave by wave
+    // the Potential panel (docs/upgrade/qt_gui.md section 20): the selected pair's potential, wave by wave
     PotentialPanel::Hooks hooks;
     hooks.commitLevels = [this](QString &why) { return commitLevels(why); };
     hooks.levelRows = [this]() { return levelsTab->levelRows(); };
@@ -143,12 +155,12 @@ AZURESetup::AZURESetup() {
   levelsTab->addExtraPanel(
       tr("Gamma Decays"),
       new RecordsPanel(holder_, "gammaDecays",
-                       tr("A level's gamma decay written as its total radiative width and branchings (<gammaDecays>) "
+                       tr("A level's gamma decay written as its total radiative width and branchings "
                           "in place of its photon amplitudes; fitted as such.")));
   levelsTab->addExtraPanel(
       tr("Isospin"),
       new RecordsPanel(holder_, "isospin",
-                       tr("Isospin-labelled levels (<isospin>): a level of one ID over the nuclei of an isospin "
+                       tr("Isospin-labelled levels: a level of one ID over the nuclei of an isospin "
                           "multiplet, its isospin, the Coulomb shifts and mixing, the reference and factors.")));
 
   segmentsTab = new SectionsTab(holder_, SegmentsParts());
@@ -207,12 +219,17 @@ AZURESetup::AZURESetup() {
     connect(mcmcTab, &MCMCTab::stopRequested, this, &AZURESetup::stopRun);
   }
   tabWidget->addTab(plotTab, tr("Pl&ot"));
-  tabWidget->addTab(new PhysicsTab(holder_), tr("P&hysics"));
+  physicsTab_ = new PhysicsTab(holder_);
+  tabWidget->addTab(physicsTab_, tr("P&hysics"));
   tabWidget->setDocumentMode(false);
   startPage_ = new StartPage;
   connect(startPage_, &StartPage::newRequested, this, &AZURESetup::newProject);
   connect(startPage_, &StartPage::openRequested, this, qOverload<>(&AZURESetup::open));
   connect(startPage_, &StartPage::openFile, this, [this](const QString &file) { open(file); });
+  connect(startPage_, &StartPage::expertToggled, this, &AZURESetup::setExpertMode);
+  // the Coulomb table (qt_gui.md section 19.12): one quiet line while runs have none, here and on the Overview
+  coulomb_ = new CoulombTableControl(this);
+  startPage_->addNotice(coulomb_->makeNotice());
   central_ = new QStackedWidget;
   central_->addWidget(startPage_);
   central_->addWidget(tabWidget);
@@ -251,11 +268,13 @@ AZURESetup::AZURESetup() {
   connect(holder_, &ProjectHolder::sectionEdited, this, [this]() {
     updateTitle();
     updateLogo();
+    updateExpertTabs();
   });
 
   tools_ = new PythonTools(this);
   connect(tools_, &PythonTools::line, runTab, &RunTab::appendLine);
   connect(tools_, &PythonTools::webPageReady, this, [](const QString &url) { QDesktopServices::openUrl(QUrl(url)); });
+  connect(tools_, &PythonTools::coulombTableRequested, coulomb_, &CoulombTableControl::showDialog);
   createActions();
   createToolBar();
   createMenus();
@@ -266,6 +285,7 @@ AZURESetup::AZURESetup() {
   {
     OverviewPage *overview = new OverviewPage(holder_);
     tabWidget->insertTab(0, overview, tr("O&verview"));
+    overview->addNotice(coulomb_->makeNotice());
     connect(holder_, &ProjectHolder::opened, overview, [this, overview]() {
       overview->clearProgress();
       overview->refresh();
@@ -301,7 +321,12 @@ AZURESetup::AZURESetup() {
     });
     connect(overview, &OverviewPage::recordRequested, this, &AZURESetup::showRecord);
     connect(overview, &OverviewPage::tabRequested, this, [this](const QString &name) {
-      tabWidget->setCurrentWidget(name == "fitting" ? static_cast<QWidget *>(fittingTab) : static_cast<QWidget *>(runTab));
+      QWidget *to = name == "fitting"    ? static_cast<QWidget *>(fittingTab)
+                    : name == "pairs"    ? static_cast<QWidget *>(pairsTab)
+                    : name == "levels"   ? static_cast<QWidget *>(levelsTab)
+                    : name == "segments" ? static_cast<QWidget *>(segmentsTab)
+                                         : static_cast<QWidget *>(runTab);
+      tabWidget->setCurrentWidget(to);
     });
     if (QComboBox *fitter = fittingTab->findChild<QComboBox *>("fitterCombo")) {
       connect(fitter, &QComboBox::currentTextChanged, overview, &OverviewPage::setFitterChoice);
@@ -330,6 +355,25 @@ AZURESetup::AZURESetup() {
     addToolBarBreak();
     addToolBar(bar);
     bar->hide();
+    // The notes about the project just opened (qt_gui.md section 19.2): one bar, not modal, shown once per open.
+    addToolBarBreak();
+    notes_ = new NotesBar(this);
+    addToolBar(notes_);
+    connect(notes_, &NotesBar::locateRequested, this, [this]() {
+      const QString folder = QFileDialog::getExistingDirectory(this, tr("Where are the data files?"), holder_->directory());
+      if (folder.isEmpty()) return;
+      QStringList still;
+      const int found = locateDataFiles(folder, &still);
+      statusBar()->showMessage(still.isEmpty() ? tr("%n data file(s) located; save the project to keep the new paths.", nullptr, found)
+                                               : tr("%1 data file(s) located, %2 still not found (Details lists them).").arg(found).arg(still.size()),
+                               30000);
+      if (still.isEmpty()) notes_->showLocate(false);
+      validate();
+    });
+    connect(notes_, &NotesBar::diagnosticsRequested, this, [this]() {
+      diagnosticsDock->show();
+      diagnosticsDock->raise();
+    });
     auto reloadProject = [this, bar]() {
       const int tab = tabWidget->currentIndex();
       QMap<RecordsPanel *, QString> shown;
@@ -423,6 +467,8 @@ AZURESetup::AZURESetup() {
   projectOpened();
   showProject(false);
   restoreWindowState();
+  coulomb_->refresh();  // the table runs would find now (front::CoulombTableStatus)
+  setExpertMode(expert::Enabled());  // the view of the last session (standard the first time)
 }
 
 AZURESetup::~AZURESetup() {
@@ -432,6 +478,14 @@ AZURESetup::~AZURESetup() {
 }
 
 void AZURESetup::createActions() {
+  expertAction_ = new QAction(tr("Show &Expert Options"), this);
+  expertAction_->setObjectName("expertAction");
+  expertAction_->setCheckable(true);
+  expertAction_->setChecked(expert::Enabled());
+  expertAction_->setToolTip(tr("Show the options, columns, tabs and sections an occasional user does not need.  It "
+                               "changes what is shown, never the project: an expert option the project sets is shown "
+                               "either way."));
+  connect(expertAction_, &QAction::toggled, this, &AZURESetup::setExpertMode);
   // the main actions: the tool bar's and the menus' (one QAction each, so a shortcut has one owner)
   auto make = [this](const QString &name, const QString &icon, const QString &text, const QKeySequence &key,
                      const QString &tip) {
@@ -521,6 +575,17 @@ void AZURESetup::createMenus() {
   for (const QString &name : {"calculate", "fit", "stop"}) runMenu->addAction(actions_[name]);
   runMenu->addSeparator();
   runMenu->addAction(actions_["plot"]);
+  // the Coulomb table without Python (qt_gui.md section 19.12): one dialog for both entries
+  runMenu->addSeparator();
+  QAction *buildTable = runMenu->addAction(tr("&Build the Coulomb Table..."), coulomb_, [this]() {
+    coulomb_->showDialog()->buildButton()->setFocus();
+  });
+  buildTable->setObjectName("buildCoulombTable");
+  buildTable->setStatusTip(tr("Build this computer's Coulomb table once (about 5 min, 88 MB): runs are about 4 times "
+                              "faster with the same results"));
+  QAction *checkTable = runMenu->addAction(tr("C&heck the Coulomb Table..."), coulomb_, &CoulombTableControl::showDialog);
+  checkTable->setObjectName("checkCoulombTable");
+  checkTable->setStatusTip(tr("Where runs look for the Coulomb table and what they find there"));
 
   // View: the look (AzureTheme.h), the tool bar and the Diagnostics
   QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
@@ -542,8 +607,13 @@ void AZURESetup::createMenus() {
   viewMenu->addAction(dockAction);
 
   // Tools: pyazr's commands as child processes (PythonTools.h), filled when the menu opens (pyazr importable or not)
+  // standard or expert view (qt_gui.md section 19.4)
+  viewMenu->addSeparator();
+  viewMenu->addAction(expertAction_);
+
   QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
   toolsMenu->setObjectName("toolsMenu");
+  toolsMenu_ = toolsMenu;
   connect(toolsMenu, &QMenu::aboutToShow, this, [this, toolsMenu]() { tools_->fillMenu(toolsMenu, holder_->path()); });
 
   QMenu *helpMenu = menuBar()->addMenu(tr("&Documentation"));
@@ -642,6 +712,7 @@ void AZURESetup::editOptions() {
 void AZURESetup::validate() {
   QString why;
   commitTabs(why);
+  validateRequested_ = true;
   diagnostics->validate();
 }
 
@@ -658,9 +729,34 @@ void AZURESetup::diagnosticsDone(bool ok, int errors, int warnings) {
     statusValidity_->setToolTip(diagnostics->summary() + "\n" + tr("Click to show the Diagnostics."));
     statusValidity_->setVisible(hasProject_);
   }
-  // nothing to show: the dock out of the way; a problem: the dock opens
   if (!hasProject_) return;
-  diagnosticsDock->setVisible(!ok || errors > 0 || warnings > 0);
+  const bool asked = validateRequested_;
+  validateRequested_ = false;
+  // The check of a project just opened is one note of the notes bar, never a box (qt_gui.md section 19.2).
+  if (openValidation_) {
+    openValidation_ = false;
+    // data files this computer does not have: one note naming them, with "Locate Data Files..." (not a wall of errors)
+    const QStringList missing = missingDataFiles();
+    if (!missing.isEmpty()) {
+      notes_->addNote(tr("%n data file(s) not found on this computer", nullptr, missing.size()),
+                      tr("The data sets name these files, which are not at that path here:\n") + missing.join("\n") +
+                          tr("\n\nLocate Data Files... looks for them by name in a folder you choose."),
+                      false, true);
+      notes_->showLocate(true);
+    }
+    if (!ok || errors > 0 || warnings > 0)
+      notes_->addNote(tr("The engine's check: %1").arg(statusValidity_ ? statusValidity_->text() : diagnostics->summary()),
+                      diagnostics->summary() + "\n\n" + diagnostics->listing(30), true);
+  }
+  // errors that are only missing data files: the note above says so; the Diagnostics stay closed until asked for
+  bool onlyDataFiles = errors > 0;
+  for (const QString &c : diagnostics->codes())
+    if (c.startsWith("E_") && c != "E_DATA_FILE") onlyDataFiles = false;
+  if (onlyDataFiles && !asked && !missingDataFiles().isEmpty()) return;
+  // An error (the project would not run) opens the Diagnostics; warnings open them only when the user asked for the
+  // check (Validate): otherwise they are counted in the status bar, whose click opens them.  Nothing to show: hidden.
+  if (!ok || errors > 0 || (asked && warnings > 0)) diagnosticsDock->setVisible(true);
+  else if (warnings == 0) diagnosticsDock->setVisible(false);
 }
 
 void AZURESetup::showRecord(const QString &section, const QString &record) {
@@ -763,6 +859,11 @@ void AZURESetup::createStatusBar() {
   jobStop_->setObjectName("statusStop");
   jobStop_->setDefaultAction(actions_["stop"]);
   jobStop_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  statusExpert_ = new QToolButton;
+  statusExpert_->setObjectName("statusExpert");
+  statusExpert_->setAutoRaise(true);
+  statusExpert_->setToolTip(expertAction_->toolTip());
+  connect(statusExpert_, &QToolButton::clicked, expertAction_, &QAction::toggle);
   jobBox_ = new QWidget;
   QHBoxLayout *job = new QHBoxLayout(jobBox_);
   job->setContentsMargins(0, 0, 0, 0);
@@ -773,8 +874,57 @@ void AZURESetup::createStatusBar() {
   statusBar()->addWidget(statusFile_, 1);
   statusBar()->addPermanentWidget(jobBox_);
   statusBar()->addPermanentWidget(statusValidity_);
+  statusBar()->addPermanentWidget(statusExpert_);
   statusValidity_->hide();
   updateTitle();
+}
+
+bool AZURESetup::expertMode() const { return expertAction_->isChecked(); }
+
+void AZURESetup::setExpertMode(bool on) {
+  if (expertAction_->isChecked() != on) {
+    expertAction_->setChecked(on);  // toggled() comes back here
+    return;
+  }
+  expert::SetEnabled(on);
+  statusExpert_->setText(on ? tr("Expert view") : tr("Standard view"));
+  if (startPage_) startPage_->setExpertChecked(on);
+  pairsTab->setExpertMode(on);
+  levelsTab->setExpertMode(on);
+  for (SectionsTab *t : {segmentsTab, effectsTab, potentialTab}) t->setExpertMode(on);
+  fittingTab->setExpertMode(on);
+  runTab->setExpertMode(on);
+  thmTab->setExpertMode(on);
+  static_cast<PhysicsTab *>(physicsTab_)->setExpertMode(on);
+  toolsMenu_->menuAction()->setVisible(on);
+  updateExpertTabs();
+}
+
+void AZURESetup::updateExpertTabs() {
+  // a section other than comments is in use: its tab is shown in either view (nothing hidden is in effect)
+  auto inUse = [this](const QString &section) {
+    for (const QString &line : holder_->sectionBody(section)) {
+      const QString t = line.trimmed();
+      if (!t.isEmpty() && !t.startsWith('#')) return true;
+    }
+    return false;
+  };
+  const bool on = expertMode();
+  const QList<QPair<QWidget *, bool>> tabs = {{potentialTab, potentialTab->hasRecords()},
+                                              {thmTab, inUse("thm")},
+                                              {mcmcTab, mcmcTab && inUse("mcmc")}};
+  for (const auto &t : tabs) {
+    if (!t.first) continue;
+    const int at = tabWidget->indexOf(t.first);
+    tabWidget->setTabVisible(at, on || t.second);
+    tabWidget->setTabToolTip(at, tabTips_.value(t.first) + (!on && t.second ? "\n" + expert::ShownBecauseSet() : QString()));
+  }
+  for (auto it = tabTips_.constBegin(); it != tabTips_.constEnd(); ++it) {
+    bool expertTab = false;
+    for (const auto &t : tabs) expertTab = expertTab || t.first == it.key();
+    if (!expertTab) tabWidget->setTabToolTip(tabWidget->indexOf(it.key()), it.value());
+  }
+  static_cast<PhysicsTab *>(physicsTab_)->setExpertMode(on);
 }
 
 void AZURESetup::updateActions() {
@@ -786,6 +936,7 @@ void AZURESetup::updateActions() {
   actions_["calculate"]->setEnabled(hasProject_ && idle);
   actions_["fit"]->setEnabled(hasProject_ && idle);
   actions_["stop"]->setEnabled(running_);
+  if (coulomb_) coulomb_->setCalculationRunning(running_);  // no build starts while a run of the window goes on
   actions_["plot"]->setEnabled(hasProject_);
 }
 
@@ -814,8 +965,10 @@ void AZURESetup::showProject(bool open) {
                                     "pole map and THM parts.")
                                : QString();
       if (!text.isEmpty()) notes << qMakePair(tabWidget->tabText(i).remove('&'), text);
+      if (!text.isEmpty()) tabTips_[tab] = text;  // what the tab is for: its tool tip
     }
     startPage_->setTabNotes(notes);
+    updateExpertTabs();
   }
   updateTitle();
   updateActions();
@@ -826,6 +979,7 @@ void AZURESetup::showProject(bool open) {
 
 bool AZURESetup::closeProject() {
   if (running_ || !maybeSave()) return false;
+  notes_->clearNotes();
   holder_->setProject(azure2::front::Project::Empty(QDir::current().filePath("untitled.azr").toStdString()));
   showProject(false);
   return true;
@@ -889,6 +1043,7 @@ void AZURESetup::restoreWindowState() {
   // the dock's visibility is the validation's (diagnosticsDone), not the last session's
   if (settings.contains("window/state")) restoreState(settings.value("window/state").toByteArray());
   diagnosticsDock->hide();
+  if (notes_) notes_->clearNotes();  // the notes are those of a project opened in this session
 }
 
 void AZURESetup::saveWindowState() {
@@ -911,4 +1066,57 @@ void AZURESetup::closeEvent(QCloseEvent *event) {
   }
   saveWindowState();
   event->accept();
+}
+
+QStringList AZURESetup::missingDataFiles() const {
+  QStringList out;
+  const QDir dir(holder_->directory());
+  for (const azure2::front::Record &r : holder_->records("data")) {
+    const QString active = QString::fromStdString(r.Value("active"));
+    if (active == "no") continue;
+    QString file = QString::fromStdString(r.Value("file")).trimmed();
+    if (file.size() >= 2 && file.startsWith('"') && file.endsWith('"')) file = file.mid(1, file.size() - 2);
+    if (file.isEmpty()) continue;
+    if (!QFileInfo(dir.filePath(file)).isFile()) out << QString::fromStdString(r.name) + ": " + file;
+  }
+  return out;
+}
+
+int AZURESetup::locateDataFiles(const QString &folder, QStringList *still) {
+  int found = 0;
+  const QDir dir(holder_->directory());
+  for (azure2::front::Record r : holder_->records("data")) {
+    if (QString::fromStdString(r.Value("active")) == "no") continue;
+    QString file = QString::fromStdString(r.Value("file")).trimmed();
+    if (file.size() >= 2 && file.startsWith('"') && file.endsWith('"')) file = file.mid(1, file.size() - 2);
+    if (file.isEmpty() || QFileInfo(dir.filePath(file)).isFile()) continue;
+    // the name as written (a Windows path's name too), looked for under the folder, nearest first
+    const QString name = QString(file).replace('\\', '/').section('/', -1);
+    QString hit;
+    QStringList level = {folder};
+    for (int depth = 0; depth < 5 && hit.isEmpty() && !level.isEmpty(); depth++) {
+      QStringList next;
+      for (const QString &d : level) {
+        if (QFileInfo(QDir(d).filePath(name)).isFile()) {
+          hit = QDir(d).filePath(name);
+          break;
+        }
+        for (const QString &sub : QDir(d).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) next << QDir(d).filePath(sub);
+      }
+      level = next;
+    }
+    if (hit.isEmpty()) {
+      if (still) *still << QString::fromStdString(r.name) + ": " + file;
+      continue;
+    }
+    QString path = dir.relativeFilePath(hit);
+    if (path.startsWith("../../")) path = QFileInfo(hit).absoluteFilePath();
+    if (path.contains(' ')) path = '"' + path + '"';
+    for (azure2::front::Field &f : r.fields)
+      if (f.key == "file") f.value = path.toStdString();
+    QString why;
+    if (holder_->setRecord("data", r, why)) found++;
+    else if (still) *still << QString::fromStdString(r.name) + ": " + why;
+  }
+  return found;
 }
