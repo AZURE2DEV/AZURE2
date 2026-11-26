@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -166,6 +167,27 @@ double CoulombTable::LogGamow(double eta) {
   if (x < 1e-8) return -0.5 * x;  // x / (e^x - 1) = 1 - x/2 + ...
   if (x < 1.0) return std::log(x / std::expm1(x));
   return std::log(x) - x - std::log1p(-std::exp(-x));
+}
+
+double CoulombTable::SmallPhase(int l, double eta, double rho, double logP) {
+  // F_l = C_l rho^(l+1) sum_n a_n, a_0 = 1, a_1 = eta rho / (l + 1), n (n + 2l + 1) a_n = 2 eta rho a_(n-1) -
+  // rho^2 a_(n-2); C_0^2 = 2 pi eta / (exp(2 pi eta) - 1), C_l = C_(l-1) sqrt(l^2 + eta^2) / (l (2l + 1)).  Below
+  // the turning point the terms are positive.  phi = atan(F / G) and P = rho / (F^2 + G^2) give sin(phi) =
+  // F sqrt(P / rho); in logarithms, since C_l and P leave the double range separately.
+  double logC = 0.5 * LogGamow(eta);
+  for (int k = 1; k <= l; k++) logC += 0.5 * std::log(k * k + eta * eta) - std::log(k * (2.0 * k + 1.0));
+  double before = 1.0, last = eta * rho / (l + 1.0), sum = before + last;
+  bool converged = false;
+  for (int n = 2; n < 2000 && !converged; n++) {
+    const double term = (2.0 * eta * rho * last - rho * rho * before) / (n * (n + 2.0 * l + 1.0));
+    sum += term;
+    converged = std::abs(term) < 1e-17 * std::abs(sum) && std::abs(last) < 1e-17 * std::abs(sum);
+    before = last;
+    last = term;
+  }
+  if (!converged || !(sum > 0.0) || !std::isfinite(sum)) return std::numeric_limits<double>::quiet_NaN();
+  const double sine = std::exp(logC + (l + 1) * std::log(rho) + std::log(sum) + 0.5 * (logP - std::log(rho)));
+  return sine < 1.0 ? std::asin(sine) : std::numeric_limits<double>::quiet_NaN();
 }
 
 CoulombTable::Open CoulombTable::ExactOpen(int l, double eta, double rho) {
@@ -397,6 +419,15 @@ bool CoulombTable::LookupOpen(int l, double eta, double rho, Open &out, CoulombT
   out.P = std::exp(lp + LogGamow(eta));
   out.S = sv;
   out.phi = ph + rho;
+  // The sheet holds phi - rho, so the sum is good to the rounding of rho (about 1e-16 rad) and no better.  Deep
+  // below the barrier phi itself is far smaller than that (phi ~ P), and the elastic amplitude exp(-2i phi) - 1
+  // would be rounding noise: there the phase comes from SmallPhase (the exact routine there would cost about 100
+  // lookups, and a heavy target has most of its lookups there).  phi is monotonic from phi(0) = 0, so a small
+  // value is met nowhere else, and below the limit the continuous phase and atan2's are the same.
+  if (std::abs(out.phi) < kSmallPhase) {
+    const double small = SmallPhase(l, eta, rho, lp + LogGamow(eta));
+    out.phi = std::isfinite(small) ? small : ExactOpen(l, eta, rho).phi;
+  }
   return true;
 }
 

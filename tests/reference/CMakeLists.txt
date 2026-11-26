@@ -179,6 +179,13 @@ target_link_libraries(coulomb_table_build_test PRIVATE AZURE2Core)
 add_test(NAME coulomb_table_build COMMAND coulomb_table_build_test)
 set_tests_properties(coulomb_table_build PROPERTIES TIMEOUT 120)
 
+# CoulombTable::LookupOpen deep below the barrier: the table's phase (stored as phi - rho) is rounding noise where
+# phi < 1e-16, so below CoulombTable::kSmallPhase the lookup takes it from CoulombTable::SmallPhase (power series).
+add_executable(coulomb_table_small_phase_test coulomb_table_small_phase_test.cpp)
+target_link_libraries(coulomb_table_small_phase_test PRIVATE AZURE2Core)
+add_test(NAME coulomb_table_small_phase COMMAND coulomb_table_small_phase_test)
+set_tests_properties(coulomb_table_small_phase PROPERTIES TIMEOUT 300)
+
 # AZUREParams::ReadUserParameters on a param.sav with "nan" errors (written after a
 # fit with an invalid covariance), blank and malformed lines: it used to loop
 # until std::bad_alloc.  The timeout turns a hang into a failure.
