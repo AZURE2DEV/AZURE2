@@ -279,6 +279,7 @@ azure2::experiment::KernelParameters TargetEffect::KernelParametersFor(const Con
   p.straggling = isStraggling_;
   p.stragglingCoefficient = stragglingCoefficient_;
   p.layoutDensity = this->GetLayoutDensity();
+  p.depthStepsPerSigma = configure.foldDepthSteps;
   p.stopping.at = [](const void *effect, const void *config, double eLab, double) {
     const TargetEffect *te = static_cast<const TargetEffect *>(effect);
     return te->StoppingAt(eLab, *static_cast<const Config *>(config), te->stoppingScaleLayoutBase_);

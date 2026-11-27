@@ -1,6 +1,7 @@
 // The values of the command line's value-taking flags, --threads and AZURE_REFINE_QUADRATURE (include/CommandLineValues.h).
 #include "CommandLineValues.h"
 
+#include "Config.h"
 #include "azure2/support/Environment.h"
 
 #include <iostream>
@@ -50,6 +51,14 @@ int RefineQuadratureFromEnvironment() {
   // option (--refine-quadrature=K) or the variable gave it (the row's range, azure2/support/Environment.h).
   return static_cast<int>(azure2::support::SwitchWholeNumber(azure2::support::ProcessEnvironment(),
                                                              azure2::support::Switch::kRefineQuadrature, 1));
+}
+
+int FoldDepthStepsFromEnvironment() {
+  // A value that does not parse, a negative one or one above the range is refused (exit 2 or ValueError), never read
+  // as the default: the panels change the folded values.
+  return static_cast<int>(azure2::support::SwitchWholeNumber(azure2::support::ProcessEnvironment(),
+                                                             azure2::support::Switch::kFoldDepthSteps,
+                                                             Config::kFoldDepthStepsDefault));
 }
 
 ThreadsInForce ApplyThreadsOption(const std::vector<std::string> &arguments,

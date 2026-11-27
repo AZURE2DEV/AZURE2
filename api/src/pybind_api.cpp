@@ -104,6 +104,7 @@ struct RuntimeOptions {
   bool data_mode = true;            // CALCULATE_WITH_DATA
   std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
   std::string base_directory;       // Config::baseDirectory: the project's relative paths ("" = the project file's directory)
+  int fold_depth_steps = -1;        // Config::foldDepthSteps: 0..1000; -1 = not given (AZURE_FOLD_DEPTH_STEPS, else 4)
   std::map<std::string, bool> options;  // the options of the calculation the call gave
 };
 
@@ -115,6 +116,12 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
   config.baseDirectory = opt.base_directory;
   // A relative table file is the session's directory's, as it was when pyazr entered that directory per call.
   config.coulombTablePath = opt.coulomb_table.empty() ? opt.coulomb_table : config.OpenPath(opt.coulomb_table);
+  // The keyword over the variable (the program: the option over the variable); a value outside 0..1000 is refused,
+  // never taken as the default: the panels change the folded values.
+  if (opt.fold_depth_steps < -1 || opt.fold_depth_steps > 1000)
+    throw py::value_error("fold_depth_steps needs a whole number from 0 to 1000 (0: the node intervals), not " +
+                          std::to_string(opt.fold_depth_steps));
+  if (opt.fold_depth_steps >= 0) config.foldDepthSteps = opt.fold_depth_steps;
   for (const auto &given : opt.options)
     if (!azure2::io::ConfigOptionNamed(given.first)) throw py::value_error(NotAnOptionText(given.first));
   // In the table's order (use_brune before use_park: use_park=True with use_brune=False gives both on, as before)
@@ -137,8 +144,10 @@ class Session {
     api_(nullptr) {
     // AZURE_REFINE_QUADRATURE: a bad value raises (ValueError), before any allocation
     const int refine = azure2::RefineQuadratureFromEnvironment();
+    const int depthSteps = azure2::FoldDepthStepsFromEnvironment();  // AZURE_FOLD_DEPTH_STEPS likewise
     config_ = new Config(noticeStream_);  // standard output, but the notices of HeldNotices() (pybind_notices.h)
     config_->refineQuadrature = refine;
+    config_->foldDepthSteps = depthSteps;  // the keyword fold_depth_steps over it (apply_options)
     config_->configfile = configfile;
     config_->paramMask |= Config::USE_API;  // silence the "Calculating ..." chatter
     apply_options(*config_, opt);
@@ -797,6 +806,9 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("data_mode", &RuntimeOptions::data_mode)
       .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
       .def_readwrite("base_directory", &RuntimeOptions::base_directory)
+      .def_readwrite("fold_depth_steps", &RuntimeOptions::fold_depth_steps,
+                     "Panels per Gaussian width of the depth integral of a target with a beam spread or straggling, "
+                     "0..1000 (0: the node intervals); -1: not given ($AZURE_FOLD_DEPTH_STEPS, else 4).")
       .def_readwrite("options", &RuntimeOptions::options,
                      "The options of the calculation the call gave, {keyword: bool}; one left out is not given.")
 ;

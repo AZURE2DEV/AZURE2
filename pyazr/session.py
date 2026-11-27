@@ -85,7 +85,8 @@ class Session(
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
-                 replace_grids=True, use_ec_table=True, ec_convection_current=True, parameter_file=None):
+                 replace_grids=True, use_ec_table=True, ec_convection_current=True, parameter_file=None,
+                 fold_depth_steps=None):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -148,6 +149,11 @@ class Session(
             included, the session takes when it is made, as the program takes its external parameter file
             (:mod:`pyazr.parameter_file`); :attr:`parameters` ``.x0`` is then the file's free values.  Not a
             ``<config>`` key.  To read only the free values into a fit vector: ``Session.parameters.read(path)``.
+        fold_depth_steps : the panels per Gaussian width of the depth integral of a target with a beam spread or
+            straggling, a whole number from 0 to 1000 (the program's ``--fold-depth-steps=K``): each panel is
+            sigma/k wide and never ends above the next node of the mesh; ``0`` integrates over the node intervals
+            (the integral before 2026-11-27).  ``None`` (the default): ``$AZURE_FOLD_DEPTH_STEPS``, else 4.  Not a
+            ``<config>`` key (``docs/source/user_guide/experimental_effects.rst``, "The depth integral").
 
         Raises
         ------
@@ -181,7 +187,8 @@ class Session(
         # rule); self.options holds the values in effect, so that a worker process can rebuild this same model
         # (pyazr.bands.sensitivities with nprocs > 1), and self.option_sources where each came from.
         given = {k: v for k, v in locals().items() if k in self._given_options}
-        opts = session_options.runtime_options(_azure2, given, not extrapolations, coulomb_table, self.cwd)
+        opts = session_options.runtime_options(_azure2, given, not extrapolations, coulomb_table, self.cwd,
+                                               fold_depth_steps)
         # the engine's text of the set-up goes to the logger pyazr.engine, not to standard output (pyazr.engine_text);
         # a refused set-up quotes it in its error
         said = []
@@ -191,7 +198,7 @@ class Session(
         except AZURE2Error as err:
             raise session_checks.setup_refused(err, said, self.file) from None
         self.options, self.option_sources = session_options.in_use(self._sess, extrapolations, coulomb_table,
-                                                                    self._parameter_file)
+                                                                    self._parameter_file, fold_depth_steps)
 
         self.mode = "extrap" if extrapolations else "data"  # what the session evaluates, fixed when it is made
         with engine_text.held():

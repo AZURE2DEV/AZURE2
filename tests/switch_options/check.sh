@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # The switches that can move a number are options of the program (docs/upgrade/evaluation.md section 9), and an
-# option has exactly the effect of its environment variable.  For each of the fourteen, on a project where it acts:
+# option has exactly the effect of its environment variable.  For each of the fifteen, on a project where it acts:
 #
 #   1. the run with the variable and the run with the option write the same output files, byte for byte, and
 #      --describe names the value with its source (environment, option);
@@ -26,7 +26,7 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 TESTS="$(cd "$HERE/.." && pwd)"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 TABLE="${AZURE2_COULOMB_TABLE:-}"
-unset AZURE2_COULOMB_TABLE AZURE2_SRIM_DATA_DIR AZURE_OPTIONS_FILE AZURE_REFINE_QUADRATURE AZURE2_EC_TABLE_NODES \
+unset AZURE2_COULOMB_TABLE AZURE2_SRIM_DATA_DIR AZURE_OPTIONS_FILE AZURE_REFINE_QUADRATURE AZURE_FOLD_DEPTH_STEPS AZURE2_EC_TABLE_NODES \
   AZURE2_SWAP_COUPLING_ORDER AZURE_BOUND_SHIFT_NUMERICAL AZURE_NO_NEUTRAL_CLOSED_FORM AZURE_SHIFT_DE_1EV \
   AZURE_LEVEL_SPACE AZURE2_THM_FD AZURE_GRAD_ADJOINT AZURE_GRAD_DENSE AZURE_TE_WEIGHTS_FD
 
@@ -97,6 +97,13 @@ switch AZURE_OPTIONS_FILE "$WORK/options.txt" "--options-file=$WORK/options.txt"
 SRIM="$(cd "$TESTS/../stopping/data/srim" && pwd)"
 switch AZURE2_SRIM_DATA_DIR "$SRIM" "--srim-data-dir=$SRIM" stopping_yield/models stopping_yield.azr "$CALC"
 switch AZURE_REFINE_QUADRATURE 2 --refine-quadrature=2 upgrade/T2 T2.azr "$CALC"
+# T2's data set 5 has a fitted layer with straggling and a beam spread: the node intervals (0) move its folded values
+switch AZURE_FOLD_DEPTH_STEPS 0 --fold-depth-steps=0 upgrade/T2 T2.azr "$CALC"
+if same azure_fold_depth_steps.var azure_fold_depth_steps.base; then
+  bad "AZURE_FOLD_DEPTH_STEPS=0 on upgrade/T2: the same files as the default (4): the panels act on nothing"
+else
+  ok "AZURE_FOLD_DEPTH_STEPS=0 on upgrade/T2: the node intervals differ from the default panels (4)"
+fi
 switch AZURE2_EC_TABLE_NODES 80 --ec-table-nodes=80 13N 13N.azr "$CALC"
 switch AZURE2_SWAP_COUPLING_ORDER 1 --swap-coupling-order 7Li_p_ay 7Li_p_ay.azr "$CALC"
 switch AZURE_BOUND_SHIFT_NUMERICAL 1 --bound-shift-numerical upgrade/T1 T1.azr "$CALC"
@@ -145,6 +152,12 @@ refused "AZURE_REFINE_QUADRATURE=65" "ERROR: AZURE_REFINE_QUADRATURE needs a who
 printf -- '--refine-quadrature=65\n' > "$WORK/refine65.txt"
 refused "--refine-quadrature=65 in the options file" "ERROR: --refine-quadrature needs a whole number from 1 to 64" \
   AZURE_OPTIONS_FILE="$WORK/refine65.txt" --
+refused "--fold-depth-steps=-1" "ERROR: --fold-depth-steps needs a whole number from 0 to 1000, not '-1'" -- --fold-depth-steps=-1
+refused "--fold-depth-steps=2.5" "ERROR: --fold-depth-steps needs a whole number from 0 to 1000, not '2.5'" -- --fold-depth-steps=2.5
+refused "AZURE_FOLD_DEPTH_STEPS=nan" "ERROR: AZURE_FOLD_DEPTH_STEPS needs a whole number from 0 to 1000, not 'nan'" \
+  AZURE_FOLD_DEPTH_STEPS=nan --
+refused "AZURE_FOLD_DEPTH_STEPS=inf" "ERROR: AZURE_FOLD_DEPTH_STEPS needs a whole number from 0 to 1000, not 'inf'" \
+  AZURE_FOLD_DEPTH_STEPS=inf --
 refused "--srim-data-dir= without a value" "ERROR: --srim-data-dir= needs a value: --srim-data-dir=DIR" -- --srim-data-dir=
 refused "--srim-data-dir alone" "ERROR: Unknown option --srim-data-dir." -- --srim-data-dir
 refused "--ec-table-nodes= without a value" "ERROR: --ec-table-nodes= needs a value" -- --ec-table-nodes=
@@ -174,8 +187,8 @@ fi
 d="$(cd "$WORK/thr.opt" && OMP_NUM_THREADS=3 "$AZURE2_BIN" --describe T1.azr --threads=2 2>/dev/null | grep -F "  threads = ")"
 [ "$d" = "  threads = 2 (--threads, over OMP_NUM_THREADS=3)" ] && ok "--describe: $d" || bad "--describe: '$d'"
 dj="$(cd "$WORK/thr.opt" && env -u OMP_NUM_THREADS "$AZURE2_BIN" --describe T1.azr --json --threads=2 2>/dev/null)"
-if printf '%s' "$dj" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["threads"]=={"value": 2, "source": "--threads"} and len(d["switches"])==14 else 1)'; then
-  ok "--describe --json: threads and the fourteen switches"
+if printf '%s' "$dj" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["threads"]=={"value": 2, "source": "--threads"} and len(d["switches"])==15 else 1)'; then
+  ok "--describe --json: threads and the fifteen switches"
 else
   bad "--describe --json: no threads or switches member"
 fi

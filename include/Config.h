@@ -204,6 +204,13 @@ class Config {
   /// 1 (the default): the grids as the project states them.  Set by the CLI's parseOptions and pyazr's session
   /// (RefineQuadratureFromEnvironment, CommandLineValues.h), which refuse a bad value.
   int refineQuadrature;
+  /// Panels per Gaussian width of the depth integral of a target with a beam spread or straggling
+  /// (experiment::KernelParameters::depthStepsPerSigma, docs/upgrade/energy_grid.md section 3.4): each panel sigma/k
+  /// wide, never ending above the next node of the mesh; 0 = the node intervals (the integral before 2026-11-27).
+  /// --fold-depth-steps=K, AZURE_FOLD_DEPTH_STEPS, or a pyazr session's fold_depth_steps; set by the CLI's
+  /// parseOptions and the session (FoldDepthStepsFromEnvironment, CommandLineValues.h), which refuse a bad value.
+  int foldDepthSteps;
+  static constexpr int kFoldDepthStepsDefault = 4;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
   /// (CompoundSystem::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
   bool includeAllJPi;

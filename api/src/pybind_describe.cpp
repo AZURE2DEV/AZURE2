@@ -25,7 +25,7 @@ struct NotProjectOptionRow {
   const char *name;
   const char *keyword;
   const char *flag;
-  const char *type;  ///< "bool" or "str" (default "")
+  const char *type;  ///< "bool", "str" (default "") or "int" (default None: the engine's own rule)
   bool bool_default;  ///< the default of a "bool" row
   const char *doc;
   const char *reason;
@@ -41,6 +41,11 @@ const std::vector<NotProjectOptionRow> &NotProjectOptionRows() {
       {"base_directory", "cwd", "", "str", false,
        "the directory the project's relative paths are resolved in (\"\": the project file's directory)",
        "a directory of this machine"},
+      {"fold_depth_steps", "fold_depth_steps", "--fold-depth-steps=K", "int", false,
+       "panels per Gaussian width of the depth integral of a target with a beam spread or straggling, 0..1000 (0: the "
+       "node intervals; None: $AZURE_FOLD_DEPTH_STEPS, else 4)",
+       "a numerical setting of the run, as --refine-quadrature (whether such a number is also a <config> key is open, "
+       "docs/upgrade/project_format3.md section 3.12)"},
   };
   return rows;
 }
@@ -172,6 +177,8 @@ void BindDescription(py::module_ &m) {
           d["type"] = row.type;
           if (std::string(row.type) == "bool")
             d["default"] = row.bool_default;
+          else if (std::string(row.type) == "int")
+            d["default"] = py::none();
           else
             d["default"] = "";
           d["effect"] = "";

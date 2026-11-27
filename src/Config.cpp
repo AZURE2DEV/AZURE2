@@ -80,6 +80,7 @@ void Config::Reset() {
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
   refineQuadrature = 1;     // AZURE_REFINE_QUADRATURE=k, read where the flags are (CommandLineValues.h)
+  foldDepthSteps = kFoldDepthStepsDefault;  // AZURE_FOLD_DEPTH_STEPS=k, read there too
   coulombTablePath.clear();
   useECTable = true;            // external-capture energy tables (--no-ec-table)
   ecConvectionCurrent = true;   // convection current in exact-form EC (--no-ec-convection-current)

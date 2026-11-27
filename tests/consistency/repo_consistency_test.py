@@ -1716,7 +1716,7 @@ if _precision_regions < 39:
 BINDING_WITHOUT_ARITHMETIC = {
     # Session: stored numbers (copies of the engine's arrays and records), names, notices, option tables
     "api/src/pybind_api.cpp": {
-        "parameter_kinds", "point_output_fields", "project_format", "data_mode", "coulomb_table", "base_directory",
+        "parameter_kinds", "point_output_fields", "project_format", "data_mode", "coulomb_table", "base_directory", "fold_depth_steps",
         "options", "RuntimeOptions()", "option_sources", "get_potential", "parameter_records", "pair_records",
         "params_values", "params_values_rwa", "params_all_rwa", "params_names", "params_fixed", "data_energies",
         "data_angles", "data_segments", "data_segments_errors", "data_excitation_energies", "data_conv", "norms",

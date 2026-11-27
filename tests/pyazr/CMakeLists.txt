@@ -377,6 +377,13 @@ add_test(NAME pyazr_shift_fold_smooth
                  ${CMAKE_CURRENT_SOURCE_DIR}/shift_fold_smooth_test.py)
 set_tests_properties(pyazr_shift_fold_smooth PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# The keyword fold_depth_steps (the panels of a target's depth integral with a spread, --fold-depth-steps=K): the
+# default 4, the node intervals 0, the program's numbers, the keyword over AZURE_FOLD_DEPTH_STEPS, the refusals.
+add_test(NAME pyazr_fold_depth_steps
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/fold_depth_steps_test.py)
+set_tests_properties(pyazr_fold_depth_steps PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A thick target with a positive energy shift on the fixed nodes: the translated stopping is never evaluated below the
 # nominal support (no "unsupported imaginary number" from a power-law stopping), and the yields equal those of the
 # same shift planned for exactly (include/ShiftedFold.h).

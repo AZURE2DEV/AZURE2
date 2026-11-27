@@ -29,6 +29,10 @@ std::string OptionText(const std::string &option, const std::string &flag);
 /// The refinement factor k of the sub-point grids (Config::refineQuadrature) from the process's record:
 /// --refine-quadrature=K or AZURE_REFINE_QUADRATURE, 1 when neither is given, else a whole number from 1 to 64.
 int RefineQuadratureFromEnvironment();
+/// The panels per Gaussian width of the target kernel's depth integral (Config::foldDepthSteps) from the process's
+/// record: --fold-depth-steps=K or AZURE_FOLD_DEPTH_STEPS, a whole number from 0 to 1000 (0: the node intervals);
+/// Config::kFoldDepthStepsDefault (4) when neither is given.
+int FoldDepthStepsFromEnvironment();
 
 /// The largest N of --threads=N.
 constexpr long kMaxThreads = 4096;

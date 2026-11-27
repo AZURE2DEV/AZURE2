@@ -8,9 +8,10 @@ reads back the values in effect with their source (``"default"``, ``"project"``,
 """
 import functools
 import inspect
+import numbers
 
 #: The keywords of :class:`pyazr.Session` that are not options of the calculation (not project state).
-NOT_OPTIONS = ("self", "file", "cwd", "extrapolations", "coulomb_table", "parameter_file")
+NOT_OPTIONS = ("self", "file", "cwd", "extrapolations", "coulomb_table", "parameter_file", "fold_depth_steps")
 
 
 def records_given(init):
@@ -37,18 +38,31 @@ def _removed_keyword(name):
     return _azure2.removed_option_text(name)
 
 
-def runtime_options(engine, given, data_mode, coulomb_table, cwd):
+def fold_depth_steps_value(value):
+    """The engine's ``RuntimeOptions.fold_depth_steps`` of the keyword: -1 for ``None`` (not given), else the whole
+    number from 0 to 1000 it is; anything else (a negative number, a fraction, ``nan``, ``inf``, a bool, text) is
+    refused with a ``ValueError`` that says what is taken."""
+    if value is None:
+        return -1
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral) or not 0 <= value <= 1000:
+        raise ValueError(f"fold_depth_steps needs a whole number from 0 to 1000 (0: the node intervals), not {value!r}")
+    return int(value)
+
+
+def runtime_options(engine, given, data_mode, coulomb_table, cwd, fold_depth_steps=None):
     """The engine's ``RuntimeOptions``: ``given`` ({keyword: value}, the options of the calculation the call named),
-    the run's mode, the Coulomb table file of this machine and the directory of the project's relative paths."""
+    the run's mode, the Coulomb table file of this machine, the directory of the project's relative paths and the
+    panels of the target's depth integral (``None``: not given)."""
     opts = engine.RuntimeOptions()
     opts.data_mode = bool(data_mode)
     opts.coulomb_table = str(coulomb_table or "")
     opts.base_directory = cwd  # the model's relative paths: this directory, not the process's
+    opts.fold_depth_steps = fold_depth_steps_value(fold_depth_steps)
     opts.options = {name: bool(value) for name, value in given.items()}
     return opts
 
 
-def in_use(sess, extrapolations, coulomb_table, parameter_file=None):
+def in_use(sess, extrapolations, coulomb_table, parameter_file=None, fold_depth_steps=None):
     """The options in effect, as ``(values, sources)``: ``values`` {keyword: value} with ``extrapolations``,
     ``coulomb_table`` and ``parameter_file`` (what :attr:`pyazr.Session.options` holds: passed back as keywords they rebuild the same
     session), ``sources`` {keyword: "default" | "project" | "keyword"} of the options of the calculation."""
@@ -58,4 +72,5 @@ def in_use(sess, extrapolations, coulomb_table, parameter_file=None):
         values[name], sources[name] = bool(value), source
     values["coulomb_table"] = str(coulomb_table or "")
     values["parameter_file"] = parameter_file
+    values["fold_depth_steps"] = fold_depth_steps  # as given: None leaves it to $AZURE_FOLD_DEPTH_STEPS, else 4
     return values, sources

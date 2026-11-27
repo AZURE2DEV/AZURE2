@@ -642,7 +642,7 @@ refused ("Calculation was aborted.", a project that AZURE2 refuses with
 does not fit the data --, a failed fill, initialization or parameter
 transformation, a failed MCMC run), so that a script or a job chain can tell.
 A flag that takes a value given without it or with a value that does not
-parse, or a bad ``AZURE_REFINE_QUADRATURE``, exits with 2 before the project
+parse, or a bad ``AZURE_REFINE_QUADRATURE`` or ``AZURE_FOLD_DEPTH_STEPS``, exits with 2 before the project
 is read (``ERROR: ...`` and the usage line).  A refused command line (an
 unknown command, an option the command does not take, a missing or bad
 answer, a file an option names that cannot be read) exits with 2 before
@@ -817,6 +817,21 @@ number from 1 (the default, the variable unset) to 64; anything else, an empty
 value included, stops the run with the usage line (exit 2), and in pyazr makes
 opening a session raise ``ValueError``.
 
+``AZURE_FOLD_DEPTH_STEPS=K`` (``--fold-depth-steps=K``; pyazr:
+``Session(..., fold_depth_steps=K)``): the panels of the depth integral of a
+target with a beam spread or straggling (:ref:`depth-integral`).  Each panel is
+:math:`\sigma/K` wide, :math:`\sigma` the Gaussian's width at the panel's top
+(the beam spread and the straggling down to that depth, c.m.), and never ends
+above the next node of the mesh, so a panel is never shorter than the way to the
+next node.  The default, 4, keeps every folded value within about
+:math:`10^{-5}` (relative) of the integral over the node intervals.  ``0`` is
+the integral over the node intervals, the only rule before 2026-11-27: every
+output is then the same, bit for bit, as before.  K is a whole number from 0 to
+1000; anything else (a negative or non-whole number, ``nan``, ``inf``, an
+empty value) stops the run with the usage line (exit 2), and in pyazr makes
+opening a session raise ``ValueError``.  A target without a spread, a thin one
+inside one node interval and every other kernel do not read it.
+
 ``AZURE_NODE_CHECK=1``: at the end of every hand-over of a parameter vector and
 before every parallel point pass, every unit of every plan task (a point without
 a fold, or a sub-point of a folded point) is compared bit for bit with the node
@@ -900,6 +915,11 @@ run and machine (value, source):``: the threads in force (``--threads=N``,
      - ``--refine-quadrature=K``
      - numbers
      - ``K``: every sub-point grid gets K times its points (1..64; a bad value exits 2)
+   * - ``AZURE_FOLD_DEPTH_STEPS``
+     - ``--fold-depth-steps=K``
+     - numbers
+     - ``K``: panels per Gaussian width of the depth integral of a target with a beam spread or
+       straggling (0..1000, default 4; 0: the node intervals; a bad value exits 2)
    * - ``AZURE2_EC_TABLE_NODES``
      - ``--ec-table-nodes=N``
      - numbers

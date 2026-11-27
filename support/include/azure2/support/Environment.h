@@ -47,6 +47,7 @@ enum class Switch : int {
   kSrimDataDir,
   kOptionsFile,
   kRefineQuadrature,
+  kFoldDepthSteps,
   kEcTableNodes,
   kSwapCouplingOrder,
   kBoundShiftNumerical,

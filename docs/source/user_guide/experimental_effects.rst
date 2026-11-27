@@ -899,6 +899,36 @@ October 2026 the default was a fixed 0.04 keV\ :sup:`1/2`, several times below
 Bohr: a line that kept it had essentially no straggling. Lines in existing
 files keep whatever coefficient is written in them.
 
+.. _depth-integral:
+
+The depth integral
+^^^^^^^^^^^^^^^^^^
+
+With a beam spread or straggling the yield of a target is a double integral: over
+the depth (the energy :math:`E_d` the beam has at each depth, from :math:`E_0`
+down to the back of the target) of the cross section averaged over a Gaussian of
+width :math:`\sigma(E_d) = \sqrt{\sigma_\text{beam}^2 + \sigma_\text{straggling}^2}`
+about :math:`E_d`.  The average at each depth reads every node of the shared
+energy mesh inside :math:`E_d \pm 5\sigma`.  The depth integral is taken by
+two-point Gauss-Legendre on *panels*: each panel is :math:`\sigma/K` wide
+(:math:`\sigma` at the panel's top, c.m.) and never ends above the next node of
+the mesh, so where :math:`\sigma/K` is shorter than the way to the next node
+(near the surface under pure straggling, where :math:`\sigma \to 0`) the panels
+are the node intervals.  The average is smooth in the depth on the scale of
+:math:`\sigma`, whatever the mesh resolves, so a few panels per :math:`\sigma`
+suffice; a mesh refined for a narrow resonance no longer multiplies the depth
+steps.
+
+:math:`K` is ``--fold-depth-steps=K`` (``AZURE_FOLD_DEPTH_STEPS``; pyazr:
+``Session(..., fold_depth_steps=K)``), a whole number from 0 to 1000.  **The
+default is 4.**  Against the depth integral on the node intervals the folded
+values move by at most :math:`10^{-5}` (relative) at :math:`K = 4`; the measured
+differences, and the quadrature's own error for scale, are in
+:doc:`../reference/command_line` and ``docs/upgrade/energy_grid.md`` section 3.4.
+**K = 0 gives the depth integral on the node intervals**, the only rule before
+2026-11-27, bit for bit.  A target without a beam spread or straggling, and every
+other kernel, are not affected.
+
 Attenuation Coefficients (Q-Coefficients)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

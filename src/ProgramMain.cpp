@@ -77,6 +77,7 @@ static void parseOptions(const std::vector<std::string> &arguments, Config &conf
                         << " is named but not readable." << std::endl;
   options.insert(options.end(), environment.OptionsFileLines().begin(), environment.OptionsFileLines().end());
   configure.refineQuadrature = azure2::RefineQuadratureFromEnvironment();
+  configure.foldDepthSteps = azure2::FoldDepthStepsFromEnvironment();
   for (std::vector<std::string>::iterator it = options.begin(); it < options.end(); it++) {
     if (*it == "--no-readline")  // a menu script's option: the menu is gone
       throw std::invalid_argument("Unknown option --no-readline.  AZURE2 has no menu: it takes a command and reads "
