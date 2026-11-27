@@ -7,6 +7,9 @@ azure2_logo.svg            -> azure2_icon.png (256 px; the default window icon, 
                               Linux AppImage), azure2.ico (16-256 px), azure2.icns (16-1024 px)
 azure2_logo_polarized.svg  -> azure2_icon_polarized.png (256 px), which the GUI shows instead while the
                               project holds a polarization segment (AZURESetup::updateLogo)
+azure2_logo_multi.svg, azure2_logo_multi_polarized.svg
+                           -> azure2_icon_multi.png, azure2_icon_multi_polarized.png (256 px): the logo seen
+                              double, shown while the project holds several compound nuclei (AZURESetup::logoFor)
 """
 import io, os, subprocess
 from PIL import Image
@@ -22,6 +25,8 @@ def render(svg, px):
 
 render("azure2_logo.svg", 256).save(os.path.join(HERE, "azure2_icon.png"), optimize=True)
 render("azure2_logo_polarized.svg", 256).save(os.path.join(HERE, "azure2_icon_polarized.png"), optimize=True)
+render("azure2_logo_multi.svg", 256).save(os.path.join(HERE, "azure2_icon_multi.png"), optimize=True)
+render("azure2_logo_multi_polarized.svg", 256).save(os.path.join(HERE, "azure2_icon_multi_polarized.png"), optimize=True)
 
 ico_sizes = [16, 22, 24, 32, 40, 48, 64, 96, 128, 256]
 ico = {s: render("azure2_logo.svg", s) for s in ico_sizes}

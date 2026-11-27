@@ -66,6 +66,11 @@ class AZURESetup : public QMainWindow {
   /// converted again from a copy (`from` is kept): qt_gui.md section 19.5.  False with the converter's report.
   bool convertOldProject(const QString &from, const QString &to, QString &report);
   /// Read / write a project without any dialog (the headless tests); false with the reason.
+  /// The resource of the logo for a project: plain, with the polarization arrow (a polarization observable among its
+  /// data sets or extrapolations), seen double (several compound nuclei), or both.
+  static QString logoFor(bool polarized, bool severalNuclei);
+  /// The logo the window shows now (the button in the tab bar, the window icon, the About box).
+  QString logo() const { return logo_; }
   bool readProjectFile(const QString &filename, QString &why);
   bool writeProjectFile(const QString &filename, QString &why);
   /// Write what the tabs hold into the project (the levels when they were edited, the text sections).
@@ -186,7 +191,8 @@ class AZURESetup : public QMainWindow {
   void updateTitle();
   /// Fill the Pairs and Levels tabs from the project's <levels> rows.
   bool loadLevels(QString &why);
-  /// The logo with the polarization arrow while a data set or extrapolation is a polarization observable.
+  /// The logo follows the project: seen double while it holds several compound nuclei, with the polarization arrow
+  /// while a data set or extrapolation is a polarization observable, both at once when both hold (logoFor).
   void updateLogo();
   bool maybeSave();
   void closeEvent(QCloseEvent *event) override;
@@ -203,7 +209,7 @@ class AZURESetup : public QMainWindow {
   RunWorker *worker_ = nullptr;
 
   QToolButton *logoButton_ = nullptr;
-  bool polarizedLogo_ = false;
+  QString logo_ = ":/azure-icon.png";  ///< the logo shown (logoFor)
   QAction *aMatrixAction, *rMatrixAction;
   QActionGroup *matrixActionGroup;
   enum { numRecent = 8 };
