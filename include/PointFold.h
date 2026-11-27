@@ -25,6 +25,34 @@ double FoldValues(const Unit &point, const WorkingCopy &data, const Config &, co
 /// on a linear form.  False if the fold is not a pure linear form for this point.
 bool FoldWeights(const Unit &point, const WorkingCopy &data, const Config &, std::vector<double> &c,
                  azure2::experiment::Broadening = azure2::experiment::Broadening::kApply);
+/*!
+ * The fold weights shared between a gradient call's forward folds and its cotangents.  The weights of a point depend
+ * on its nodes (energies, stopping), its kernels' parameters and its own energy, never on the sub-point values, so
+ * within one gradient call -- the forward pass, then the cotangents, at one set of parameters, with no hand-over, no
+ * energy shift and no mesh re-placement in between -- they are computed once: while a KeepFoldWeights is alive on
+ * `results`, FoldKept computes a point's weights at its first fold, keeps them, and returns sum_i c[i] values[i]
+ * (equal to FoldValues to rounding); KeptWeights hands the same weights to the gradient.  The scope is the whole
+ * invalidation rule: it is opened after the hand-over of the call's parameters and closed before anything can move a
+ * node, a kernel parameter (density, thickness, width, temperature) or a point (the energy-shift columns), and the
+ * weights are dropped with it.  One vector of NumSubPoints doubles per folded point.  Not opened under
+ * --fold-weights-by-differences.
+ */
+class KeepFoldWeights {
+ public:
+  KeepFoldWeights(azure2::Results &results, const WorkingCopy &data, const Config &);
+  ~KeepFoldWeights();
+  KeepFoldWeights(const KeepFoldWeights &) = delete;
+  KeepFoldWeights &operator=(const KeepFoldWeights &) = delete;
+
+ private:
+  azure2::Results &results_;
+};
+/// FoldValues (broadening applied) of `point`, through the kept weights while a KeepFoldWeights is alive; the fold
+/// itself otherwise, and whenever the product is not finite (a failed point is then found exactly as without them).
+double FoldKept(const Unit &point, const WorkingCopy &data, const Config &, const std::vector<double> &values,
+                azure2::Results &results);
+/// The weights FoldKept keeps for `point`; null if none are kept.
+const std::vector<double> *KeptWeights(const Unit &point, const azure2::Results &results);
 /// d/dT of the fold for the sub-point values (0-based), T the effect's Doppler temperature (doppler_<n>, the analytic
 /// gradient); 0 without a Doppler step.
 double FoldTemperatureDerivative(const Unit &point, const WorkingCopy &data, const Config &,

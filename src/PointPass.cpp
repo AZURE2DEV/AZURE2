@@ -87,8 +87,8 @@ void Unit::IntegrateTargetEffectComponents(const WorkingCopy &data, const Config
     e1[i - 1] = this->GetSubPoint(data, i)->GetFitE1CrossSection(results);
     e2[i - 1] = this->GetSubPoint(data, i)->GetFitE2CrossSection(results);
   }
-  this->SetFitE1CrossSection(results, FoldValues(*this, data, configure, e1));
-  this->SetFitE2CrossSection(results, FoldValues(*this, data, configure, e2));
+  this->SetFitE1CrossSection(results, FoldKept(*this, data, configure, e1, results));
+  this->SetFitE2CrossSection(results, FoldKept(*this, data, configure, e2, results));
 }
 
 /*!
@@ -145,7 +145,7 @@ void Unit::FoldSubPoints(const WorkingCopy &data, const Config &configure, azure
     this->RatioPartsAt(data, i, results, weight[i - 1], element);
     product[i - 1] = weight[i - 1] * element;
   }
-  const double denominator = FoldValues(*this, data, configure, weight);
-  const double numerator = FoldValues(*this, data, configure, product);
+  const double denominator = FoldKept(*this, data, configure, weight, results);
+  const double numerator = FoldKept(*this, data, configure, product, results);
   this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
 }

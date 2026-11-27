@@ -62,6 +62,31 @@ class LinearForm {
     for (std::size_t i = 0; i < o.dense_.size(); i++) c[i] += o.dense_[i];
     return *this;
   }
+  /*!
+   * num += c (fa a + fb b), the quadrature's step (KernelQuadrature.h, AddInterpolated).  For a and b single terms
+   * (the unit forms of two nodes: every kernel that folds the node values themselves) the two products are added
+   * straight into num, with the arithmetic and the order of the general expression -- (coefficient fa) c, then num's
+   * own += of a two-term form -- so the weights are the same to the last bit, without a temporary form per Gauss point.
+   */
+  friend void AddInterpolated(LinearForm &num, double c, double fa, const LinearForm &a, double fb, const LinearForm &b) {
+    if (a.count_ != 1 || b.count_ != 1 || !a.dense_.empty() || !b.dense_.empty()) {
+      LinearForm sigma = fa * a + fb * b;
+      num += c * sigma;
+      return;
+    }
+    num.valid_ = num.valid_ && a.valid_ && b.valid_;
+    const int ia = a.small_[0].first, ib = b.small_[0].first;
+    const double va = (a.small_[0].second * fa) * c, vb = (b.small_[0].second * fb) * c;
+    if (num.dense_.empty() && num.count_ == 0) {
+      num.small_[0] = Term(ia, va);
+      num.small_[1] = Term(ib, vb);
+      num.count_ = 2;
+      return;
+    }
+    num.Cover(std::min(ia, ib), std::max(ia, ib));
+    num.dense_[(std::size_t)(ia - num.low_)] += va;
+    num.dense_[(std::size_t)(ib - num.low_)] += vb;
+  }
   friend LinearForm operator*(LinearForm f, double a) { return f *= a; }
   friend LinearForm operator*(double a, LinearForm f) { return f *= a; }
   friend LinearForm operator/(LinearForm f, double a) { return f /= a; }
