@@ -81,12 +81,13 @@ bool PointCotangents(WorkingCopy &data, const GradPoint &p, const CompoundSystem
  * model, called once per point in data order (its side effects, the norm gradient, see the same order at any thread
  * count).  The THM (HOES) segments are left out unless `hoes`, the context of their adjoint, is given
  * (ThmThroughEnergyTasks): then their cotangents come from their profiles (ThmModelCotangents) and each kHoes site's
- * adjoint is taken once in its task.  False, with `accum` untouched and `bailSeg` the segment, where a point is outside
- * the analytic path.
+ * adjoint is taken once in its task.  `free`, where given, names the free level parameters: a unit integrated over a
+ * line shape (LineWindow.h) takes the differences of its line shape only for a free energy or width of its final
+ * level.  False, with `accum` untouched and `bailSeg` the segment, where a point is outside the analytic path.
  */
 bool EnergyTaskGradient(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, azure2::Results &results, const Config &config,
                         const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
-                        const ThmAdjointContext *hoes = nullptr);
+                        const ThmAdjointContext *hoes = nullptr, const FreeLevelMask *free = nullptr);
 
 /*!
  * Rows d(model)/d(theta) times rowFitBar(point, model) over the energy tasks: for every point of the data segments

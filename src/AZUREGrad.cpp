@@ -559,7 +559,8 @@ bool AccumulateEGammaGradient(const CompoundSystem *compound, const LevelState &
   // mixed THM+direct datasets keep the analytic speed-up on the direct part.
   if (FormalPartsOutsideAdjoint(compound, state, pmap)) return false;
   int bailSeg = 0;
-  if (!azure2::EnergyTaskGradient(compound, state, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes)) {
+  const AMatrixFunc::FreeMask free = BuildFreeMask(compound, pmap);
+  if (!azure2::EnergyTaskGradient(compound, state, data, results, config, shiftDeriv, fitBarFn, accum, bailSeg, hoes, &free)) {
     // On bail the caller ignores `accum` and falls back to finite differences.
     return false;
   }

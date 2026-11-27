@@ -142,7 +142,9 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
         double gamma_fc = state().ECGamma(jf, lf, fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
-        complex base = azure2::physics::external_capture_element(gamma_fc, sqrtNF, conv, ecAmp);
+        // a node of the line-shape integration (LineWindow.h): its element, which does not carry the final amplitude
+        const bool lineNode = this->ActiveLineNode() != nullptr;
+        complex base = this->ExternalElementAt(k, m, azure2::physics::external_capture_element(gamma_fc, sqrtNF, conv, ecAmp));
 
         // "effective amplitude" carrying the umatrix_cc factor for the
         // gamma_fc / sqrtNF derivatives (= ecAmp for direct capture).
@@ -175,6 +177,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
                                                   uBarcc, aBar[jcc - 1], LevelSink(accum, jcc));
         }
 
+        if (lineNode) continue;  // the final level's amplitude enters through the line shape (LineShapeChain)
         // Explicit gamma_fc:  d T_ec / d gamma_fc = sqrtNF * conv * effAmp.
         accum.AddGamma(jf, lf, fc, azure2::physics::external_capture_width_cotangent(eb, sqrtNF, conv, effAmp));
 
@@ -221,7 +224,7 @@ void AMatrixFunc::TBarAdjoint(Site *energyPoint, const TMatrixCotangent &bar, Gr
       const azure2::physics::ChannelPhases exit{point->GetExpCoulombPhase(jNum, chpNum),
                                                 point->GetExpHardSpherePhase(jNum, chpNum)};
       complex sqrtPenEn = point->GetSqrtPenetrability(jNum, chNum);
-      complex sqrtPenEx = point->GetSqrtPenetrability(jNum, chpNum);
+      complex sqrtPenEx = this->ExitSqrtPenetrability(point, jNum, chpNum);
 
       // d T / d umatrix = -uphase  ->  ubar = conj(-uphase) * tBar.
       const complex uBar = azure2::physics::amplitude_cotangent(entrance, exit, tb);
@@ -396,8 +399,11 @@ bool AMatrixFunc::CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent
   if (!ir) return false;
   const azure2::ExitRow &theDecay = P.exits[ir - 1];
   terms.assign(compound()->NumJGroups(), std::vector<BilinearTerm>());
+  // External capture: the dense path, but for a node of the line-shape integration (LineWindow.h), whose external
+  // elements are constants of the pass unless a channel-capture pathway multiplies them.
   for (int k = 1; k <= theDecay.num_groups; k++)
-    if (P.Group(theDecay, k).num_external > 0) return false;
+    for (int m = 1; m <= P.Group(theDecay, k).num_external; m++)
+      if (!this->ActiveLineNode() || P.External(P.Group(theDecay, k), m).channel_capture) return false;
   for (int k = 1; k <= theDecay.num_groups && k <= (int)bar.t.size(); k++) {
     const int numM = P.Group(theDecay, k).num_internal;
     for (int m = 1; m <= numM && m <= (int)bar.t[k - 1].size(); m++) {
@@ -414,7 +420,7 @@ bool AMatrixFunc::CollectBilinearTerms(Site *energyPoint, const TMatrixCotangent
       const complex uBar = azure2::physics::amplitude_cotangent(entrance, exit, tb);
       const complex beta = azure2::physics::bilinear_cotangent(
           azure2::physics::penetrability_factor(point->GetSqrtPenetrability(jNum, chNum),
-                                                point->GetSqrtPenetrability(jNum, chpNum)),
+                                                this->ExitSqrtPenetrability(point, jNum, chpNum)),
           uBar);
       std::vector<BilinearTerm> &list = terms[jNum - 1];
       bool merged = false;

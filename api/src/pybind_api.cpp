@@ -733,8 +733,6 @@ void BindErrors(py::module_ &m) {
       PyErr_SetString(ErrorClass("ParameterVectorError").ptr(), e.what());
     } catch (const AZURE2Error &e) {
       PyErr_SetString(ErrorClass("AZURE2Error").ptr(), e.what());
-    } catch (const azure2::LineWindowDerivativeRefused &e) {  // an analytic derivative over a line shape (LineWindow.h)
-      PyErr_SetString(ErrorClass("AZURE2Error").ptr(), e.what());
     }
   });
 }

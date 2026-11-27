@@ -5,16 +5,17 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <sstream>
 #include <stdexcept>
 
 #include <gsl/gsl_integration.h>
 
 #include "AChannel.h"
+#include "azure2/physics/ExternalCapture.h"
 #include "ALevel.h"
 #include "CompoundSystem.h"
 #include "Config.h"
-#include "Fitters.h"
 #include "CoulFunc.h"
 #include "GenMatrixFunc.h"
 #include "JGroup.h"
@@ -270,19 +271,6 @@ std::shared_ptr<const LineNodeSet> LineNodesOf(const Site &site, const CompoundS
 std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable, const CompoundSystem *compound,
                               const Config &configure) {
   if (configure.paramMask & Config::USE_RMC_FORMALISM) return "the RMC formalism is not supported";
-  // A fitter that reads the analytic gradient or the residual rows' Jacobian (its row of Fitters()): the adjoint
-  // takes the T-matrix at the nominal final state, not over the line shape, so its derivative would be wrong.
-  const FitterRow &fitter = FitterOfConfig(configure);
-  if (fitter.gradient || fitter.residualRows) {
-    std::string allowed;
-    for (const FitterRow &row : Fitters())
-      if (!row.gradient && !row.residualRows)
-        allowed += (allowed.empty() ? "" : ", ") + std::string(row.name) +
-                   (*row.option ? " (" + std::string(row.option) + ")" : " (no switch)");
-    return "the fitter " + std::string(fitter.name) + " (" + fitter.option + ") is not supported: it reads the " +
-           (fitter.gradient ? "analytic gradient" : "analytic Jacobian of the residual rows") +
-           ", which does not run over the line shape; fit with " + allowed;
-  }
   if (otherObservable)
     return "only a capture cross section (angle-integrated or differential) can be integrated over the line shape";
   LineFinal lf;
@@ -304,80 +292,185 @@ std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable
   return why;
 }
 
-std::string LineWindowDerivativeMessage(int segmentKey) {
-  return "line_window: segment #" + std::to_string(segmentKey) + " integrates over a final state's line shape, and the analytic derivatives "
-         "(gradient, Jacobian of the residual rows, model sensitivities) do not run over it; values and finite "
-         "differences of them are available, fit with a fitter that reads neither (MIGRAD with its numerical "
-         "gradient)";
-}
-
 std::string LineWindowProblem(const Site &site, const CompoundSystem *compound, const Config &configure) {
   return LineWindowProblem(site.GetEntranceKey(), site.GetExitKey(),
                            site.IsAngularDist() || site.IsPhase() || site.IsAnalyzingPower() || site.IsTHM(), compound,
                            configure);
 }
 
-void LineWindowCrossSection(GenMatrixFunc &func, Site *site, Results &results) {
-  const CompoundSystem *c = func.compound();
-  const LevelState &state = func.state();
-  const Config &configure = func.configure();
-  const std::string why = LineWindowProblem(*site, c, configure);
-  if (!why.empty()) throw std::runtime_error("line_window: " + why + ".");
-  LineFinal lf;
-  FindLineFinal(c, site->GetEntranceKey(), site->GetExitKey(), lf);
-  const double centre = LineCentreEnergy(c, state, configure, lf);
-  const std::shared_ptr<const LineNodeSet> set = LineNodesOf(*site, c, state, configure, lf, centre);
+namespace {
 
+/// The one-level parameters of the final level at the line centre, as the nodes read them: E_R, the observed
+/// amplitude g~, S(E_R), the formal gamma^2 and s = sqrt(2 mu a)/hbar; the excitation energy of the entrance.
+struct LineLevel {
+  double ER = 0.0, gt = 0.0, SR = 0.0, g2 = 0.0, s = 0.0, inEnergy = 0.0;
+};
+
+LineLevel LineLevelOf(const CompoundSystem *c, const Site &site, const LineFinal &lf, double centre, double gt) {
+  const JGroup *jg = c->GetJGroup(lf.j);
+  const AChannel *fc = jg->GetChannel(lf.ch);
+  const int l = fc->GetL(), twoJ = lf.fp->SpinOrbitTwoJ(jg->GetJ());
+  const double a = fc->GetRadius();
+  CoulFunc coul(lf.fp);
+  LineLevel L;
+  L.ER = centre - lf.thr;
+  L.gt = gt;
+  L.SR = coul.PEShift(l, twoJ, a, L.ER);
+  const double dSR = coul.PEShift_dE(l, twoJ, a, L.ER);
+  if (!(1.0 - gt * gt * dSR > 0.0) || gt == 0.0)
+    throw std::runtime_error("line_window: the final level's reduced width has no formal (one-level) equivalent.");
+  L.g2 = gt * gt / (1.0 - gt * gt * dSR);
+  L.s = std::sqrt(2.0 * lf.fp->GetRedMass() * uconv * a) / hbarc;
+  const PPair *entrancePair = c->GetPair(lf.aa);
+  L.inEnergy = site.GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
+  return L;
+}
+
+/// The node `n` as the T-matrix builders read it, for the final level `L`.
+void SetLineNode(const LineFinal &lf, const LineLevel &L, const LineNodeData &n, LineNode &node) {
+  const double dR = std::atan2(n.P * L.g2, L.ER - n.ef - L.g2 * (n.S - L.SR));
+  const double d = dR - std::atan2(n.Fa, n.Ga);
+  const double cd = std::cos(d), sd = std::sin(d);
+  node.photonEnergy = L.inEnergy - (lf.thr + n.ef);
+  node.amp = n.sqrtDens * (cd * n.Fa + sd * n.Ga) / (L.gt * L.s);
+  node.ec.resize(n.parts.size());
+  for (std::size_t k = 0; k < n.parts.size(); k++) {
+    node.ec[k].resize(n.parts[k].size());
+    for (std::size_t m = 0; m < n.parts[k].size(); m++)
+      node.ec[k][m] = n.sqrtDens * (cd * n.parts[k][m].first + sd * n.parts[k][m].second);
+  }
+}
+
+/// node(weight) for each node of `set`, active in `func` with its T-matrix built.  Leaves the T-matrix of the last
+/// node in `func`, and no node active.
+template <class Visit>
+void VisitLineNodes(GenMatrixFunc &func, Site *site, const LineFinal &lf, double centre, const LineNodeSet &set,
+                    double gt, Visit visit) {
+  if (set.nodes.empty()) return;
+  const LineLevel L = LineLevelOf(func.compound(), *site, lf, centre, gt);
+  LineNode node;
+  func.SetActiveLineNode(&node);
+  try {
+    for (const LineNodeData &n : set.nodes) {
+      SetLineNode(lf, L, n, node);
+      func.RecalculateTMatrix(site);
+      visit(n.weight);
+    }
+  } catch (...) {
+    func.SetActiveLineNode(nullptr);
+    throw;
+  }
+  func.SetActiveLineNode(nullptr);
+}
+
+/// The site's record: the weighted sum of the nodes' records for the final level at `centre` with amplitude `gt`.
+void WriteLine(GenMatrixFunc &func, Site *site, Results &results, const LineFinal &lf, double centre,
+               const LineNodeSet &set, double gt) {
   const std::size_t length = site->RecordLength();
   const std::size_t countAt = site->HasAngularPart() ? Results::AngularOffset() : length;  // not a value: kept
   std::vector<double> sum(length, 0.0);
   double count = 0.0;
-  if (!set->nodes.empty()) {
-    const JGroup *jg = c->GetJGroup(lf.j);
-    const AChannel *fc = jg->GetChannel(lf.ch);
-    const int l = fc->GetL(), twoJ = lf.fp->SpinOrbitTwoJ(jg->GetJ());
-    const double a = fc->GetRadius();
-    CoulFunc coul(lf.fp);
-    // the current parameters of the final level
-    const double ER = centre - lf.thr;
-    const double gt = LineObservedAmplitude(c, state, configure, lf, centre, set->nfTerms);
-    const double SR = coul.PEShift(l, twoJ, a, ER), dSR = coul.PEShift_dE(l, twoJ, a, ER);
-    if (!(1.0 - gt * gt * dSR > 0.0) || gt == 0.0)
-      throw std::runtime_error("line_window: the final level's reduced width has no formal (one-level) equivalent.");
-    const double g2 = gt * gt / (1.0 - gt * gt * dSR);
-    const double s = std::sqrt(2.0 * lf.fp->GetRedMass() * uconv * a) / hbarc;
-    const PPair *entrancePair = c->GetPair(lf.aa);
-    const double inEnergy = site->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
-    LineNode node;
-    func.SetActiveLineNode(&node);
-    try {
-      for (const LineNodeData &n : set->nodes) {
-        const double dR = std::atan2(n.P * g2, ER - n.ef - g2 * (n.S - SR));
-        const double d = dR - std::atan2(n.Fa, n.Ga);
-        const double cd = std::cos(d), sd = std::sin(d);
-        node.photonEnergy = inEnergy - (lf.thr + n.ef);
-        node.amp = n.sqrtDens * (cd * n.Fa + sd * n.Ga) / (gt * s);
-        node.ec.resize(n.parts.size());
-        for (std::size_t k = 0; k < n.parts.size(); k++) {
-          node.ec[k].resize(n.parts[k].size());
-          for (std::size_t m = 0; m < n.parts[k].size(); m++)
-            node.ec[k][m] = n.sqrtDens * (cd * n.parts[k][m].first + sd * n.parts[k][m].second);
-        }
-        func.RecalculateTMatrix(site);
-        func.CalculateCrossSection(site, results);
-        const double *rec = site->Record(results);
-        for (std::size_t i = 0; i < length; i++)
-          if (i != countAt) sum[i] += n.weight * rec[i];
-        if (countAt < length) count = std::max(count, rec[countAt]);
-      }
-    } catch (...) {
-      func.SetActiveLineNode(nullptr);
-      throw;
-    }
-    func.SetActiveLineNode(nullptr);
-  }
+  VisitLineNodes(func, site, lf, centre, set, gt, [&](double weight) {
+    func.CalculateCrossSection(site, results);
+    const double *rec = site->Record(results);
+    for (std::size_t i = 0; i < length; i++)
+      if (i != countAt) sum[i] += weight * rec[i];
+    if (countAt < length) count = std::max(count, rec[countAt]);
+  });
   double *rec = site->Record(results);
   for (std::size_t i = 0; i < length; i++) rec[i] = (i == countAt) ? count : sum[i];
+}
+
+/// The final level of a site that passed LineWindowProblem (throws what it says otherwise).
+LineFinal CheckedLineFinal(const Site &site, const CompoundSystem *c, const Config &configure) {
+  const std::string why = LineWindowProblem(site, c, configure);
+  if (!why.empty()) throw std::runtime_error("line_window: " + why + ".");
+  LineFinal lf;
+  FindLineFinal(c, site.GetEntranceKey(), site.GetExitKey(), lf);
+  return lf;
+}
+
+}  // namespace
+
+void LineWindowCrossSection(GenMatrixFunc &func, Site *site, Results &results) {
+  const CompoundSystem *c = func.compound();
+  const LevelState &state = func.state();
+  const Config &configure = func.configure();
+  const LineFinal lf = CheckedLineFinal(*site, c, configure);
+  const double centre = LineCentreEnergy(c, state, configure, lf);
+  const std::shared_ptr<const LineNodeSet> set = LineNodesOf(*site, c, state, configure, lf, centre);
+  WriteLine(func, site, results, lf, centre, *set, LineObservedAmplitude(c, state, configure, lf, centre, set->nfTerms));
+}
+
+void ForEachLineNode(GenMatrixFunc &func, Site *site, const std::function<void(double)> &node) {
+  const CompoundSystem *c = func.compound();
+  const LevelState &state = func.state();
+  const Config &configure = func.configure();
+  const LineFinal lf = CheckedLineFinal(*site, c, configure);
+  const double centre = LineCentreEnergy(c, state, configure, lf);
+  const std::shared_ptr<const LineNodeSet> set = LineNodesOf(*site, c, state, configure, lf, centre);
+  VisitLineNodes(func, site, lf, centre, *set, LineObservedAmplitude(c, state, configure, lf, centre, set->nfTerms), node);
+}
+
+void LineWindowCrossSectionAt(GenMatrixFunc &func, Site *site, Results &results, double dCentre, double dLogAmplitude) {
+  const CompoundSystem *c = func.compound();
+  const LevelState &state = func.state();
+  const Config &configure = func.configure();
+  const LineFinal lf = CheckedLineFinal(*site, c, configure);
+  const double centre = LineCentreEnergy(c, state, configure, lf) + dCentre;
+  // a moved centre has its own nodes, made here and not kept (the run keeps those of its evaluations)
+  const std::shared_ptr<const LineNodeSet> set = dCentre != 0.0 ? MakeLineNodes(*site, c, state, configure, lf, centre)
+                                                                : LineNodesOf(*site, c, state, configure, lf, centre);
+  const double gt = LineObservedAmplitude(c, state, configure, lf, centre, set->nfTerms);
+  WriteLine(func, site, results, lf, centre, *set, gt * (1.0 + dLogAmplitude));
+}
+
+LineShapeChain LineShapeChainOf(const Site &site, const CompoundSystem *c, const LevelState &state, const Config &configure) {
+  const LineFinal lf = CheckedLineFinal(site, c, configure);
+  const bool brune = !!(configure.paramMask & Config::USE_BRUNE_FORMALISM);
+  const double centre = LineCentreEnergy(c, state, configure, lf);
+  const JGroup *jg = c->GetJGroup(lf.j);
+  LineShapeChain chain;
+  chain.group = lf.j;
+  chain.level = lf.la;
+  chain.energy = brune && state.E(lf.j, lf.la) != 0.0;
+  chain.dLogAmplitude.assign((std::size_t)jg->NumChannels(), 0.0);
+  // g~ = g_f / sqrt(N), N = n0 + sum_d A_d g_d^2:  d ln g~ / d g_d = delta_df / g_f - A_d g_d / N
+  double gf = 0.0;
+  if (lf.ecLinked && (!brune || centre == SetUpEnergy(c, lf))) {
+    // N_f of the state, at the energy of the set-up (the terms of AMatrixFunc::TBarAdjoint)
+    const ALevel *level = jg->GetLevel(lf.la);
+    const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM) && level->IsInRMatrix();
+    const double invN = std::pow(state.SqrtNF(lf.j, lf.la), 2.0);
+    gf = state.ECGamma(lf.j, lf.la, lf.ch);
+    const int numNF = level->NumNFIntegrals(), numD = park ? jg->NumChannels() : numNF;
+    for (int d = 1; d <= numD; d++) {
+      const PPair *pd = c->GetPair(jg->GetChannel(d)->GetPairNum());
+      double Ad = (d <= numNF) ? azure2::physics::bound_state_coefficient(jg->GetChannel(d)->GetRadius(), pd->GetRedMass()) *
+                                     level->GetNFIntegral(d)
+                               : 0.0;
+      if (park && jg->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0) Ad -= state.ShiftDerivative(lf.j, lf.la, d);
+      chain.dLogAmplitude[d - 1] = -Ad * state.ECGamma(lf.j, lf.la, d) * invN;
+    }
+  } else {
+    const std::vector<double> nfTerms = LineNFTerms(c, configure, lf, centre);
+    auto amplitude = [&](int ch) { return lf.ecLinked ? state.ECGamma(lf.j, lf.la, ch) : state.Gamma(lf.j, lf.la, ch); };
+    double sum = 1.0;
+    for (std::size_t ch = 0; ch < nfTerms.size(); ch++)
+      if (nfTerms[ch] != 0.0) sum += std::pow(amplitude((int)ch + 1), 2.0) * nfTerms[ch];
+    gf = amplitude(lf.ch);
+    for (std::size_t ch = 0; ch < nfTerms.size(); ch++)
+      chain.dLogAmplitude[ch] = -nfTerms[ch] * amplitude((int)ch + 1) / sum;
+  }
+  if (gf != 0.0) chain.dLogAmplitude[lf.ch - 1] += 1.0 / gf;
+  // the steps of the differences: a small part of the line's width in E_R, of the amplitude in g~
+  const AChannel *fc = jg->GetChannel(lf.ch);
+  CoulFunc coul(lf.fp);
+  const double gt = LineObservedAmplitude(c, state, configure, lf, centre, LineNFTerms(c, configure, lf, centre));
+  const double width = 2.0 * coul.Penetrability(fc->GetL(), lf.fp->SpinOrbitTwoJ(jg->GetJ()), fc->GetRadius(), centre - lf.thr) * gt * gt;
+  chain.centreStep = std::min(1.0e-5, std::max(1.0e-8, 1.0e-3 * width));
+  chain.amplitudeStep = 1.0e-4;
+  return chain;
 }
 
 }  // namespace azure2

@@ -27,9 +27,10 @@
 #       through a parameter file gives the cross sections of the project with the level there, within 1e-6.
 #   (h) a capture cascade (`secondary_gamma` on the capture exit) with a line window is refused: the line-shape
 #       integration has no secondary-gamma form (dev's rule; the two features meet on the combined branch only).
-#   (i) a fit of a windowed data set with a fitter that reads the analytic gradient or the residual rows' Jacobian
-#       (its row of Fitters(): lm, migrad-gradient) is refused at set-up with no output: the adjoint does not
-#       run over the line shape; plain MIGRAD (numerical gradient) fits it and writes its outputs.
+#   (i) a fit of a windowed data set runs with every fitter and writes its outputs: plain MIGRAD (numerical
+#       gradient) and the fitters that read the analytic gradient or the residual rows' Jacobian (lm,
+#       migrad-gradient), whose adjoint runs over the line shape (tests/pyazr/line_window_derivatives_test.py checks
+#       its numbers against central differences).
 #
 #   ./tests/ec_unbound_broad/check.sh path/to/AZURE2
 
@@ -172,7 +173,7 @@ else
   tail -5 "$WORK/i_cascade/run.log"
 fi
 
-echo "(i) fitters that read the analytic derivatives are refused; plain MIGRAD fits"
+echo "(i) every fitter fits a windowed data set"
 # the windowed project with one data point; the final level's energy fixed (its widths stay free), so that MIGRAD's
 # steps do not move the line centre and rebuild the line's capture integrals (seconds instead of minutes)
 mkdir -p "$WORK/j_fit"
@@ -207,12 +208,13 @@ for fitter in "lm --use-lm" "migrad-gradient --use-gradient"; do
   fi
   fit_run "fit_$name" "$switch"
   status=$?
-  if [ $status -ne 0 ] && grep -q "ERROR: segment #1 .*line window.*the fitter $name ($switch) is not supported" \
-    "$WORK/fit_$name/run.log" && [ ! -s "$WORK/fit_$name/output/param.sav" ]; then
-    ok "(i) $switch is refused, nothing written"
+  if [ $status -eq 0 ] && [ -s "$WORK/fit_$name/output/param.sav" ] && [ -s "$WORK/fit_$name/output/chiSquared.out" ] &&
+    ! grep -q "ERROR" "$WORK/fit_$name/run.log"; then
+    ok "(i) $switch fits the windowed data set"
   else
-    bad "(i) $switch was not refused (exit $status)"
+    bad "(i) $switch did not fit (exit $status)"
     grep -a "ERROR" "$WORK/fit_$name/run.log" | sed -n '1,2p' | cut -c1-200
+    tail -3 "$WORK/fit_$name/run.log"
   fi
 done
 fit_run fit_migrad ""

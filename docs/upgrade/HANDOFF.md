@@ -1142,6 +1142,18 @@ Branch `feature/upgrade-5-thm-ff`, cut from `feature/upgrade` 76875f72, pushed, 
   `residuals_and_jacobian`/`model_gradients`, the bands and `fit_with_engine` with those fitters (the binding maps
   it to `EngineError`); the program's uncertainty band catches that type only and writes the outputs without it.
   Values are unchanged. Tests: `tests/ec_unbound_broad/check.sh` (i), `pyazr_line_window_derivatives`.
+  **Superseded 2026-11-27: the adjoint runs over the line shape and the refusal is gone.** A windowed unit's record
+  is the weighted sum of its nodes' records, so `LineUnitAdjoint` (`src/GradEnergyTasks.cpp`) visits the nodes
+  (`ForEachLineNode`, each active in the task's solver with its T-matrix rebuilt), takes `PointTBar` with the node's
+  weight in the cotangent and merges the bilinear terms into the task's (the node's external elements are constants
+  of that pass, `CollectBilinearTerms`; a channel-capture pathway takes the dense `TBarAdjoint`, which reads the
+  node's exit amplitude and element). The line shape's own share (the final level's energy and observed amplitude
+  place the nodes and set the phase and amplitude of the final scattering state) is two central differences of the
+  line integration (`LineWindowCrossSectionAt`), chained to the widths by `LineShapeChain::dLogAmplitude`; taken only
+  while a free parameter reads them (the rows' mask; always in a scalar pass). A screened windowed unit is outside
+  the analytic path (finite differences). `LineWindowDerivativeRefused` and the fitter refusal of
+  `LineWindowProblem` are removed. Tests: `pyazr_line_window_derivatives` (gradient, rows and sensitivities against
+  central differences on `a_w1`, `d_w1`, `g_w1`), `tests/ec_unbound_broad/check.sh` (i) (every fitter fits).
 
 **Run:** build (0 warnings); `ctest -R pyazr_ui -j6` 20 of 20 (with the smoke test); `pyazr_ui_static` and
 `pyazr_ui_node` failing before the page change; `docs_build` (and `sphinx-build -W -n` into a scratch directory);
