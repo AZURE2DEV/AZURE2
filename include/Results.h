@@ -102,6 +102,16 @@ struct Results {
     bool Stored(int slot) const { return slot >= 0 && (std::size_t)slot < stored.size() && stored[(std::size_t)slot]; }
   } objective;
 
+  /*!
+   * The fold weights of the points, kept for the length of one gradient call (PointFold.h, KeepFoldWeights): index =
+   * the point's plan task, empty = none kept.  While `active`, a point's fold computes its weights once and is their
+   * product with the sub-point values; the gradient reads the same weights.  Empty and inactive at any other time.
+   */
+  struct KeptFoldWeights {
+    bool active = false;
+    std::vector<std::vector<double>> weights;
+  } foldWeights;
+
   /// The scratch of the energy tasks that write this buffer, one per thread (TaskScratch.h): solvers and their
   /// buffers, never a value of the evaluation.  A copy of the buffer starts with empty scratch.
   TaskScratchSet scratch;

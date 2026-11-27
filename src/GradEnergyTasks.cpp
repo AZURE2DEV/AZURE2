@@ -14,6 +14,7 @@
 #include "JGroup.h"
 #include "LineWindow.h"
 #include "ModelPass.h"
+#include "PointFold.h"
 #include "Profile.h"
 #include "Results.h"
 #include "Segment.h"
@@ -494,6 +495,8 @@ bool EnergyTaskGradient(const CompoundSystem *compound, const LevelState &state,
                         const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
                         const ThmAdjointContext *hoes) {
   bailSeg = 0;
+  // one set of fold weights for the forward folds and the cotangents of this call (PointFold.h)
+  const KeepFoldWeights keptWeights(results, *data, config);
   Pass pass;
   Forward(compound, state, *data, results, config, pass, hoes);
   // The objective's cotangent of each model, in data order (fitBarFn may accumulate the norm gradient); a THM point's
@@ -549,6 +552,8 @@ bool EnergyTaskRows(const CompoundSystem *compound, const LevelState &state, Wor
                     std::vector<double> &models, std::vector<double> &rows, int &bailSeg, int &numTasks) {
   bailSeg = 0;
   numTasks = 0;
+  // one set of fold weights for the forward folds and the cotangents of this call (PointFold.h)
+  const KeepFoldWeights keptWeights(results, *data, config);
   Pass pass;
   Forward(compound, state, *data, results, config, pass, nullptr);
   const int n = (int)pass.points.size();

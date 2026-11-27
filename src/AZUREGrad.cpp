@@ -382,8 +382,16 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
       w[i - 1] = (yp - ym) / (2.0 * h);
     }
   };
+  // The weights the forward fold of this gradient call kept (PointFold.h, KeepFoldWeights), or computed here.
   std::vector<double> c;
-  if (config.environment.foldWeightsByDifferences || !FoldWeights(*point, data, config, c)) {
+  bool exact = false;
+  if (const std::vector<double> *kept = KeptWeights(*point, results)) {
+    c = *kept;
+    exact = true;
+  } else if (!config.environment.foldWeightsByDifferences) {
+    exact = FoldWeights(*point, data, config, c);
+  }
+  if (!exact) {
     fdWeights(c);
   } else if (azure2::support::ProcessEnvironment().Set(azure2::support::Switch::kFoldWeightsCheck)) {
     if (config.diagnostics->foldWeightChecks++ < azure2::support::ProcessEnvironment().Integer(azure2::support::Switch::kFoldWeightsCheck, 0)) {
@@ -412,8 +420,8 @@ bool GradTargetEffectAdjoint(WorkingCopy &data, Unit *point, azure2::Results &re
       point->RatioPartsAt(data, i, results, weight[i - 1], element[i - 1]);
       product[i - 1] = weight[i - 1] * element[i - 1];
     }
-    den = FoldValues(*point, data, config, weight);
-    const double num = FoldValues(*point, data, config, product);
+    den = FoldKept(*point, data, config, weight, results);
+    const double num = FoldKept(*point, data, config, product, results);
     // The forward pass returns 0 for D = 0, a constant: no gradient.
     if (!(std::fabs(den) > 0.0)) {
       point->SetFitCrossSection(results, model);

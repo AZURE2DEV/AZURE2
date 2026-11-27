@@ -3,15 +3,18 @@
 // experiment/ (Kernels.h); nothing here depends on which kernel the effect has.
 #include "PointFold.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+#include "CalculationPlan.h"
 #include "Config.h"
 #include "DataSet.h"
 #include "Results.h"
+#include "RunDiagnostics.h"
 #include "ShiftedFold.h"
 #include "TargetEffect.h"
 #include "Unit.h"
@@ -103,13 +106,52 @@ double FoldValues(const Unit &unit, const WorkingCopy &data, const Config &confi
                                   values.data() + in.first);
 }
 
+KeepFoldWeights::KeepFoldWeights(azure2::Results &results, const WorkingCopy &data, const Config &configure)
+    : results_(results) {
+  if (configure.environment.foldWeightsByDifferences) return;
+  results_.foldWeights.weights.assign((std::size_t)data.Plan().NumTasks(), std::vector<double>());
+  results_.foldWeights.active = true;
+}
+
+KeepFoldWeights::~KeepFoldWeights() {
+  results_.foldWeights.active = false;
+  std::vector<std::vector<double>>().swap(results_.foldWeights.weights);
+}
+
+const std::vector<double> *KeptWeights(const Unit &unit, const azure2::Results &results) {
+  const int task = unit.PlanTask();
+  if (!results.foldWeights.active || task < 0 || (std::size_t)task >= results.foldWeights.weights.size()) return nullptr;
+  const std::vector<double> &c = results.foldWeights.weights[(std::size_t)task];
+  return (!c.empty() && c.size() == (std::size_t)unit.NumSubPoints()) ? &c : nullptr;
+}
+
+double FoldKept(const Unit &unit, const WorkingCopy &data, const Config &configure, const std::vector<double> &values,
+                azure2::Results &results) {
+  const int task = unit.PlanTask();
+  if (!results.foldWeights.active || task < 0 || (std::size_t)task >= results.foldWeights.weights.size())
+    return FoldValues(unit, data, configure, values, Broadening::kApply);
+  // Each point is folded by one thread at a time (the point pass, the cotangents), so its entry has one writer.
+  std::vector<double> &c = results.foldWeights.weights[(std::size_t)task];
+  if (c.empty()) {
+    const auto t0 = std::chrono::steady_clock::now();
+    if (!FoldWeights(unit, data, configure, c, Broadening::kApply)) c.clear();
+    if (configure.diagnostics)
+      configure.diagnostics->foldWeightNs +=
+          std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+  }
+  if (c.empty() || c.size() != values.size()) return FoldValues(unit, data, configure, values, Broadening::kApply);
+  double sum = 0.0;
+  for (std::size_t i = 0; i < c.size(); i++) sum += c[i] * values[i];
+  return std::isfinite(sum) ? sum : FoldValues(unit, data, configure, values, Broadening::kApply);
+}
+
 void FoldPoint(Unit &unit, const WorkingCopy &data, const Config &configure, azure2::Results &results) {
   const int n = unit.NumSubPoints();
   std::vector<double> values(n > 0 ? n : 0);
   for (int j = 1; j <= n; j++) values[j - 1] = unit.SlotValue(*unit.GetSubPoint(data, j), j, results);
   // read through a lab-frame row set the fold is a lab value; the point's own Jacobian makes it the c.m. value its
   // comparison divides by the same Jacobian (RowSet.h)
-  const double fold = FoldValues(unit, data, configure, values, Broadening::kApply);
+  const double fold = FoldKept(unit, data, configure, values, results);
   if (std::isnan(fold) && unit.RowSetOf() && unit.RowSetOf()->labFrame) {
     for (int j = 1; j <= n; j++)
       if (std::isnan(unit.SlotJacobian(j))) {
