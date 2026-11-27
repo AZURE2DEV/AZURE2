@@ -380,9 +380,21 @@ def place_level_values(project, parameters, pairs, want):
     pair number, mapped through ``pairs``), l and 2s.  A fixed width of a channel the level has no row for is the
     engine's zero input (a level of a J-group gets a fixed, zero width for every group channel it does not list):
     there is nothing to write.  Any other value without a row raises ValueError naming it, so that a snapshot is never
-    a mixture of two fits."""
+    a mixture of two fits.
+
+    A fixed width whose row states 0 keeps its 0.  A width stated as zero is fixed whatever its flag, and with
+    external capture its channel can still have a physical width (the external part alone; the engine then holds the
+    internal amplitude that brings the total closest to the zero asked for, with its warning "Imaginary portion of
+    the external width is greater than the total width").  Written as that value the row would no longer be zero: it
+    would read back as the same amplitude, but free, and the snapshot would have more free parameters than the fit
+    (tests/13N with external capture: two photon channels of the 20 MeV background levels).  The 0 reads back as the
+    amplitude the fit held."""
     pairkey = {p.number: p.key for p in pairs}
-    level_params = [p for p in parameters if p.kind in ("energy", "width")]
+    stated_zero = {(level.group, level.level, c.pair, c.l, int(round(2 * c.s)))
+                   for level in project.levels() if level.active for c in level.channels if c.width == 0.0}
+    level_params = [p for p in parameters if p.kind in ("energy", "width") and not (
+        p.kind == "width" and p.fixed and
+        (p.jgroup, p.level, pairkey.get(p.pair, p.pair), p.L, int(round(2 * (p.S or 0.0)))) in stated_zero)]
     values = [(p.kind, p.jgroup, p.level, pairkey.get(p.pair, p.pair) if p.kind == "width" else 0,
                p.L if p.kind == "width" else 0, int(round(2 * (p.S or 0.0))) if p.kind == "width" else 0,
                float(want[p.index])) for p in level_params]
