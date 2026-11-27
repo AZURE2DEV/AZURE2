@@ -481,6 +481,14 @@ Each checked against the start commit of this page, by a run (R) or by reading t
   are now the Riccati-Bessel function, within 6.1e-15 of mpmath for l = 0–8 and ρ = 1e-6–5e4 (R,
   `physics_coulomb_neutral`); G, G′ and every charged pair are unchanged bit for bit. `coulomb.md` section 10.
 - The web page was tested in a headless Chrome and used by the PI; Firefox and Safari were not run.
+- A folded point reads every node of the shared mesh inside its support, whichever data set put it there, and the
+  target kernel with a beam spread or straggling costs the square of that number (R, 2026-11-26: 11B+α, 4487 points,
+  eleven such data sets; about 3400 nodes per point where `dev` b60aed09 had 94-152 sub-points, 330 nodes when only
+  those data sets are active; the data set's own `quadrature points` does not cap it). One evaluation costs what it
+  did (their folds are 25 of its 27 thread-seconds); a gradient was 12-17 times `dev`'s and is about twice it since
+  the weights' linear form is a dense run and the shifted refolds run in one team (`energy_grid.md` section 3.3).
+  The remaining cost needs a thinned set of nodes for the nested kernel, or the fold in one pass: both move numbers,
+  not done.
 
 ## 10. What is not finished
 
