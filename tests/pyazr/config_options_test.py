@@ -259,7 +259,7 @@ try:
           sorted(o["key"] for o in rows.values() if o["key"]) and len(option_keys) == 10)
     check("each other option (not project state) has its reason",
           all(o["reason"] for o in rows.values() if not o["key"]) and
-          {k for k, o in rows.items() if not o["key"]} == {"extrapolations", "coulomb_table", "cwd"})
+          {k for k, o in rows.items() if not o["key"]} == {"extrapolations", "coulomb_table", "cwd", "fold_depth_steps"})
     positional, keys = _azure2.config_keys()
     check("the option keys are keys of <config> (bool)", all((k, "bool") in [(n, t) for n, t, _ in keys]
                                                                for k in option_keys))
