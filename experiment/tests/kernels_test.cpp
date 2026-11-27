@@ -196,6 +196,167 @@ void WindowSearch() {
   Close("... and the integral of 1 + 2 E", num, 0.00045 + (1.50035 * 1.50035 - 1.49990 * 1.49990), 1e-13);
 }
 
+namespace {
+
+double NanSigma(const void *, const void *, double, double) { return std::numeric_limits<double>::quiet_NaN(); }
+
+/// The largest |second difference| of a scan, over the largest |first difference|: of order the step over the scale
+/// of the function when it is smooth, of order 1 at a jump.
+double Roughness(const std::vector<double> &y) {
+  double d1 = 0.0, d2 = 0.0;
+  for (std::size_t i = 1; i < y.size(); i++) d1 = std::max(d1, std::fabs(y[i] - y[i - 1]));
+  for (std::size_t i = 1; i + 1 < y.size(); i++) d2 = std::max(d2, std::fabs(y[i + 1] - 2.0 * y[i] + y[i - 1]));
+  return d1 > 0.0 ? d2 / d1 : 0.0;
+}
+
+/// The depth integral of the target kernel with a beam spread or straggling on its own panels
+/// (KernelParameters::depthStepsPerSigma, docs/upgrade/energy_grid.md section 3.4), against identities that hold
+/// whatever the panels are and against the node intervals (depthStepsPerSigma = 0).
+void DepthPanels() {
+  std::printf("target: the depth integral on its own panels\n");
+  const Kernel &k = *KernelNamed("target");
+  const double eps = 1e-20;  // c.m. MeV cm^2, constant
+  double sigmaLab = 0.004;   // MeV, a beam spread of 4 keV lab (3.3 keV c.m.)
+  KernelParameters p;
+  p.sigma.at = ConstantSigma;
+  p.sigma.owner = &sigmaLab;
+  KernelPoint point;
+  point.energy = 1.0;
+  point.cmFactor = 1.0 / 1.2;
+  point.density = 2e18;  // atoms/cm^2: T = 0.02 MeV c.m., 6 sigma
+  point.targetThickness = eps * point.density;
+  // nodes every 0.25 keV from E0 + 0.03 down to E0 - T - 0.03: 80 intervals per target, 13 per sigma
+  Grid g(1.03, 1.0 - point.targetThickness - 0.03, 320, eps);
+  auto fold = [&](int steps, const std::vector<double> &values) {
+    p.depthStepsPerSigma = steps;
+    return k.fold(p, point, g.nodes, values.data());
+  };
+  const std::vector<double> constant(g.energy.size(), 3.0);
+  std::vector<double> linear, resonance;
+  for (double e : g.energy) {
+    linear.push_back(2.0 + 5.0 * (e - 1.0));
+    resonance.push_back(1.0 + 1.0 / (1.0 + std::pow((e - 0.99) / 0.002, 2)));  // a 4 keV wide peak inside the target
+  }
+
+  p.gaussian = true;
+  for (int steps : {0, 1, 2, 4, 8}) {
+    // A constant cross section folds to itself (the Gaussian average is normalised, 1/epsilon constant and the panels
+    // tile [E0 - T, E0]), and a linear one to its value at mid-depth (a Gaussian average and 2-point Gauss-Legendre are
+    // exact for it), whatever the panels are.
+    const std::string what = "k = " + std::to_string(steps) + ": ";
+    Close(what + "a constant cross section folds to itself", fold(steps, constant), 3.0, 1e-13);
+    Close(what + "a linear one to its value at mid-depth", fold(steps, linear), 2.0 - 5.0 * 0.5 * point.targetThickness,
+          1e-13);
+    double v, w;
+    FoldBoth(k, p, point, g, resonance, v, w);
+    Close(what + "the weights give the value", w, v, 1e-13);
+  }
+  // A resonance inside the target: the panels against the node intervals, the rule of 1e-5 at k = 4 (energy_grid.md
+  // section 3.4), and closer as k grows
+  const double nodes = fold(0, resonance);
+  const double d1 = std::fabs(fold(1, resonance) / nodes - 1.0), d2 = std::fabs(fold(2, resonance) / nodes - 1.0);
+  const double d4 = std::fabs(fold(4, resonance) / nodes - 1.0), d8 = std::fabs(fold(8, resonance) / nodes - 1.0);
+  std::printf("        resonance, relative to the node intervals: k=1 %.2e, k=2 %.2e, k=4 %.2e, k=8 %.2e\n", d1, d2, d4, d8);
+  Check("a resonance: k = 4 within 1e-5 of the node intervals", d4 < 1e-5);
+  Check("a resonance: k = 1, 2, 4, 8 move towards the node intervals", d8 < d4 && d4 < d2 && d2 < d1);
+  // sigma/k shorter than a node interval everywhere: every panel ends on the next node, the panels are the node
+  // intervals bit for bit.  Fails if a panel may end above the next node (the node-interval floor ignored).
+  Check("sigma/k below the node spacing (k = 64): the node intervals bit for bit", fold(64, resonance) == nodes);
+  // sigma/k exactly the node spacing: every panel ends on a node, by the rounding of a - h or by the floor
+  {
+    const double spacing = g.energy[0] - g.energy[1];
+    sigmaLab = 4.0 * spacing / point.cmFactor;  // c.m. sigma = 4 node intervals, k = 4: one interval
+    const double a = fold(0, resonance), b = fold(4, resonance);
+    Close("a panel ending exactly on a node (sigma/k = the spacing): the node intervals, to rounding", b / a, 1.0, 1e-12);
+  }
+  // a Gaussian wider than the whole target: one panel over [E0 - T, E0] at k = 1 (sigma/k > T); the identities hold
+  sigmaLab = 0.06;  // 50 keV c.m., the target 20 keV
+  {
+    Grid wide(1.3, 0.7, 2400, eps);
+    p.depthStepsPerSigma = 1;
+    const std::vector<double> c(wide.energy.size(), 3.0);
+    std::vector<double> l;
+    for (double e : wide.energy) l.push_back(2.0 + 5.0 * (e - 1.0));
+    Close("sigma > T, k = 1: a constant folds to itself", k.fold(p, point, wide.nodes, c.data()), 3.0, 1e-13);
+    Close("sigma > T, k = 1: a linear one to its value at mid-depth", k.fold(p, point, wide.nodes, l.data()),
+          2.0 - 5.0 * 0.5 * point.targetThickness, 1e-13);
+  }
+  sigmaLab = 0.004;
+  // The back of the target below the last node: the depth integral ends at the last node, on either rule
+  {
+    Grid shortGrid(1.03, 1.0 - 0.5 * point.targetThickness, 200, eps);
+    const std::vector<double> c(shortGrid.energy.size(), 3.0);
+    for (int steps : {0, 4}) {
+      p.depthStepsPerSigma = steps;
+      Close("back below the last node, k = " + std::to_string(steps) + ": the constant over the half that has nodes",
+            k.fold(p, point, shortGrid.nodes, c.data()), 1.5, 1e-13);
+    }
+  }
+  // A NaN beam spread is no spread (the depth's value interpolated) on either rule
+  p.sigma.at = NanSigma;
+  Check("a NaN sigma: k = 4 is the node intervals bit for bit", fold(4, resonance) == fold(0, resonance));
+  p.sigma.at = ConstantSigma;
+  // Pure straggling: sigma -> 0 at the surface, where the panels are the node intervals; deeper they widen
+  p.gaussian = false;
+  p.straggling = true;
+  p.stragglingCoefficient = 0.8;  // c.m. keV^1/2: 3.6 keV at the back
+  // (A linear cross section is not exact here on either rule: near the surface the Gaussian is narrower than a node
+  // interval and its window, split at a node, is averaged by Gauss-Legendre asymmetrically: 1.3e-10 relative.)
+  for (int steps : {0, 1, 4}) {
+    const std::string what = "straggling, k = " + std::to_string(steps) + ": ";
+    Close(what + "a constant cross section folds to itself", fold(steps, constant), 3.0, 1e-13);
+    Close(what + "a linear one to its value at mid-depth (1e-9: the inner average, above)", fold(steps, linear),
+          2.0 - 5.0 * 0.5 * point.targetThickness, 1e-9);
+  }
+  const double strag0 = fold(0, resonance), strag4 = fold(4, resonance);
+  Close("straggling, a resonance: k = 4 within 1e-5 of the node intervals (relative)", strag4 / strag0, 1.0, 1e-5);
+  p.stragglingCoefficient = 0.0;  // Bohr straggling (z1 = 2 on z2 = 7)
+  point.z1 = 2;
+  point.z2 = 7;
+  const double bohr0 = fold(0, resonance), bohr4 = fold(4, resonance);
+  Close("Bohr straggling, a resonance: k = 4 within 1e-5 of the node intervals (relative)", bohr4 / bohr0, 1.0, 1e-5);
+  Close("Bohr straggling: a constant folds to itself", fold(4, constant), 3.0, 1e-13);
+  p.straggling = false;
+  p.gaussian = true;
+
+  // Smooth in the point's energy (an energy shift moves E0 across nodes and panel ends) and in the thickness (a
+  // fitted density moves the back E0 - T(N)): a scan in steps of 1/40 node interval is no rougher at k = 4 than on
+  // the node intervals (where the panel ends are nodes).
+  const double spacing = g.energy[0] - g.energy[1];
+  for (const bool thickness : {false, true}) {
+    std::vector<double> y0, y4;
+    const double e0 = point.energy, t0 = point.targetThickness;
+    for (int i = 0; i <= 200; i++) {
+      const double step = (i - 100) * spacing / 40.0;
+      if (thickness) {
+        point.targetThickness = t0 + step;
+        point.density = point.targetThickness / eps;
+      } else {
+        point.energy = e0 + step;
+      }
+      y0.push_back(fold(0, resonance));
+      y4.push_back(fold(4, resonance));
+    }
+    point.energy = e0;
+    point.targetThickness = t0;
+    point.density = t0 / eps;
+    const double r0 = Roughness(y0), r4 = Roughness(y4);
+    const std::string what = thickness ? "the thickness (a fitted density)" : "the energy (a shift across nodes)";
+    std::printf("        scan in %s: roughness %.3e on the node intervals, %.3e at k = 4\n", what.c_str(), r0, r4);
+    Check("a scan in " + what + ": no rougher at k = 4 than on the node intervals", r4 <= 1.5 * r0 + 1e-6);
+  }
+  // A layer yield: the back of the layer found on the nodes (LayerExit.h), the yield per incident particle 1e-24 N
+  // times a constant cross section, on either rule
+  p.layerYield = true;
+  for (int steps : {0, 4})
+    Close("layer yield, k = " + std::to_string(steps) + ": 1e-24 N sigma for a constant", fold(steps, constant),
+          1e-24 * point.density * 3.0, 1e-12);
+  p.layerYield = false;
+  p.depthStepsPerSigma = 0;
+}
+
+}  // namespace
+
 int main() {
   LinearFormArithmetic();
   std::printf("the table\n");
@@ -435,6 +596,7 @@ int main() {
   }
 
   WindowSearch();
+  DepthPanels();
 
   std::printf("%s\n", failures ? "FAILED" : "all passed");
   return failures ? 1 : 0;

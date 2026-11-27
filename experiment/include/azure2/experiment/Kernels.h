@@ -88,6 +88,10 @@ struct KernelParameters {
   double stragglingCoefficient = 0.0;  ///< c.m. keV^1/2; 0 with straggling on = Bohr straggling
   double layoutDensity = 0.0;          ///< the density the grids span (atoms/cm^2)
   EnergyFunction stopping;             ///< lab stopping cross section at a lab energy (the support of a thick target)
+  /// The panels of the depth integral of a target with a beam spread or straggling (docs/upgrade/energy_grid.md
+  /// section 3.4): k panels per Gaussian width, each sigma/k wide (sigma at the panel's top) and never ending above the
+  /// next node; 0 (the default here): the node intervals.  The engine sets it from Config::foldDepthSteps.
+  int depthStepsPerSigma = 0;
   bool BohrStraggling() const { return straggling && !(stragglingCoefficient > 0.0); }
   // Beam profile.
   const std::vector<BeamProfileComponent> *profile = nullptr;
