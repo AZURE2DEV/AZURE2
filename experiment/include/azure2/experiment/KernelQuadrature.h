@@ -53,6 +53,15 @@ inline int BracketingInterval(const KernelNodes &nodes, double e) {
   return (a < nodes.n && e <= nodes.Energy(a) && e >= nodes.Energy(a + 1)) ? a : 0;
 }
 
+/// num += c (fa a + fb b): the step of the quadrature at one Gauss point, a and b the values at the two nodes around
+/// it.  A value type may overload it (LinearForm.h does, to add the two terms without a temporary form); the
+/// arithmetic is this expression's.
+template <class V>
+inline void AddInterpolated(V &num, double c, double fa, const V &a, double fb, const V &b) {
+  V sigma = fa * a + fb * b;
+  num += c * sigma;
+}
+
 /*!
  * 2-point Gauss-Legendre over the nodes (energies descending from node 1), restricted to the c.m. window [lo, hi]:
  * the node values (values[j - 1]) and, for a yield, the stopping are interpolated linearly between the two nodes that
@@ -78,13 +87,12 @@ void GridQuadrature(const KernelNodes &nodes, const V *values, double lo, double
     for (int gp = 0; gp < 2; gp++) {
       const double e = mid + half * (gp == 0 ? x1 : x2);
       const double frac = (Ea - e) / (Ea - Eb);  // 0 at node j, 1 at node j + 1
-      V sigma = (1.0 - frac) * values[j - 1] + frac * values[j];
       double f = 1.0;
       if (divideByStopping) {
         double stopping = (1.0 - frac) * nodes.Stopping(j) + frac * nodes.Stopping(j + 1);
         f = 1.0 / stopping / 1.0e24;
       }
-      num += (half * wNum(e) * f) * sigma;
+      AddInterpolated(num, half * wNum(e) * f, 1.0 - frac, values[j - 1], frac, values[j]);
       den += half * wDen(e);
     }
   }

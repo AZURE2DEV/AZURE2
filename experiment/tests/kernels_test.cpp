@@ -101,6 +101,38 @@ void LinearFormArithmetic() {
         Evaluate(got + two, values) + Evaluate(two + got, values), 2.0 * (want + 2.0 * node(7) - 3.0 * node(9)), 1e-13);
   LinearForm same = LinearForm::Unit(5) + LinearForm::Unit(5) + LinearForm::Unit(5);
   Close("one node three times", Evaluate(same, values), 3.0 * node(5), 1e-15);
+  // The quadrature's step (AddInterpolated) on unit forms equals the general expression bit for bit, whatever the
+  // sum already holds (empty, two inline terms, a dense run on either side).
+  {
+    bool same = true;
+    for (int start = 0; start < 4; start++) {
+      LinearForm fast = 0.0, slow = 0.0;
+      if (start >= 1) fast += 0.3 * LinearForm::Unit(7), slow += 0.3 * LinearForm::Unit(7);
+      if (start >= 2) fast += 0.7 * LinearForm::Unit(8), slow += 0.7 * LinearForm::Unit(8);
+      if (start >= 3) fast += 1.1 * LinearForm::Unit(12), slow += 1.1 * LinearForm::Unit(12);
+      double c = 0.37, f = 0.123456789;
+      for (int j : {7, 8, 9, 5, 4, 20, 8, 7}) {
+        const LinearForm a = LinearForm::Unit(j), b = LinearForm::Unit(j + 1);
+        AddInterpolated(fast, c, 1.0 - f, a, f, b);
+        LinearForm sigma = (1.0 - f) * a + f * b;
+        slow += c * sigma;
+        c *= 1.7, f = 1.0 - 0.9 * f;
+      }
+      // a value that is not a unit form takes the general expression
+      const LinearForm wide = 0.25 * LinearForm::Unit(3) + 0.75 * LinearForm::Unit(4);
+      AddInterpolated(fast, 2.0, 0.4, wide, 0.6, LinearForm::Unit(5));
+      LinearForm sigma = 0.4 * wide + 0.6 * LinearForm::Unit(5);
+      slow += 2.0 * sigma;
+      std::vector<double> cf(32, 0.0), cs(32, 0.0);
+      for (const auto &t : fast.Terms()) cf[t.first] += t.second;
+      for (const auto &t : slow.Terms()) cs[t.first] += t.second;
+      if (cf != cs || fast.Valid() != slow.Valid()) same = false;
+    }
+    Check("the quadrature's step on unit forms: the general expression, bit for bit", same);
+    LinearForm bad = 0.0;
+    AddInterpolated(bad, 1.0, 0.5, LinearForm::Unit(1), 0.5, LinearForm(1.0));
+    Check("... and an invalid value makes the sum invalid", !bad.Valid());
+  }
   Check("a sum of forms is valid; a nonzero constant is not", got.Valid() && !(got + LinearForm(1.0)).Valid());
   Check("zero is the empty form", LinearForm(0.0).Terms().empty() && LinearForm(0.0).Valid());
 }
