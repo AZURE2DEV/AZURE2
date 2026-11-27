@@ -10,6 +10,35 @@
 namespace azure2 {
 namespace experiment {
 
+/// The first interval j in [1, n) (nodes j, j + 1) that is not wholly above `hi`, i.e. the first with
+/// Energy(j + 1) < hi; n if there is none.  The energies descend, so the intervals before it all lie above `hi`.
+/// Written on the negated test so that a NaN `hi` selects every interval, as a walk over all of them would.
+inline int FirstIntervalBelow(const KernelNodes &nodes, double hi) {
+  int a = 1, b = nodes.n;
+  while (a < b) {
+    const int m = a + (b - a) / 2;
+    if (nodes.Energy(m + 1) >= hi)
+      a = m + 1;
+    else
+      b = m;
+  }
+  return a;
+}
+
+/// One past the last interval j in [1, n) that is not wholly below `lo`, i.e. the first j with Energy(j) <= lo; n
+/// if there is none (a NaN `lo` selects every interval).
+inline int EndIntervalAbove(const KernelNodes &nodes, double lo) {
+  int a = 1, b = nodes.n;
+  while (a < b) {
+    const int m = a + (b - a) / 2;
+    if (nodes.Energy(m) <= lo)
+      b = m;
+    else
+      a = m + 1;
+  }
+  return a;
+}
+
 /*!
  * 2-point Gauss-Legendre over the nodes (energies descending from node 1), restricted to the c.m. window [lo, hi]:
  * the node values (values[j - 1]) and, for a yield, the stopping are interpolated linearly between the two nodes that
@@ -21,8 +50,11 @@ template <class V, class WNum, class WDen>
 void GridQuadrature(const KernelNodes &nodes, const V *values, double lo, double hi, bool divideByStopping, WNum wNum,
                     WDen wDen, V &num, double &den) {
   const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
-  const int n = nodes.n;
-  for (int j = 1; j < n; j++) {
+  // The intervals that meet the window are consecutive (descending energies): found by bisection, so that a narrow
+  // window on many nodes (the Gaussian inside the target's depth integral) costs its own intervals, not all of them.
+  // The test below stays: it decides, the bisection only skips intervals it would skip.
+  const int first = FirstIntervalBelow(nodes, hi), end = EndIntervalAbove(nodes, lo);
+  for (int j = first; j < end; j++) {
     const double Ea = nodes.Energy(j);
     const double Eb = nodes.Energy(j + 1);
     if (Eb >= hi || Ea <= lo) continue;

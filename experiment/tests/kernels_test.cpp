@@ -2,12 +2,15 @@
 // weights the gradient reads (the kernel on LinearForm) reproduce the forward value, and each kernel against a closed
 // form (a constant survives every normalised kernel; a thin target of constant stopping averages a linear cross
 // section to its value at the mid-depth; a thick target integrates a constant to 1e-24 sigma dE/epsilon).
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "azure2/experiment/KernelQuadrature.h"
 #include "azure2/experiment/Kernels.h"
 #include "azure2/experiment/LinearForm.h"
 
@@ -103,6 +106,56 @@ void LinearFormArithmetic() {
 }
 
 }  // namespace
+
+/// The window search of GridQuadrature against a walk over every interval: the bisection may only leave out
+/// intervals the walk's own test skips (nodes descending, some repeated; windows inside, outside, empty, NaN).
+void WindowSearch() {
+  std::printf("the window of GridQuadrature by bisection\n");
+  unsigned state = 12345u;
+  auto next = [&state]() {
+    state = state * 1664525u + 1013904223u;
+    return (state >> 8) / 16777216.0;
+  };
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  bool same = true;
+  int windows = 0;
+  for (int n : {0, 1, 2, 3, 7, 64, 501}) {
+    std::vector<double> energy;
+    double e = 2.0;
+    for (int i = 0; i < n; i++) {
+      energy.push_back(e);
+      if (next() > 0.15) e -= 0.001 + 0.01 * next();  // else: a repeated node
+    }
+    KernelNodes nodes;
+    nodes.n = n;
+    nodes.energy = energy.data();
+    for (int trial = 0; trial < 400; trial++) {
+      double lo = e - 0.05 + (2.05 - e + 0.1) * next(), hi = lo + (trial % 3 == 0 ? 0.004 : 1.0) * next();
+      if (trial % 50 == 1) hi = lo;
+      if (trial % 50 == 2) std::swap(lo, hi);
+      if (trial % 50 == 3) lo = nan;
+      if (trial % 50 == 4) hi = nan;
+      if (trial % 50 == 5 && n > 2) lo = energy[n / 2], hi = energy[n / 3];  // on nodes
+      const int first = FirstIntervalBelow(nodes, hi), end = EndIntervalAbove(nodes, lo);
+      for (int j = 1; j < n; j++) {
+        const bool walked = !(nodes.Energy(j + 1) >= hi || nodes.Energy(j) <= lo);
+        if (walked && !(j >= first && j < end)) same = false;
+      }
+      if (first < 1 || end > std::max(n, 1)) same = false;
+      windows++;
+    }
+  }
+  Check("every interval the walk integrates is inside the bisected range (" + std::to_string(windows) + " windows)", same);
+  // and the quadrature itself: a window of a few intervals of many
+  Grid g(2.0, 1.0, 4000, 1.0);
+  std::vector<double> sigma;
+  for (double x : g.energy) sigma.push_back(1.0 + 2.0 * x);  // linear: its interpolant is exact
+  auto one = [](double) { return 1.0; };
+  double num = 0.0, den = 0.0;
+  GridQuadrature<double>(g.nodes, sigma.data(), 1.49990, 1.50035, false, one, one, num, den);
+  Close("a narrow window on 4000 intervals: its width", den, 0.00045, 1e-13);
+  Close("... and the integral of 1 + 2 E", num, 0.00045 + (1.50035 * 1.50035 - 1.49990 * 1.49990), 1e-13);
+}
 
 int main() {
   LinearFormArithmetic();
@@ -341,6 +394,8 @@ int main() {
       Close(what + ": the weights give the same value", ws, vs, 1e-13);
     }
   }
+
+  WindowSearch();
 
   std::printf("%s\n", failures ? "FAILED" : "all passed");
   return failures ? 1 : 0;
