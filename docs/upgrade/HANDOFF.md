@@ -2,6 +2,37 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-27 (fold depth steps) — `feature/upgrade-fold`: the target's depth integral on its own panels, default 4
+
+On origin/dev fd61ad43 + the merge of deBoer's #28 (00b70e5c).  The PI accepted deBoer's proposal (perf/fold-depth-steps,
+5fb9b360, cherry-picked with him as author): the depth integral of a target with a beam spread or straggling runs on
+panels sigma/K wide (never ending above the next node), default K = 4, rule 1e-5 on folded values against the
+node-interval integral.  Design and numbers: `energy_grid.md` section 3.4; user guide `experimental_effects.rst` ("The
+depth integral"), `command_line.rst` (`AZURE_FOLD_DEPTH_STEPS`).
+
+**Code.** `KernelParameters::depthStepsPerSigma` (no getenv, no static), set from `Config::foldDepthSteps` in
+`TargetEffect::KernelParametersFor`; the switch `AZURE_FOLD_DEPTH_STEPS` / `--fold-depth-steps=K` (0..1000, 0 = the node
+intervals, refused otherwise, exit 2), pyazr `Session(fold_depth_steps=K)` (a `RuntimeOptions` field over the variable,
+ValueError otherwise).  Not a `<config>` key (open, as for `--refine-quadrature`).  No cache signature: nodes and EC
+amplitudes do not move.  Fix found on the way: the node-interval depth loop skipped intervals shorter than 2e-10 MeV,
+which is the cause of the `--refine-quadrature=32` jump on `tests/convolution_unify` (resonance core lattice 1.25e-10 MeV).
+
+**Tests.** `experiment_kernels` (DepthPanels, FineCore: identities, the node-interval floor, slivers, NaN sigma, scans in
+E0 and thickness; each mutation-tested), `pyazr_fold_depth_steps`, `tests/switch_options/check.sh` (variable = option,
+refusals), the consistency allow-list (check 60).  With K = 0 the 3225 files of `tools/runall.sh` (three bases) are
+byte-identical to 00b70e5c; at K = 4 17 files per basis move (shift_true_energy/models, upgrade/T2, units_scales), none
+of the 27 regression projects.
+
+**11B+α** (deBoer's private case, kept outside the repository): 00b70e5c reproduces his 9447.57473555 and 9134.91;
+K = 0 the same; K = 4 9447.57467154; gradient call 32.3 s -> 18.6 s, evaluation 3.7 s -> 0.73 s (4 threads, this
+machine); largest folded difference at K = 4 3.6e-6 (his number).
+
+**Open (for the PI and deBoer).** Points 300-6000 times below their data set's maximum (yield onsets, threshold
+tails) move by up to 1.3e-4 / 3.5e-4 relative at K = 4: the rule holds on plateau values, not on far tails, unless it is
+read relative to the data set's scale; a fit to convergence on the reduced 11B+α case is path-dependent at every K (one
+K = 4 MIGRAD run stopped at the mesh budget at a wild shift step); `GridQuadrature`'s own 1e-12 MeV guard; whether K
+becomes a `<config>` key; re-baselining of the tests whose pinned numbers moved (listed in the report, none changed).
+
 ## 2026-11-25 (agent gui-casual, second task) — `feature/upgrade-gui-casual`: old projects convert; the numeric locale
 
 On top of `258e3760`.  **Design** `docs/upgrade/project_format3.md` 8.6; timeline and table

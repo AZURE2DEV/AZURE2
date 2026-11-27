@@ -695,6 +695,100 @@ digit. The kernel itself stays quadratic in the nodes of the support (`FOR_THE_O
 The roadmap lists SUM, RATIO, natural targets and the S factor as kernel builders. They are already one table of
 expression nodes with `value` and `backward`, tested alone; re-implementing them as kernels would write them twice.
 
+### 3.4 The depth integral of the target kernel with a beam spread or straggling (2026-11-27)
+
+**What it is.** With a beam spread σ_b or straggling σ_s the target kernel is a double integral (`FoldTarget`,
+`experiment/src/KernelTarget.cpp`): over the depth, E_d from E₀ down to the back E₀ − T (or E_out), of ⟨σ⟩(E_d)/ε, where
+⟨σ⟩(E_d) is the Gaussian average of width σ_eff(E_d) = √(σ_b² + σ_s(E₀ − E_d)²) about E_d over every node of the
+shared mesh inside E_d ± 5σ_eff (`GridQuadrature`).  The outer integral is 2-point Gauss–Legendre on panels.  Until
+2026-11-27 the panels were the node intervals of the mesh, so the kernel cost (depth nodes) × (window nodes), quadratic
+in the node count: a mesh refined for a narrow resonance, shared by every data set of the nucleus, multiplied the
+depth steps of every thick target with a spread (11B+α: a gradient call 12–17 times the old engine's).
+
+**The rule** (R. J. deBoer's study, `perf/fold-depth-steps` 5fb9b360, made a setting): the panels of the depth integral
+are its own.  A panel starts at a, the previous panel's end (the first at min(E₀, top node)); it is σ_eff(a)/K wide,
+and it never ends above the next node below a: b = min(a − σ_eff(a)/K, E_next), clipped at the back of the target and at
+the last node.  The Gaussian average is smooth in E_d on the scale of σ_eff whatever the mesh resolves, so K panels per
+σ suffice; where σ_eff/K is shorter than the way to the next node (near the surface under pure straggling, σ_s → 0,
+and wherever the mesh is coarser than σ/K) the panels are the node intervals.  Every panel passes at least one node,
+so there are never more panels than node intervals; a NaN σ gives the node interval (and the depth's value the
+interpolated one, as before).  The inner average is unchanged: every node of its window.  The forward fold
+(`FoldTarget<double>`) and the gradient's weights (`FoldTarget<LinearForm>`, read by `FoldWeights`, the per-call weights
+of `KeepFoldWeights` and the shift columns, `src/PointFold.cpp`) are one template: the panels are the same by
+construction.  No cache depends on it: the mesh, the nodes and the external-capture amplitudes at them
+(`WorkingCopy::ECSignature`) do not move; only the quadrature's weights do.
+
+**The setting.** K = `Config::foldDepthSteps`, carried to the kernel in `KernelParameters::depthStepsPerSigma`
+(`TargetEffect::KernelParametersFor`): `--fold-depth-steps=K`, `AZURE_FOLD_DEPTH_STEPS` (a switch of kind numbers:
+the option over the options file over the variable) and pyazr's `Session(fold_depth_steps=K)` (over the variable), a
+whole number from 0 to 1000; anything else is refused (exit 2, `ValueError`).  **Default 4.  K = 0 is the node
+intervals, bit for bit the integral before.**  Not a `<config>` key (as `--refine-quadrature`; project_format3.md
+§3.12 leaves open whether a number-changing switch becomes one).
+
+**The tolerance** (the PI, 2026-11-27): at the default, any folded value within 10⁻⁵ (relative) of the node-interval
+depth integral on the same mesh.
+
+**Measured** (2026-11-27, `feature/upgrade-fold`, 4 threads; the largest relative difference of any folded value of
+the project, K against K = 0 on the same mesh; in brackets the largest absolute difference over the largest folded
+value of its file).
+
+| case | mesh | K = 1 | K = 2 | K = 4 | K = 8 | K = 16 |
+|---|---|---|---|---|---|---|
+| 11B+α project (4487 points, 246 free parameters) | default | 1.3e-4 | 2.5e-5 | 3.6e-6 [9.5e-9] | 5.1e-7 | 2.6e-7 |
+| same | refine 2 | — | 2.5e-5 | 3.7e-6 | 4.4e-7 | — |
+| a reduced 11B+α case (87 points) | default | 1.0e-4 | 6.6e-6 | 5.6e-7 | 2.7e-7 | 1.2e-7 |
+| same | refine 4 | 1.1e-4 | 1.1e-5 | 7.1e-7 | 4.5e-7 | 2.1e-7 |
+| `thick_target_resonance` + 0.1 keV spread + c_s 0.8 keV^1/2, 141 points 260-330 keV | default | 1.4e-4 | 1.2e-5 | 8.6e-7 | 6.8e-8 | 3.7e-8 |
+| same | refine 4 | 1.4e-4 | 1.2e-5 | 8.5e-7 | 5.6e-8 | 3.6e-9 |
+| same, 2 keV spread | default | 4.3e-4 | 3.1e-5 | 2.1e-6 | 1.3e-7 | 1.8e-8 |
+| same, Bohr straggling | default | 1.0e-4 | 8.7e-6 | 6.3e-7 | 6.5e-8 | 3.0e-8 |
+| same, infinite target (to 1 keV) | default | 1.4e-4 | 1.2e-5 | 8.6e-7 | 6.1e-8 | 3.0e-8 |
+| T3's 7Li(p,n) through its threshold, 20 keV layer, 2 keV spread | default | 7.0e-4 [2.6e-6] | 6.1e-4 [2.2e-6] | 3.5e-4 [1.1e-6] | 5.8e-6 [7.0e-7] | 3.0e-6 [3.7e-7] |
+| `beam_spread_ay` A_y + a 20 keV layer, 30 keV spread | default | 1.4e-5 | 3.2e-6 | 2.1e-7 | 1.5e-8 | 5.5e-10 |
+
+Read: the difference falls by about 14 per doubling of K on the default mesh and by 15-16 on a refined one (4th order,
+the error of 2-point Gauss-Legendre on panels of a smooth integrand), until it reaches the node-interval integral's own
+error (a few 1e-8 to 2.6e-7 at K = 16: K = 0 is not the limit).  **At K = 4 every plateau value is within 1e-5; the
+largest relative differences above 1e-5 are on points whose folded value is 300-6000 times below the largest value of
+their data set** (the onset of a thick-target yield, the first keV above a threshold): there the integrand is a far
+Gaussian tail and the relative error of the panels grows; measured against the largest value of the file they are
+1e-6 or less.  Of the projects of `tests/` run by `tools/runall.sh` (calculate with data, three bases, 1087 files per
+basis) 17 files per basis move at K = 4: `shift_true_energy/models` (fit 1.3e-4 relative at a point 300 times below the
+plateau, 4.2e-7 of the plateau; kernel_gauss 9.1e-6; identity, shifted, twins 2.8e-6), `upgrade/T2` (2.5e-7, T2_true
+1.4e-6), `units_scales/models/yield_story` (5.9e-8); none of the 27 regression projects of `tests/run_tests.sh`.  With
+K = 0 the 3225 files are identical to the engine before (byte for byte, run.log left out).
+
+Smoothness at K = 4 against K = 0 (the same scans, `thick_target_resonance` with spread and straggling; third
+differences over second differences of 21 values of the total χ²): the areal density as a fit parameter (±2 %)
+1.07e-2 at both; the stopping scale (±2 %) 1.07e-2 at both; the energy shift of `pyazr_shift_fold_smooth`'s model
+with a 0.5 keV spread and c_s 0.8 keV^1/2 added (21 shifts over 0.2 keV) 7.0e-3 at both (the test's bound is 5e-2).
+
+Cost (11B+α, 4 threads, `AZURE_GRAD_TIMING=1`, the 3-call gradient fit of deBoer's PR): node intervals 32.3 s per
+gradient call and 3.7 s per evaluation (the target-effect weights 23.1 s thread-summed per call); K = 2: 18.2 s /
+0.69 s; K = 4: 18.6 s / 0.73 s (weights 0.88 s); K = 8: 18.8 s / 0.83 s; peak memory 2.15 GB at every K.  The total χ²
+after the fit: 9447.57473555 at K = 0 (as before), 9447.57467154 at K = 4 (6.8e-9 relative).  What is left of the
+gradient call at K = 4 is the adjoint rows (12.3 s) and the shift columns (5.9 s), not the fold.
+
+Fits to convergence (MIGRAD, analytic gradient, the reduced 11B+α case, 123 free parameters) end at different points
+whatever K: 36.945 at K = 0 (26914 calls), 37.168 at K = 2, 37.252 at K = 8 (952 calls), and a restart at K = 0 from
+the K = 8 end point goes on to 37.108; at K = 4 one run stopped at a trial step whose energy shift asked the mesh planner
+for 4.9e8 nodes (`kMeshNodeBudget`).  The χ² at one vector differs by 3e-8 between K = 0, 4 and 8 and the gradient
+check (`AZURE_GRAD_CHECK`, 40 parameters) agrees as well at K = 4 as at K = 0: the scatter is the fit's (a flat valley,
+99 of 123 first steps bounded), not the panels'; an evaluation-level comparison is the one that tells.
+
+**The jump of `--refine-quadrature=32` on `tests/convolution_unify`** (deBoer: K = 32 differs from K = 16 by 5.6e-4 and
+runs 7 times faster).  The models' levels have widths of 0.2-0.6 eV; their core lattice at 50 points per width times
+32 has a pitch of 1.25e-10 MeV.  The node-interval depth loop skipped every interval with half-width below 1e-10 MeV
+(a guard meant for empty intervals): at K = 32 the whole core of the 3.5 MeV resonances dropped out of the depth
+integral, 20 of 1001 points of `tgt_straggle` came out 5.6e-4 low and the dense core no longer cost anything.  The
+panels of K = 4 were not affected (a panel passes the core whole).  Fixed (only an empty panel is skipped); a unit case
+with 2000 intervals of 1e-10 MeV in the target (`FineCore`, kernels_test.cpp) folds a constant to itself at K = 0
+and 4, and fails with the old guard.  After the fix `tgt_straggle` at K = 0: refine 32 against 16 1.0e-10 (was
+5.6e-4), 911 s against 224 s (quadratic again, was 33 s); refine 32 at K = 0 against K = 4 2.4e-11.  Every file of the
+tree at K = 0 is unchanged by the fix.  The quadrature of
+`GridQuadrature` (`KernelQuadrature.h`) keeps its own guard, half-width below 1e-12 MeV: reached at a pitch below 2e-12
+MeV, which no project has (it would need 0.2 eV at 1e5 points per width); it is listed as open.
+
 ## 4. Lab data with a fitted shift: the comparison in the frame of the data (M3 (b))
 
 ### 4.1 The rule
