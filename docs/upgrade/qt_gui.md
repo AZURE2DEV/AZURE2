@@ -218,7 +218,15 @@ actions and their state; the status bar's file, modified mark and validity, the 
 opened by an error, its double click; the start page and its recent and example entries; the options' editors made
 from the facade's rows (a value set in an editor reaches the command line); the summary after a calculation of T1
 (rows = data sets, total = the engine's); the plot's wheel zoom, pan, cursor read-out, check-box lists and the CSV
-export (rows = points of the files).
+export (rows = points of the files); the logo of the project (below).
+
+**The logo follows the project** (`AZURESetup::updateLogo`, `logoFor`; the button at the right of the tab bar, the
+window icon and the About box). Four drawings in `gui/images/` (`make_icons.py` renders the 256 px files of the
+resource): the plain logo; with the polarization arrow while a data set or an extrapolation is a polarization
+observable; seen double (`azure2_logo_multi.svg`, 2026-11-26: the logo twice, the copy behind with protons and
+neutrons exchanged and its (A) in a lighter blue) while the project holds several compound nuclei
+(`PairsModel::nuclei()`); seen double with the arrow when both hold. Checked in `gui_shell` on T1 (one nucleus, an
+analyzing power: the arrow) and on natural neon (three nuclei: seen double).
 
 
 ## 12. Forms of values: what is chosen is chosen, not typed (upgrade 7, 2026-11-19)

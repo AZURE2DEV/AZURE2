@@ -94,7 +94,7 @@ AZURESetup::AZURESetup() {
   logoButton_->setStyleSheet("QToolButton { border: none; padding: 0 0.6em; color: palette(link); font-weight: bold; }"
                              "QToolButton:hover { background: palette(midlight); border-radius: 4px; }");
   connect(logoButton_, &QToolButton::clicked, this, [this]() {
-    AboutAZURE2Dialog about(this, polarizedLogo_);
+    AboutAZURE2Dialog about(this, logo_);
     about.exec();
   });
   tabWidget->setCornerWidget(logoButton_, Qt::TopRightCorner);
@@ -668,6 +668,11 @@ void AZURESetup::updateTitle() {
   }
 }
 
+QString AZURESetup::logoFor(bool polarized, bool severalNuclei) {
+  if (severalNuclei) return polarized ? ":/azure-icon-multi-polarized.png" : ":/azure-icon-multi.png";
+  return polarized ? ":/azure-icon-polarized.png" : ":/azure-icon.png";
+}
+
 void AZURESetup::updateLogo() {
   bool polarized = false;
   for (const char *section : {"data", "extrapolations"})
@@ -675,9 +680,10 @@ void AZURESetup::updateLogo() {
       const std::string q = r.Value("quantity");
       polarized = polarized || q == "analyzing_power" || q == "ay" || q == "spin_observable";
     }
-  if (polarized == polarizedLogo_) return;
-  polarizedLogo_ = polarized;
-  const QIcon icon(polarized ? ":/azure-icon-polarized.png" : ":/azure-icon.png");
+  const QString logo = logoFor(polarized, pairsTab->getPairsModel()->nuclei().size() > 1);
+  if (logo == logo_) return;
+  logo_ = logo;
+  const QIcon icon(logo);
   logoButton_->setIcon(icon);
   setWindowIcon(icon);
   qApp->setWindowIcon(icon);
@@ -776,7 +782,7 @@ void AZURESetup::showRecord(const QString &section, const QString &record) {
 }
 
 void AZURESetup::showAbout() {
-  AboutAZURE2Dialog about(this, polarizedLogo_);
+  AboutAZURE2Dialog about(this, logo_);
   about.exec();
 }
 
