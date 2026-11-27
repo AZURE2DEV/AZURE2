@@ -2,6 +2,7 @@
 // layer yield), with the beam spread and the straggling as a Gaussian average at each depth.
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <vector>
 
@@ -43,6 +44,16 @@ double BohrStragglingSigma(const KernelParameters &p, double arealDensity, doubl
 }
 
 namespace {
+
+/// STUDY switch (perf/fold-depth-steps, not for release): AZURE_FOLD_DEPTH_STEPS=k gives the depth integral of the
+/// target kernel with a spread its own panels, k per Gaussian sigma; unset or 0: the node intervals (today).
+double DepthStepsPerSigma() {
+  static const double steps = [] {
+    const char *v = std::getenv("AZURE_FOLD_DEPTH_STEPS");
+    return v ? std::atof(v) : 0.0;
+  }();
+  return steps;
+}
 
 /*!
  * Target integration:  Y(E0) = (1/N) int_{E0-T}^{E0} <sigma>(E_d) / epsilon(E_d) dE_d  over the depth, where
@@ -127,20 +138,23 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
     GridQuadrature<V>(nodes, values, lo, eHigh, true, one, one, outer, unused);
   } else {
     const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
-    for (int i = 1; i < numPoints; i++) {
-      double Ea = nodes.Energy(i), Eb = nodes.Energy(i + 1);
-      if (Eb >= surface || Ea <= back) continue;
-      double a = std::min(Ea, surface), b = std::max(Eb, back);
+    // the Gaussian's width at a depth: the beam spread and the straggling down to it
+    auto sigmaAt = [&](double eDepth) {
+      double beam = p.gaussian ? p.sigma(eDepth, point.cmFactor) : 0.0;
+      if (!(beam > 0.)) beam = 0.0;
+      double straggle = p.BohrStraggling()
+                            ? BohrStragglingSigma(p, arealTo(eDepth) - arealTo(surface), point.cmFactor, point.z1, point.z2)
+                            : StragglingSigma(p, surface - eDepth);
+      return std::sqrt(beam * beam + straggle * straggle);
+    };
+    // one panel [b, a] of the depth integral: 2-point Gauss-Legendre, the Gaussian average over every node of its
+    // window at each of the two depths
+    auto panel = [&](double a, double b) {
       double mid = 0.5 * (a + b), half = 0.5 * (a - b);
-      if (half < 1.0e-10) continue;
+      if (half < 1.0e-10) return;
       for (int gp = 0; gp < 2; gp++) {
         double eDepth = mid + half * (gp == 0 ? x1 : x2);
-        double beam = p.gaussian ? p.sigma(eDepth, point.cmFactor) : 0.0;
-        if (!(beam > 0.)) beam = 0.0;
-        double straggle = p.BohrStraggling()
-                              ? BohrStragglingSigma(p, arealTo(eDepth) - arealTo(surface), point.cmFactor, point.z1, point.z2)
-                              : StragglingSigma(p, surface - eDepth);
-        double sigmaEff = std::sqrt(beam * beam + straggle * straggle);
+        double sigmaEff = sigmaAt(eDepth);
         V inner = 0.0;
         if (sigmaEff > 1.0e-10) {
           double den = 0.0;
@@ -159,6 +173,32 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
           inner = yieldAt(eDepth);
         }
         outer += half * inner;
+      }
+    };
+    const double depthSteps = DepthStepsPerSigma();
+    if (!(depthSteps > 0.0)) {
+      // the depth integral on the node intervals inside the target
+      for (int i = 1; i < numPoints; i++) {
+        double Ea = nodes.Energy(i), Eb = nodes.Energy(i + 1);
+        if (Eb >= surface || Ea <= back) continue;
+        panel(std::min(Ea, surface), std::max(Eb, back));
+      }
+    } else {
+      // STUDY (perf/fold-depth-steps): the depth integral on its own panels.  The Gaussian average is smooth in the
+      // depth on the scale of its width, whatever the nodes resolve, so a panel is sigma / depthSteps wide (sigma at
+      // the panel's top), and never narrower than the node interval it starts in: where the Gaussian is narrower
+      // than the nodes (the first depths under pure straggling) the panels are the node intervals, as above.
+      const double top = std::min(surface, nodes.Energy(1)), bottom = std::max(back, nodes.Energy(numPoints));
+      double a = top;
+      int i = FirstIntervalBelow(nodes, a);
+      while (a > bottom && i < numPoints) {
+        const double node = nodes.Energy(i + 1), h = sigmaAt(a) / depthSteps;
+        double b = a - h;
+        if (!(h > 0.0) || b > node) b = node;
+        if (b < bottom) b = bottom;
+        panel(a, b);
+        a = b;
+        while (i < numPoints && nodes.Energy(i + 1) >= a) i++;
       }
     }
   }
