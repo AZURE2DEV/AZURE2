@@ -69,14 +69,12 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
   auto one = [](double) { return 1.0; };
   // sigma(E) / (epsilon(E) 1e24) interpolated at one energy, for a depth node with no spread to average over
   auto yieldAt = [&](double e) {
-    for (int j = 1; j < numPoints; j++) {
+    if (const int j = BracketingInterval(nodes, e)) {
       double Ea = nodes.Energy(j), Eb = nodes.Energy(j + 1);
-      if (e <= Ea && e >= Eb) {
-        double frac = (Ea - e) / (Ea - Eb);
-        V sigma = (1.0 - frac) * values[j - 1] + frac * values[j];
-        double stopping = (1.0 - frac) * nodes.Stopping(j) + frac * nodes.Stopping(j + 1);
-        return (1.0 / stopping / 1.0e24) * sigma;
-      }
+      double frac = (Ea - e) / (Ea - Eb);
+      V sigma = (1.0 - frac) * values[j - 1] + frac * values[j];
+      double stopping = (1.0 - frac) * nodes.Stopping(j) + frac * nodes.Stopping(j + 1);
+      return (1.0 / stopping / 1.0e24) * sigma;
     }
     return V(0.0);
   };
@@ -95,14 +93,12 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
   }
   auto arealTo = [&](double e) {
     if (arealCum.empty() || e >= nodes.Energy(1)) return 0.0;
-    for (int j = 1; j < numPoints; j++) {
+    if (const int j = BracketingInterval(nodes, e)) {
       double Ea = nodes.Energy(j), Eb = nodes.Energy(j + 1);
-      if (e <= Ea && e >= Eb) {
-        double frac = (Ea - e) / (Ea - Eb);
-        double ia = invEps(nodes.Stopping(j)), ib = invEps(nodes.Stopping(j + 1));
-        double ie = (1.0 - frac) * ia + frac * ib;
-        return arealCum[j] + 0.5 * (ia + ie) * (Ea - e);
-      }
+      double frac = (Ea - e) / (Ea - Eb);
+      double ia = invEps(nodes.Stopping(j)), ib = invEps(nodes.Stopping(j + 1));
+      double ie = (1.0 - frac) * ia + frac * ib;
+      return arealCum[j] + 0.5 * (ia + ie) * (Ea - e);
     }
     return arealCum[numPoints];
   };

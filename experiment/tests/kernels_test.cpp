@@ -117,7 +117,7 @@ void WindowSearch() {
     return (state >> 8) / 16777216.0;
   };
   const double nan = std::numeric_limits<double>::quiet_NaN();
-  bool same = true;
+  bool same = true, bracket = true;
   int windows = 0;
   for (int n : {0, 1, 2, 3, 7, 64, 501}) {
     std::vector<double> energy;
@@ -136,6 +136,12 @@ void WindowSearch() {
       if (trial % 50 == 3) lo = nan;
       if (trial % 50 == 4) hi = nan;
       if (trial % 50 == 5 && n > 2) lo = energy[n / 2], hi = energy[n / 3];  // on nodes
+      // the interval that brackets an energy: the first the walk finds
+      const double at = trial % 50 == 6 && n > 0 ? energy[(std::size_t)(next() * n) % n] : trial % 50 == 7 ? nan : lo;
+      int walkedTo = 0;
+      for (int j = 1; j < n && !walkedTo; j++)
+        if (at <= nodes.Energy(j) && at >= nodes.Energy(j + 1)) walkedTo = j;
+      if (BracketingInterval(nodes, at) != walkedTo) bracket = false;
       const int first = FirstIntervalBelow(nodes, hi), end = EndIntervalAbove(nodes, lo);
       for (int j = 1; j < n; j++) {
         const bool walked = !(nodes.Energy(j + 1) >= hi || nodes.Energy(j) <= lo);
@@ -146,6 +152,7 @@ void WindowSearch() {
     }
   }
   Check("every interval the walk integrates is inside the bisected range (" + std::to_string(windows) + " windows)", same);
+  Check("the interval that brackets an energy is the first a walk finds (on nodes, repeated nodes, outside, NaN)", bracket);
   // and the quadrature itself: a window of a few intervals of many
   Grid g(2.0, 1.0, 4000, 1.0);
   std::vector<double> sigma;

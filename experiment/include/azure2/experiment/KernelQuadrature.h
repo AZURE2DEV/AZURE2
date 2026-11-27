@@ -39,6 +39,20 @@ inline int EndIntervalAbove(const KernelNodes &nodes, double lo) {
   return a;
 }
 
+/// The first interval j in [1, n) whose two nodes bracket `e` (Energy(j) >= e >= Energy(j + 1)), 0 if `e` lies
+/// outside the nodes (or is NaN): what a walk from node 1 finds first, by bisection on the descending energies.
+inline int BracketingInterval(const KernelNodes &nodes, double e) {
+  int a = 1, b = nodes.n;
+  while (a < b) {
+    const int m = a + (b - a) / 2;
+    if (nodes.Energy(m + 1) <= e)
+      b = m;
+    else
+      a = m + 1;
+  }
+  return (a < nodes.n && e <= nodes.Energy(a) && e >= nodes.Energy(a + 1)) ? a : 0;
+}
+
 /*!
  * 2-point Gauss-Legendre over the nodes (energies descending from node 1), restricted to the c.m. window [lo, hi]:
  * the node values (values[j - 1]) and, for a yield, the stopping are interpolated linearly between the two nodes that
@@ -79,12 +93,10 @@ void GridQuadrature(const KernelNodes &nodes, const V *values, double lo, double
 /// The node values interpolated linearly at energy e inside the nodes' span; 0 outside it.
 template <class V>
 V InterpolateNodes(const KernelNodes &nodes, const V *values, double e) {
-  for (int j = 1; j < nodes.n; j++) {
+  if (const int j = BracketingInterval(nodes, e)) {
     double Ea = nodes.Energy(j), Eb = nodes.Energy(j + 1);
-    if (e <= Ea && e >= Eb) {
-      double frac = (Ea - e) / (Ea - Eb);
-      return (1.0 - frac) * values[j - 1] + frac * values[j];
-    }
+    double frac = (Ea - e) / (Ea - Eb);
+    return (1.0 - frac) * values[j - 1] + frac * values[j];
   }
   return V(0.0);
 }
