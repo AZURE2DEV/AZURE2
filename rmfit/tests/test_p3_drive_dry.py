@@ -48,7 +48,8 @@ def make_dir(tmp):
             "structure": {"broad_first_kev": 10.0, "narrow_phase": True, "levelscan_per_cycle": 1, "levelscan_top": 2,
                           "levelscan_gamma_kev": None, "local_release_mev": 0.0, "local_nfev": 20, "recall_levels": 2, "recall_min_pass": 0.5,
                           # the pre-2026-11-24 loop order and add rules (test_drive_add_first.py tests the new defaults)
-                          "add_first": False, "retest_at_cap": False, "split_retest_tau": 0.0},
+                          "add_first": False, "retest_at_cap": False, "split_retest_tau": 0.0,
+                          "broad_retest_gamma_kev": 0.0},
             "standing_decisions": [{"date": "2026-11-08", "who": "test", "text": "fixture"}]}
     json.dump(spec, open(os.path.join(tmp, "spec.json"), "w"), indent=1)
     return base

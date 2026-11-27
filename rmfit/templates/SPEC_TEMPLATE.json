@@ -143,7 +143,10 @@
    2.0
   ],
   "retest_at_cap": true,
-  "split_retest_tau": 10.0
+  "split_retest_tau": 10.0,
+  "broad_retest_gamma_kev": 1000.0,
+  "broad_retest_window_mev": 1.0,
+  "broad_retest_pair": null
  },
  "standing_decisions": [
   {

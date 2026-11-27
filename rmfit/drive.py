@@ -71,12 +71,23 @@ DEFAULT_STRUCTURE = dict(seed_omitted=True, broad_first_kev=10.0, narrow_phase=T
                          # rejected only for amplitudes at the theta^2 cap is re-tested once with those channels closed;
                          # split_retest_tau: an add rejected as "splits" with a gain >= this x tau is re-tested once with the
                          # partner inside the local release, then queued as a non-blocking decision (0 = off)
-                         add_first=True, norm_range_first=[0.5, 2.0], retest_at_cap=True, split_retest_tau=10.0)
-# the 2026-11-24 defaults apply to drives whose state file was created after them (DEFAULTS_REV 2); an older drive keeps the
-# previous behaviour unless its spec sets the keys (no method change in the middle of someone else's run)
-DEFAULTS_REV = 2
+                         add_first=True, norm_range_first=[0.5, 2.0], retest_at_cap=True, split_retest_tau=10.0,
+                         # 2026-11-26 (the evaluator "yes" to method change 5, ladder diagnostics G/H): a broad-queue add whose test
+                         # ends marginal / collapse / relocated is re-tested once with ONE broad seed (the level's lowest wave in
+                         # its lowest pair, physical width broad_retest_gamma_kev; the other channels seeded tiny) and the
+                         # energy free within +-broad_retest_window_mev (policy.e_window is 0.3).  Rung 3: the default tiny
+                         # seed never produced the deleted broad 5-/4+/0+; 1 MeV seeds with a 1 MeV window found all three
+                         # (H3, 1.07M -> 160k).  broad_retest_pair None = the lowest pair among the level's channels.
+                         # 0 = off.
+                         broad_retest_gamma_kev=1000.0, broad_retest_window_mev=1.0, broad_retest_pair=None)
+# defaults of a later revision apply to drives whose state file was created after them; an older drive keeps the previous
+# behaviour unless its spec sets the keys (no method change in the middle of someone else's run).  Rev 2 = 2026-11-24
+# (add-first, norm box, re-tests at the cap / large splits), rev 3 = 2026-11-26 (broad re-test).
+DEFAULTS_REV = 3
 OFF_BEFORE_REV2 = dict(structure=dict(add_first=False, norm_range_first=None, retest_at_cap=False, split_retest_tau=0.0),
                        stop=dict(marginal_rule_from_cycle=1))
+OFF_BEFORE_REV3 = dict(structure=dict(broad_retest_gamma_kev=0.0), stop=dict())
+OFF_BEFORE = {2: OFF_BEFORE_REV2, 3: OFF_BEFORE_REV3}
 DEFAULT_STOP = dict(polish_gain_rel_min=5e-4, sign_rounds_without_accept=2, level_adds_marginal_in_a_row=2,
                     cycle_gain_rel_min=1e-3, population_gain_rel_min=1e-3, dataset_off_extra_pct=5.0, reproduce_rtol=1e-3,
                     # sign rounds only after the polish converged (skill section 3, step 1 "when done" before step 2): a flip
@@ -140,14 +151,16 @@ class Driver:
         self.structure = dict(DEFAULT_STRUCTURE, **spec_structure)
         self.state_path = os.path.join(self.dir, STATE_FILE)
         self.state = self._load_state()
-        if int(self.state.get("defaults_rev", 1)) < DEFAULTS_REV:
-            spec_stop = self.spec.get("stop_rules") or {}
-            for k, v in OFF_BEFORE_REV2["structure"].items():
-                if k not in spec_structure:
-                    self.structure[k] = v
-            for k, v in OFF_BEFORE_REV2["stop"].items():
-                if k not in spec_stop:
-                    self.stop[k] = v
+        rev = int(self.state.get("defaults_rev", 1))
+        spec_stop = self.spec.get("stop_rules") or {}
+        for r in sorted(OFF_BEFORE):
+            if rev < r:
+                for k, v in OFF_BEFORE[r]["structure"].items():
+                    if k not in spec_structure:
+                        self.structure[k] = v
+                for k, v in OFF_BEFORE[r]["stop"].items():
+                    if k not in spec_stop:
+                        self.stop[k] = v
         if base:
             base = os.path.abspath(base)
             if self.state.get("base") and os.path.abspath(self.state["base"]) != base:
@@ -1309,7 +1322,7 @@ class Driver:
             self.log("  level adds untrusted after RECALL: an accept is recorded as accept-pending (decision)")
         is_broad = not self._is_narrow(spec)
         st = self._level_add(c, cand, jpis)
-        st = self._retest(c, cand, jpis, st)
+        st = self._retest(c, cand, jpis, st, broad=is_broad)
         self.state["tested_candidates"].append(i)
         self.counters["level_tests"] = ntests + 1
         out = st.get("outcome", "?")
@@ -1346,7 +1359,76 @@ class Driver:
                                # names no channels (structure.seed_omitted, default True since 2026-11-22)
                                seed_omitted=bool(self.structure.get("seed_omitted", True)) if seed_omitted is None else bool(seed_omitted))
 
-    def _retest(self, c, cand, jpis, st):
+    def _retest(self, c, cand, jpis, st, broad=True):
+        """The re-tests of a rejected add: _retest_rejected (theta^2 cap, large split), then, for a broad-queue candidate,
+        _retest_broad (structure.broad_retest_gamma_kev)."""
+        st = self._retest_rejected(c, cand, jpis, st)
+        return self._retest_broad(c, cand, jpis, st) if broad else st
+
+    BROAD_RETEST_OUTCOMES = ("marginal", "collapse", "relocated")
+
+    def _retest_broad(self, c, cand, jpis, st):
+        """structure.broad_retest_gamma_kev (2026-11-26, approved method change; benchmark diagnostics): a
+        broad-queue add that ends marginal / collapse / relocated is tried once more as a BROAD level: one channel, the
+        lowest wave of the lowest pair among the level's channels (structure.broad_retest_pair overrides the pair), seeded
+        at physical width broad_retest_gamma_kev, the group's other open channels seeded tiny (seed_omitted), and the
+        policy's energy window widened to structure.broad_retest_window_mev for this test only.  An ENSDF candidate sits at
+        a narrow level's energy with a tiny seed, so a broad, background-like level there is never tried: rung 3's deleted
+        5- 14.56 (667 keV), 4+ 14.58 (217 keV) and 0+ 13.47 (2.48 MeV) came back only with 1 MeV seeds and a 1 MeV window
+        (H3; with the 0.3 MeV window the 0+ ended "relocated" at 14.032 - 0.300).  Not re-tested: an outcome outside
+        BROAD_RETEST_OUTCOMES, a first test that already gave a level of >= 30 % of the seed width (the same test again),
+        a result without the level's channels."""
+        gam = float(self.structure.get("broad_retest_gamma_kev") or 0.0)
+        out = st.get("outcome")
+        if gam <= 0 or out not in self.BROAD_RETEST_OUTCOMES:
+            return st
+        lg = st.get("level_gamma_ev")
+        if _isnum(lg) and float(lg) >= 0.3 * gam * 1e3:
+            self.log(f"  no broad re-test: the {out} level was already {float(lg) / 1e3:.0f} keV wide")
+            return st
+        th = st.get("theta2") or {}
+        if isinstance(th, str):
+            try:
+                th = json.loads(th)
+            except ValueError:
+                th = {}
+        chans = []
+        for k in th:
+            m = re.match(r"g\[\S+ p(\d+) L(\d+) S([-0-9.]+)\]", k)
+            if m:
+                chans.append((int(m.group(1)), int(m.group(2)), float(m.group(3))))
+        want = self.structure.get("broad_retest_pair")
+        if want is not None:
+            chans = [q for q in chans if q[0] == int(want)]
+        if not chans:
+            self.log(f"  no broad re-test of {st.get('jpi', cand.jpi)} @ {cand.energy}: the {out} result names none of the level's channels"
+                     + (f" in pair {want}" if want is not None else ""))
+            return st
+        pair = min(q[0] for q in chans)
+        L, S = min((q[1], q[2]) for q in chans if q[0] == pair)
+        win = max(float(self.structure.get("broad_retest_window_mev") or 0.0), float(getattr(c.policy, "e_window", 0.0) or 0.0))
+        why = (f"{out} with the default seed: re-tested broad (p{pair} L{L} S{S:g} at {gam:g} keV, energy window "
+               f"+-{1000 * win:.0f} keV)")
+        self.log(f"  re-test (structure.broad_retest_gamma_kev): {st.get('jpi', cand.jpi)} @ {cand.energy} was {out} "
+                 f"(delta {float(st.get('delta') or 0):+.1f}); again as one broad level, p{pair} L{L} S{S:g} at {gam:g} keV, "
+                 f"energy free within +-{1000 * win:.0f} keV")
+        cand2 = dataclasses.replace(cand, channels=[dict(pair=pair, L=L, S=S, gamma=gam * 1e3)],
+                                    note=(cand.note + f" [{why}]").strip())
+        pol = c.policy
+        if hasattr(pol, "e_window") and win > float(pol.e_window):
+            c.policy = dataclasses.replace(pol, e_window=win)
+        try:
+            st2 = self._level_add(c, cand2, [st.get("jpi") or cand.jpi], seed_omitted=True)
+        finally:
+            c.policy = pol
+        st2["retest_of"] = ((st.get("retest_of") + "; ") if st.get("retest_of") else "") + why
+        self.note(f"re-test of {st.get('jpi', cand.jpi)} @ {cand.energy}: {why} -> {st2.get('outcome')} "
+                  f"(delta {float(st2.get('delta') or 0):+.1f}"
+                  + (f", E {float(st2['energy_fit']):.4f}" if _isnum(st2.get("energy_fit")) else "")
+                  + (f", Gamma {float(st2['level_gamma_ev']) / 1e3:.0f} keV" if _isnum(st2.get("level_gamma_ev")) else "") + ")")
+        return st2
+
+    def _retest_rejected(self, c, cand, jpis, st):
         """One re-test of an add the criteria rejected for a reason that is not about the level (2026-11-24, benchmark
         diagnostics; the evaluator approved the method proposal):
           * "unphysical" only because amplitudes of the new level sit AT the theta^2 cap (structure.retest_at_cap): the same
@@ -1682,7 +1764,7 @@ PLAN_TEXT = {
     "POPULATION": "restarts_per_cycle sign-perturbed restarts polished to convergence + crossover_passes between them (basin crossing); gain < population_gain_rel_min -> off until a structure change",
     "SHIFTS_FREE": "polish --shifts-free if pre_authorized.shifts_free",
     "LEVELSCAN": "when the broad candidate queue is empty: residual-run clusters -> template screen of every J^pi -> candidates appended (structure.levelscan_per_cycle)",
-    "STRUCTURE_ADD": "level add per candidates.json entry, broad first (structure.broad_first_kev), narrow alignment after the broad queue + scan; hypothesis required; adoption per pre_authorized.adopt_level; one re-test of an add unphysical only at the theta^2 cap (structure.retest_at_cap) or a large split (structure.split_retest_tau); marginal results end the broad queue from stop_rules.marginal_rule_from_cycle on",
+    "STRUCTURE_ADD": "level add per candidates.json entry, broad first (structure.broad_first_kev), narrow alignment after the broad queue + scan; hypothesis required; adoption per pre_authorized.adopt_level; one re-test of an add unphysical only at the theta^2 cap (structure.retest_at_cap) or a large split (structure.split_retest_tau); a broad-queue add ending marginal/collapse/relocated is re-tested once as one broad level (structure.broad_retest_gamma_kev, window broad_retest_window_mev); marginal results end the broad queue from stop_rules.marginal_rule_from_cycle on",
     "PRUNE": "backward elimination over the levels this run adopted only (structure.prune_own); the cheapest REMOVE verdict adopted, repeated on the new structure",
     "SIGN_POST": "sign rounds again if a structure was adopted",
     "DATASET_OFF": "Botek test on the worst chi2/N sets (budget dataset_off_max); large extra recovery -> decision (keep)",

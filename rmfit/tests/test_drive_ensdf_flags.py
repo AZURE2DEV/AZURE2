@@ -18,10 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 sys.path.insert(0, HERE)
 os.environ.pop("JOB_ID", None)
-from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
-if _PYAZR3:
-    print("SKIP: a pyazr 2 test; this process runs pyazr 3")
-    sys.exit(77)
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402  (shared by both backends since 2026-11-26)
 
 FAILS = []
 HL = 6.582119569e-19 * 0.6931471805599453        # hbar ln 2, keV s
@@ -43,7 +40,10 @@ class Lv:
 
 def main():
     import pyazr
-    import test_drive_dry as tdd
+    if _PYAZR3:
+        import test_p3_drive_dry as tdd
+    else:
+        import test_drive_dry as tdd
     from rmfit import drive as dv
     from rmfit import review as rv
     from rmfit.spec import Finding

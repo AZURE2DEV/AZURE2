@@ -27,7 +27,7 @@ from .model import single_variant, base_segments, rows_in_segment
 from .search import SearchConfig, sign_round, crossover_round, tau_flip
 from .structure import LevelCandidate, add_level_variant, scan_jpi_on_window, classify, JPI_GROUPS, resolve_jpis  # noqa: F401
 from . import enginepin
-from .backend import PYAZR3
+from .backend import PYAZR3, ENGINE_FLAG_KEYS
 from .spec import FitSpec
 from .decisions import DecisionQueue
 
@@ -322,7 +322,7 @@ class Campaign:
                 except ValueError:
                     pass
         sav_levels = {int(k.split("_")[1]) for k in vals if k.startswith("energy_")}
-        kw = {k: v for k, v in dict(flags or {}).items() if k in ("use_brune", "use_park", "ignore_externals", "use_long_wavelength")}
+        kw = {k: v for k, v in dict(flags or {}).items() if k in ENGINE_FLAG_KEYS}
         with azure2(base_azr, data_mode=True, **kw) as m:
             model_levels = {int(p.name.split("_")[1]) for p in m.parameters if p.name.startswith("energy_")}
             if sav_levels and max(sav_levels) != max(model_levels | {0}):
@@ -377,7 +377,7 @@ class Campaign:
         base_azr = os.path.abspath(base_azr); sav = os.path.abspath(sav)
         _, vals = read_parameter_file(sav)
         sav_levels = {int(k.split("_")[1]) for k in vals if k.startswith("energy_")}
-        kw = {k: v for k, v in dict(flags or {}).items() if k in ("use_brune", "use_park", "ignore_externals", "use_long_wavelength")}
+        kw = {k: v for k, v in dict(flags or {}).items() if k in ENGINE_FLAG_KEYS}
         # two sessions of one project: as written, and with the file taken as the program takes it (every value
         # of the file, the fixed ones included: Session(file, parameter_file=))
         with Session(base_azr, **kw) as m, Session(base_azr, parameter_file=sav, **kw) as ms:
@@ -649,7 +649,7 @@ class Campaign:
             for j, k in enumerate(ev.keys):
                 if k.kind == "width" and j in gW and gW[j] > 0:
                     e_seed = ev.level_energy.get(k.level, 0.0)
-                    cap = policy.cap_for(e_seed)
+                    cap = policy.channel_cap(k, policy.cap_for(e_seed))
                     excess = max(excess, (xs[j] / gW[j]) ** 2 / cap)
             n = int(np.ceil(np.log(excess) / np.log(tighten_factor))) if excess > 1 else 0
             scales = [s for s in (excess / tighten_factor ** i for i in range(1, n + 1)) if s > 1.0] + [1.0]
@@ -1232,19 +1232,21 @@ class Campaign:
         Never use on a model whose numbers will be reported.  Returns the
         number of data sets changed."""
         import pyazr
+        from .azr3 import unvalidated
         project = pyazr.Project.open(os.path.abspath(azr_path))
         n = 0
-        for name, rec in list(project.records().items()):
-            if rec.record_kind != "dataset" or str(rec.get("active", "yes")) == "no":
-                continue
-            q = rec.get("quadrature")
-            if not q:
-                continue
-            words = str(q).split()
-            parts = dict(zip(words[::2], words[1::2]))
-            parts["width_multiplier"], parts["per_width"] = f"{mult:g}", f"{ppw:g}"
-            project.set(name, quadrature=" ".join(f"{k} {v}" for k, v in parts.items()))
-            n += 1
+        with unvalidated(project):   # one structure check per edit, no full validation (rmfit.azr3.unvalidated)
+            for name, rec in list(project.records().items()):
+                if rec.record_kind != "dataset" or str(rec.get("active", "yes")) == "no":
+                    continue
+                q = rec.get("quadrature")
+                if not q:
+                    continue
+                words = str(q).split()
+                parts = dict(zip(words[::2], words[1::2]))
+                parts["width_multiplier"], parts["per_width"] = f"{mult:g}", f"{ppw:g}"
+                project.set(name, quadrature=" ".join(f"{k} {v}" for k, v in parts.items()))
+                n += 1
         if n:
             project.save()
         return n

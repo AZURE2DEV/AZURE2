@@ -13,10 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))
 sys.path.insert(0, HERE)
 os.environ.setdefault("OMP_NUM_THREADS", "1")
-from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402
-if _PYAZR3:
-    print("SKIP: a pyazr 2 test; this process runs pyazr 3")
-    sys.exit(77)
+from rmfit.backend import PYAZR3 as _PYAZR3  # noqa: E402  (shared by both backends since 2026-11-26)
 from _fixtures import fixture  # noqa: E402
 from rmfit.campaign import Campaign
 from rmfit.engine import SingleSession

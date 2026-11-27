@@ -231,6 +231,19 @@ behind the previous one; on Slurm `sbatch --export=ALL,RMFIT_CMD="..." run_crc_r
 below use qsub; read sbatch on a Slurm site. Every step ends by rewriting `STATUS.md` and appending to the
 readme; read both before the next step.
 
+**Step 0, before any polish: structure first whenever the data reach a new channel or energy range** (the evaluator,
+2026-11-25: a fit makes little sense while there are large gaps in the needed level structure, unless it only polishes
+an isolated energy range; run the level search first).  A level set built from one entrance channel has only the levels
+that channel populates; a newly entered channel sees levels whose widths in the old channels are too small for the old
+data to need them.  So, BEFORE polishing a merged model: (a) list the known levels of the compound nucleus in the new
+data's Ex window (`pyazr.nds.fetch_levels`, ENSDF/TUNL, the new data's own papers) against the model's levels, and seed
+the missing ones (`candidates.json`, step 4) with the new channel's literature widths; (b) band-map the new data's
+residuals (section 3c, step 1) and run `levelscan` / `structure add` on them -- the new data alone first (old segments
+off, old channels' widths frozen), then merge.  Polishing first does not work: several polishes of a merged model with
+the levels missing did not find them.  Symptoms of missing levels, not of a data conflict: broad poles averaging over
+narrow peaks, new-channel widths at the theta^2 cap, norms at the `norm_range` floor, long residual runs at every angle.
+Also read the new data's papers for the reaction mechanism (a direct part near threshold has no compound level to find).
+
 | step | command | purpose | when done |
 |---|---|---|---|
 | 1 | `polish --nfev 150 --tighten` | walk amplitudes beyond the theta^2 caps into the box (x10 stages), then converge | all theta^2 inside the caps; gain < 0.05% per stage |
