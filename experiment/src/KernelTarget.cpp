@@ -140,7 +140,9 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
     // window at each of the two depths
     auto panel = [&](double a, double b) {
       double mid = 0.5 * (a + b), half = 0.5 * (a - b);
-      if (half < 1.0e-10) return;
+      // Only an empty panel is skipped: a node interval of a resonance's core lattice can be shorter than any fixed
+      // threshold (0.2 eV / 1600 points per width = 1.25e-10 MeV at --refine-quadrature=32), and its content counts.
+      if (!(half > 0.0)) return;
       for (int gp = 0; gp < 2; gp++) {
         double eDepth = mid + half * (gp == 0 ? x1 : x2);
         double sigmaEff = sigmaAt(eDepth);
@@ -187,9 +189,7 @@ V FoldTarget(const KernelParameters &p, const KernelPoint &point, const KernelNo
         const double node = nodes.Energy(i + 1), h = sigmaAt(a) / depthSteps;
         double b = a - h;
         if (!(h > 0.0) || b > node) b = node;
-        // No sliver above the back: a remainder the panel would skip (shorter than 2e-10 MeV, below) is joined to
-        // this panel, so that the panels tile [back, top] whole (a constant folds to itself).
-        if (b < bottom + 2.0e-10) b = bottom;
+        if (b < bottom) b = bottom;
         panel(a, b);
         a = b;
         while (i < numPoints && nodes.Energy(i + 1) >= a) i++;

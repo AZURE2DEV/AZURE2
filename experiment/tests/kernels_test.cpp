@@ -355,6 +355,44 @@ void DepthPanels() {
   p.depthStepsPerSigma = 0;
 }
 
+
+/// A resonance's core lattice finer than 2e-10 MeV inside the target (tests/convolution_unify/models/tgt_straggle at
+/// --refine-quadrature=32: 0.2 eV / 1600 points per width = 1.25e-10 MeV): every node interval counts in the depth
+/// integral.  Before, a depth interval with half-width below 1e-10 MeV was skipped: the core dropped out of the
+/// node-interval integral (K = 0), 5.6e-4 off at the points whose target covers the resonance, 7 times faster.
+void FineCore() {
+  std::printf("target: a core lattice finer than 2e-10 MeV in the depth integral\n");
+  const Kernel &k = *KernelNamed("target");
+  const double eps = 1e-20;
+  KernelParameters p;
+  p.straggling = true;
+  p.stragglingCoefficient = 0.04;  // c.m. keV^1/2, as tgt_straggle
+  KernelPoint point;
+  point.energy = 1.0;
+  point.cmFactor = 1.0 / 1.2;
+  point.density = 2e18;
+  point.targetThickness = eps * point.density;  // 0.02 MeV
+  // 0.25 keV nodes from 1.01 down to 0.97, and 2000 extra intervals of 1e-10 MeV (0.2 eV) at 0.99
+  std::vector<double> energy, stopping;
+  for (int i = 0; i <= 160; i++) {
+    const double e = 1.01 - 0.00025 * i;
+    energy.push_back(e);
+    if (std::fabs(e - 0.99) < 1e-12)
+      for (int j = 1; j <= 2000; j++) energy.push_back(0.99 - 1.0e-10 * j);
+  }
+  stopping.assign(energy.size(), eps);
+  KernelNodes nodes;
+  nodes.n = static_cast<int>(energy.size());
+  nodes.energy = energy.data();
+  nodes.stopping = stopping.data();
+  const std::vector<double> constant(energy.size(), 3.0);
+  for (int steps : {0, 4}) {
+    p.depthStepsPerSigma = steps;
+    Close("K = " + std::to_string(steps) + ": a constant folds to itself across the 1e-10 MeV intervals",
+          k.fold(p, point, nodes, constant.data()), 3.0, 1e-12);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -597,6 +635,7 @@ int main() {
 
   WindowSearch();
   DepthPanels();
+  FineCore();
 
   std::printf("%s\n", failures ? "FAILED" : "all passed");
   return failures ? 1 : 0;
