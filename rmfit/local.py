@@ -87,6 +87,16 @@ class BoundsPolicy:
                                           # +-0.5 keV theta2_cap_windows entry at the candidate's seed energy, kept in the
                                           # campaign policy when the level is accepted (the evaluator 2026-09-27: "increase the cap
                                           # for the narrow resonances to 3")
+    theta2_cap_jpi_pairs: list = field(default_factory=list)   # [[jpi, [pair keys], cap], ...]: theta^2 cap for the channels
+                                          # of those file pair keys in every level of that J^pi, on top of (the min with) the
+                                          # energy caps above (e.g. theta2 at 1 for one J^pi's closed / inelastic
+                                          # channels, the elastic channel exempt, to remove a
+                                          # spurious collective pole).  Applied in default_bounds, sanity and the tighten
+                                          # stages; not in level adds / rediscovery / levelscan / uq bounds (energy caps only)
+    pole_guard: Optional[dict] = None     # {e_min, e_max, step, gamma_max, near, near_factor, jpi} (MeV): polish rejects
+                                          # every trial step with more SPURIOUS narrow poles (Gamma < gamma_max, on no level
+                                          # of their J^pi) than its start (rmfit.poleguard; pyazr 3).  2026-11-27
+                                          # (the evaluator's choice): the collective 7/2+ pole a cap or a level removal only moved
     narrow_window: Optional[dict] = None   # {gamma_kev, factor, min_kev}: a level whose total width is below
                                            # gamma_kev keeps its energy within +-max(min_kev, factor*Gamma) instead of e_window
 
@@ -119,6 +129,13 @@ class BoundsPolicy:
             if float(w[0]) <= e_level <= float(w[1]) and (len(w) < 4 or w[3] is None or int(w[3]) == int(pair)):
                 return float(w[2])
         return None
+
+    def channel_cap(self, key, cap: float) -> float:
+        """``cap`` lowered by the first theta2_cap_jpi_pairs rule matching the key's J^pi and file pair key."""
+        for r in self.theta2_cap_jpi_pairs or []:
+            if key.jpi == r[0] and key.pair is not None and int(key.pair) in [int(q) for q in r[1]]:
+                return min(cap, float(r[2]))
+        return cap
 
     def cap_for(self, e_level: float) -> float:
         """theta^2 cap for a level at excitation energy e_level (MeV): an energy window's cap if one matches, else the
@@ -388,7 +405,7 @@ def default_bounds(ev: Evaluator, x_ref, policy: BoundsPolicy = BoundsPolicy(),
     for j, k in enumerate(ev.keys):
         if k.kind == "width":
             e_seed = ev.level_energy.get(k.level, 0.0)
-            cap = policy.cap_for(e_seed)
+            cap = policy.channel_cap(k, policy.cap_for(e_seed))
             w = gW.get(j)
             if w is None or not np.isfinite(w) or w <= 0:
                 c_ph = ph_c.get(j)
@@ -612,7 +629,7 @@ def sanity(ev: Evaluator, x, policy: BoundsPolicy = BoundsPolicy(),
                 t2 = float((x[j] / w) ** 2)
                 rep.max_theta2 = max(rep.max_theta2, t2)
                 e_seed = ev.level_energy.get(k.level, 0.0)
-                cap = policy.cap_for(e_seed)
+                cap = policy.channel_cap(k, policy.cap_for(e_seed))
                 if t2 > cap * (1 + 1e-6):
                     rep.theta2_violations.append(f"{k}: theta2={t2:.3g}")
             if abs(x[j]) > 1e3:
@@ -787,6 +804,15 @@ def polish(ev: Evaluator, x0, free: Optional[np.ndarray] = None,
                          "converged", "nothing to fit", 1, 1, free, dead, [],
                          time.time() - t0, start_obj)
 
+    guard, guard_allowed, guard_hits = None, [], {"n": 0}
+    if getattr(policy, "pole_guard", None):
+        from .poleguard import PoleGuard
+        guard = PoleGuard(ev, policy.pole_guard, log=say)
+        bad0 = guard(x0)
+        guard_allowed = bad0
+        say(f"  pole guard at the start: {PoleGuard.text(bad0)}"
+            + (" -- WARNING: the start already has spurious poles; only steps that ADD poles are rejected" if bad0 else ""))
+
     cache = {"x": x0.copy(), "r": r0, "J": J0}
     counts = {"f": 1, "j": 1}
     ckpt = os.environ.get("RMFIT_POLISH_CHECKPOINT", "")
@@ -801,6 +827,13 @@ def polish(ev: Evaluator, x0, free: Optional[np.ndarray] = None,
         if np.array_equal(x, cache["x"]) and cache["r"] is not None:
             return cache["r"]
         counts["f"] += 1
+        if guard is not None:
+            bad = guard(x)
+            if guard.worse(bad, guard_allowed):
+                guard_hits["n"] += 1
+                if guard_hits["n"] <= 5 or guard_hits["n"] % 50 == 0:
+                    say(f"  pole guard: trial step rejected ({guard_hits['n']}): {PoleGuard.text(bad)}")
+                return np.full(r0.size, BIG_RESIDUAL)
         try:
             r, _ = _resid(x, False)
         except EvalError as err:
@@ -861,6 +894,9 @@ def polish(ev: Evaluator, x0, free: Optional[np.ndarray] = None,
         status, hit = "rejected", []
     say(f"  polish: {start_obj:.3f} -> {obj:.3f} ({status}, {res.message.strip()}; "
         f"nfev={counts['f']} njev={counts['j']}, {time.time()-t0:.0f}s)")
+    if guard is not None:
+        say(f"  pole guard at the end: {PoleGuard.text(guard(x))} ({guard_hits['n']} trial step(s) rejected)")
+        guard.close()
     return FitResult(x, obj, chi2, pen, pri, status, res.message.strip(), counts["f"],
                      counts["j"], free, dead, hit, time.time() - t0, start_obj)
 

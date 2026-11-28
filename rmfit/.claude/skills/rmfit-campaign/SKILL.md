@@ -231,6 +231,36 @@ behind the previous one; on Slurm `sbatch --export=ALL,RMFIT_CMD="..." run_crc_r
 below use qsub; read sbatch on a Slurm site. Every step ends by rewriting `STATUS.md` and appending to the
 readme; read both before the next step.
 
+**Step 0, before any polish: structure first whenever the data reach a new channel or energy range** (the evaluator,
+2026-11-25: a fit makes little sense while there are large gaps in the needed level structure, unless it only polishes
+an isolated energy range; run the level search first).  A level set built from one entrance channel has only the levels
+that channel populates; a newly entered channel sees levels whose widths in the old channels are too small for the old
+data to need them.  So, BEFORE polishing a merged model: (a) list the known levels of the compound nucleus in the new
+data's Ex window (`pyazr.nds.fetch_levels`, ENSDF/TUNL, the new data's own papers) against the model's levels, and seed
+the missing ones (`candidates.json`, step 4) with the new channel's literature widths; (b) band-map the new data's
+residuals (section 3c, step 1) and run `levelscan` / `structure add` on them -- the new data alone first (old segments
+off, old channels' widths frozen), then merge.  Polishing first does not work: several polishes of a merged model with
+the levels missing did not find them.  Symptoms of missing levels, not of a data conflict: broad poles averaging over
+narrow peaks, new-channel widths at the theta^2 cap, norms at the `norm_range` floor, long residual runs at every angle.
+Read the new data's papers for the reaction mechanism, but do not take a "direct reaction" reading of a smooth component
+as settled: far above a particle threshold that channel has little barrier, and an ordinary level (theta^2 of a few
+tenths) is MeV wide and looks smooth (the evaluator, 2026-11-27: such a channel "could produce resonances many MeV wide
+that could mimic what seems to be a direct component").  Search broad physical levels (template Gamma up to a few MeV,
+theta^2 <= 1) before relaxing background-pole caps.
+
+**Step 0b: un-zero every width that is to vary** (the evaluator, 2026-11-27: "make sure to 'un-zero' any partial widths
+that you want to have varied in the fit").  A width of exactly 0 is FIXED by the engine whatever its fix flag says; it is
+not even a key, so nothing in `init`, `polish`, `levelscan` or `structure add` reports it, and a token seed (1e-12) does
+not move either (the minimizer's step scales with the value).  Before any polish, and again whenever data in a channel
+are switched (back) on or a channel is to carry something new: (a) count the active, free (`chanFix` 0) level-channel
+rows whose width is exactly 0, per pair; (b) seed them at 0.01 gamma_W in the engine, not in eV (a fixed eV seed is far
+above the cap where gamma_W is small and can raise the objective by half; 0.01 gamma_W changes it by a fraction of a
+percent); halve the seed while the objective rises by more than 20 % and bake; (c) check that the campaign's free-
+parameter count went up by the number seeded.  The drive's SEED_CHANNELS state does this for a drive run; a hand-built
+campaign does not get it from `init`.  What it can cost: a whole level search run with dozens of widths of the existing
+levels frozen at 0, and a later test that seeded only the new poles left well over a hundred free zeros in the physical
+levels.
+
 | step | command | purpose | when done |
 |---|---|---|---|
 | 1 | `polish --nfev 150 --tighten` | walk amplitudes beyond the theta^2 caps into the box (x10 stages), then converge | all theta^2 inside the caps; gain < 0.05% per stage |

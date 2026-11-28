@@ -536,7 +536,17 @@ def _patterns(n: int, max_signs: int, seed: int = 0, priors: Sequence[dict] = ()
         # same indices as before (rng.choice on the integer 2^n) and decode index i into itertools.product((1, -1),
         # repeat=n) order (bit n-1-k of i set -> sign -1 at position k): identical templates, O(max_signs) memory.
         nall = 2 ** n
-        if nall > max_signs:
+        if nall > max_signs and n >= 63:
+            # 2026-11-26 (a window with about 80 open channels): rng.choice cannot take an
+            # integer >= 2^63 (OverflowError: Python int too large to convert to C long).  Draw max_signs distinct
+            # random sign vectors bit by bit instead (bits[0] = the most significant bit, i.e. position 0, as in the
+            # decoding below).  n <= 62 keeps the rng.choice draw, so earlier campaigns' templates are unchanged.
+            rng = np.random.default_rng(seed)
+            seen = set()
+            while len(seen) < max_signs:
+                seen.add(int("".join("1" if b else "0" for b in rng.integers(0, 2, size=n)), 2))
+            idx = sorted(seen)
+        elif nall > max_signs:
             rng = np.random.default_rng(seed)
             idx = [int(i) for i in sorted(rng.choice(nall, max_signs, replace=False))]
         else:

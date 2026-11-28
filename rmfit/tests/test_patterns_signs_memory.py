@@ -41,6 +41,13 @@ def main():
     check("n = 31 and 40 build in < 5 s and < 200 MB extra", dt < 5 and dm < 200, f"{dt:.1f} s, {dm:.0f} MB")
     check("n = 31: 32 distinct equal-split sign vectors of length 31", len(eq31) == 32 and all(len(s) == 31 for s in eq31), len(eq31))
     check("n = 40: 32 distinct equal-split sign vectors", len({s for _, s, d in p40 if d == "equal split"}) == 32)
+    # 2026-11-26: n >= 63 overflowed rng.choice (a window with about 80 channels)
+    for n in (62, 63, 64, 82, 120):
+        pn = _patterns(n, 32)
+        eq = [s for _, s, d in pn if d == "equal split"]
+        check(f"n = {n}: 32 distinct equal-split sign vectors of length {n}, entries +-1",
+              len(set(eq)) == 32 and len(eq) == 32 and all(len(s) == n and set(s) <= {1, -1} for s in eq), len(set(eq)))
+    check("n = 82 is reproducible (same seed -> same templates)", _patterns(82, 32) == _patterns(82, 32))
 
 if __name__ == "__main__":
     main()

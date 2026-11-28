@@ -129,16 +129,32 @@ def fingerprint(azure2_root=None, cli=None):
                 if line.startswith("__version__"):
                     fp["pyazr_version"] = line.split("=", 1)[1].strip().strip("'\"")
                     break
-    cli = cli or shutil.which("AZURE2")
+    # the engine's own command-line program before whatever AZURE2 is first on PATH (2026-11-26: a frozen engine of
+    # AZURE2_engines/ has bin/AZURE2, a build tree build/src/AZURE2; PATH in a job usually still finds the old shared
+    # ~/bin/AZURE2, which recorded the wrong binary).  Informational: check() compares the .so md5 only.
+    if not cli:
+        cli = next((p for p in (os.path.join(root, "bin", "AZURE2"), os.path.join(root, "build", "src", "AZURE2"))
+                    if os.path.isfile(p)), None) or shutil.which("AZURE2")
     if cli and os.path.exists(cli):
         fp["cli"] = os.path.abspath(cli)
         fp["cli_md5"] = _md5(cli)
+    # a frozen engine made by AZURE2_engines/freeze_engine.sh has no git; its MANIFEST names the commit
+    man = os.path.join(root, "MANIFEST")
+    if os.path.isfile(man):
+        try:
+            with open(man) as fh:
+                for line in fh:
+                    if line.startswith("commit "):
+                        fp["manifest_commit"] = line.split()[1]
+                        break
+        except OSError:
+            pass
     return fp
 
 
 def short(fp):
     """One line for logs: root, .so md5 (8), commit/marker."""
-    tag = (fp.get("git_head") or fp.get("install_marker") or "?")[:7]
+    tag = (fp.get("git_head") or fp.get("manifest_commit") or fp.get("install_marker") or "?")[:7]
     return f"{fp.get('azure2_root')} .so {str(fp.get('so_md5'))[:8]} ({tag}, pyazr {fp.get('pyazr_version')})"
 
 
