@@ -1292,11 +1292,16 @@ add_test(NAME pyazr_fit_engine_control
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fit_engine_control_test.py)
 set_tests_properties(pyazr_fit_engine_control PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
-# A line window (capture over a broad final state's line shape): every analytic derivative of a session (gradient,
-# Jacobian, model sensitivities, the fitters that read them) raises EngineError, the values keep working.
+# A line window (capture over a broad final state's line shape): the analytic derivatives of a session (gradient,
+# Jacobian, model sensitivities) agree with central differences, and the fitters that read them run.  The first runs
+# two models (about 4 minutes; a moved final-level energy rebuilds a point's capture integrals), the second all three.
 add_test(NAME pyazr_line_window_derivatives
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/line_window_derivatives_test.py)
 set_tests_properties(pyazr_line_window_derivatives PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+add_test(NAME pyazr_line_window_derivatives_all
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/line_window_derivatives_test.py --all)
+set_tests_properties(pyazr_line_window_derivatives_all PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS slow
+                     TIMEOUT 3000)
 
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),

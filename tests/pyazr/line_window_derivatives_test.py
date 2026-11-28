@@ -18,17 +18,23 @@ into the 1/2+ state of 13N at E_x = 2.3655 MeV, Gamma_p = 39 keV):
 each with a windowed data set (one point where external capture is on: a moved final-level energy rebuilds that
 point's capture integrals, seconds each time; two points on g_w1) and the final level's energy and proton width free:
 
-1. ``Objective.value_and_grad`` and ``.grad`` against central differences of ``Objective(x)``;
-2. ``Objective.jacobian`` / ``.residuals_and_jacobian`` against central differences of ``.residuals``;
+1. ``Objective.value_and_grad`` against central differences of ``Objective(x)``;
+2. ``Objective.residuals_and_jacobian`` against central differences of ``.residuals``;
 3. ``Session.model_gradients`` against central differences of the models of ``Session.evaluate``;
 4. the columns of the final level's energy and width are not zero (the line shape's share is there);
 5. the values after the derivatives are the values before them (the differences leave no trace in the records);
-6. the engine's fitters that read the gradient or the rows run (``fit_with_engine``), on a_w1.
+6. on g_w1, where no capture integral is rebuilt: ``.grad`` and ``.jacobian`` give what the paired calls give, and
+   the engine's fitters that read the gradient or the rows run (``fit_with_engine``).
+
+Every derivative call with the final level's energy free rebuilds the capture integrals of a windowed point with
+external capture twice, so the models with external capture take one call of each kind.  Without arguments the test
+runs a_w1 and g_w1 (about 4 minutes at 2 threads; a CI runner takes three times that); ``--all`` adds d_w1 (ctest
+pyazr_line_window_derivatives_all, label slow).
 
 Fails without the adjoint over the line shape: the columns of the final level are wrong (and, with the refusal of
 before, every derivative raises).
 
-Run from anywhere:  python3 tests/pyazr/line_window_derivatives_test.py
+Run from anywhere:  python3 tests/pyazr/line_window_derivatives_test.py [--all]
 """
 import os
 import shutil
@@ -119,7 +125,7 @@ def models_of(s, x):
 
 work = tempfile.mkdtemp(prefix="line_window_derivatives_")
 try:
-    for model in CASES:
+    for model in [m for m in CASES if m != "d_w1" or "--all" in sys.argv[1:]]:
         print(f"{model}")
         # the data from the model's own values, so that the residuals are of order one
         s = Session(write_project(os.path.join(work, model), model))
@@ -136,15 +142,16 @@ try:
 
         t0 = time.time()
         v2, grad = f.value_and_grad(x)
-        jac = np.asarray(f.jacobian(x), float)
-        r2, jac2 = f.residuals_and_jacobian(x)
+        r2, jac = f.residuals_and_jacobian(x)
+        jac = np.asarray(jac, float)
         sens = s.model_gradients(x)
         t_derivatives = time.time() - t0
         t0 = time.time()
         check("value_and_grad gives the value", np.isclose(v2, value, rtol=1e-10), (v2, value))
-        check("grad = value_and_grad", np.allclose(f.grad(x), grad, rtol=1e-10, atol=0))
-        check("residuals_and_jacobian = residuals, jacobian", np.allclose(r2, rows, rtol=1e-10)
-              and np.allclose(jac2, jac, rtol=1e-10, atol=0))
+        check("residuals_and_jacobian gives the residuals", np.allclose(r2, rows, rtol=1e-10), (r2, rows))
+        if model == "g_w1":
+            check("grad = value_and_grad", np.allclose(f.grad(x), grad, rtol=1e-10, atol=0))
+            check("jacobian = residuals_and_jacobian", np.allclose(f.jacobian(x), jac, rtol=1e-10, atol=0))
         check("the values after the derivatives are the values before", np.isclose(f(x), value, rtol=1e-12)
               and np.allclose(f.residuals(x), rows, rtol=1e-12, atol=0), (f(x), value))
 
@@ -177,7 +184,7 @@ try:
             check("the final level's width column is not zero", np.all(np.abs(jac[:, final[0] + 1]) > 0),
                   jac[:, final[0] + 1])
 
-        if model == "a_w1":
+        if model == "g_w1":
             fitters = [n for n, r in pyazr.kinds()["fitters"].items() if r["gradient"] or r["residual_rows"]]
             check("the table names the fitters that read the gradient or the rows", "lm" in fitters
                   and "migrad-gradient" in fitters, fitters)
