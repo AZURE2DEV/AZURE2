@@ -10,6 +10,7 @@ The values, priors and limits of normalizations, energy shifts and the other nui
 at all: they are fields of the session's parameter rows (``prior_centre``, ``prior_sigma``, ``fixed``,
 ``segment_key``), which the worker hands to the parent (:func:`nuisance_rows`).
 """
+import contextlib
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -94,6 +95,16 @@ class Segment:
         return default
 
 
+def _first_float(text) -> Optional[float]:
+    """The first token of a field's text as a number (``"1.9537733 fixed"`` -> 1.9537733), or None (a record name,
+    an empty field)."""
+    t = str(text or "").split()
+    try:
+        return float(t[0]) if t else None
+    except ValueError:
+        return None
+
+
 class SegmentTable(list):
     """The data sets of a project in file order."""
 
@@ -163,6 +174,17 @@ class SegmentTable(list):
                 covariance=get("covariance", ""), norm_text=norm, shift_text=shift,
                 norm_group=norm if kinds.get(norm) == "normalization" else "",
                 shift_group=scale, fields=flds))
+            # the norm's value as written (2026-11-26, an engine migration): a FIXED norm has no parameter
+            # row in the session, so with_nuisances never sets it -- a fixed shared record (``normalization SI``,
+            # ``value 1.9537733 fixed``) or a data set's own fixed ``norm 0.8`` read as 1.0, and a fixed relvector
+            # reference (model x norm) was then divided by the wrong norm (about 2x off).  with_nuisances still
+            # overrides the value of every norm the session has a row for.
+            v = _first_float(norm)
+            if v is None and kinds.get(norm) == "normalization":
+                v = _first_float(dict(reversed(tuple((str(k), str(x)) for k, val in project[norm].items()
+                                                     for x in (val if isinstance(val, (list, tuple)) else [val])))).get("value", ""))
+            if v is not None:
+                out[-1].norm = v
             # which nuisances are fitted, as the engine describes the record (no session needed): a member of a
             # shared record other than the first reads "fixed (the group's is its first member's)"
             s, fn = out[-1], []
@@ -178,6 +200,51 @@ class SegmentTable(list):
                     fn.append((0.0, 0.0, fit))
             s.shift_fn_params = tuple(fn)
         return out
+
+
+
+@contextlib.contextmanager
+def unvalidated(project):
+    """``project`` (a ``pyazr.Project``) with its edits applied WITHOUT the engine's validation of the whole project
+    before and after each one; the document's structure is still checked after every edit (``Document.problems``),
+    and the engine checks the result when a session opens it (Claude 2026-11-25).
+
+    Why: ``Project._apply`` runs the validator (``validate_format3_text``) twice per edit, and the validator
+    (experiment::Build, ``CheckCovarianceFile``) re-reads each data set's covariance file uncached and opens every
+    data file that file lists.  A project of S data sets sharing one covariance file of F files costs S*F file opens
+    per validation, and a loop of per-record edits 2 S of them: O(S^2 F).  On a large project (about 180 data sets, 160
+    files) ``without_fields`` in a SingleSession open had not finished after 2 h on a compute node (NFS opens; on the
+    login node one validation took ~10 min).  rmfit's loops here make mechanical edits (fields and records removed,
+    records renamed or copied, windows, fix flags, the output directory), so the per-edit validation buys nothing
+    the session open does not check.  A pyazr without ``Project._apply`` gets its own per-edit behaviour."""
+    apply = _unvalidated_apply(project)
+    if apply is None:
+        yield project
+        return
+    project._apply = apply
+    try:
+        yield project
+    finally:
+        project.__dict__.pop("_apply", None)
+
+
+def _unvalidated_apply(project):
+    """The replacement of ``project._apply`` used by :func:`unvalidated` (None for a pyazr without it): the edit on a
+    copy of the document, kept when its structure has no problem."""
+    if not (hasattr(type(project), "_apply") and hasattr(project, "_doc")):
+        return None
+    from pyazr.errors import FormatError
+
+    def apply(what, edit):
+        doc = type(project._doc).parse(project._doc.write())
+        edit(doc)
+        problems = doc.problems()
+        if problems:
+            raise FormatError(f"{what}: the document's structure: " + "; ".join(problems))
+        project._doc = doc
+        return []
+
+    return apply
 
 
 def segments(path, cwd=None) -> SegmentTable:
@@ -213,12 +280,13 @@ def without_fields(path, out_path, names) -> str:
     """The project written to ``out_path`` with the fields ``names`` removed from every ``dataset`` record."""
     import pyazr
     project = pyazr.Project.open(os.path.abspath(path))
-    for rname, rec in project.records().items():
-        if rec.record_kind != "dataset":
-            continue
-        drop = {n: None for n in names if n in rec.keys()}
-        if drop:
-            project.set(rname, **drop)
+    with unvalidated(project):
+        for rname, rec in project.records().items():
+            if rec.record_kind != "dataset":
+                continue
+            drop = {n: None for n in names if n in rec.keys()}
+            if drop:
+                project.set(rname, **drop)
     return project.save(out_path)
 
 
@@ -300,37 +368,38 @@ def write_variant(base_azr: str, out_path: str, output_dir: str, datasets=None, 
     data set kept.  Returns ``(path, {record name: its key in the variant})``."""
     import pyazr
     project = pyazr.Project.open(os.path.abspath(base_azr))
-    if datasets is not None:
-        used = {b for b, _, _ in datasets}
-        for name, rec in list(project.records().items()):
-            kind = rec.record_kind
-            if kind == "extrapolation" or (kind == "dataset" and name not in used):
-                project.remove(name)
-        if project.config().get("priorCovariance"):
-            project.set_config(priorCovariance=None)
-        first = {}
-        for base, new, fields in datasets:
-            fields = dict(fields)
-            for f in drop_fields:
-                fields.setdefault(f, None)
-            if base not in first:
-                first[base] = new
-                original = dict(project[base].items())
-                project.set(base, **{k: v for k, v in fields.items() if not (v is None and k not in original)})
-                if new != base:
-                    project.rename(base, new)
-                first[base] = (new, original)
-            else:
-                full = dict(first[base][1])
-                full.update(fields)
-                project.add_dataset(new, **{k: v for k, v in full.items() if v is not None})
-    elif drop_fields:
-        for name, rec in list(project.records().items()):
-            if rec.record_kind == "dataset":
-                drop = {f: None for f in drop_fields if f in rec.keys()}
-                if drop:
-                    project.set(name, **drop)
-    project.set_config(output_dir=output_dir.rstrip("/") + "/")
+    with unvalidated(project):
+        if datasets is not None:
+            used = {b for b, _, _ in datasets}
+            for name, rec in list(project.records().items()):
+                kind = rec.record_kind
+                if kind == "extrapolation" or (kind == "dataset" and name not in used):
+                    project.remove(name)
+            if project.config().get("priorCovariance"):
+                project.set_config(priorCovariance=None)
+            first = {}
+            for base, new, fields in datasets:
+                fields = dict(fields)
+                for f in drop_fields:
+                    fields.setdefault(f, None)
+                if base not in first:
+                    first[base] = new
+                    original = dict(project[base].items())
+                    project.set(base, **{k: v for k, v in fields.items() if not (v is None and k not in original)})
+                    if new != base:
+                        project.rename(base, new)
+                    first[base] = (new, original)
+                else:
+                    full = dict(first[base][1])
+                    full.update(fields)
+                    project.add_dataset(new, **{k: v for k, v in full.items() if v is not None})
+        elif drop_fields:
+            for name, rec in list(project.records().items()):
+                if rec.record_kind == "dataset":
+                    drop = {f: None for f in drop_fields if f in rec.keys()}
+                    if drop:
+                        project.set(name, **drop)
+        project.set_config(output_dir=output_dir.rstrip("/") + "/")
     path = project.save(out_path)
     keys, n = {}, 0
     for name, rec in project.records().items():
@@ -457,6 +526,10 @@ class Model:
 
     def __init__(self, project):
         self.project = project
+        # rmfit's structure edits, unvalidated (see unvalidated(); the session open checks the saved project)
+        apply = _unvalidated_apply(project)
+        if apply is not None:
+            project._apply = apply
 
     @classmethod
     def from_file(cls, path) -> "Model":
@@ -521,9 +594,13 @@ class Model:
             q = self.pair(pair)
         except KeyError as err:
             raise ValueError(str(err)) from None
+        # sep_energy / excitation as on ModelChannel: structure.channel_threshold reads them when a level of a J^pi
+        # with no group yet is added (test_p3_add_level_open_channels, 2026-11-26: AttributeError before)
         return type("PairTemplate", (), dict(J1=q.two_j_light / 2.0, parity1=int(q.light_parity),
                                              J2=q.two_j_heavy / 2.0, parity2=int(q.heavy_parity),
-                                             is_photon=(q.kind_name == "photon"), pair=int(q.key)))()
+                                             is_photon=(q.kind_name == "photon"), pair=int(q.key),
+                                             sep_energy=float(q.separation_energy),
+                                             excitation=float(q.light_excitation) + float(q.heavy_excitation)))()
 
     _pair_template = pair_template
 

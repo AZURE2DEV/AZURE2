@@ -230,6 +230,13 @@ add_test(NAME pyazr_fixed_width_roundtrip
                  ${CMAKE_CURRENT_SOURCE_DIR}/fixed_width_roundtrip_test.py)
 set_tests_properties(pyazr_fixed_width_roundtrip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# save_fit keeps a width stated as zero at zero when external capture gives its channel a physical width, so the
+# snapshot has the fit's free parameters and no more.
+add_test(NAME pyazr_save_fit_zero_width
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/save_fit_zero_width_test.py)
+set_tests_properties(pyazr_save_fit_zero_width PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # an extrapolation grid in frame lab or cm: the engine evaluates the grid asked for.
 add_test(NAME pyazr_extrapolation_frame
          COMMAND ${Python3_EXECUTABLE}

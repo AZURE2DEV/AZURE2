@@ -70,7 +70,7 @@ from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
-from .backend import PYAZR3
+from .backend import PYAZR3, ENGINE_FLAG_KEYS
 
 DEFAULTS = dict(enabled=False, j_saturated=0.01, sample_norms=True, chains=4, warmup=1000, draws=2000, target_accept=0.9,
                 max_tree_depth=10, start_jitter_sd=0.1, seed=11, temper=1.0, priors=None, bounds="policy", theta2_cap=None,
@@ -101,7 +101,7 @@ def _child(fn, *args, **kw):
 
 
 def _session_flags(flags: dict) -> dict:
-    return {k: v for k, v in dict(flags or {}).items() if k in ("use_brune", "use_park", "ignore_externals", "use_long_wavelength")}
+    return {k: v for k, v in dict(flags or {}).items() if k in ENGINE_FLAG_KEYS}
 
 
 # ---------------------------------------------------------------------------------------------------------------------

@@ -2,10 +2,12 @@
 
 rmfit is one code base on two engine interfaces (the evaluator 2026-11-16: "One rmfit, two backends"):
 
-* **pyazr 2** (AZURE2 ``dev`` and the archive's pinned builds): the project is the ``.azr`` text format, the engine
-  session is ``pyazr.azure2``, the model editor ``pyazr.AzrModel``, the data-set table ``pyazr.datasets.SegmentSet``.
-* **pyazr 3** (AZURE2 ``feature/upgrade``): project format 3 (records), ``pyazr.Session`` / ``Objective`` /
-  ``Evaluation`` / ``Parameters`` / ``Project``; rmfit's only contact with a project is :mod:`rmfit.azr3`.
+* **pyazr 3** (AZURE2 ``dev`` since 2026-11-25, when feature/upgrade was merged; the engine of new campaigns): project
+  format 3 (records), ``pyazr.Session`` / ``Objective`` / ``Evaluation`` / ``Parameters`` / ``Project``; rmfit's only
+  contact with a project is :mod:`rmfit.azr3`.
+* **pyazr 2** (the archive's pinned 2.x builds, which older campaigns stay on): the project is the ``.azr`` text format,
+  the engine session is ``pyazr.azure2``, the model editor ``pyazr.AzrModel``, the data-set table
+  ``pyazr.datasets.SegmentSet``.
 
 Everything that does not touch the engine or the project file (search, ledger, driver logic, review criteria, keys)
 is shared.  The contact points branch on :data:`PYAZR3`; the large contact layers have one module per backend
@@ -39,6 +41,11 @@ def _detect():
 PYAZR_MAJOR, PYAZR_VERSION = _detect()
 #: True on pyazr 3 (project format 3), False on pyazr 2 (.azr text format)
 PYAZR3 = PYAZR_MAJOR == 3
+
+# campaign.json "flags" keys that the side sessions (init's .sav check, uq) pass on to the engine.  The coulomb_table pair
+# was missing until 2026-11-26: a large campaign's init opened its two .sav-check sessions on the exact Coulomb functions
+# (the default table path held a format-1 table) and invalidated output/intEC.dat, about a fifth of its init time.
+ENGINE_FLAG_KEYS = ("use_brune", "use_park", "ignore_externals", "use_long_wavelength", "use_coulomb_table", "coulomb_table")
 
 
 def name() -> str:

@@ -165,10 +165,53 @@ def score_run(case: dict, run_name: str, review_missing: bool = False) -> dict:
     if rel < -0.01:
         # a run that beats the reference by more than 1 % says the REFERENCE is not a converged fit on this engine / objective
         # (13N tier 0, 2026-11-09: the fixture's .azr holds start values, its fit lives in param.par): the row is not a recovery score
-        row["verdict"] = "REFERENCE-SUSPECT"
-        stale.append(f"run beats the reference by {-100 * rel:.1f} %: the reference is not a converged fit; rebuild it")
+        # -- unless the run carries levels the reference lacks (a benchmark, 2026-11-25: every deleted level recovered
+        # plus two extra levels worth about the whole difference); then the gain is structure, not convergence
+        extra, missing = level_difference(os.path.join(run_dir, "REVIEW.md"), os.path.join(ref_dir, "REVIEW.md"))
+        if extra is None or not (extra or missing):
+            row["verdict"] = "REFERENCE-SUSPECT"
+            stale.append(f"run beats the reference by {-100 * rel:.1f} %: the reference is not a converged fit; rebuild it")
+        else:
+            row["verdict"] = "EXTRA-LEVELS"
+            stale.append(f"run beats the reference by {-100 * rel:.1f} % with a different level set (levels inside the data range): "
+                         f"extra {', '.join(extra) or 'none'}; missing {', '.join(missing) or 'none'} -- not a recovery score at equal "
+                         f"structure; judge the extra levels (review flags) before rebuilding the reference")
     row["note"] = "; ".join(t for t in (run.get("note", ""), row.get("note", ""), "; ".join(stale[1:] if row.get("note") else stale), pre_note.strip()) if t)
     return row
+
+
+def review_levels(path: str) -> Optional[List[tuple]]:
+    """(J^pi, Ex MeV, Gamma text) rows of a REVIEW.md "Levels inside the data range" table, or None without one."""
+    if not os.path.exists(path):
+        return None
+    rows, inside = [], False
+    for line in open(path):
+        if line.startswith("## "):
+            inside = line.strip().startswith("## Levels inside the data range")
+            continue
+        m = re.match(r"\|\s*(\d+/?\d*[+-])\s*\|\s*([0-9.]+)\s*\|\s*([^|]*?)\s*\|", line) if inside else None
+        if m and m.group(3) not in ("?", ""):     # "?" = no width: a level switched off (PRUNE zeroes, does not delete)
+            rows.append((m.group(1), float(m.group(2)), m.group(3)))
+    return rows if rows else None
+
+
+def level_difference(run_review: str, ref_review: str, tol_mev: float = 0.03):
+    """Levels of the run with no reference level of the same J^pi within tol_mev (extra) and the converse (missing), as
+    "J^pi E (Gamma)" strings; (None, None) when either REVIEW.md has no level table."""
+    run, ref = review_levels(run_review), review_levels(ref_review)
+    if run is None or ref is None:
+        return None, None
+
+    def unmatched(a, b):
+        left, out = list(b), []
+        for j, e, g in a:
+            hit = next((x for x in left if x[0] == j and abs(x[1] - e) <= tol_mev), None)
+            if hit is None:
+                out.append(f"{j} {e:.4f} ({g})")
+            else:
+                left.remove(hit)
+        return out
+    return unmatched(run, ref), unmatched(ref, run)
 
 
 def _review_cid(path: str) -> Optional[int]:
@@ -214,7 +257,7 @@ JOB = """#!/bin/csh
 #   python3 -m rmfit.bench score {casefile} {run}
 {setup_lines}
 setenv AZURE2_ROOT {azure2_root}
-setenv PYTHONPATH {rmatrix}:${{AZURE2_ROOT}}
+{engine_guard}setenv PYTHONPATH {rmatrix}:${{AZURE2_ROOT}}
 setenv OMP_NUM_THREADS 1
 setenv PYTHONUNBUFFERED 1
 cd {base}
@@ -251,7 +294,7 @@ JOB_SLURM = """#!/bin/bash
 #   python3 -m rmfit.bench score {casefile} {run}
 {setup_lines}
 export AZURE2_ROOT={azure2_root}
-export PYTHONPATH={rmatrix}:${{AZURE2_ROOT}}
+{engine_guard}export PYTHONPATH={rmatrix}:${{AZURE2_ROOT}}
 export OMP_NUM_THREADS=1
 export PYTHONUNBUFFERED=1
 cd {base} || exit 1
@@ -355,7 +398,19 @@ def write_job(case: dict, run_name: str) -> str:
     else:
         extra = dict(mail_line=site.mail_line(), setup_lines=site.setup_lines(), queue_line=site.queue_line(),
                      pe_line=site.pe_line(slots))
-    text = (JOB_SLURM if slurm else JOB).format(**extra, slots=slots, jobname=jobname,
+    # a frozen engine of AZURE2_engines/ (freeze_engine.sh, MANIFEST): verify it before any calculation (2026-11-26,
+    # skill azure2-frozen-engines "build guard"); other engines (pyazr 2 trees) have no manifest and no guard
+    _root = ref.get("azure2_root") or os.path.expanduser("~/AZURE2")
+    _fz = os.path.join(os.path.dirname(os.path.abspath(_root)), "freeze_engine.sh")
+    engine_guard = ""
+    if os.path.isfile(os.path.join(_root, "MANIFEST")) and os.path.isfile(_fz) and os.path.basename(_root).startswith("AZURE2_frozen_"):
+        engine_guard = (f"bash {_fz} --check {os.path.basename(_root)[len('AZURE2_frozen_'):]} || exit 1   "
+                        "# frozen engine intact (MANIFEST md5s)\n")
+        if os.path.isfile(os.path.join(_root, "coulomb_table.bin")):    # the engine's own table, as its use_engine does
+            ct = os.path.join(_root, "coulomb_table.bin")
+            engine_guard += (f"export AZURE2_COULOMB_TABLE={ct}\n" if (slurm or site.scheduler() == "shell")
+                             else f"setenv AZURE2_COULOMB_TABLE {ct}\n")
+    text = (JOB_SLURM if slurm else JOB).format(**extra, slots=slots, jobname=jobname, engine_guard=engine_guard,
                       log=f"bench_{run_name}.log", case=case["name"], run=run_name, label=run.get("label", ""), refdir=ref["campaign"],
                       refazr=ref["azr"], flips=start["flips"], seed=start["seed"], jitter=start["jitter"], ekick=start["ekick"],
                       pnfev=start["polish_nfev"], spec=spec, casefile=case["_path"], azure2_root=ref.get("azure2_root") or os.path.expanduser("~/AZURE2"),

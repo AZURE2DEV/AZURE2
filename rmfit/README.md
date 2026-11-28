@@ -22,9 +22,12 @@ Process guide (the Claude skill `rmfit-campaign`): `.claude/skills/rmfit-campaig
 linked as `~/.claude/skills/rmfit-campaign`.  It lived in the AZURE2 repository until 2026-11-07, and the copy a
 port had made at `.claude/skills/rmfit-campaign/` of the repository's root was dropped on 2026-11-18.
 
-**Two backends.**  rmfit runs on pyazr 2 (AZURE2 `dev`: `.azr` text projects, `pyazr.azure2`, `AzrModel`) and on
-pyazr 3 (AZURE2 `feature/upgrade`: project format 3 only, `Session`, `Objective`, `Evaluation`, `Parameters`,
-`Project`).  `backend.py` reads the version of the pyazr that `AZURE2_ROOT` provides; everything that does not touch
+**Two backends.**  rmfit runs on pyazr 3 (AZURE2 `dev` since PR #20 merged feature/upgrade, 2026-11-25; pyazr
+3.0.0.dev8: project format 3 only, `Session`, `Objective`, `Evaluation`, `Parameters`, `Project`) and on pyazr 2 (the
+pinned 2.x builds older campaigns run on, e.g. `AZURE2_frozen_b60aed09`: `.azr` text projects, `pyazr.azure2`,
+`AzrModel`).  New campaigns use pyazr 3; a project is converted when a new dated directory starts from it (the evaluator
+2026-11-25, "convert on use": `AZURE2 --convert OLD NEW`, `AZURE2 --convert-params OLD.sav NEW.sav --project OLD`),
+and a campaign stays on the engine it was pinned to at `init`.  `backend.py` reads the version of the pyazr that `AZURE2_ROOT` provides; everything that does not touch
 the engine or the project file (search, ledger, driver logic, review criteria, keys) is one code, and the contact
 points branch on `backend.PYAZR3`.  On pyazr 3:
 

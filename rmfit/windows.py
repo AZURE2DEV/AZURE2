@@ -168,49 +168,51 @@ def window_variant_p3(base_azr: str, path: str, ex_lo: float, ex_hi: float,
     converted.  Returns a summary dict (data sets kept/dropped, levels fixed).
     """
     import pyazr
+    from .azr3 import unvalidated
     base_dir = os.path.dirname(os.path.abspath(base_azr))
     project = pyazr.Project.open(os.path.abspath(base_azr))
     segs = SegmentTable.from_file(base_azr)
-    kept, dropped = 0, 0
-    for seg in segs:
-        if not seg.active:
-            continue
-        lo, hi = excitation_bounds_to_lab(project, seg.entrance_key, ex_lo, ex_hi)
-        new_lo, new_hi = max(seg.energy_min, lo), min(seg.energy_max, hi)
-        # a data set left without points would throw the bookkeeping off: switch it off
-        n_in = 0
-        if new_hi > new_lo:
-            capped = dataclasses.replace(seg, energy_min=new_lo, energy_max=new_hi)
-            rows = rows_in_segment(capped, base_dir)
-            if rows is None:
-                raise NotImplementedError(f"window_variant: data set {seg.name}: its file's columns "
-                                          f"({seg.get('columns')!r}) are not lab energies rmfit can window")
-            n_in = int(rows.shape[0])
-        if n_in == 0:
-            project.set(seg.name, active="no")
-            dropped += 1
-        else:
-            project.set(seg.name, energy_window=(repr(float(new_lo)), repr(float(new_hi)), "MeV"))
-            kept += 1
-    for name, rec in list(project.records().items()):
-        if rec.record_kind == "extrapolation":
-            project.remove(name)
-    if output_dir is not None:
-        project.set_config(output_dir=output_dir.rstrip("/") + "/")
-    fixed_levels = []
-    for lv in project.levels():
-        if not lv.active:
-            continue
-        if free_levels_below is not None:
-            outside = lv.energy > free_levels_below
-        else:
-            outside = fix_outside and (lv.energy < ex_lo - level_margin or lv.energy > ex_hi + level_margin)
-        if outside:
-            project.set_level(lv, fixed=True)
-            for c in lv.channels:
-                if not c.fixed:
-                    project.set_channel(lv, c.pair, c.l, c.s, fixed=True)
-            fixed_levels.append(f"{lv.jpi}@{lv.energy:.4f}")
+    with unvalidated(project):   # one structure check per edit, no full validation (rmfit.azr3.unvalidated)
+        kept, dropped = 0, 0
+        for seg in segs:
+            if not seg.active:
+                continue
+            lo, hi = excitation_bounds_to_lab(project, seg.entrance_key, ex_lo, ex_hi)
+            new_lo, new_hi = max(seg.energy_min, lo), min(seg.energy_max, hi)
+            # a data set left without points would throw the bookkeeping off: switch it off
+            n_in = 0
+            if new_hi > new_lo:
+                capped = dataclasses.replace(seg, energy_min=new_lo, energy_max=new_hi)
+                rows = rows_in_segment(capped, base_dir)
+                if rows is None:
+                    raise NotImplementedError(f"window_variant: data set {seg.name}: its file's columns "
+                                              f"({seg.get('columns')!r}) are not lab energies rmfit can window")
+                n_in = int(rows.shape[0])
+            if n_in == 0:
+                project.set(seg.name, active="no")
+                dropped += 1
+            else:
+                project.set(seg.name, energy_window=(repr(float(new_lo)), repr(float(new_hi)), "MeV"))
+                kept += 1
+        for name, rec in list(project.records().items()):
+            if rec.record_kind == "extrapolation":
+                project.remove(name)
+        if output_dir is not None:
+            project.set_config(output_dir=output_dir.rstrip("/") + "/")
+        fixed_levels = []
+        for lv in project.levels():
+            if not lv.active:
+                continue
+            if free_levels_below is not None:
+                outside = lv.energy > free_levels_below
+            else:
+                outside = fix_outside and (lv.energy < ex_lo - level_margin or lv.energy > ex_hi + level_margin)
+            if outside:
+                project.set_level(lv, fixed=True)
+                for c in lv.channels:
+                    if not c.fixed:
+                        project.set_channel(lv, c.pair, c.l, c.s, fixed=True)
+                fixed_levels.append(f"{lv.jpi}@{lv.energy:.4f}")
     project.save(path)
     return dict(path=path, segments_kept=kept, segments_dropped=dropped, levels_fixed=fixed_levels)
 

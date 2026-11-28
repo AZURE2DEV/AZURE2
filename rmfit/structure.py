@@ -517,6 +517,14 @@ def scan_jpi_on_window(base_azr: str, workdir: str, cand: LevelCandidate, flags:
                           output_dir=os.path.join(workdir, "output_window_base"))
     log(f"  window [{ex_lo:.2f}, {ex_hi:.2f}] MeV: {info['segments_kept']} segments kept, "
         f"{info['segments_dropped']} dropped, {len(info['levels_fixed'])} levels fixed")
+    if int(info["segments_kept"]) == 0:
+        # 2026-11-27 (reported by another session): a candidate whose window holds no data point (e.g. above the top of
+        # the data) left a project with no active data set; Sharded found no shard block and raised IndexError.  No data
+        # there = nothing to test: one "crashed" result, which run_level_add records as scan_failed (the drive counts
+        # that as untestable, not as a marginal add).
+        why = f"no data point in the window [{ex_lo:.3f}, {ex_hi:.3f}] MeV: nothing to test the candidate on"
+        log(f"  {why}")
+        return [ScanResult(cand.jpi or "", "", np.inf, np.inf, None, "crashed", why)]
     with _open(win, workdir, flags, nshards, "window_base", objective=objective) as ev:
         x0 = ev.x0 if x_base is None else take(x_base, base_keys, ev.keys, ev.x0)
         b = default_bounds(ev, x0, policy)

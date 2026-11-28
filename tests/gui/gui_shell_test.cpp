@@ -21,6 +21,8 @@
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
+#include <QIcon>
+#include <QImage>
 #include <QCheckBox>
 #include <QDir>
 #include <QDockWidget>
@@ -48,6 +50,7 @@
 #include "DiagnosticsPanel.h"
 #include "FittingTab.h"
 #include "MCMCTab.h"
+#include "PairsTab.h"
 #include "PlotTab.h"
 #include "PlotWidget.h"
 #include "RecordTabs.h"
@@ -430,6 +433,29 @@ int main(int argc, char **argv) {
   w.tabs()->setCurrentWidget(w.getFittingTab());
   Settle();
   w.grab().save(shots + "/shell_fitting_light.png");
+
+  // (f) the logo follows the project: with the polarization arrow for T1 (one compound nucleus, an analyzing
+  //     power among its data), seen double for natural neon (21Ne, 22Ne, 23Ne; no polarization)
+  Check(AZURESetup::logoFor(false, false) == ":/azure-icon.png" && AZURESetup::logoFor(true, false) == ":/azure-icon-polarized.png" &&
+            AZURESetup::logoFor(false, true) == ":/azure-icon-multi.png" &&
+            AZURESetup::logoFor(true, true) == ":/azure-icon-multi-polarized.png",
+        "the logo: plain, polarized, seen double, seen double and polarized");
+  for (const char *file : {":/azure-icon.png", ":/azure-icon-polarized.png", ":/azure-icon-multi.png", ":/azure-icon-multi-polarized.png"})
+    Check(!QIcon(file).pixmap(26, 26).isNull() && QImage(file).width() == 256, std::string("the logo file ") + file + " is in the program");
+  Check(w.logo() == ":/azure-icon-polarized.png",
+        "T1, one compound nucleus and an analyzing power: the logo with the arrow (" + w.logo().toStdString() + ")");
+  {
+    const fs::path neon = CopyProject(source / "tests/natural_neon/natural_neon.azr", work / "neon");
+    const bool opened = w.readProjectFile(QString::fromStdString(neon.string()), why);
+    Settle();
+    Check(opened && w.hasProject(), "natural neon opened: " + why.toStdString());
+    Check(w.getPairsTab()->getPairsModel()->nuclei().size() == 3 && w.logo() == ":/azure-icon-multi.png",
+          "natural neon, three compound nuclei and no polarization: the logo seen double (" + w.logo().toStdString() + ")");
+    w.grab().save(shots + "/shell_logo_multi.png");
+    w.readProjectFile(QString::fromStdString(t1.string()), why);
+    Settle();
+    Check(w.logo() == ":/azure-icon-polarized.png", "T1 again: the logo with the arrow");
+  }
 
   std::cout << (failures ? "FAILED: " : "OK: ") << failures << " failure(s)" << std::endl;
   return failures ? 1 : 0;

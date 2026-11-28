@@ -11,7 +11,8 @@ SingleSession and on a Sharded evaluator (3 shards):
       evaluator's own keys, and an objective that a fresh evaluation of the stored x reproduces; it lies between the
       start and the final objective;
   (c) load_checkpoint refuses a key list that differs.
-    AZURE2_ROOT=<build> python3 rmfit/tests/test_polish_checkpoint.py      (about a minute)"""
+    AZURE2_ROOT=<build> python3 rmfit/tests/test_polish_checkpoint.py      (about a minute; pyazr 2 -- the pyazr 3 version is
+    test_p3_polish_checkpoint.py)"""
 import os
 import shutil
 import sys
@@ -84,7 +85,7 @@ def main():
         os.makedirs(os.path.join(fix, "output"), exist_ok=True); os.makedirs(os.path.join(fix, "checks"), exist_ok=True)
         azr = os.path.join(fix, "sfg.azr")
         if PYAZR3:
-            print("SKIP: frees levels by editing the .azr text (pyazr 2 format); this process runs pyazr 3")
+            print("SKIP: a pyazr 2 test; this process runs pyazr 3 (its pyazr 3 version is test_p3_polish_checkpoint.py)")
             return 77
         lines = open(azr).read().split("\n")
         i0, i1 = lines.index("<levels>"), lines.index("</levels>")
