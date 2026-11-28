@@ -375,20 +375,15 @@ fitted level energy moves it. Below the final state there is no photon
 (:math:`E_\gamma = E_x - E_f \le 0`): the capture is zero there, for internal
 and external capture alike.
 
-The analytic derivatives do not run over the line shape, so a project with a
-``line_window`` refuses everything that reads them. The program refuses, at
-set-up and with no output, a fit with a fitter that reads the analytic
-gradient or the Jacobian of the residual rows (``--use-gradient``,
-``--use-lm``: the columns ``gradient`` and
-``residual_rows`` of ``pyazr.kinds()["fitters"]``); fit with plain MIGRAD
-(no fitter switch), whose gradient is numerical. A pyazr session raises
-``pyazr.EngineError`` for ``Objective.value_and_grad``, ``Objective.grad``,
-``Objective.jacobian``, ``Objective.residuals_and_jacobian``,
-``Session.model_gradients``, the uncertainty bands made from them and
-``fit_with_engine`` with those fitters; the values (``Objective(x)``,
-``Objective.residuals``, ``Objective.log_prob``, ``Session.evaluate``) work.
-A run that asks for the cross-section uncertainty band writes its outputs
-without the band and says why.
+The analytic derivatives run over the line shape, so a project with a
+``line_window`` can be fitted with every fitter (``--use-gradient``,
+``--use-lm``) and gives the gradient, the Jacobian of the residual rows, the
+model sensitivities and the uncertainty bands made from them. The value of a
+windowed point is a weighted sum over final energies, and its derivative is
+the same sum of the derivatives at each final energy. The final level's own
+energy and width also set the line shape; that part of their derivatives is
+taken from central differences of the line integration, and costs four more
+line integrations per windowed point while either is free.
 
 One case is refused (``E_FINAL_STATE_UNBOUND``, by ``AZURE2 --validate``, by
 every run and by pyazr): a final state with external capture at such a

@@ -87,8 +87,6 @@ void Forward(const CompoundSystem *compound, const LevelState &state, WorkingCop
   for (int s = 1; s <= data.Data().NumSegments(); s++) {
     const Segment *seg = data.Data().GetSegment(s);
     if (!seg || (seg->IsTHM() && !hoes)) continue;
-    // Every analytic derivative starts here; over a line shape it would be wrong (LineWindow.h): refused, not taken.
-    if (seg->GetLineWindow() > 0.0) throw LineWindowDerivativeRefused(LineWindowDerivativeMessage(seg->GetSegmentKey()));
     pass.segments.push_back(seg);
     for (int p = 0; p < seg->NumPoints(); p++)
       if (Unit *pt = seg->GetPoint(data, p + 1)) pass.points.push_back({seg, s, p, pt});
@@ -271,6 +269,94 @@ bool ForEachGroup(AMatrixFunc &amf, WorkingCopy &data, const Pass &pass, const E
   return true;
 }
 
+// One read of a line-window unit (LineWindow.h): its cotangent and value, and where its adjoint goes (the bilinear
+// terms of the read's task or row, and the accumulator).
+struct LineRead {
+  const UnitCotangent *k;
+  double value;
+  std::vector<std::vector<BilinearTerm>> *terms;
+  GradAccum *acc;
+  const FreeLevelMask *free;  // the free level parameters, where the pass knows them (null: all taken as free)
+};
+
+// The adjoint of the reads of unit u, a capture integrated over its final state's line shape.  At fixed nodes the
+// record is the weighted sum of the nodes' records, so each node's T-matrix cotangents (its weight in the cotangent)
+// join the task's bilinear terms, or take the dense adjoint where the decay has a channel-capture pathway.  The line
+// shape's own share -- the final level's energy and amplitude place the nodes and set the final state -- comes from
+// central differences of the line integration (LineShapeChain).  The level matrices of `amf` are those of the unit's
+// energy; its T-matrix is left at the last node's.  False: outside the analytic path.
+bool LineUnitAdjoint(AMatrixFunc &amf, WorkingCopy &data, Results &results, UnitRef u, const std::vector<LineRead> &reads,
+                     const vector_matrix_r *shiftDeriv, bool dense) {
+  Site *site = &data.SiteAt(u);
+  // a screened value's dY/dU_e is taken per record (AMatrixFunc::PointTBar), not per node
+  if (site->GetScreeningParam() > 0) return false;
+  for (const LineRead &r : reads)
+    if (r.k->xsComponent < 0 || r.k->ayCrossSection) return false;
+  bool ok = true;
+  TMatrixCotangent bar;
+  std::vector<std::vector<BilinearTerm>> terms;
+  ForEachLineNode(amf, site, [&](double weight) {
+    for (const LineRead &r : reads) {
+      if (!ok) return;
+      if (!amf.PointTBar(site, results, r.value * weight, bar, r.k->xsComponent, false, RowsOf(data, u, *r.k), RowSlotOf(data, u, *r.k))) {
+        ok = false;
+        return;
+      }
+      if (dense || !amf.CollectBilinearTerms(site, bar, terms))
+        amf.TBarAdjoint(site, bar, *r.acc, shiftDeriv);
+      else
+        MergeTerms(*r.terms, terms);
+    }
+  });
+  if (!ok) return false;
+
+  // The line shape: d(value)/d(centre) and d(value)/d(ln g~) of each read, where a free parameter takes them.
+  const LineShapeChain chain = LineShapeChainOf(*site, amf.compound(), amf.state(), amf.configure());
+  bool energy = false, amplitude = false;
+  for (const LineRead &r : reads) {
+    const FreeLevelMask *mask = r.free;
+    energy = energy || (chain.energy && (!mask || mask->e[chain.group - 1][chain.level - 1]));
+    for (std::size_t d = 0; d < chain.dLogAmplitude.size(); d++)
+      amplitude = amplitude || (chain.dLogAmplitude[d] != 0.0 && (!mask || mask->g[chain.group - 1][chain.level - 1][d]));
+  }
+  if (!energy && !amplitude) return true;
+  double *rec = site->Record(results);
+  const std::vector<double> kept(rec, rec + site->RecordLength());
+  std::vector<double> minus(reads.size()), slope(reads.size());
+  auto difference = [&](double dCentre, double dLogAmplitude) {
+    for (int side = 0; side < 2; side++) {
+      const double sign = side ? 1.0 : -1.0;
+      LineWindowCrossSectionAt(amf, site, results, sign * dCentre, sign * dLogAmplitude);
+      for (std::size_t i = 0; i < reads.size(); i++) {
+        const UnitCotangent &k = *reads[i].k;
+        const double v = k.xsComponent == 1   ? site->GetFitE1CrossSection(results)
+                         : k.xsComponent == 2 ? site->GetFitE2CrossSection(results)
+                                              : site->ValueFor(RowsOf(data, u, k), RowSlotOf(data, u, k), results);
+        if (side) slope[i] = (v - minus[i]) / (2.0 * (dCentre + dLogAmplitude));
+        else minus[i] = v;
+      }
+    }
+  };
+  try {
+    if (energy) {
+      difference(chain.centreStep, 0.0);
+      for (std::size_t i = 0; i < reads.size(); i++) reads[i].acc->AddE(chain.group, chain.level, reads[i].value * slope[i]);
+    }
+    if (amplitude) {
+      difference(0.0, chain.amplitudeStep);
+      for (std::size_t i = 0; i < reads.size(); i++)
+        for (std::size_t d = 0; d < chain.dLogAmplitude.size(); d++)
+          if (chain.dLogAmplitude[d] != 0.0)
+            reads[i].acc->AddGamma(chain.group, chain.level, (int)d + 1, reads[i].value * slope[i] * chain.dLogAmplitude[d]);
+    }
+  } catch (...) {
+    std::copy(kept.begin(), kept.end(), rec);
+    throw;
+  }
+  std::copy(kept.begin(), kept.end(), rec);
+  return true;
+}
+
 // The THM sites of one task (kHoes) into `acc`: per site the cotangents of all its readers summed (in their order), and
 // the HOES adjoint taken once per site on a level-space fill at the task's energy (THMMatrixFunc::THMPointAdjoint).
 bool HoesTask(const CompoundSystem *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
@@ -302,7 +388,7 @@ bool HoesTask(const CompoundSystem *compound, const LevelState &state, const Con
 // J-group, a decay with external capture on its own.
 bool ScalarTask(const CompoundSystem *compound, const LevelState &state, const Config &config, WorkingCopy &data, Results &results, const Pass &pass,
                 const EnergyTaskList &list, const EnergyTask &task, const vector_matrix_r *shiftDeriv,
-                const ThmAdjointContext *hoes, GradAccum &acc) {
+                const ThmAdjointContext *hoes, const FreeLevelMask *free, GradAccum &acc) {
   if (!HasCotangents(pass, list, task)) return true;
   if (hoes && !HoesTask(compound, state, config, data, results, pass, list, task, *hoes, acc)) return false;
   if (FirstTMatrixReader(data, pass, list, task) < 0) return true;
@@ -320,18 +406,29 @@ bool ScalarTask(const CompoundSystem *compound, const LevelState &state, const C
     TMatrixCotangent sum;
     GroupCotangents(pass, list, task, begin, end, order);
     MergeSharedReads(data, pass, order, reads);
+    bool any = false;
+    std::map<UnitRef, std::vector<LineRead>> lineReads;  // the units integrated over a line shape, after the others
     for (const SharedRead &r : reads) {
       const UnitCotangent &k = pass.cot[r.cotangent];
       if (!ReadsTMatrix(data, r.unit)) continue;  // a THM site: HoesTask
+      if (data.SiteAt(r.unit).GetLineWindow() > 0.0) {
+        lineReads[r.unit].push_back({&k, r.value, &merged, &acc, free});
+        continue;
+      }
       if (!amf.PointTBar(&data.SiteAt(r.unit), results, r.value, bar, k.xsComponent, k.ayCrossSection, RowsOf(data, r.unit, k), RowSlotOf(data, r.unit, k))) return false;
       AddCotangent(sum, bar);
+      any = true;
     }
-    if (dense || !amf.CollectBilinearTerms(provider, sum, terms)) {
-      amf.TBarAdjoint(provider, sum, acc, shiftDeriv);
-      return true;
+    if (any) {
+      if (dense || !amf.CollectBilinearTerms(provider, sum, terms)) {
+        amf.TBarAdjoint(provider, sum, acc, shiftDeriv);
+      } else {
+        for (const auto &s : sum.screen) acc.AddScreening(s.first, s.second);
+        MergeTerms(merged, terms);
+      }
     }
-    for (const auto &s : sum.screen) acc.AddScreening(s.first, s.second);
-    MergeTerms(merged, terms);
+    for (const auto &unit : lineReads)
+      if (!LineUnitAdjoint(amf, data, results, unit.first, unit.second, shiftDeriv, dense)) return false;
     return true;
   };
   if (!ForEachGroup(amf, data, pass, list, task, group)) return false;
@@ -378,10 +475,15 @@ bool RowTask(const CompoundSystem *compound, const LevelState &state, const Conf
   auto group = [&](int begin, int end, Site *provider) {
     groupSlots.clear();
     GroupCotangents(pass, list, task, begin, end, order);
+    std::vector<std::pair<int, int>> lineCots;  // (cotangent, row slot) of the units integrated over a line shape
     for (const std::pair<int, UnitRef> &o : order) {
       const UnitCotangent &k = pass.cot[o.first];
       const int slot = slotOf(k.row);
       if (sums.size() < rowsOf.size()) sums.resize(rowsOf.size());
+      if (data.SiteAt(o.second).GetLineWindow() > 0.0) {
+        lineCots.push_back({o.first, slot});
+        continue;
+      }
       if (std::find(groupSlots.begin(), groupSlots.end(), slot) == groupSlots.end()) {
         groupSlots.push_back(slot);
         sums[slot] = TMatrixCotangent();
@@ -397,6 +499,11 @@ bool RowTask(const CompoundSystem *compound, const LevelState &state, const Conf
       for (const auto &s : sums[slot].screen) rowAcc[slot].AddScreening(s.first, s.second);
       MergeTerms(rowTerms[slot], terms);
     }
+    std::map<UnitRef, std::vector<LineRead>> lineReads;  // every row slot of the group exists by now
+    for (const std::pair<int, int> &c : lineCots)
+      lineReads[pass.cot[c.first].unit].push_back({&pass.cot[c.first], pass.cot[c.first].value, &rowTerms[c.second], &rowAcc[c.second], mask});
+    for (const auto &unit : lineReads)
+      if (!LineUnitAdjoint(amf, data, results, unit.first, unit.second, shiftDeriv, dense)) return false;
     return true;
   };
   const bool ok = ForEachGroup(amf, data, pass, list, task, group);
@@ -493,7 +600,7 @@ bool RowTask(const CompoundSystem *compound, const LevelState &state, const Conf
 
 bool EnergyTaskGradient(const CompoundSystem *compound, const LevelState &state, WorkingCopy *data, Results &results, const Config &config,
                         const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum, int &bailSeg,
-                        const ThmAdjointContext *hoes) {
+                        const ThmAdjointContext *hoes, const FreeLevelMask *free) {
   bailSeg = 0;
   // one set of fold weights for the forward folds and the cotangents of this call (PointFold.h)
   const KeepFoldWeights keptWeights(results, *data, config);
@@ -521,7 +628,7 @@ bool EnergyTaskGradient(const CompoundSystem *compound, const LevelState &state,
     // by the caller (AMatrixFunc::ResolveFormalCotangents).
     chunkAcc[c].formal = true;
     for (int t = c; t < list.size(); t += chunks)
-      if (!ScalarTask(compound, state, config, *data, results, pass, list, list[t], shiftDeriv, hoes, chunkAcc[c])) {
+      if (!ScalarTask(compound, state, config, *data, results, pass, list, list[t], shiftDeriv, hoes, free, chunkAcc[c])) {
         failedTask[c] = t;
         break;
       }

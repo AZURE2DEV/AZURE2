@@ -153,20 +153,13 @@ void WriteRunOutputs(ProgramRun &run) {
                             << std::endl;
     }
     if (!cov.empty()) {
-      bool built = false, refusedByLineWindow = false;
-      try {
-        const vector_r bestFit = run.params.GetMinuitParams().Params();
-        built = BuildBandData(run.compound.get(), run.state, run.inputs, run.data, run.results, run.configure, cov,
-                              bandData, &run.fitFixedMask, &bestFit);
-      } catch (const azure2::LineWindowDerivativeRefused &refused) {
-        // The band's sensitivities are the adjoint's, which a line window refuses: no band, said so; the outputs go on.
-        run.configure.outStream << "Cross-section bands unavailable: " << refused.what() << "." << std::endl;
-        refusedByLineWindow = true;
-      }
+      const vector_r bestFit = run.params.GetMinuitParams().Params();
+      const bool built = BuildBandData(run.compound.get(), run.state, run.inputs, run.data, run.results, run.configure, cov,
+                                       bandData, &run.fitFixedMask, &bestFit);
       if (built) {
         bandPtr = &bandData;
         run.configure.outStream << "Writing cross-section uncertainty bands..." << std::endl;
-      } else if (!refusedByLineWindow) {
+      } else {
         run.configure.outStream << "Cross-section bands unavailable: the analytic model "
                                  "sensitivities are not supported for this configuration."
                               << std::endl;

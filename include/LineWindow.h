@@ -1,6 +1,7 @@
 #ifndef AZURE2_LINEWINDOW_H
 #define AZURE2_LINEWINDOW_H
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -77,8 +78,7 @@ struct LineNodeStore {
 
 /// Why this site's line window cannot be computed ("" if it can): the exit must be a capture pair whose final level
 /// lies above exactly one particle threshold, outside the RMC formalism, for a cross section (not angular
-/// coefficients, a phase or a polarization observable), and the run's fitter must take neither the analytic gradient
-/// nor the residual rows' Jacobian (its row of Fitters()): the adjoint does not run over the line shape.
+/// coefficients, a phase or a polarization observable).
 std::string LineWindowProblem(const Site &site, const CompoundSystem *compound, const Config &configure);
 /// The same for a data set's reaction before its points exist (`otherObservable`: not a cross section).
 std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable, const CompoundSystem *compound,
@@ -89,16 +89,30 @@ std::string LineWindowProblem(int entranceKey, int exitKey, bool otherObservable
 /// of the last node in `func`.
 void LineWindowCrossSection(GenMatrixFunc &func, Site *site, Results &results);
 
-/// The refusal of an analytic derivative (gradient, residual rows' Jacobian, model sensitivities) of a model with a
-/// line window: the adjoint takes the T-matrix at the nominal final state, not over the line shape, so its numbers
-/// would be wrong.  Thrown where every such derivative starts (GradEnergyTasks.cpp, `Forward`); a caller that can go
-/// on without the derivative (the program's uncertainty band) catches this type only.
-struct LineWindowDerivativeRefused : std::runtime_error {
-  explicit LineWindowDerivativeRefused(const std::string &what) : std::runtime_error(what) {}
-};
+/// The fixed-node pass of the adjoint over the line shape: node(weight) for each node of the site's quadrature (the
+/// nodes of LineWindowCrossSection at the current parameters), that node active in `func` and its T-matrix built, so
+/// that d(record)/d(parameters) at fixed nodes is the weighted sum of the nodes' adjoints.  Leaves the T-matrix of
+/// the last node in `func`.
+void ForEachLineNode(GenMatrixFunc &func, Site *site, const std::function<void(double)> &node);
 
-/// The message of that refusal for the segment (data set or extrapolation) of key `segmentKey`: what, what is allowed.
-std::string LineWindowDerivativeMessage(int segmentKey);
+/// What the line shape itself takes from the parameters, besides the level matrix: the final level's energy (the
+/// line centre, in the Brune parametrizations) and its observed amplitude g~, which place the nodes and set the
+/// phase and the amplitude of the final scattering state.  The adjoint takes d(record)/d(centre) and
+/// d(record)/d(ln g~) by central differences of the line integration itself (LineWindowCrossSectionAt, steps
+/// `centreStep` in MeV and `amplitudeStep`), so that they follow the value with its re-placed nodes, and chains
+/// them to the widths with dLogAmplitude[ch - 1] = d ln g~ / d gamma_ch (the channels of the level's J-group).
+struct LineShapeChain {
+  int group = 0, level = 0;  ///< the final level
+  bool energy = false;       ///< the centre follows the level's energy parameter
+  std::vector<double> dLogAmplitude;
+  double centreStep = 0.0, amplitudeStep = 0.0;
+};
+LineShapeChain LineShapeChainOf(const Site &site, const CompoundSystem *compound, const LevelState &state,
+                                const Config &configure);
+
+/// LineWindowCrossSection with the line centre moved by dCentre (MeV; its own nodes, not kept by the run) or, on the
+/// nodes of the evaluation, the observed amplitude times (1 + dLogAmplitude).
+void LineWindowCrossSectionAt(GenMatrixFunc &func, Site *site, Results &results, double dCentre, double dLogAmplitude);
 
 }  // namespace azure2
 
