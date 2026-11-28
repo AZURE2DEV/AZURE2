@@ -378,7 +378,7 @@ add_test(NAME pyazr_shift_fold_smooth
 set_tests_properties(pyazr_shift_fold_smooth PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
 # The keyword fold_depth_steps (the panels of a target's depth integral with a spread, --fold-depth-steps=K): the
-# default 4, the node intervals 0, the program's numbers, the keyword over AZURE_FOLD_DEPTH_STEPS, the refusals.
+# default 8, a non-default 4, the node intervals 0, the program's numbers, the keyword over AZURE_FOLD_DEPTH_STEPS, the refusals.
 add_test(NAME pyazr_fold_depth_steps
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/fold_depth_steps_test.py)

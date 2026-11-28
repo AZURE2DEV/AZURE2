@@ -2,12 +2,20 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
-## 2026-11-27 (fold depth steps) — `feature/upgrade-fold`: the target's depth integral on its own panels, default 4
+## 2026-11-27/28 (fold depth steps) — `feature/upgrade-fold`: the target's depth integral on its own panels, default 8
+
+**2026-11-28: the default is 8** (the PI: "Set to 8", after the tail measurements, `energy_grid.md` section 3.4 "Why 8
+and not 4"): a point 3 keV above a threshold moved 3.5e-4 at K = 4, 4.2e-7 at 8; the 11B+α tail at 8 equals the mesh's
+own error; the one case that does not converge in K is the 5σ cut of the beam Gaussian sweeping across a resonance
+(about 1e-4 at every K, 50 times below the mesh error there), a limit of the cut, not of the panels.  At 8 no pinned
+test moves (ctest 423, run_tests 190, the 27 regression chi2 files byte-identical).  Cost against 4: 18.8 s / 18.6 s
+per gradient call on 11B+α.  Then origin/dev 3133da7d merged in (logo, save_fit zero width, rmfit sync).
+
 
 On origin/dev fd61ad43 + the merge of deBoer's #28 (00b70e5c).  The PI accepted deBoer's proposal (perf/fold-depth-steps,
 5fb9b360, cherry-picked with him as author): the depth integral of a target with a beam spread or straggling runs on
-panels sigma/K wide (never ending above the next node), default K = 4, rule 1e-5 on folded values against the
-node-interval integral.  Design and numbers: `energy_grid.md` section 3.4; user guide `experimental_effects.rst` ("The
+panels sigma/K wide (never ending above the next node), default K = 4 at first (8 since 2026-11-28, above), rule
+1e-5 on folded values against the node-interval integral.  Design and numbers: `energy_grid.md` section 3.4; user guide `experimental_effects.rst` ("The
 depth integral"), `command_line.rst` (`AZURE_FOLD_DEPTH_STEPS`).
 
 **Code.** `KernelParameters::depthStepsPerSigma` (no getenv, no static), set from `Config::foldDepthSteps` in
@@ -24,7 +32,7 @@ byte-identical to 00b70e5c; at K = 4 17 files per basis move (shift_true_energy/
 of the 27 regression projects.
 
 **11B+α** (deBoer's private case, kept outside the repository): 00b70e5c reproduces his 9447.57473555 and 9134.91;
-K = 0 the same; K = 4 9447.57467154; gradient call 32.3 s -> 18.6 s, evaluation 3.7 s -> 0.73 s (4 threads, this
+K = 0 the same; K = 4 9447.57467154, K = 8 9447.57473604; gradient call 32.3 s -> 18.6 s, evaluation 3.7 s -> 0.73 s (4 threads, this
 machine); largest folded difference at K = 4 3.6e-6 (his number).
 
 **Open (for the PI and deBoer).** Points 300-6000 times below their data set's maximum (yield onsets, threshold

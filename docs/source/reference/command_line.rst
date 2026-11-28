@@ -823,8 +823,10 @@ target with a beam spread or straggling (:ref:`depth-integral`).  Each panel is
 :math:`\sigma/K` wide, :math:`\sigma` the Gaussian's width at the panel's top
 (the beam spread and the straggling down to that depth, c.m.), and never ends
 above the next node of the mesh, so a panel is never shorter than the way to the
-next node.  The default, 4, keeps every folded value within about
-:math:`10^{-5}` (relative) of the integral over the node intervals.  ``0`` is
+next node.  The default, 8, keeps a folded value within a few :math:`10^{-7}`
+(relative) of the integral over the node intervals, at or below that integral's
+own error on the default mesh (:ref:`depth-integral`, which also names the one
+known exception, a point near the 5 :math:`\sigma` cut of the beam Gaussian).  ``0`` is
 the integral over the node intervals, the only rule before 2026-11-27: every
 output is then the same, bit for bit, as before.  K is a whole number from 0 to
 1000; anything else (a negative or non-whole number, ``nan``, ``inf``, an
@@ -919,7 +921,7 @@ run and machine (value, source):``: the threads in force (``--threads=N``,
      - ``--fold-depth-steps=K``
      - numbers
      - ``K``: panels per Gaussian width of the depth integral of a target with a beam spread or
-       straggling (0..1000, default 4; 0: the node intervals; a bad value exits 2)
+       straggling (0..1000, default 8; 0: the node intervals; a bad value exits 2)
    * - ``AZURE2_EC_TABLE_NODES``
      - ``--ec-table-nodes=N``
      - numbers

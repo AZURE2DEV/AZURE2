@@ -721,12 +721,43 @@ construction.  No cache depends on it: the mesh, the nodes and the external-capt
 **The setting.** K = `Config::foldDepthSteps`, carried to the kernel in `KernelParameters::depthStepsPerSigma`
 (`TargetEffect::KernelParametersFor`): `--fold-depth-steps=K`, `AZURE_FOLD_DEPTH_STEPS` (a switch of kind numbers:
 the option over the options file over the variable) and pyazr's `Session(fold_depth_steps=K)` (over the variable), a
-whole number from 0 to 1000; anything else is refused (exit 2, `ValueError`).  **Default 4.  K = 0 is the node
-intervals, bit for bit the integral before.**  Not a `<config>` key (as `--refine-quadrature`; project_format3.md
+whole number from 0 to 1000; anything else is refused (exit 2, `ValueError`).  **Default 8** (the PI, 2026-11-28,
+after the tail measurements below; 4 was the first default, deBoer's proposal).  **K = 0 is the node intervals, bit for
+bit the integral before.**  Not a `<config>` key (as `--refine-quadrature`; project_format3.md
 §3.12 leaves open whether a number-changing switch becomes one).
 
 **The tolerance** (the PI, 2026-11-27): at the default, any folded value within 10⁻⁵ (relative) of the node-interval
-depth integral on the same mesh.
+depth integral on the same mesh.  K = 4 met it on plateau values but not in far tails (below); K = 8 meets it everywhere
+but at the one case the panels cannot help, a point at the 5σ cut of the beam Gaussian (below).
+
+**Why 8 and not 4** (2026-11-28, the cases where a point moved by more than 1e-5 at K = 4; K against K = 0 on the
+default mesh; "/max" the change over the data set's largest folded value; "mesh" the node-interval integral's own error
+at that point, K = 0 on the default mesh against a refined mesh):
+
+| case, worst point (its value / the set's maximum) | K = 2 | K = 4 | K = 8 | K = 16 | /max at K = 8 | mesh |
+|---|---|---|---|---|---|---|
+| T3's 7Li(p,n) 3 keV above its threshold, 20 keV layer, 2 keV spread (3.7e-5) | 6.1e-4 | 3.5e-4 | 4.2e-7 | 1.8e-7 | 6e-7 (worst of the file) | 3.7e-2 (refine 4) |
+| same, worst at K = 8 (0.10, just above threshold) | — | ~1e-5 | 5.8e-6 | 3.0e-6 | 6.1e-7 | — |
+| 11B+α project, its worst point at K = 4 (3.8e-6) | 2.5e-5 | 3.6e-6 | 3.6e-7 | 2.3e-8 | 1e-12 | 3.4e-7 (refine 2) |
+| `shift_true_energy/models/fit`, 7 keV below the resonance (3.2e-3) | 6.8e-5 | 1.3e-4 | 9.9e-5 | 5.5e-5 | 3.2e-7 | 5.7e-3 (refine 4) |
+
+At the threshold a panel σ/K wide spans the kink of the cross section (zero below, rising above): K = 2 and 4 are
+erratic there, at K = 8 the panels pass it and the error drops 800 times.  For the 11B+α tail the panel error falls
+as the 4th power and at K = 8 equals the mesh's own error at that point.  **The one case that does not converge in K**
+is `shift_true_energy/models/fit`: its beam spread, 1.5 keV lab (1.41 keV c.m.), is cut at 5σ = 7.0 keV, and the point
+lies 7.1 keV below the resonance, so as the depth changes the edge of the Gaussian's window sweeps across the
+resonance and the depth integrand has a jump there; 2-point Gauss-Legendre over a jump converges slowly whatever the
+panels.  It stays near 1e-4 of the point's value at every K (0.002 of its data σ), 50 times below the node-interval
+integral's own error there.  It is a limit of the 5σ cut of the beam Gaussian (`kConvolutionRange`), not of the panels;
+removing it would mean widening the cut or ending a panel where the window's edge meets a node, a choice left to the
+PI.
+
+The tree at K = 8 (`tools/runall.sh`, three bases): 15 files per basis move against 00b70e5c, in the projects that move
+at K = 4: `shift_true_energy/models` fit 9.9e-5 (above), kernel_gauss 3.9e-7, identity, shifted, twins 1.5e-6 (at a
+point 4e7 times below its maximum), `upgrade/T2` 1.3e-7, T2_true 3.5e-7, `units_scales/models/yield_story` 2.4e-8;
+`ctest -LE slow` (423) and `tests/run_tests.sh` (190) pass with the default overridden to 8, and the 27 regression
+chiSquared.out files are byte-identical to 00b70e5c.  Cost against K = 4 (11B+α, 4 threads): gradient call 18.8 s
+against 18.6 s, evaluation 0.83 s against 0.73 s; the node intervals took 32.3 s and 3.7 s.
 
 **Measured** (2026-11-27, `feature/upgrade-fold`, 4 threads; the largest relative difference of any folded value of
 the project, K against K = 0 on the same mesh; in brackets the largest absolute difference over the largest folded

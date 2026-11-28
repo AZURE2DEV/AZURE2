@@ -31,7 +31,7 @@ constexpr std::array<SwitchRow, kSwitchCount> kTable = {{
     {Switch::kRefineQuadrature, "AZURE_REFINE_QUADRATURE", T::kInteger, "1", K::kNumbers,
      "every sub-point grid gets K times its points (1..64; a bad value exits 2)",
      kManual, "--refine-quadrature=K", 1, 64},
-    {Switch::kFoldDepthSteps, "AZURE_FOLD_DEPTH_STEPS", T::kInteger, "4", K::kNumbers,
+    {Switch::kFoldDepthSteps, "AZURE_FOLD_DEPTH_STEPS", T::kInteger, "8", K::kNumbers,
      "panels per Gaussian width of a target's depth integral with a spread (0..1000; 0: the node intervals)",
      kManual, "--fold-depth-steps=K", 0, 1000},
     {Switch::kEcTableNodes, "AZURE2_EC_TABLE_NODES", T::kInteger, "ecTableNodesPerDecade (50)", K::kNumbers,

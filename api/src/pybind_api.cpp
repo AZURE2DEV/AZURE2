@@ -104,7 +104,7 @@ struct RuntimeOptions {
   bool data_mode = true;            // CALCULATE_WITH_DATA
   std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
   std::string base_directory;       // Config::baseDirectory: the project's relative paths ("" = the project file's directory)
-  int fold_depth_steps = -1;        // Config::foldDepthSteps: 0..1000; -1 = not given (AZURE_FOLD_DEPTH_STEPS, else 4)
+  int fold_depth_steps = -1;        // Config::foldDepthSteps: 0..1000; -1 = not given (AZURE_FOLD_DEPTH_STEPS, else 8)
   std::map<std::string, bool> options;  // the options of the calculation the call gave
 };
 
@@ -808,7 +808,7 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("base_directory", &RuntimeOptions::base_directory)
       .def_readwrite("fold_depth_steps", &RuntimeOptions::fold_depth_steps,
                      "Panels per Gaussian width of the depth integral of a target with a beam spread or straggling, "
-                     "0..1000 (0: the node intervals); -1: not given ($AZURE_FOLD_DEPTH_STEPS, else 4).")
+                     "0..1000 (0: the node intervals); -1: not given ($AZURE_FOLD_DEPTH_STEPS, else 8).")
       .def_readwrite("options", &RuntimeOptions::options,
                      "The options of the calculation the call gave, {keyword: bool}; one left out is not given.")
 ;

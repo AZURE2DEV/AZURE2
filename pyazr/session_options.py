@@ -72,5 +72,5 @@ def in_use(sess, extrapolations, coulomb_table, parameter_file=None, fold_depth_
         values[name], sources[name] = bool(value), source
     values["coulomb_table"] = str(coulomb_table or "")
     values["parameter_file"] = parameter_file
-    values["fold_depth_steps"] = fold_depth_steps  # as given: None leaves it to $AZURE_FOLD_DEPTH_STEPS, else 4
+    values["fold_depth_steps"] = fold_depth_steps  # as given: None leaves it to $AZURE_FOLD_DEPTH_STEPS, else 8
     return values, sources

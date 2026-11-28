@@ -921,10 +921,20 @@ steps.
 
 :math:`K` is ``--fold-depth-steps=K`` (``AZURE_FOLD_DEPTH_STEPS``; pyazr:
 ``Session(..., fold_depth_steps=K)``), a whole number from 0 to 1000.  **The
-default is 4.**  Against the depth integral on the node intervals the folded
-values move by at most :math:`10^{-5}` (relative) at :math:`K = 4`; the measured
-differences, and the quadrature's own error for scale, are in
-:doc:`../reference/command_line` and ``docs/upgrade/energy_grid.md`` section 3.4.
+default is 8.**  Against the depth integral on the node intervals a folded value
+moves by a few :math:`10^{-7}` (relative) or less at :math:`K = 8` (the 11B+α
+project of 4487 points: :math:`5 \times 10^{-7}`), which is at or below the error
+of the node-interval integral itself on the default mesh.  At :math:`K = 4`
+(:math:`4 \times 10^{-6}` there) a point within a few keV of a reaction threshold
+moved by up to :math:`3.5 \times 10^{-4}` of its own value, because a panel
+spanned the threshold's kink; at :math:`K = 8` it moves by
+:math:`4 \times 10^{-7}`.  One case does not get better with :math:`K`: a point
+whose beam Gaussian, cut at 5 :math:`\sigma`, has its cut sweep across a narrow
+resonance as the depth changes (a point about 5 :math:`\sigma` below the
+resonance) moves by about :math:`10^{-4}` of its own value at every :math:`K`.
+That is a limit of the 5 :math:`\sigma` cut, not of the panels, and it is 50 times
+smaller than the node-interval integral's own error at that point.  The measured
+tables are in ``docs/upgrade/energy_grid.md`` section 3.4.
 **K = 0 gives the depth integral on the node intervals**, the only rule before
 2026-11-27, bit for bit.  A target without a beam spread or straggling, and every
 other kernel, are not affected.

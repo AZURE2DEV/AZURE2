@@ -4,12 +4,13 @@ straggling (docs/upgrade/energy_grid.md section 3.4; the program's --fold-depth-
 
 Model: tests/upgrade/T2 (data set 5: a fitted layer with straggling and a beam spread; data set 1: a layer with Bohr
 straggling and a spread).  Checked:
-  (a) None (not given) is the default 4: every data set's chi2 equal to the session with fold_depth_steps=4;
+  (a) None (not given) is the default 8 (Config::kFoldDepthStepsDefault): every data set's chi2 equal to the session
+      with fold_depth_steps=8; a value that is not the default, 4, differs from both 8 and 0 where a nested kernel is;
   (b) 0, the node intervals, moves the data sets with a nested kernel and no other, by less than 1e-3 relative;
   (c) the keyword equals the program: a session with 0 writes the AZUREOut files of AZURE2 calculate
       --fold-depth-steps=0 byte for byte, one without it those of the program without the option, and the two differ;
   (d) the keyword over the variable: AZURE_FOLD_DEPTH_STEPS=0 in a child process gives the chi2 of 0, and with
-      fold_depth_steps=4 in that process those of 4;
+      fold_depth_steps=8 or 4 in that process those of 8 or 4;
   (e) refusals: -1, 1001, 2.5, nan, inf, True and "4" raise ValueError naming the keyword and the range;
   (f) Session.options records the keyword as given (None or the number), so **options rebuilds the same model.
 
@@ -60,16 +61,20 @@ try:
                 x0 = np.array(s.parameters.x0, float)
                 return np.array([d.chi2 for d in s.evaluate(x0).data]), dict(s.options)
 
+    DEFAULT = 8  # Config::kFoldDepthStepsDefault (the PI's decision of 2026-11-28; energy_grid.md section 3.4)
     given_none, options_none = chi2s()
+    default, options_default = chi2s(fold_depth_steps=DEFAULT)
     four, options_four = chi2s(fold_depth_steps=4)
     zero, options_zero = chi2s(fold_depth_steps=0)
-    check("(a) not given: the chi2 of fold_depth_steps=4, every data set", np.array_equal(given_none, four),
-          (given_none, four))
-    moved = [i for i in range(len(four)) if zero[i] != four[i]]
-    rel = max((abs(zero[i] / four[i] - 1.0) for i in moved), default=0.0)
-    print(f"    data sets moved by 0 against 4: {[i + 1 for i in moved]}, largest relative change of chi2 {rel:.3e}")
-    check("(b) 0 moves some data sets (a nested kernel in T2)", len(moved) > 0, zero - four)
-    check("(b) ... and not every one (the others have no spread inside a target)", len(moved) < len(four), moved)
+    check(f"(a) not given: the chi2 of fold_depth_steps={DEFAULT}, every data set", np.array_equal(given_none, default),
+          (given_none, default))
+    moved = [i for i in range(len(default)) if zero[i] != default[i]]
+    rel = max((abs(zero[i] / default[i] - 1.0) for i in moved), default=0.0)
+    print(f"    data sets moved by 0 against {DEFAULT}: {[i + 1 for i in moved]}, largest relative change of chi2 {rel:.3e}")
+    check("(a) 4, not the default: differs from the default and from 0 in a data set with a nested kernel",
+          any(four[i] != default[i] and four[i] != zero[i] for i in moved), (four, default, zero))
+    check("(b) 0 moves some data sets (a nested kernel in T2)", len(moved) > 0, zero - default)
+    check("(b) ... and not every one (the others have no spread inside a target)", len(moved) < len(default), moved)
     check("(b) ... by less than 1e-3 relative", rel < 1e-3, rel)
 
     binary = os.environ.get("AZURE2_BIN")
@@ -121,6 +126,8 @@ try:
         out = subprocess.run([sys.executable, "-c", child, k], env=env, capture_output=True, text=True, check=True)
         return np.array(eval(out.stdout.strip().splitlines()[-1]))
     check("(d) AZURE_FOLD_DEPTH_STEPS=0, keyword not given: the chi2 of 0", np.array_equal(in_child("None"), zero))
+    check(f"(d) the keyword {DEFAULT} over AZURE_FOLD_DEPTH_STEPS=0: the chi2 of {DEFAULT}",
+          np.array_equal(in_child(str(DEFAULT)), default))
     check("(d) the keyword 4 over AZURE_FOLD_DEPTH_STEPS=0: the chi2 of 4", np.array_equal(in_child("4"), four))
 
     for bad in (-1, 1001, 2.5, math.nan, math.inf, True, "4"):

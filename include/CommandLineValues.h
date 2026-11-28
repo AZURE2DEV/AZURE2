@@ -31,7 +31,7 @@ std::string OptionText(const std::string &option, const std::string &flag);
 int RefineQuadratureFromEnvironment();
 /// The panels per Gaussian width of the target kernel's depth integral (Config::foldDepthSteps) from the process's
 /// record: --fold-depth-steps=K or AZURE_FOLD_DEPTH_STEPS, a whole number from 0 to 1000 (0: the node intervals);
-/// Config::kFoldDepthStepsDefault (4) when neither is given.
+/// Config::kFoldDepthStepsDefault (8) when neither is given.
 int FoldDepthStepsFromEnvironment();
 
 /// The largest N of --threads=N.

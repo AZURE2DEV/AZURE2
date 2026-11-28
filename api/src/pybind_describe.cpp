@@ -43,7 +43,7 @@ const std::vector<NotProjectOptionRow> &NotProjectOptionRows() {
        "a directory of this machine"},
       {"fold_depth_steps", "fold_depth_steps", "--fold-depth-steps=K", "int", false,
        "panels per Gaussian width of the depth integral of a target with a beam spread or straggling, 0..1000 (0: the "
-       "node intervals; None: $AZURE_FOLD_DEPTH_STEPS, else 4)",
+       "node intervals; None: $AZURE_FOLD_DEPTH_STEPS, else 8)",
        "a numerical setting of the run, as --refine-quadrature (whether such a number is also a <config> key is open, "
        "docs/upgrade/project_format3.md section 3.12)"},
   };

@@ -152,7 +152,7 @@ class Session(
         fold_depth_steps : the panels per Gaussian width of the depth integral of a target with a beam spread or
             straggling, a whole number from 0 to 1000 (the program's ``--fold-depth-steps=K``): each panel is
             sigma/k wide and never ends above the next node of the mesh; ``0`` integrates over the node intervals
-            (the integral before 2026-11-27).  ``None`` (the default): ``$AZURE_FOLD_DEPTH_STEPS``, else 4.  Not a
+            (the integral before 2026-11-27).  ``None`` (the default): ``$AZURE_FOLD_DEPTH_STEPS``, else 8.  Not a
             ``<config>`` key (``docs/source/user_guide/experimental_effects.rst``, "The depth integral").
 
         Raises

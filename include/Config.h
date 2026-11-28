@@ -210,7 +210,7 @@ class Config {
   /// --fold-depth-steps=K, AZURE_FOLD_DEPTH_STEPS, or a pyazr session's fold_depth_steps; set by the CLI's
   /// parseOptions and the session (FoldDepthStepsFromEnvironment, CommandLineValues.h), which refuse a bad value.
   int foldDepthSteps;
-  static constexpr int kFoldDepthStepsDefault = 4;
+  static constexpr int kFoldDepthStepsDefault = 8;
   /// Hard-sphere scattering in every J^pi the particle pairs allow, whether or not a level carries it
   /// (CompoundSystem::AddHardSphereGroups). Read from "includeAllJPi=1" in the <config> block; off when absent.
   bool includeAllJPi;

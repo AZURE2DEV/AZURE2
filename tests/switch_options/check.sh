@@ -100,9 +100,9 @@ switch AZURE_REFINE_QUADRATURE 2 --refine-quadrature=2 upgrade/T2 T2.azr "$CALC"
 # T2's data set 5 has a fitted layer with straggling and a beam spread: the node intervals (0) move its folded values
 switch AZURE_FOLD_DEPTH_STEPS 0 --fold-depth-steps=0 upgrade/T2 T2.azr "$CALC"
 if same azure_fold_depth_steps.var azure_fold_depth_steps.base; then
-  bad "AZURE_FOLD_DEPTH_STEPS=0 on upgrade/T2: the same files as the default (4): the panels act on nothing"
+  bad "AZURE_FOLD_DEPTH_STEPS=0 on upgrade/T2: the same files as the default (8): the panels act on nothing"
 else
-  ok "AZURE_FOLD_DEPTH_STEPS=0 on upgrade/T2: the node intervals differ from the default panels (4)"
+  ok "AZURE_FOLD_DEPTH_STEPS=0 on upgrade/T2: the node intervals differ from the default panels (8)"
 fi
 switch AZURE2_EC_TABLE_NODES 80 --ec-table-nodes=80 13N 13N.azr "$CALC"
 switch AZURE2_SWAP_COUPLING_ORDER 1 --swap-coupling-order 7Li_p_ay 7Li_p_ay.azr "$CALC"
