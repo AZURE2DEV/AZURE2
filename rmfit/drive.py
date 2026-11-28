@@ -1383,7 +1383,10 @@ class Driver:
         if gam <= 0 or out not in self.BROAD_RETEST_OUTCOMES:
             return st
         lg = st.get("level_gamma_ev")
-        if _isnum(lg) and float(lg) >= 0.3 * gam * 1e3:
+        # an already broad level is the same test again -- EXCEPT "relocated": there the window stopped it, not the seed
+        # (2026-11-27, ladder rung 3: the ENSDF 0+ 14.032 ended relocated at the -300 keV edge, Gamma 1.9 MeV, +484,186,
+        # and this rule skipped the wider-window re-test that diagnostic H3 had shown recovers it)
+        if out != "relocated" and _isnum(lg) and float(lg) >= 0.3 * gam * 1e3:
             self.log(f"  no broad re-test: the {out} level was already {float(lg) / 1e3:.0f} keV wide")
             return st
         th = st.get("theta2") or {}

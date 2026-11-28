@@ -222,6 +222,12 @@ def part_f(tmp):
         n = len(c.adds)
         d._retest(c, cand, ["0+"], d._level_add(c, cand, ["0+"]))
         check(f"(f) no broad re-test after {name}", len(c.adds) == n + 1, str(c.adds[n:]))
+    c.scripted = [dict(outcome="relocated", delta=4.84e5, theta2=th, energy_fit=13.732, level_gamma_ev=1.92e6, jpi="0+"),
+                  dict(outcome="accept", delta=4.9e5, jpi="0+")]
+    n = len(c.adds)
+    st = d._retest(c, cand, ["0+"], d._level_add(c, cand, ["0+"]))
+    check("(f) relocated AND already broad (1.9 MeV, ladder rung 3's 0+ 14.032) -> still re-tested with the wide window",
+          len(c.adds) == n + 2 and c.adds[-1].get("e_window") == 1.0 and st.get("outcome") == "accept", str(c.adds[n:]))
     c.scripted = [dict(outcome="marginal", delta=5.0, theta2=th, jpi="0+")]
     n = len(c.adds)
     d._retest(c, cand, ["0+"], d._level_add(c, cand, ["0+"]), broad=False)
